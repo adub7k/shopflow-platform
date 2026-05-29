@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="112" fill="#0a0a0a"/>
+  <text x="256" y="296" 
+    font-family="-apple-system,BlinkMacSystemFont,'SF Pro Display','Helvetica Neue',Arial,sans-serif"
+    font-size="82"
+    font-weight="800"
+    fill="white"
+    text-anchor="middle"
+    letter-spacing="-3">ShopFlow</text>
+</svg>

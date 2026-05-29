@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Off-Kut — Queue Display</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{--green:#1D9E75;--blue:#378ADD;--orange:#EF9F27;--red:#e74c3c;}
+html,body{height:100%;background:#111;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden;}
+#app{height:100%;display:flex;flex-direction:column;padding:24px 32px;}
+
+/* Header */
+#header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-shrink:0;}
+#shop-info{display:flex;align-items:center;gap:16px;}
+#shop-scissors{font-size:36px;}
+#shop-name{font-size:28px;font-weight:800;letter-spacing:-0.5px;}
+#shop-tagline{font-size:13px;opacity:0.5;margin-top:2px;}
+#live-clock{font-size:22px;font-weight:700;opacity:0.7;text-align:right;}
+#live-date{font-size:13px;opacity:0.4;text-align:right;margin-top:2px;}
+
+/* Stats bar */
+#stats-bar{display:flex;gap:16px;margin-bottom:24px;flex-shrink:0;}
+.stat-card{flex:1;background:rgba(255,255,255,0.06);border-radius:16px;padding:16px 20px;display:flex;align-items:center;gap:14px;}
+.stat-icon{font-size:28px;}
+.stat-num{font-size:32px;font-weight:800;line-height:1;}
+.stat-label{font-size:12px;opacity:0.5;margin-top:2px;}
+
+/* Queue columns */
+#queue-area{flex:1;display:flex;gap:20px;min-height:0;}
+.queue-col{flex:1;display:flex;flex-direction:column;gap:12px;}
+.col-header{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:12px;margin-bottom:4px;flex-shrink:0;}
+.col-header-dot{width:12px;height:12px;border-radius:50%;}
+.col-header-name{font-size:16px;font-weight:700;}
+.col-header-count{font-size:13px;opacity:0.5;margin-left:auto;}
+
+/* Queue cards */
+.queue-card{background:rgba(255,255,255,0.06);border-radius:16px;padding:16px 20px;display:flex;align-items:center;gap:16px;border-left:4px solid transparent;animation:slideIn 0.3s ease;}
+@keyframes slideIn{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+.queue-card.in-chair{background:rgba(29,158,117,0.12);border-left-color:var(--green);}
+.queue-card.waiting{border-left-color:rgba(255,255,255,0.15);}
+.queue-pos{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.1);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;flex-shrink:0;}
+.queue-pos.current{background:var(--green);}
+.queue-info{flex:1;min-width:0;}
+.queue-name{font-size:20px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.queue-service{font-size:13px;opacity:0.6;margin-top:3px;}
+.queue-right{text-align:right;flex-shrink:0;}
+.queue-status{font-size:12px;font-weight:700;padding:4px 10px;border-radius:20px;}
+.status-in-chair{background:rgba(29,158,117,0.2);color:var(--green);}
+.status-waiting{background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.6);}
+.queue-wait{font-size:12px;opacity:0.4;margin-top:4px;}
+
+/* Empty state */
+.empty-queue{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;opacity:0.3;padding:40px;}
+.empty-queue-icon{font-size:48px;margin-bottom:12px;}
+.empty-queue-text{font-size:16px;}
+
+/* Footer */
+#footer{display:flex;justify-content:space-between;align-items:center;padding-top:16px;border-top:1px solid rgba(255,255,255,0.08);flex-shrink:0;margin-top:16px;}
+#footer-msg{font-size:14px;opacity:0.4;}
+#footer-brand{font-size:13px;opacity:0.3;}
+
+/* Scrolling marquee for long queues */
+.queue-col-scroll{overflow-y:auto;flex:1;}
+.queue-col-scroll::-webkit-scrollbar{display:none;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="header">
+    <div id="shop-info">
+      <div id="shop-scissors">&#9986;</div>
+      <div>
+        <div id="shop-name">ShopFlow</div>
+        <div id="shop-tagline">Walk-ins Welcome.</div>
+      </div>
+    </div>
+    <div>
+      <div id="live-clock">--:-- --</div>
+      <div id="live-date"></div>
+    </div>
+  </div>
+
+  <div id="stats-bar">
+    <div class="stat-card">
+      <div class="stat-icon">&#9203;</div>
+      <div><div class="stat-num" id="stat-waiting">0</div><div class="stat-label">Waiting</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">&#9986;</div>
+      <div><div class="stat-num" id="stat-inchair">0</div><div class="stat-label">In Chair</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">&#10003;</div>
+      <div><div class="stat-num" id="stat-done">0</div><div class="stat-label">Done Today</div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">&#9202;</div>
+      <div><div class="stat-num" id="stat-wait">~0m</div><div class="stat-label">Est. Wait</div></div>
+    </div>
+  </div>
+
+  <div id="queue-area">
+    <!-- Barber columns render here -->
+  </div>
+
+  <div id="footer">
+    <div id="footer-msg">&#128172; Check in at the tablet &nbsp;&bull;&nbsp; &#9986; We'll call your name when it's your turn</div>
+    <div id="footer-brand" style="opacity:.3;font-size:12px;">Powered by <strong>ShopFlow</strong></div>
+  </div>
+</div>
+
+<script>
+let _barbers = [], _queue = [], _todayDone = 0;
+
+function updateClock() {
+  const now = new Date();
+  const time = now.toLocaleTimeString('en-US', {hour:'numeric',minute:'2-digit',hour12:true});
+  const date = now.toLocaleDateString('en-US', {weekday:'long',month:'long',day:'numeric'});
+  document.getElementById('live-clock').textContent = time;
+  document.getElementById('live-date').textContent = date;
+}
+
+async function fetchData() {
+  try {
+    const [barbers, queue, todayStats, settings] = await Promise.all([
+      fetch('/api/barbers').then(r=>r.json()),
+      fetch('/api/queue').then(r=>r.json()),
+      fetch('/api/queue/today').then(r=>r.json()),
+      fetch('/api/settings').then(r=>r.json()),
+    ]);
+    _barbers = barbers;
+    _queue = queue.filter(q=>q.status!=='completed');
+    _todayDone = todayStats.completed || 0;
+
+    if (settings.shopName) document.getElementById('shop-name').textContent = settings.shopName;
+    if (settings.tagline) document.getElementById('shop-tagline').textContent = settings.tagline;
+
+    render();
+  } catch(e) { console.error('Display error:', e); }
+}
+
+function render() {
+  const waiting = _queue.filter(q=>q.status==='waiting');
+  const inChair = _queue.filter(q=>q.status==='in-chair');
+  const avgWait = 35;
+  const estWait = waiting.length * avgWait;
+
+  document.getElementById('stat-waiting').textContent = waiting.length;
+  document.getElementById('stat-inchair').textContent = inChair.length;
+  document.getElementById('stat-done').textContent = _todayDone;
+  document.getElementById('stat-wait').textContent = estWait > 0 ? '~'+estWait+'m' : 'None';
+
+  const area = document.getElementById('queue-area');
+  let html = '';
+
+  // All queue together, grouped by barber
+  _barbers.forEach(b => {
+    const myInChair = inChair.find(q=>q.barberId===b.id);
+    const myWaiting = waiting.filter(q=>q.barberId===b.id);
+    const noPreference = waiting.filter(q=>!q.barberId);
+
+    html += '<div class="queue-col">';
+    html += '<div class="col-header" style="background:'+b.color+'18;">';
+    html += '<div class="col-header-dot" style="background:'+b.color+';"></div>';
+    html += '<div class="col-header-name" style="color:'+b.color+'">&#9986; '+b.name+'</div>';
+    html += '<div class="col-header-count">'+(myInChair?'1 in chair ':'')+myWaiting.length+' waiting</div>';
+    html += '</div>';
+    html += '<div class="queue-col-scroll">';
+
+    if (myInChair) {
+      html += '<div class="queue-card in-chair">';
+      html += '<div class="queue-pos current">&#9986;</div>';
+      html += '<div class="queue-info"><div class="queue-name">'+myInChair.customerName+'</div><div class="queue-service">'+myInChair.service+'</div></div>';
+      html += '<div class="queue-right"><span class="queue-status status-in-chair">In Chair</span></div>';
+      html += '</div>';
+    }
+
+    if (myWaiting.length === 0 && !myInChair) {
+      html += '<div class="empty-queue"><div class="empty-queue-icon">&#127937;</div><div class="empty-queue-text">Available</div></div>';
+    }
+
+    myWaiting.forEach((q,i) => {
+      const waitMins = (myInChair ? 30 : 0) + (i * avgWait);
+      html += '<div class="queue-card waiting">';
+      html += '<div class="queue-pos">'+(i+1)+'</div>';
+      html += '<div class="queue-info"><div class="queue-name">'+q.customerName+'</div><div class="queue-service">'+q.service+'</div></div>';
+      html += '<div class="queue-right"><span class="queue-status status-waiting">Waiting</span><div class="queue-wait">~'+waitMins+'m</div></div>';
+      html += '</div>';
+    });
+
+    html += '</div></div>';
+  });
+
+  // No preference column if anyone is unassigned
+  const noPreference = waiting.filter(q=>!q.barberId);
+  if (noPreference.length) {
+    html += '<div class="queue-col">';
+    html += '<div class="col-header" style="background:rgba(255,255,255,0.06);">';
+    html += '<div class="col-header-dot" style="background:#888;"></div>';
+    html += '<div class="col-header-name" style="color:#aaa;">No Preference</div>';
+    html += '<div class="col-header-count">'+noPreference.length+' waiting</div>';
+    html += '</div>';
+    html += '<div class="queue-col-scroll">';
+    noPreference.forEach((q,i) => {
+      html += '<div class="queue-card waiting">';
+      html += '<div class="queue-pos">'+(i+1)+'</div>';
+      html += '<div class="queue-info"><div class="queue-name">'+q.customerName+'</div><div class="queue-service">'+q.service+'</div></div>';
+      html += '<div class="queue-right"><span class="queue-status status-waiting">Next Available</span></div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  }
+
+  area.innerHTML = html || '<div style="width:100%;display:flex;align-items:center;justify-content:center;opacity:0.3;flex-direction:column;gap:12px;"><div style="font-size:64px;">&#127937;</div><div style="font-size:20px;">Queue is empty — walk ins welcome!</div></div>';
+}
+
+// Start
+fetchData();
+setInterval(fetchData, 15000); // Refresh every 15 seconds
+setInterval(updateClock, 1000);
+updateClock();
+</script>
+</body>
+</html>
