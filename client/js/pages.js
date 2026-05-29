@@ -655,12 +655,7 @@ const Settings = {
       }
       html.push('</div>');
 
-      // Security
-      html.push('<div class="section-header">Security</div><div class="card">');
-      html.push('<div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="font-size:14px;font-weight:600;">App PIN</div><div style="font-size:12px;color:var(--muted);">Required to open the CRM. Booking page stays public.</div></div><button class="btn btn-sm" onclick="PinAuth.showChangePIN()">🔒 Change PIN</button></div>');
-      html.push('</div>');
-
-      html.push('<div style="display:flex;gap:8px;margin-top:8px;"><button class="btn btn-primary" style="flex:1;" onclick="Settings.save()">Save Settings</button><button class="btn btn-danger" onclick="PinAuth.lock()">Lock App</button></div>');
+      html.push('<div style="display:flex;gap:8px;margin-top:8px;"><button class="btn btn-primary" style="flex:1;" onclick="Settings.save()">Save Settings</button><button class="btn btn-danger" onclick="Auth.logout()">Sign Out</button></div>');
       el.innerHTML=html.join('');
     }catch(e){el.innerHTML='<div class="card"><p style="color:var(--muted)">Could not load settings</p></div>';}
   },

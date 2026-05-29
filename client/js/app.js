@@ -24,13 +24,6 @@ const App = {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    // PIN check
-    const authed = await PinAuth.init();
-    if(!authed) {
-      PinAuth.showLock();
-      await new Promise(resolve => { const t=setInterval(()=>{if(PinAuth.isUnlocked()){clearInterval(t);resolve();}},200); });
-    }
-
     // Load settings
     const s = await db.settings.get();
     const tt=document.getElementById('topbar-title'); if(tt)tt.textContent=s.shopName||'ShopFlow';
