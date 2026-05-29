@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black"/>
+<meta name="apple-mobile-web-app-title" content="ShopFlow"/>
+<link rel="apple-touch-icon" href="/icons/icon-192.png"/>
+<link rel="icon" type="image/png" href="/icons/icon-192.png"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<title>ShopFlow</title>
+<link rel="stylesheet" href="/css/app.css"/>
+</head>
+<body>
+
+<!-- Loading screen -->
+<div id="loading">
+  <div id="loading-logo">✂️</div>
+  <div id="loading-title">ShopFlow</div>
+  <div id="loading-sub">Loading your shop...</div>
+  <div class="loading-dots">
+    <div class="loading-dot"></div>
+    <div class="loading-dot"></div>
+    <div class="loading-dot"></div>
+  </div>
+</div>
+
+<!-- Topbar -->
+<div id="topbar">
+  <button id="topbar-menu-btn" onclick="document.getElementById('sidebar').style.display=document.getElementById('sidebar').style.display==='block'?'none':'block'">☰</button>
+  <img id="topbar-logo" src="/icons/icon-192.png" style="width:28px;height:28px;border-radius:7px;" />
+  <div id="topbar-title">ShopFlow</div>
+</div>
+
+<!-- App -->
+<div id="app">
+  <!-- Sidebar -->
+  <div id="sidebar">
+    <div style="padding:12px 16px 8px;border-bottom:1px solid var(--border);margin-bottom:8px;display:flex;align-items:center;gap:10px;">
+      <img src="/icons/icon-192.png" style="width:32px;height:32px;border-radius:8px;flex-shrink:0;" />
+      <div>
+        <div style="font-size:15px;font-weight:800;color:var(--text);letter-spacing:-.03em;">ShopFlow</div>
+        <div style="font-size:10px;color:var(--muted);">Powered by ShopFlow</div>
+      </div>
+    </div>
+    <div class="nav-section">Menu</div>
+    <div class="nav-item active" data-page="dashboard" onclick="App.nav('dashboard')"><span class="nav-item-icon">⊞</span>Dashboard</div>
+    <div class="nav-item" data-page="appointments" onclick="App.nav('appointments')"><span class="nav-item-icon">📅</span>Appointments</div>
+    <div class="nav-item" data-page="clients" onclick="App.nav('clients')"><span class="nav-item-icon">👤</span>Clients</div>
+    <div class="nav-item" data-page="revenue" onclick="App.nav('revenue')"><span class="nav-item-icon">📈</span>Revenue</div>
+    <div class="nav-item" data-page="settings" onclick="App.nav('settings')"><span class="nav-item-icon">⚙️</span>Settings</div>
+    <div id="sidebar-footer">
+      <div style="font-size:11px;color:var(--faint);">Powered by <strong style="color:var(--green);">ShopFlow</strong></div>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div id="main">
+    <div id="page-dashboard"   class="page active"></div>
+    <div id="page-appointments" class="page"></div>
+    <div id="page-clients"     class="page"></div>
+    <div id="page-revenue"     class="page"></div>
+    <div id="page-settings"    class="page"></div>
+  </div>
+</div>
+
+<!-- Bottom nav (mobile) -->
+<div id="bottom-nav">
+  <button class="bottom-nav-item active" data-page="dashboard" onclick="App.nav('dashboard')"><span class="bottom-nav-icon">⊞</span>Home</button>
+  <button class="bottom-nav-item" data-page="appointments" onclick="App.nav('appointments')"><span class="bottom-nav-icon">📅</span>Bookings</button>
+  <button class="bottom-nav-item" data-page="clients" onclick="App.nav('clients')"><span class="bottom-nav-icon">👤</span>Clients</button>
+  <button class="bottom-nav-item" data-page="revenue" onclick="App.nav('revenue')"><span class="bottom-nav-icon">📈</span>Revenue</button>
+  <button class="bottom-nav-item" data-page="settings" onclick="App.nav('settings')"><span class="bottom-nav-icon">⚙️</span>Settings</button>
+</div>
+
+<!-- Modal -->
+<div id="modal-overlay">
+  <div id="modal-box"></div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script src="/js/api.js"></script>
+<script src="/js/utils.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/pages.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>

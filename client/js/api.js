@@ -1,0 +1,44 @@
+// ── ShopFlow Multi-Tenant API ─────────────────────────────────────────────────
+const Auth = {
+  getToken: () => localStorage.getItem('sf_token'),
+  getShopSlug: () => localStorage.getItem('sf_shopSlug'),
+  getShopName: () => localStorage.getItem('sf_shopName'),
+  isLoggedIn: () => !!localStorage.getItem('sf_token'),
+  logout: () => {
+    localStorage.removeItem('sf_token');
+    localStorage.removeItem('sf_shopId');
+    localStorage.removeItem('sf_shopSlug');
+    localStorage.removeItem('sf_shopName');
+    window.location.href = '/login';
+  }
+};
+
+async function apiFetch(path, opts={}) {
+  const token = Auth.getToken();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers['Authorization'] = 'Bearer '+token;
+  const res = await fetch('/api/shop'+path, {
+    ...opts,
+    headers,
+    body: opts.body ? JSON.stringify(opts.body) : undefined
+  });
+  if (res.status === 401) { Auth.logout(); return; }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: 'Request failed '+res.status }));
+    throw new Error(err.error || 'Request failed '+res.status);
+  }
+  return res.json();
+}
+
+const db = {
+  settings:      { get: () => apiFetch('/settings'), save: (s) => apiFetch('/settings', {method:'POST',body:s}) },
+  barbers:       { all: () => apiFetch('/barbers'), save: (b) => apiFetch('/barbers',{method:'POST',body:b}), delete: (id) => apiFetch('/barbers/'+id,{method:'DELETE'}), saveSchedule: (id,s) => apiFetch('/barbers/'+id+'/schedule',{method:'POST',body:s}) },
+  services:      { all: () => apiFetch('/services'), save: (s) => apiFetch('/services',{method:'POST',body:s}), delete: (id) => apiFetch('/services/'+id,{method:'DELETE'}) },
+  customers:     { all: () => apiFetch('/customers'), search: (q) => apiFetch('/customers/search?q='+encodeURIComponent(q)), get: (id) => apiFetch('/customers/'+id), save: (c) => apiFetch('/customers',{method:'POST',body:c}), delete: (id) => apiFetch('/customers/'+id,{method:'DELETE'}), redeem: (id) => apiFetch('/customers/'+id+'/redeem',{method:'POST'}) },
+  appointments:  { all: (p) => apiFetch('/appointments'+(p?'?'+new URLSearchParams(p):'')), save: (a) => apiFetch('/appointments',{method:'POST',body:a}), complete: (id,d) => apiFetch('/appointments/'+id+'/complete',{method:'POST',body:d}), noshow: (id) => apiFetch('/appointments/'+id+'/noshow',{method:'POST'}), delete: (id) => apiFetch('/appointments/'+id,{method:'DELETE'}) },
+  revenue:       { get: () => apiFetch('/revenue') },
+  conversations: { forCustomer: (cid) => apiFetch('/conversations/customer/'+cid), save: (c) => apiFetch('/conversations',{method:'POST',body:c}) },
+  sms:           { send: (o) => apiFetch('/sms/send',{method:'POST',body:o}) },
+  auth:          { verifyPin: (pin) => apiFetch('/auth/verify-pin',{method:'POST',body:{pin}}), changePin: (cur,n) => apiFetch('/auth/change-pin',{method:'POST',body:{currentPin:cur,newPin:n}}) },
+  blockedDates:  { all: () => apiFetch('/blocked-dates'), block: (date,reason) => apiFetch('/blocked-dates',{method:'POST',body:{date,reason}}), unblock: (date) => apiFetch('/blocked-dates/'+date,{method:'DELETE'}) },
+};

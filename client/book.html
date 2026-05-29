@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black"/>
+<meta name="apple-mobile-web-app-title" content="ShopFlow"/>
+<meta name="application-name" content="ShopFlow"/>
+<link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png"/>
+<link rel="apple-touch-icon" href="/icons/icon-192.png"/>
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png"/>
+<link rel="icon" type="image/png" href="/icons/icon-192.png"/>
+<title>Book an Appointment</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --black:#0a0a0a;
+  --white:#ffffff;
+  --off:#f5f5f7;
+  --border:#d2d2d7;
+  --border-lt:#e8e8ed;
+  --muted:#6e6e73;
+  --faint:#aeaeb2;
+  --green:#1a8a3c;
+  --green-bg:#f0f9f3;
+  --green-border:#b3dfbf;
+  --red:#ff3b30;
+  --font:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif;
+  --radius:14px;
+  --radius-sm:10px;
+  --shadow:0 2px 20px rgba(0,0,0,.08),0 1px 4px rgba(0,0,0,.04);
+  --shadow-sm:0 1px 8px rgba(0,0,0,.06);
+}
+html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
+body{background:var(--off);color:var(--black);font-family:var(--font);font-size:16px;line-height:1.5;min-height:100vh;}
+
+/* ── Outer wrap ── */
+.outer{max-width:430px;margin:0 auto;min-height:100vh;background:var(--white);position:relative;}
+@media(min-width:500px){
+  body{display:flex;align-items:flex-start;justify-content:center;padding:32px 16px 64px;}
+  .outer{min-height:auto;border-radius:24px;overflow:hidden;box-shadow:0 8px 48px rgba(0,0,0,.12),0 2px 8px rgba(0,0,0,.06);}
+}
+
+/* ── Header ── */
+.header{padding:28px 24px 20px;background:var(--white);border-bottom:0.5px solid var(--border-lt);}
+.header-logo{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+.logo-mark{width:38px;height:38px;background:var(--black);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.logo-text{font-size:18px;font-weight:800;color:var(--black);letter-spacing:-.04em;}
+.header-shop-name{font-size:22px;font-weight:700;color:var(--black);letter-spacing:-.03em;margin-bottom:3px;}
+.header-tagline{font-size:14px;color:var(--muted);}
+
+/* ── Progress ── */
+.progress-wrap{height:2px;background:var(--border-lt);}
+.progress-bar{height:2px;background:var(--black);transition:width .4s cubic-bezier(.4,0,.2,1);}
+
+/* ── Steps ── */
+.step{display:none;padding:28px 24px;}
+.step.active{display:block;}
+.step-label{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:6px;}
+.step-title{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margin-bottom:4px;line-height:1.1;}
+.step-sub{font-size:14px;color:var(--muted);margin-bottom:24px;line-height:1.5;}
+
+/* ── Service list ── */
+.service-list{display:flex;flex-direction:column;gap:8px;}
+.service-item{
+  background:var(--white);
+  border:1px solid var(--border-lt);
+  border-radius:var(--radius);
+  padding:16px 18px;
+  display:flex;align-items:center;gap:14px;
+  cursor:pointer;
+  transition:all .15s cubic-bezier(.4,0,.2,1);
+  -webkit-tap-highlight-color:transparent;
+}
+.service-item:hover{border-color:var(--border);box-shadow:var(--shadow-sm);}
+.service-item.selected{border-color:var(--black);background:var(--black);}
+.service-item.selected .service-name{color:var(--white);}
+.service-item.selected .service-meta{color:rgba(255,255,255,.6);}
+.service-item.selected .service-price{color:var(--white);}
+.service-item.selected .service-check{opacity:1;}
+.service-icon-wrap{width:42px;height:42px;border-radius:10px;background:var(--off);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s;}
+.service-item.selected .service-icon-wrap{background:rgba(255,255,255,.15);}
+.service-icon{font-size:20px;}
+.service-info{flex:1;min-width:0;}
+.service-name{font-size:15px;font-weight:600;color:var(--black);margin-bottom:2px;transition:color .15s;}
+.service-meta{font-size:12px;color:var(--muted);transition:color .15s;}
+.service-price{font-size:17px;font-weight:700;color:var(--black);flex-shrink:0;letter-spacing:-.02em;transition:color .15s;}
+.service-check{opacity:0;width:20px;height:20px;flex-shrink:0;transition:opacity .15s;}
+
+/* ── Barber list ── */
+.barber-list{display:flex;flex-direction:column;gap:8px;}
+.barber-any{
+  background:var(--white);
+  border:1px solid var(--border-lt);
+  border-radius:var(--radius);
+  padding:14px 18px;
+  display:flex;align-items:center;gap:14px;
+  cursor:pointer;
+  transition:all .15s;
+  -webkit-tap-highlight-color:transparent;
+}
+.barber-any:hover{border-color:var(--border);box-shadow:var(--shadow-sm);}
+.barber-any.selected{border-color:var(--black);background:var(--black);}
+.barber-any.selected .barber-any-name{color:var(--white);}
+.barber-any.selected .barber-any-sub{color:rgba(255,255,255,.6);}
+.barber-any-avatar{width:44px;height:44px;border-radius:50%;background:var(--off);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;transition:background .15s;}
+.barber-any.selected .barber-any-avatar{background:rgba(255,255,255,.15);}
+.barber-any-name{font-size:15px;font-weight:600;color:var(--black);transition:color .15s;}
+.barber-any-sub{font-size:13px;color:var(--muted);margin-top:1px;transition:color .15s;}
+.barber-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
+.barber-card{
+  background:var(--white);
+  border:1px solid var(--border-lt);
+  border-radius:var(--radius);
+  padding:18px 14px;
+  text-align:center;
+  cursor:pointer;
+  transition:all .15s;
+  -webkit-tap-highlight-color:transparent;
+}
+.barber-card:hover{border-color:var(--border);box-shadow:var(--shadow-sm);}
+.barber-card.selected{border-color:var(--black);background:var(--black);}
+.barber-card.selected .barber-name{color:var(--white);}
+.barber-card.selected .barber-bio{color:rgba(255,255,255,.6);}
+.barber-avatar{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:var(--white);margin:0 auto 10px;letter-spacing:-.02em;}
+.barber-name{font-size:14px;font-weight:600;color:var(--black);margin-bottom:3px;transition:color .15s;}
+.barber-bio{font-size:12px;color:var(--muted);line-height:1.4;transition:color .15s;}
+
+/* ── Calendar ── */
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
+.cal-month{font-size:17px;font-weight:600;color:var(--black);letter-spacing:-.02em;}
+.cal-btn{width:34px;height:34px;border:1px solid var(--border-lt);border-radius:50%;background:var(--white);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--muted);transition:all .15s;-webkit-tap-highlight-color:transparent;}
+.cal-btn:hover{border-color:var(--border);color:var(--black);}
+.cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:8px;}
+.cal-weekday{text-align:center;font-size:11px;font-weight:500;color:var(--faint);padding:4px 0;letter-spacing:.02em;}
+.cal-days{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
+.cal-day{
+  aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+  border-radius:50%;font-size:15px;font-weight:400;
+  cursor:pointer;color:var(--black);
+  transition:all .15s;
+  -webkit-tap-highlight-color:transparent;
+  position:relative;
+}
+.cal-day:hover:not(.cal-past):not(.cal-blocked):not(.cal-nowork){background:var(--off);}
+.cal-day.cal-today{font-weight:600;color:var(--black);}
+.cal-day.cal-today::after{content:'';width:4px;height:4px;border-radius:50%;background:var(--green);position:absolute;bottom:3px;}
+.cal-day.cal-selected{background:var(--black);color:var(--white);font-weight:600;}
+.cal-day.cal-selected::after{background:rgba(255,255,255,.5);}
+.cal-day.cal-past{color:var(--faint);cursor:not-allowed;pointer-events:none;}
+.cal-day.cal-blocked{color:var(--faint);cursor:not-allowed;pointer-events:none;text-decoration:line-through;}
+.cal-day.cal-nowork{color:var(--border);cursor:not-allowed;pointer-events:none;}
+.cal-day.cal-other{color:var(--faint);}
+.cal-day.cal-has::before{content:'';width:3px;height:3px;border-radius:50%;background:var(--green);position:absolute;top:4px;right:4px;}
+.cal-day.cal-selected.cal-has::before{background:rgba(255,255,255,.6);}
+
+/* ── Time slots ── */
+.time-section{margin-bottom:20px;}
+.time-section-label{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:10px;}
+.time-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.time-slot{
+  padding:13px 8px;border:1px solid var(--border-lt);border-radius:var(--radius-sm);
+  text-align:center;font-size:14px;font-weight:500;
+  cursor:pointer;background:var(--white);color:var(--black);
+  transition:all .15s;-webkit-tap-highlight-color:transparent;
+  font-family:var(--font);
+}
+.time-slot:hover{border-color:var(--border);box-shadow:var(--shadow-sm);}
+.time-slot.selected{background:var(--black);color:var(--white);border-color:var(--black);}
+.no-slots{text-align:center;padding:40px 20px;}
+.no-slots-icon{font-size:36px;margin-bottom:12px;}
+.no-slots-title{font-size:16px;font-weight:600;color:var(--black);margin-bottom:6px;}
+.no-slots-sub{font-size:14px;color:var(--muted);}
+
+/* ── Loading ── */
+.loading-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 20px;}
+.spinner{width:28px;height:28px;border:2px solid var(--border-lt);border-top-color:var(--black);border-radius:50%;animation:spin .7s linear infinite;margin-bottom:14px;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-size:14px;color:var(--muted);}
+
+/* ── Summary card ── */
+.summary-card{background:var(--off);border-radius:var(--radius);padding:18px;margin-bottom:24px;}
+.summary-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;}
+.summary-row:not(:last-child){border-bottom:0.5px solid var(--border-lt);}
+.summary-label{font-size:13px;color:var(--muted);}
+.summary-value{font-size:14px;font-weight:600;color:var(--black);text-align:right;max-width:200px;}
+.summary-price{font-size:18px;font-weight:700;color:var(--black);letter-spacing:-.02em;}
+
+/* ── Form ── */
+.field{margin-bottom:14px;}
+.field-label{font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px;letter-spacing:.02em;}
+.field-input{
+  width:100%;padding:14px 16px;
+  border:1px solid var(--border-lt);border-radius:var(--radius-sm);
+  font-size:16px;font-family:var(--font);
+  background:var(--white);color:var(--black);
+  outline:none;transition:border-color .15s;
+  -webkit-appearance:none;
+}
+.field-input:focus{border-color:var(--black);}
+.field-input::placeholder{color:var(--faint);}
+.field-note{font-size:12px;color:var(--faint);margin-top:5px;}
+.error-msg{background:#fff5f5;border:1px solid #ffd7d5;border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;color:var(--red);margin-bottom:14px;display:none;line-height:1.5;}
+
+/* ── Buttons ── */
+.btn-primary{
+  width:100%;padding:17px;border:none;border-radius:var(--radius);
+  font-size:16px;font-weight:600;font-family:var(--font);
+  cursor:pointer;background:var(--black);color:var(--white);
+  transition:all .15s cubic-bezier(.4,0,.2,1);
+  margin-bottom:10px;letter-spacing:-.01em;
+  -webkit-tap-highlight-color:transparent;
+}
+.btn-primary:hover{background:#1a1a1a;}
+.btn-primary:active{transform:scale(.98);}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+.btn-back{
+  width:100%;padding:14px;border:1px solid var(--border-lt);border-radius:var(--radius);
+  font-size:15px;font-weight:500;font-family:var(--font);
+  cursor:pointer;background:transparent;color:var(--muted);
+  transition:all .15s;-webkit-tap-highlight-color:transparent;
+}
+.btn-back:hover{border-color:var(--border);color:var(--black);}
+
+/* ── Screens ── */
+.error-screen,.unavail-screen,.success-screen{text-align:center;padding:56px 24px;}
+.screen-icon{font-size:48px;margin-bottom:20px;}
+.screen-title{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margin-bottom:8px;}
+.screen-sub{font-size:15px;color:var(--muted);line-height:1.6;margin-bottom:28px;}
+.retry-btn{padding:14px 32px;background:var(--black);color:var(--white);border:none;border-radius:var(--radius);font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font);}
+
+/* ── Success ── */
+.success-check{width:72px;height:72px;border-radius:50%;background:var(--green-bg);border:1.5px solid var(--green-border);display:flex;align-items:center;justify-content:center;margin:0 auto 24px;animation:pop .4s cubic-bezier(.175,.885,.32,1.275);}
+@keyframes pop{0%{transform:scale(.5);opacity:0}100%{transform:scale(1);opacity:1}}
+.success-check-svg{width:28px;height:28px;}
+.confirm-card{background:var(--off);border-radius:var(--radius);padding:18px;text-align:left;margin-bottom:20px;}
+.confirm-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:14px;}
+.confirm-row:not(:last-child){border-bottom:0.5px solid var(--border-lt);}
+.confirm-label{color:var(--muted);}
+.confirm-value{font-weight:600;color:var(--black);}
+.sms-pill{display:inline-flex;align-items:center;gap:7px;background:var(--green-bg);border:1px solid var(--green-border);border-radius:100px;padding:8px 16px;font-size:13px;color:var(--green);font-weight:500;}
+
+/* ── Powered ── */
+.powered{text-align:center;padding:24px;font-size:12px;color:var(--faint);}
+.powered strong{color:var(--black);}
+</style>
+<script src="https://js.stripe.com/v3/"></script>
+</head>
+<body>
+<div class="outer">
+
+  <!-- Header -->
+  <div class="header" id="page-header" style="display:none;">
+
+    <div class="header-shop-name" id="shop-name">Loading...</div>
+    <div class="header-tagline" id="shop-tag"></div>
+  </div>
+  <div class="progress-wrap"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
+
+  <!-- Loading -->
+  <div class="step active" id="step-loading">
+    <div class="loading-wrap" style="min-height:60vh;">
+      <div class="spinner"></div>
+      <div class="loading-text">Loading...</div>
+    </div>
+  </div>
+
+  <!-- Error -->
+  <div class="step" id="step-error">
+    <div class="error-screen">
+      <div class="screen-icon">⚠️</div>
+      <div class="screen-title">Something went wrong</div>
+      <div class="screen-sub" id="error-msg">Could not load booking page. Please check your connection and try again.</div>
+      <button class="retry-btn" onclick="Book.init()">Try Again</button>
+    </div>
+  </div>
+
+  <!-- Unavailable -->
+  <div class="step" id="step-unavail">
+    <div class="unavail-screen">
+      <div class="screen-icon">🔒</div>
+      <div class="screen-title">Booking unavailable</div>
+      <div class="screen-sub" id="unavail-msg">Online booking is currently turned off. Please call us to book your appointment.</div>
+    </div>
+  </div>
+
+  <!-- Step 1: Service -->
+  <div class="step" id="step-1">
+    <div class="step-label">Step 1 of 5</div>
+    <div class="step-title">Choose a service</div>
+    <div class="step-sub">What are you coming in for?</div>
+    <div class="service-list" id="service-list"></div>
+  </div>
+
+  <!-- Step 2: Barber -->
+  <div class="step" id="step-2">
+    <div class="step-label">Step 2 of 5</div>
+    <div class="step-title">Choose a barber</div>
+    <div class="step-sub">Pick who you'd like, or let us assign the next available.</div>
+    <div class="barber-list" id="barber-list"></div>
+    <div style="margin-top:16px;"><button class="btn-back" onclick="Book.goTo(1)">← Back</button></div>
+  </div>
+
+  <!-- Step 3: Date -->
+  <div class="step" id="step-3">
+    <div class="step-label">Step 3 of 5</div>
+    <div class="step-title">Pick a date</div>
+    <div class="step-sub" id="date-step-sub">Select your preferred day</div>
+    <div class="cal-nav">
+      <button class="cal-btn" onclick="Book.prevMonth()">‹</button>
+      <div class="cal-month" id="cal-month-label"></div>
+      <button class="cal-btn" onclick="Book.nextMonth()">›</button>
+    </div>
+    <div class="cal-weekdays">
+      <div class="cal-weekday">SUN</div><div class="cal-weekday">MON</div>
+      <div class="cal-weekday">TUE</div><div class="cal-weekday">WED</div>
+      <div class="cal-weekday">THU</div><div class="cal-weekday">FRI</div>
+      <div class="cal-weekday">SAT</div>
+    </div>
+    <div class="cal-days" id="cal-days"></div>
+    <div style="margin-top:20px;"><button class="btn-back" onclick="Book.goTo(2)">← Back</button></div>
+  </div>
+
+  <!-- Step 4: Time -->
+  <div class="step" id="step-4">
+    <div class="step-label">Step 4 of 5</div>
+    <div class="step-title">Pick a time</div>
+    <div class="step-sub" id="time-step-sub">Available times</div>
+    <div id="time-content"></div>
+    <div style="margin-top:16px;"><button class="btn-back" onclick="Book.goTo(3)">← Back</button></div>
+  </div>
+
+  <!-- Step 4b: Deposit -->
+  <div class="step" id="step-deposit">
+    <div class="step-label">Almost there</div>
+    <div class="step-title">Secure your spot</div>
+    <div class="step-sub" id="deposit-msg">A deposit is required to confirm your booking.</div>
+    <div style="background:var(--off);border-radius:var(--radius);padding:18px;margin-bottom:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:14px;color:var(--muted);">Deposit amount</span>
+        <span style="font-size:22px;font-weight:800;color:var(--black);" id="deposit-amount-display">$10</span>
+      </div>
+      <div style="font-size:12px;color:var(--faint);margin-top:6px;">Applied toward your total at checkout</div>
+    </div>
+    <div style="margin-bottom:16px;">
+      <div class="field-label">Card details</div>
+      <div id="card-element" style="padding:14px 16px;border:1px solid var(--border-lt);border-radius:var(--radius-sm);background:var(--white);"></div>
+      <div id="card-error" style="color:var(--red);font-size:13px;margin-top:8px;display:none;"></div>
+    </div>
+    <div class="error-msg" id="deposit-error"></div>
+    <button class="btn-primary" id="deposit-btn" onclick="Book.payDeposit()">Pay Deposit & Confirm</button>
+    <button class="btn-back" onclick="Book.goTo(4)">← Back</button>
+  </div>
+
+  <!-- Step 5: Info -->
+  <div class="step" id="step-5">
+    <div class="step-label">Step 5 of 5</div>
+    <div class="step-title">Your details</div>
+    <div class="step-sub">Enter your info to confirm the booking.</div>
+    <div class="summary-card" id="booking-summary"></div>
+    <div class="field">
+      <label class="field-label">Full name</label>
+      <input class="field-input" id="b-name" type="text" placeholder="First and last name" autocomplete="name"/>
+    </div>
+    <div class="field">
+      <label class="field-label">Phone number</label>
+      <input class="field-input" id="b-phone" type="tel" placeholder="(505) 555-0100" autocomplete="tel"/>
+      <div class="field-note">We'll send a confirmation text to this number</div>
+    </div>
+    <div class="field">
+      <label class="field-label">Email <span style="font-weight:400;color:var(--faint);">(optional)</span></label>
+      <input class="field-input" id="b-email" type="email" placeholder="your@email.com" autocomplete="email"/>
+    </div>
+    <div class="field" style="margin-bottom:20px;">
+      <label class="field-label">Notes <span style="font-weight:400;color:var(--faint);">(optional)</span></label>
+      <input class="field-input" id="b-notes" placeholder="Anything we should know?"/>
+    </div>
+    <div class="error-msg" id="book-error"></div>
+    <button class="btn-primary" id="book-btn" onclick="Book.submit()">Confirm Appointment</button>
+    <button class="btn-back" onclick="Book.goTo(4)">← Back</button>
+  </div>
+
+  <!-- Success -->
+  <div class="step" id="step-success">
+    <div class="success-screen">
+      <div class="success-check">
+        <svg class="success-check-svg" viewBox="0 0 28 28" fill="none">
+          <path d="M6 14l5.5 5.5L22 8" stroke="#1a8a3c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="screen-title">You're booked!</div>
+      <div class="screen-sub" id="success-sub">Your appointment is confirmed.</div>
+      <div class="confirm-card" id="confirm-card"></div>
+      <div class="sms-pill" id="sms-pill" style="display:none;">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="9" rx="2" stroke="#1a8a3c" stroke-width="1.3"/><path d="M4 11l1.5 1.5L7 11" stroke="#1a8a3c" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Confirmation text sent to your phone
+      </div>
+    </div>
+  </div>
+
+  <div class="powered">Booking powered by <strong>ShopFlow</strong></div>
+</div>
+
+<script>
+const Book = {
+  _info: null,
+  _service: null,
+  _barber: null,
+  _date: null,
+  _time: null,
+  _cy: new Date().getFullYear(),
+  _cm: new Date().getMonth(),
+
+  async init() {
+    this._show('step-loading');
+    try {
+      const slug = window.location.pathname.split('/book/')[1]?.split('/')[0];
+      if (!slug) throw new Error('Invalid booking URL');
+      const res = await fetch('/api/public/'+slug+'/info');
+      if (!res.ok) throw new Error('Server error ' + res.status);
+      const info = await res.json();
+      if (info.error) throw new Error(info.message || info.error);
+      this._info = info;
+
+      // Apply accent color override if set
+      if (info.accentColor && info.accentColor !== '#16a34a') {
+        document.documentElement.style.setProperty('--black', info.accentColor);
+      }
+
+      document.getElementById('shop-name').textContent = info.shopName || 'ShopFlow';
+      document.getElementById('shop-tag').textContent  = info.tagline || '';
+      document.title = 'Book — ' + (info.shopName || 'ShopFlow');
+      document.getElementById('page-header').style.display = 'block';
+
+      if (!info.bookingEnabled) {
+        document.getElementById('unavail-msg').textContent = info.bookingMessage || 'Online booking is currently turned off.';
+        this._show('step-unavail');
+        return;
+      }
+
+      this._buildServices();
+      this._buildBarbers();
+      this._progress(5);
+      this._show('step-1');
+    } catch(e) {
+      console.error(e);
+      document.getElementById('error-msg').textContent = e.message || 'Could not connect. Please try again.';
+      this._show('step-error');
+    }
+  },
+
+  _show(id) {
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.getElementById(id)?.classList.add('active');
+    window.scrollTo(0, 0);
+  },
+
+  _progress(pct) {
+    document.getElementById('progress-bar').style.width = pct + '%';
+  },
+
+  // ── Step 1 ─────────────────────────────────────────────────────────────────
+  _buildServices() {
+    const el = document.getElementById('service-list');
+    const svcs = this._info?.services || [];
+    const icons = { cut:'✂️', fade:'✂️', taper:'✂️', beard:'🧔', combo:'✂️', color:'🎨', design:'⭐', kids:'👦', other:'💈' };
+    if (!svcs.length) { el.innerHTML = '<p style="color:var(--faint);font-size:14px;">No services available.</p>'; return; }
+    el.innerHTML = svcs.map(s => {
+      const icon = icons[s.name?.toLowerCase()] || icons[s.category?.toLowerCase()] || '💈';
+      return `<div class="service-item" id="svc-${s.id}" onclick="Book._pickSvc('${s.id}','${s.name.replace(/'/g,"\\'")}',${s.price},${s.duration||45})">
+        <div class="service-icon-wrap"><span class="service-icon">${icon}</span></div>
+        <div class="service-info">
+          <div class="service-name">${s.name}</div>
+          <div class="service-meta">${s.duration||45} min</div>
+        </div>
+        <div class="service-price">$${s.price}</div>
+        <svg class="service-check" width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <circle cx="10" cy="10" r="9" fill="rgba(255,255,255,.2)"/>
+          <path d="M6 10l3 3 5-5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>`;
+    }).join('');
+  },
+
+  _pickSvc(id, name, price, duration) {
+    this._service = { id, name, price, duration };
+    document.querySelectorAll('.service-item').forEach(c => c.classList.remove('selected'));
+    document.getElementById('svc-'+id)?.classList.add('selected');
+    setTimeout(() => this.goTo(2), 200);
+  },
+
+  // ── Step 2 ─────────────────────────────────────────────────────────────────
+  _buildBarbers() {
+    const el = document.getElementById('barber-list');
+    const barbers = this._info?.barbers || [];
+    let html = `<div class="barber-any" id="barber-any" onclick="Book._pickBarber(null,null,'No preference')">
+      <div class="barber-any-avatar">✂️</div>
+      <div>
+        <div class="barber-any-name">No preference</div>
+        <div class="barber-any-sub">First available barber</div>
+      </div>
+    </div>`;
+    if (barbers.length) {
+      html += '<div class="barber-grid">' + barbers.map(b => `
+        <div class="barber-card" id="barber-${b.id}" onclick="Book._pickBarber('${b.id}','${b.name.replace(/'/g,"\\'")}','${b.name.replace(/'/g,"\\'")}')">
+          <div class="barber-avatar" style="background:${b.color||'#0a0a0a'}">${(b.name||'?').slice(0,2).toUpperCase()}</div>
+          <div class="barber-name">${b.name}</div>
+          <div class="barber-bio">${b.bio||'Chair '+b.chair}</div>
+        </div>`).join('') + '</div>';
+    }
+    el.innerHTML = html;
+  },
+
+  _pickBarber(id, name, label) {
+    this._barber = { id, name, label };
+    document.querySelectorAll('.barber-any,.barber-card').forEach(c => c.classList.remove('selected'));
+    document.getElementById(id ? 'barber-'+id : 'barber-any')?.classList.add('selected');
+    setTimeout(() => this.goTo(3), 200);
+  },
+
+  // ── Step 3 ─────────────────────────────────────────────────────────────────
+  _buildCal() {
+    const y = this._cy, m = this._cm;
+    const label = new Date(y, m).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    document.getElementById('cal-month-label').textContent = label;
+    const first = new Date(y, m, 1).getDay();
+    const days  = new Date(y, m+1, 0).getDate();
+    const now   = new Date(); now.setHours(0,0,0,0);
+    const blocked = this._info?.blockedDates || [];
+    const barbers = this._info?.barbers || [];
+    let workDays;
+    if (this._barber?.id) {
+      const b = barbers.find(x => x.id === this._barber.id);
+      workDays = b?.schedule?.workDays || [1,2,3,4,5,6];
+    } else {
+      const all = new Set();
+      barbers.forEach(b => (b.schedule?.workDays||[1,2,3,4,5,6]).forEach(d => all.add(d)));
+      workDays = [...all];
+    }
+    let html = '';
+    for (let i = 0; i < first; i++) html += '<div></div>';
+    for (let d = 1; d <= days; d++) {
+      const ds = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const dt = new Date(y, m, d);
+      const dow = dt.getDay();
+      const isPast = dt < now;
+      const isBlocked = blocked.includes(ds);
+      const isNoWork = !workDays.includes(dow);
+      const isToday = dt.getTime() === now.getTime();
+      const isSel = ds === this._date;
+      let cls = 'cal-day';
+      if (isPast) cls += ' cal-past';
+      else if (isBlocked) cls += ' cal-blocked';
+      else if (isNoWork) cls += ' cal-nowork';
+      else if (isSel) cls += ' cal-selected';
+      else if (isToday) cls += ' cal-today';
+      const clickable = !isPast && !isBlocked && !isNoWork;
+      html += `<div class="${cls}"${clickable ? ` onclick="Book._pickDate('${ds}')"` : ''}>${d}</div>`;
+    }
+    document.getElementById('cal-days').innerHTML = html;
+  },
+
+  prevMonth() { this._cm--; if(this._cm<0){this._cm=11;this._cy--;} this._buildCal(); },
+  nextMonth() { this._cm++; if(this._cm>11){this._cm=0;this._cy++;} this._buildCal(); },
+
+  _pickDate(date) {
+    this._date = date;
+    this._buildCal();
+    setTimeout(() => this.goTo(4), 200);
+  },
+
+  // ── Step 4 ─────────────────────────────────────────────────────────────────
+  async _buildTimes() {
+    const el = document.getElementById('time-content');
+    const sub = document.getElementById('time-step-sub');
+    if (this._date && sub) {
+      const dt = new Date(this._date + 'T12:00:00');
+      sub.textContent = dt.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+    }
+    el.innerHTML = '<div class="loading-wrap" style="padding:40px 0;"><div class="spinner"></div><div class="loading-text">Checking availability...</div></div>';
+    try {
+      const params = new URLSearchParams({ date: this._date });
+      if (this._barber?.id) params.append('barberId', this._barber.id);
+      const slug = window.location.pathname.split('/book/')[1]?.split('/')[0];
+      const res = await fetch('/api/public/'+slug+'/availability?' + params);
+      if (!res.ok) throw new Error();
+      const slots = await res.json();
+      if (!slots.length) {
+        el.innerHTML = `<div class="no-slots"><div class="no-slots-icon">😔</div><div class="no-slots-title">No times available</div><div class="no-slots-sub">Try a different day or barber</div></div>`;
+        return;
+      }
+      const am = slots.filter(s => s.includes('AM'));
+      const pm = slots.filter(s => s.includes('PM'));
+      let html = '';
+      if (am.length) {
+        html += '<div class="time-section"><div class="time-section-label">Morning</div><div class="time-grid">';
+        html += am.map(t => `<div class="time-slot${this._time===t?' selected':''}" onclick="Book._pickTime('${t}')">${t}</div>`).join('');
+        html += '</div></div>';
+      }
+      if (pm.length) {
+        html += '<div class="time-section"><div class="time-section-label">Afternoon</div><div class="time-grid">';
+        html += pm.map(t => `<div class="time-slot${this._time===t?' selected':''}" onclick="Book._pickTime('${t}')">${t}</div>`).join('');
+        html += '</div></div>';
+      }
+      el.innerHTML = html;
+    } catch(e) {
+      el.innerHTML = '<div class="no-slots"><div class="no-slots-icon">⚠️</div><div class="no-slots-title">Could not load times</div><div class="no-slots-sub">Please try again</div></div>';
+    }
+  },
+
+  _pickTime(t) {
+    this._time = t;
+    document.querySelectorAll('.time-slot').forEach(b => b.classList.remove('selected'));
+    event.target.classList.add('selected');
+    setTimeout(() => this.goTo(5), 200);
+  },
+
+  // ── Step 5 ─────────────────────────────────────────────────────────────────
+  _buildSummary() {
+    const el = document.getElementById('booking-summary');
+    const dt = new Date(this._date + 'T12:00:00');
+    const dateLabel = dt.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
+    el.innerHTML = `
+      <div class="summary-row"><span class="summary-label">Service</span><span class="summary-value">${this._service?.name}</span></div>
+      <div class="summary-row"><span class="summary-label">Barber</span><span class="summary-value">${this._barber?.label||'No preference'}</span></div>
+      <div class="summary-row"><span class="summary-label">Date</span><span class="summary-value">${dateLabel}</span></div>
+      <div class="summary-row"><span class="summary-label">Time</span><span class="summary-value">${this._time}</span></div>
+      <div class="summary-row"><span class="summary-label">Price</span><span class="summary-price">$${this._service?.price}</span></div>`;
+  },
+
+  // ── Navigation ──────────────────────────────────────────────────────────────
+  goTo(step) {
+    const pcts = { 1:5, 2:25, 3:45, 4:65, deposit:88, 5:85, success:100 };
+    this._progress(pcts[step] || 0);
+    this._show(typeof step === 'number' ? 'step-'+step : 'step-'+step);
+    if (step === 3) this._buildCal();
+    if (step === 4) this._buildTimes();
+    if (step === 5) this._buildSummary();
+  },
+
+  // ── Submit ──────────────────────────────────────────────────────────────────
+  _stripe: null,
+  _cardElement: null,
+  _pendingAppointmentId: null,
+
+  async submit() {
+    const name  = document.getElementById('b-name')?.value.trim();
+    const phone = document.getElementById('b-phone')?.value.trim();
+    const email = document.getElementById('b-email')?.value.trim();
+    const notes = document.getElementById('b-notes')?.value.trim();
+    const errEl = document.getElementById('book-error');
+    errEl.style.display = 'none';
+    if (!name) { errEl.textContent='Please enter your full name.'; errEl.style.display='block'; document.getElementById('b-name')?.focus(); return; }
+    if (!phone || phone.replace(/\D/g,'').length < 10) { errEl.textContent='Please enter a valid 10-digit phone number.'; errEl.style.display='block'; document.getElementById('b-phone')?.focus(); return; }
+
+    const btn = document.getElementById('book-btn');
+    btn.textContent = 'Confirming...'; btn.disabled = true;
+
+    try {
+      // Check if deposit required
+      const dep = this._info?.deposit;
+      if (dep?.enabled && this._info?.stripePublishableKey && this._info?.stripeAccountId) {
+        // Create the appointment first (unconfirmed until deposit paid)
+        const slug = window.location.pathname.split('/book/')[1]?.split('/')[0];
+      const res = await fetch('/api/public/'+slug+'/book', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customerName:name, customerPhone:phone, customerEmail:email||'', barberId:this._barber?.id||null, barberName:this._barber?.name||null, serviceId:this._service?.id||null, serviceName:this._service?.name, servicePrice:this._service?.price, date:this._date, time:this._time, notes:notes||'', status:'pending-deposit' })
+        });
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error||'Booking failed');
+        this._pendingAppointmentId = data.appointmentId;
+        this._pendingEmail = email;
+
+        // Go to deposit step
+        btn.textContent = 'Confirm Appointment'; btn.disabled = false;
+        this._initDepositStep(dep.amount, dep.message);
+        this.goTo('deposit');
+        return;
+      }
+
+      // No deposit — book directly
+      await this._bookDirectly(name, phone, email, notes, btn);
+    } catch(e) {
+      errEl.textContent = e.message || 'Could not complete booking. Please try again.';
+      errEl.style.display = 'block';
+      btn.textContent = 'Confirm Appointment'; btn.disabled = false;
+    }
+  },
+
+  async _bookDirectly(name, phone, email, notes, btn) {
+    const slug = window.location.pathname.split('/book/')[1]?.split('/')[0];
+      const res = await fetch('/api/public/'+slug+'/book', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ customerName:name, customerPhone:phone, customerEmail:email||'', barberId:this._barber?.id||null, barberName:this._barber?.name||null, serviceId:this._service?.id||null, serviceName:this._service?.name, servicePrice:this._service?.price, date:this._date, time:this._time, notes:notes||'' })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      this._showSuccess(data.smsSent);
+    } else { throw new Error(data.error || 'Booking failed.'); }
+    if (btn) { btn.textContent = 'Confirm Appointment'; btn.disabled = false; }
+  },
+
+  _showSuccess(smsSent) {
+    const dt = new Date(this._date + 'T12:00:00');
+    document.getElementById('success-sub').textContent = 'See you '+dt.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+' at '+this._time+'.';
+    document.getElementById('confirm-card').innerHTML =
+      '<div class="confirm-row"><span class="confirm-label">Service</span><span class="confirm-value">'+this._service?.name+'</span></div>'+
+      '<div class="confirm-row"><span class="confirm-label">Barber</span><span class="confirm-value">'+(this._barber?.label||'Next available')+'</span></div>'+
+      '<div class="confirm-row"><span class="confirm-label">Date</span><span class="confirm-value">'+dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</span></div>'+
+      '<div class="confirm-row"><span class="confirm-label">Time</span><span class="confirm-value">'+this._time+'</span></div>'+
+      '<div class="confirm-row"><span class="confirm-label">Price</span><span class="confirm-value">$'+this._service?.price+'</span></div>';
+    if (smsSent) document.getElementById('sms-pill').style.display = 'inline-flex';
+    this.goTo('success');
+  },
+
+  _initDepositStep(amount, message) {
+    document.getElementById('deposit-msg').textContent = message || 'A deposit is required to confirm your booking.';
+    document.getElementById('deposit-amount-display').textContent = '$'+amount;
+    // Init Stripe
+    if (!this._stripe && this._info?.stripePublishableKey) {
+      this._stripe = Stripe(this._info.stripePublishableKey, { stripeAccount: this._info.stripeAccountId });
+      const elements = this._stripe.elements();
+      this._cardElement = elements.create('card', {
+        style: { base: { fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif', fontSize:'16px', color:'#0a0a0a', '::placeholder':{ color:'#aeaeb2' } } }
+      });
+      this._cardElement.mount('#card-element');
+      this._cardElement.on('change', e => {
+        const errEl = document.getElementById('card-error');
+        if (errEl) { errEl.textContent = e.error?.message||''; errEl.style.display = e.error?'block':'none'; }
+      });
+    }
+  },
+
+  async payDeposit() {
+    const btn = document.getElementById('deposit-btn');
+    const errEl = document.getElementById('deposit-error');
+    errEl.style.display = 'none';
+    btn.textContent = 'Processing...'; btn.disabled = true;
+
+    try {
+      // Create PaymentIntent
+      const slug = window.location.pathname.split('/book/')[1]?.split('/')[0];
+      const dres = await fetch('/api/public/'+slug+'/deposit/create', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appointmentId: this._pendingAppointmentId, customerName: document.getElementById('b-name')?.value.trim(), customerEmail: this._pendingEmail||'' })
+      });
+      const data = await dres.json();
+      if (!data.ok) throw new Error(data.error||'Could not process deposit');
+
+      // Confirm payment
+      const result = await this._stripe.confirmCardPayment(data.clientSecret, {
+        payment_method: { card: this._cardElement }
+      });
+
+      if (result.error) throw new Error(result.error.message);
+
+      // Mark deposit as paid
+      await fetch('/api/deposit/confirm', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appointmentId: this._pendingAppointmentId, paymentIntentId: result.paymentIntent.id, amount: data.amount })
+      });
+
+      this._showSuccess(false);
+    } catch(e) {
+      errEl.textContent = e.message || 'Payment failed. Please try again.';
+      errEl.style.display = 'block';
+      btn.textContent = 'Pay Deposit & Confirm'; btn.disabled = false;
+    }
+  }
+};
+
+document.addEventListener('DOMContentLoaded', () => Book.init());
+</script>
+</body>
+</html>

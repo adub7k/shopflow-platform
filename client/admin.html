@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ShopFlow Admin</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{--black:#0a0a0a;--white:#fff;--off:#f5f5f7;--border:#e5e7eb;--muted:#6b7280;--green:#16a34a;--green-lt:#f0fdf4;--font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
+body{font-family:var(--font);background:var(--off);min-height:100vh;-webkit-font-smoothing:antialiased;}
+.topbar{background:var(--black);padding:16px 24px;display:flex;align-items:center;justify-content:space-between;}
+.topbar-logo{display:flex;align-items:center;gap:10px;}
+.topbar-logo img{width:28px;height:28px;border-radius:7px;}
+.topbar-title{font-size:16px;font-weight:700;color:var(--white);letter-spacing:-.03em;}
+.topbar-badge{background:#16a34a;color:white;font-size:10px;font-weight:700;padding:3px 8px;border-radius:100px;letter-spacing:.05em;}
+.wrap{max-width:1000px;margin:0 auto;padding:32px 24px;}
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px;}
+.stat-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:20px;}
+.stat-label{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;}
+.stat-value{font-size:32px;font-weight:800;color:var(--black);letter-spacing:-.04em;}
+.stat-sub{font-size:13px;color:var(--muted);margin-top:4px;}
+.section-title{font-size:18px;font-weight:700;color:var(--black);letter-spacing:-.03em;margin-bottom:16px;}
+.shops-table{background:var(--white);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
+.table-header{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:0;background:var(--off);padding:12px 20px;border-bottom:1px solid var(--border);}
+.table-header div{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
+.table-row{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:0;padding:14px 20px;border-bottom:0.5px solid var(--border);align-items:center;transition:background .1s;}
+.table-row:hover{background:var(--off);}
+.table-row:last-child{border-bottom:none;}
+.shop-name{font-size:14px;font-weight:600;color:var(--black);}
+.shop-email{font-size:12px;color:var(--muted);margin-top:2px;}
+.plan-badge{display:inline-block;padding:3px 10px;border-radius:100px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}
+.plan-starter{background:#f3f4f6;color:#374151;}
+.plan-pro{background:#eff6ff;color:#1d4ed8;}
+.plan-shop{background:var(--green-lt);color:var(--green);}
+.date-text{font-size:13px;color:var(--muted);}
+.loading{text-align:center;padding:60px;color:var(--muted);}
+.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--off);}
+.auth-card{background:var(--white);border-radius:20px;padding:40px;width:360px;box-shadow:0 4px 32px rgba(0,0,0,.08);}
+.auth-title{font-size:22px;font-weight:700;margin-bottom:20px;}
+.auth-input{width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:10px;font-size:15px;font-family:var(--font);outline:none;margin-bottom:12px;}
+.auth-btn{width:100%;padding:14px;background:var(--black);color:white;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font);}
+.mrr-highlight{font-size:13px;color:var(--green);font-weight:600;margin-top:4px;}
+</style>
+</head>
+<body>
+<div id="auth-screen" class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-title">🔐 ShopFlow Admin</div>
+    <input id="admin-key" class="auth-input" type="password" placeholder="Admin key" onkeydown="if(event.key==='Enter')loadAdmin()"/>
+    <button class="auth-btn" onclick="loadAdmin()">Access Dashboard</button>
+  </div>
+</div>
+
+<div id="admin-screen" style="display:none;">
+  <div class="topbar">
+    <div class="topbar-logo">
+      <img src="/icons/icon-192.png"/>
+      <div class="topbar-title">ShopFlow Admin</div>
+    </div>
+    <div class="topbar-badge">OWNER ONLY</div>
+  </div>
+  <div class="wrap">
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card"><div class="loading">Loading...</div></div>
+    </div>
+    <div class="section-title">Recent Shops</div>
+    <div class="shops-table">
+      <div class="table-header">
+        <div>Shop</div><div>Plan</div><div>Joined</div><div>Last Active</div>
+      </div>
+      <div id="shops-list"><div class="loading">Loading shops...</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let adminKey = '';
+
+async function loadAdmin() {
+  adminKey = document.getElementById('admin-key').value;
+  try {
+    const res = await fetch('/api/admin/stats', { headers: {'x-admin-key': adminKey} });
+    if (!res.ok) { alert('Invalid admin key'); return; }
+    const data = await res.json();
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('admin-screen').style.display = 'block';
+    renderStats(data);
+    renderShops(data);
+  } catch(e) { alert('Error: '+e.message); }
+}
+
+const planPrices = { starter:19.99, pro:99, shop:200 };
+
+function renderStats(data) {
+  const mrr = Object.entries(data.planBreakdown||{}).reduce((sum,[plan,count])=>sum+(planPrices[plan]||0)*count,0);
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Total Shops</div>
+      <div class="stat-value">${data.totalShops||0}</div>
+      <div class="stat-sub">${data.activeShops||0} active</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">MRR</div>
+      <div class="stat-value">$${mrr.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</div>
+      <div class="mrr-highlight">$${(mrr*12).toLocaleString('en-US',{maximumFractionDigits:0})} ARR</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Plans</div>
+      <div class="stat-value">${Object.values(data.planBreakdown||{}).reduce((a,b)=>a+b,0)}</div>
+      <div class="stat-sub">${Object.entries(data.planBreakdown||{}).map(([p,c])=>c+' '+p).join(' · ')}</div>
+    </div>`;
+}
+
+function renderShops(data) {
+  const shops = data.recentShops||[];
+  if (!shops.length) { document.getElementById('shops-list').innerHTML='<div class="loading">No shops yet</div>'; return; }
+  document.getElementById('shops-list').innerHTML = shops.map(s=>`
+    <div class="table-row">
+      <div><div class="shop-name">${s.shopName}</div></div>
+      <div><span class="plan-badge plan-${s.plan}">${s.plan}</span></div>
+      <div class="date-text">${new Date(s.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
+      <div class="date-text">${s.lastActivity?new Date(s.lastActivity).toLocaleDateString('en-US',{month:'short',day:'numeric'}):'Never'}</div>
+    </div>`).join('');
+}
+</script>
+</body>
+</html>

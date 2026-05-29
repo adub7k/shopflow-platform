@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Sign Up — ShopFlow</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{--black:#0a0a0a;--white:#fff;--off:#f5f5f7;--border:#d2d2d7;--muted:#6e6e73;--faint:#aeaeb2;--green:#16a34a;--green-lt:#f0fdf4;--green-border:#b3dfbf;--red:#ff3b30;--font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
+body{font-family:var(--font);background:var(--off);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;-webkit-font-smoothing:antialiased;}
+.card{background:var(--white);border-radius:20px;padding:40px 36px;width:100%;max-width:440px;box-shadow:0 4px 32px rgba(0,0,0,.08);}
+.logo{display:flex;align-items:center;gap:10px;margin-bottom:28px;}
+.logo-img{width:36px;height:36px;border-radius:9px;}
+.logo-text{font-size:18px;font-weight:800;color:var(--black);letter-spacing:-.04em;}
+h1{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margin-bottom:6px;}
+.subtitle{font-size:14px;color:var(--muted);margin-bottom:28px;line-height:1.5;}
+.field{margin-bottom:14px;}
+.field label{font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:5px;letter-spacing:.02em;}
+.field input,.field select{width:100%;padding:13px 14px;border:1px solid var(--border);border-radius:10px;font-size:15px;font-family:var(--font);background:var(--white);color:var(--black);outline:none;transition:border-color .15s;-webkit-appearance:none;}
+.field input:focus,.field select:focus{border-color:var(--black);}
+.field input::placeholder{color:var(--faint);}
+.slug-preview{font-size:12px;color:var(--green);margin-top:5px;font-weight:500;}
+.btn{width:100%;padding:15px;border:none;border-radius:12px;font-size:16px;font-weight:600;font-family:var(--font);cursor:pointer;background:var(--black);color:var(--white);margin-top:8px;transition:opacity .15s;}
+.btn:hover{opacity:.85;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+.error{background:#fff5f5;border:1px solid #ffd7d5;border-radius:8px;padding:10px 12px;font-size:13px;color:var(--red);margin-bottom:12px;display:none;}
+.login-link{text-align:center;margin-top:20px;font-size:14px;color:var(--muted);}
+.login-link a{color:var(--black);font-weight:600;text-decoration:none;}
+.plan-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;}
+.plan-card{border:1.5px solid var(--border);border-radius:10px;padding:12px 10px;text-align:center;cursor:pointer;transition:all .15s;}
+.plan-card:hover{border-color:var(--black);}
+.plan-card.selected{border-color:var(--black);background:var(--black);}
+.plan-card.selected .plan-name,.plan-card.selected .plan-price{color:var(--white);}
+.plan-name{font-size:13px;font-weight:700;color:var(--black);margin-bottom:4px;}
+.plan-price{font-size:12px;color:var(--muted);}
+.terms{font-size:12px;color:var(--faint);text-align:center;margin-top:12px;line-height:1.5;}
+.terms a{color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <img class="logo-img" src="/icons/icon-192.png" />
+    <div class="logo-text">ShopFlow</div>
+  </div>
+  <h1>Get started free</h1>
+  <div class="subtitle">Set up your shop in 2 minutes. No credit card required to start.</div>
+
+  <div class="error" id="err"></div>
+
+  <div class="field">
+    <label>Shop name *</label>
+    <input id="shopName" type="text" placeholder="e.g. Off-Kut Barbershop" oninput="updateSlug()" />
+    <div class="slug-preview" id="slug-preview"></div>
+  </div>
+  <div class="field">
+    <label>Your email *</label>
+    <input id="email" type="email" placeholder="you@yourshop.com" />
+  </div>
+  <div class="field">
+    <label>Password *</label>
+    <input id="password" type="password" placeholder="At least 6 characters" />
+  </div>
+  <div class="field">
+    <label>Phone (optional)</label>
+    <input id="phone" type="tel" placeholder="(505) 555-0100" />
+  </div>
+
+  <div class="field">
+    <label>Choose your plan</label>
+    <div class="plan-cards">
+      <div class="plan-card selected" id="plan-starter" onclick="selectPlan('starter')">
+        <div class="plan-name">Starter</div>
+        <div class="plan-price">$19.99/mo</div>
+      </div>
+      <div class="plan-card" id="plan-pro" onclick="selectPlan('pro')">
+        <div class="plan-name">Pro</div>
+        <div class="plan-price">$99/mo</div>
+      </div>
+      <div class="plan-card" id="plan-shop" onclick="selectPlan('shop')">
+        <div class="plan-name">Shop</div>
+        <div class="plan-price">$200/mo</div>
+      </div>
+    </div>
+    <input type="hidden" id="plan" value="starter" />
+  </div>
+
+  <button class="btn" id="signup-btn" onclick="signup()">Create my ShopFlow →</button>
+  <div class="terms">By signing up you agree to our <a href="/terms.html">Terms of Service</a> and <a href="/privacy.html">Privacy Policy</a></div>
+  <div class="login-link">Already have an account? <a href="/login">Sign in</a></div>
+</div>
+
+<script>
+let selectedPlan = 'starter';
+
+function selectPlan(plan) {
+  selectedPlan = plan;
+  document.getElementById('plan').value = plan;
+  ['starter','pro','shop'].forEach(p => {
+    document.getElementById('plan-'+p).classList.toggle('selected', p===plan);
+  });
+}
+
+async function updateSlug() {
+  const name = document.getElementById('shopName').value;
+  if (name.length < 2) { document.getElementById('slug-preview').textContent = ''; return; }
+  try {
+    const res = await fetch('/api/accounts/check-slug?name='+encodeURIComponent(name));
+    const data = await res.json();
+    const el = document.getElementById('slug-preview');
+    el.textContent = data.available ? '✓ Your booking link: shopflow.io/book/'+data.slug : '⚠ That name is taken — try adding your city';
+    el.style.color = data.available ? '#16a34a' : '#ff3b30';
+  } catch(e) {}
+}
+
+async function signup() {
+  const shopName = document.getElementById('shopName').value.trim();
+  const email    = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const phone    = document.getElementById('phone').value.trim();
+  const plan     = document.getElementById('plan').value;
+  const errEl    = document.getElementById('err');
+  errEl.style.display = 'none';
+
+  if (!shopName) { errEl.textContent='Enter your shop name.'; errEl.style.display='block'; return; }
+  if (!email)    { errEl.textContent='Enter your email.'; errEl.style.display='block'; return; }
+  if (!password||password.length<6) { errEl.textContent='Password must be at least 6 characters.'; errEl.style.display='block'; return; }
+
+  const btn = document.getElementById('signup-btn');
+  btn.textContent='Creating your shop...'; btn.disabled=true;
+
+  try {
+    const res = await fetch('/api/accounts/signup', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ shopName, email, password, phone, plan })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      localStorage.setItem('sf_token', data.token);
+      localStorage.setItem('sf_shopId', data.shopId);
+      localStorage.setItem('sf_shopSlug', data.shopSlug);
+      localStorage.setItem('sf_shopName', data.shopName);
+      window.location.href = data.crmUrl;
+    } else {
+      errEl.textContent = data.error || 'Signup failed. Please try again.';
+      errEl.style.display = 'block';
+      btn.textContent='Create my ShopFlow →'; btn.disabled=false;
+    }
+  } catch(e) {
+    errEl.textContent = 'Connection error. Please try again.';
+    errEl.style.display = 'block';
+    btn.textContent='Create my ShopFlow →'; btn.disabled=false;
+  }
+}
+</script>
+</body>
+</html>
