@@ -704,20 +704,73 @@ function requireAdmin(req, res, next) {
 app.get('/api/admin/stats', requireAdmin, (req, res) => {
   const shops = master.get('shops').value() || [];
   const planPrices = { starter: 19.99, pro: 99, shop: 200 };
-  const planCounts = {};
-  shops.forEach(s => { planCounts[s.plan] = (planCounts[s.plan] || 0) + 1; });
+  const MRR_GOAL = 25000;
+
+  const activeShops  = shops.filter(s => s.active);
+  const churned      = shops.filter(s => !s.active);
+
+  // Plan counts (active only for MRR)
+  const planCounts = {}, allPlanCounts = {};
+  activeShops.forEach(s => { planCounts[s.plan]    = (planCounts[s.plan]    || 0) + 1; });
+  shops.forEach(s       => { allPlanCounts[s.plan] = (allPlanCounts[s.plan] || 0) + 1; });
+
   const mrr = Object.entries(planCounts).reduce((sum, [plan, count]) => sum + (planPrices[plan] || 0) * count, 0);
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  // Month-over-month: shops created this month vs last month
+  const now = new Date();
+  const thisMonthStr = now.toISOString().slice(0, 7);
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthStr = lastMonth.toISOString().slice(0, 7);
+
+  const newThisMonth  = activeShops.filter(s => (s.createdAt||'').startsWith(thisMonthStr));
+  const newLastMonth  = activeShops.filter(s => (s.createdAt||'').startsWith(lastMonthStr));
+  const newMrrThisMonth = newThisMonth.reduce((s, shop) => s + (planPrices[shop.plan] || 0), 0);
+  const newMrrLastMonth = newLastMonth.reduce((s, shop) => s + (planPrices[shop.plan] || 0), 0);
+
+  // Last month's implied MRR (shops active before this month)
+  const lastMonthShops = shops.filter(s => s.active && (s.createdAt||'') < thisMonthStr + '-01');
+  const lastMrr = lastMonthShops.reduce((sum, s) => sum + (planPrices[s.plan] || 0), 0);
+  const mrrGrowth = lastMrr > 0 ? Math.round(((mrr - lastMrr) / lastMrr) * 100) : null;
+
+  // Churn rate (inactive / total ever)
+  const churnRate = shops.length > 0 ? Math.round((churned.length / shops.length) * 100) : 0;
+
+  // How many shops needed to hit $25k MRR
+  const mrrToGoal = Math.max(0, MRR_GOAL - mrr);
+  const shopsNeeded = {
+    starter: Math.ceil(mrrToGoal / planPrices.starter),
+    pro:     Math.ceil(mrrToGoal / planPrices.pro),
+    shop:    Math.ceil(mrrToGoal / planPrices.shop),
+  };
+
+  // Avg revenue per shop
+  const avgMrr = activeShops.length ? (mrr / activeShops.length) : 0;
+
+  // LTV estimate (avg MRR / monthly churn rate, assuming avg 12mo if no churn)
+  const monthlyChurnRate = shops.length > 0 ? (churned.length / Math.max(shops.length, 1)) / 12 : 0;
+  const ltv = monthlyChurnRate > 0 ? Math.round(avgMrr / monthlyChurnRate) : avgMrr * 24;
+
+  const oneDayAgo  = new Date(Date.now() - 24 * 3600000).toISOString();
+  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 3600000).toISOString();
+
   res.json({
     totalShops: shops.length,
-    activeShops: shops.filter(s => s.active).length,
-    activeToday: shops.filter(s => s.lastActivity && s.lastActivity > oneDayAgo).length,
-    activeWeek: shops.filter(s => s.lastActivity && s.lastActivity > oneWeekAgo).length,
-    mrr,
-    arr: mrr * 12,
+    activeShops: activeShops.length,
+    churnedShops: churned.length,
+    churnRate,
+    activeToday: activeShops.filter(s => s.lastActivity && s.lastActivity > oneDayAgo).length,
+    activeWeek:  activeShops.filter(s => s.lastActivity && s.lastActivity > oneWeekAgo).length,
+    mrr, arr: mrr * 12, avgMrr, ltv,
+    mrrGrowth,
+    newMrrThisMonth,
+    newMrrLastMonth,
+    newShopsThisMonth: newThisMonth.length,
+    mrrGoal: MRR_GOAL,
+    mrrToGoal,
+    mrrPct: Math.min(100, Math.round((mrr / MRR_GOAL) * 100)),
+    shopsNeeded,
     planBreakdown: planCounts,
-    recentShops: [...shops].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5).map(s => ({
+    recentShops: [...shops].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 8).map(s => ({
       id: s.id, shopName: s.shopName, plan: s.plan, email: s.email, createdAt: s.createdAt, active: s.active,
     })),
   });

@@ -14,6 +14,7 @@
   --red:#dc2626;--red-lt:#fef2f2;
   --yellow:#d97706;--yellow-lt:#fffbeb;
   --sidebar-w:220px;
+  --topbar-h:56px;
   --font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   --radius:10px;--radius-lg:14px;
 }
@@ -21,7 +22,7 @@ body{font-family:var(--font);background:var(--off);min-height:100vh;-webkit-font
 
 /* ── Auth ── */
 .auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--black);}
-.auth-card{background:#111;border:1px solid #222;border-radius:20px;padding:44px 40px;width:380px;}
+.auth-card{background:#111;border:1px solid #222;border-radius:20px;padding:44px 40px;width:380px;max-width:calc(100vw - 32px);}
 .auth-logo{display:flex;align-items:center;gap:10px;margin-bottom:32px;}
 .auth-logo-mark{width:36px;height:36px;background:var(--green);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;}
 .auth-logo-text{font-size:20px;font-weight:800;color:#fff;letter-spacing:-.03em;}
@@ -30,12 +31,23 @@ body{font-family:var(--font);background:var(--off);min-height:100vh;-webkit-font
 .auth-sub{font-size:13px;color:#6b7280;margin-bottom:28px;}
 .auth-input{width:100%;padding:13px 16px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;font-size:15px;font-family:var(--font);color:#fff;outline:none;margin-bottom:10px;transition:border .15s;}
 .auth-input:focus{border-color:#333;}
-.auth-btn{width:100%;padding:14px;background:var(--green);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--font);letter-spacing:-.01em;transition:opacity .15s;}
+.auth-btn{width:100%;padding:14px;background:var(--green);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--font);transition:opacity .15s;}
 .auth-btn:hover{opacity:.9;}
 .auth-err{font-size:13px;color:#f87171;margin-top:8px;display:none;}
 
+/* ── Mobile topbar ── */
+#mobile-topbar{display:none;position:fixed;top:0;left:0;right:0;height:var(--topbar-h);background:#0a0a0a;border-bottom:1px solid #1a1a1a;align-items:center;padding:0 16px;gap:12px;z-index:60;}
+#mobile-topbar-title{font-size:15px;font-weight:800;color:#fff;letter-spacing:-.03em;flex:1;}
+.mobile-topbar-badge{font-size:9px;font-weight:700;background:#1a3a1a;color:var(--green);padding:2px 7px;border-radius:100px;letter-spacing:.06em;}
+#hamburger-btn{background:none;border:none;color:#9ca3af;cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;justify-content:center;}
+
+/* ── Sidebar backdrop ── */
+#sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90;backdrop-filter:blur(1px);}
+body.admin-sidebar-open #sidebar-backdrop{display:block;}
+
 /* ── App shell ── */
-#app{display:none;min-height:100vh;display:grid;grid-template-columns:var(--sidebar-w) 1fr;grid-template-rows:1fr;}
+#app{display:none;min-height:100vh;}
+#app-inner{display:grid;grid-template-columns:var(--sidebar-w) 1fr;min-height:100vh;}
 
 /* ── Sidebar ── */
 #sidebar{background:#0a0a0a;border-right:1px solid #1a1a1a;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;}
@@ -48,6 +60,17 @@ body{font-family:var(--font);background:var(--off);min-height:100vh;-webkit-font
 .sb-item:hover{background:#141414;color:#e5e7eb;}
 .sb-item.active{background:#1a3a1a;color:var(--green);}
 .sb-item-icon{font-size:14px;width:18px;text-align:center;flex-shrink:0;}
+
+/* ── MRR goal in sidebar ── */
+.sb-goal{margin:12px 8px;background:#111;border:1px solid #1f2937;border-radius:10px;padding:12px;}
+.sb-goal-label{font-size:10px;font-weight:700;color:#444;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
+.sb-goal-nums{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}
+.sb-goal-mrr{font-size:15px;font-weight:800;color:var(--green);}
+.sb-goal-target{font-size:11px;color:#555;}
+.sb-goal-bar{height:5px;background:#1f2937;border-radius:100px;overflow:hidden;}
+.sb-goal-fill{height:100%;background:var(--green);border-radius:100px;transition:width .6s ease;}
+.sb-goal-pct{font-size:11px;color:#555;margin-top:5px;}
+
 .sb-footer{margin-top:auto;padding:16px;border-top:1px solid #1a1a1a;}
 .sb-footer-text{font-size:11px;color:#333;}
 .sb-signout{font-size:12px;color:#555;cursor:pointer;margin-top:6px;padding:6px 0;}
@@ -55,52 +78,79 @@ body{font-family:var(--font);background:var(--off);min-height:100vh;-webkit-font
 
 /* ── Main area ── */
 #main{background:var(--off);overflow-y:auto;min-height:100vh;}
-.page{display:none;padding:32px;}
+.page{display:none;padding:28px;}
 .page.active{display:block;}
 
 /* ── Page header ── */
-.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;}
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;}
 .page-title{font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.03em;}
 .page-sub{font-size:13px;color:var(--muted);margin-top:2px;}
 
+/* ── Goal banner ── */
+.goal-banner{background:linear-gradient(135deg,#0a1a0a 0%,#0f2a0f 100%);border:1px solid #1a3a1a;border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:24px;position:relative;overflow:hidden;}
+.goal-banner::before{content:'';position:absolute;top:-30px;right:-30px;width:120px;height:120px;background:var(--green);opacity:.06;border-radius:50%;}
+.goal-banner-label{font-size:11px;font-weight:700;color:#4ade80;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;}
+.goal-banner-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;}
+.goal-banner-mrr{font-size:32px;font-weight:900;color:#fff;letter-spacing:-.04em;line-height:1;}
+.goal-banner-sub{font-size:13px;color:#4ade80;margin-top:3px;}
+.goal-banner-right{text-align:right;}
+.goal-banner-pct{font-size:24px;font-weight:800;color:#4ade80;}
+.goal-banner-of{font-size:12px;color:#4b7a4b;}
+.goal-bar-wrap{height:8px;background:#1a3a1a;border-radius:100px;overflow:hidden;}
+.goal-bar-fill{height:100%;background:linear-gradient(90deg,#16a34a,#4ade80);border-radius:100px;transition:width .8s ease;}
+.goal-milestones{display:flex;justify-content:space-between;margin-top:8px;}
+.goal-milestone{font-size:10px;color:#4b7a4b;}
+.goal-milestone.reached{color:#4ade80;font-weight:700;}
+
 /* ── Metric cards ── */
-.metrics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:28px;}
-.metric-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px 22px;}
+.metrics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
+.metric-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;}
 .metric-label{font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;}
-.metric-value{font-size:28px;font-weight:800;color:var(--text);letter-spacing:-.04em;line-height:1;}
+.metric-value{font-size:26px;font-weight:800;color:var(--text);letter-spacing:-.04em;line-height:1;}
 .metric-value.green{color:var(--green);}
-.metric-sub{font-size:12px;color:var(--muted);margin-top:5px;}
+.metric-value.red{color:var(--red);}
+.metric-sub{font-size:12px;color:var(--muted);margin-top:4px;}
 .metric-sub.up{color:var(--green);}
+.metric-sub.down{color:var(--red);}
+.metric-badge{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:700;padding:2px 7px;border-radius:100px;margin-top:4px;}
+.metric-badge.up{background:var(--green-lt);color:var(--green);}
+.metric-badge.down{background:var(--red-lt);color:var(--red);}
+.metric-badge.neutral{background:var(--off);color:var(--muted);}
+
+/* ── Path to goal card ── */
+.path-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:20px;margin-bottom:20px;}
+.path-title{font-size:14px;font-weight:700;color:var(--text);margin-bottom:4px;}
+.path-sub{font-size:12px;color:var(--muted);margin-bottom:16px;}
+.path-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:.5px solid var(--border);}
+.path-row:last-child{border-bottom:none;}
+.path-plan{font-size:13px;font-weight:600;color:var(--text);}
+.path-price{font-size:12px;color:var(--muted);}
+.path-needed{font-size:13px;font-weight:700;color:var(--text);}
+.path-note{font-size:11px;color:var(--muted);margin-top:2px;text-align:right;}
 
 /* ── Section cards ── */
-.card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:20px;}
-.card-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+.card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px;}
+.card-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
 .card-title{font-size:14px;font-weight:700;color:var(--text);letter-spacing:-.02em;}
 .card-sub{font-size:12px;color:var(--muted);}
 
-/* ── Plan breakdown ── */
-.plan-bars{padding:20px;}
-.plan-row{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+/* ── Plan bars ── */
+.plan-bars{padding:18px;}
+.plan-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;}
 .plan-row:last-child{margin-bottom:0;}
-.plan-label{font-size:12px;font-weight:600;color:var(--muted);width:56px;flex-shrink:0;}
+.plan-label{font-size:12px;font-weight:700;width:52px;flex-shrink:0;}
 .plan-bar-wrap{flex:1;background:var(--off);border-radius:100px;height:8px;overflow:hidden;}
 .plan-bar{height:100%;border-radius:100px;transition:width .6s ease;}
-.plan-bar.starter{background:#d1d5db;}
-.plan-bar.pro{background:var(--blue);}
-.plan-bar.shop{background:var(--green);}
-.plan-count{font-size:12px;font-weight:700;color:var(--text);width:24px;text-align:right;flex-shrink:0;}
+.plan-count{font-size:12px;font-weight:700;color:var(--text);width:20px;text-align:right;flex-shrink:0;}
 .plan-rev{font-size:11px;color:var(--muted);width:52px;text-align:right;flex-shrink:0;}
 
 /* ── Table ── */
-.table-wrap{overflow-x:auto;}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;}
 table{width:100%;border-collapse:collapse;}
-th{font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;padding:12px 16px;text-align:left;background:var(--off);border-bottom:1px solid var(--border);}
-td{padding:13px 16px;border-bottom:0.5px solid var(--border);font-size:13px;vertical-align:middle;}
+th{font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;padding:11px 14px;text-align:left;background:var(--off);border-bottom:1px solid var(--border);white-space:nowrap;}
+td{padding:12px 14px;border-bottom:.5px solid var(--border);font-size:13px;vertical-align:middle;}
 tr:last-child td{border-bottom:none;}
 tr.clickable:hover td{background:#fafafa;cursor:pointer;}
-.shop-name-cell{font-weight:600;color:var(--text);}
-.shop-email-cell{font-size:11px;color:var(--muted);margin-top:2px;}
-.shop-slug-cell{font-size:11px;color:var(--faint);font-family:monospace;}
 
 /* ── Badges ── */
 .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700;letter-spacing:.03em;}
@@ -112,23 +162,23 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 .badge-yes{background:var(--green-lt);color:var(--green);}
 .badge-no{background:#f3f4f6;color:var(--faint);}
 
-/* ── Search / filter bar ── */
-.toolbar{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border);}
-.search-input{flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font);outline:none;background:var(--off);}
+/* ── Toolbar ── */
+.toolbar{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.search-input{flex:1;min-width:160px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:var(--font);outline:none;background:var(--off);}
 .search-input:focus{border-color:#aaa;background:#fff;}
 .filter-select{padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:var(--font);outline:none;background:var(--off);color:var(--muted);cursor:pointer;}
 
 /* ── Buttons ── */
 .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;font-family:var(--font);cursor:pointer;border:none;transition:opacity .15s,background .15s;}
 .btn:hover{opacity:.88;}
+.btn:disabled{opacity:.5;cursor:not-allowed;}
 .btn-green{background:var(--green);color:#fff;}
 .btn-dark{background:var(--text);color:#fff;}
 .btn-outline{background:var(--white);color:var(--text);border:1px solid var(--border);}
 .btn-red{background:var(--red-lt);color:var(--red);border:1px solid #fecaca;}
 .btn-sm{padding:6px 12px;font-size:12px;}
-.btn-icon{padding:7px 10px;font-size:14px;}
 
-/* ── Toggle switch ── */
+/* ── Toggle ── */
 .toggle{position:relative;width:36px;height:20px;flex-shrink:0;}
 .toggle input{opacity:0;width:0;height:0;}
 .toggle-slider{position:absolute;inset:0;background:#d1d5db;border-radius:100px;cursor:pointer;transition:.2s;}
@@ -136,59 +186,72 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 .toggle input:checked + .toggle-slider{background:var(--green);}
 .toggle input:checked + .toggle-slider::before{transform:translateX(16px);}
 
-/* ── Shop profile drawer ── */
+/* ── Drawer ── */
 #drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.3);z-index:100;display:none;backdrop-filter:blur(2px);}
-#drawer{position:fixed;top:0;right:-560px;width:560px;height:100vh;background:var(--white);box-shadow:-8px 0 40px rgba(0,0,0,.12);z-index:101;overflow-y:auto;transition:right .28s cubic-bezier(.4,0,.2,1);}
+#drawer{position:fixed;top:0;right:-580px;width:560px;height:100vh;background:var(--white);box-shadow:-8px 0 40px rgba(0,0,0,.12);z-index:101;overflow-y:auto;transition:right .28s cubic-bezier(.4,0,.2,1);}
 #drawer.open{right:0;}
-.drawer-topbar{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--white);z-index:1;}
+.drawer-topbar{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--white);z-index:1;}
 .drawer-close{width:30px;height:30px;border-radius:50%;border:none;background:var(--off);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;color:var(--muted);}
-.drawer-close:hover{background:var(--border);}
-.drawer-body{padding:24px;}
-.drawer-section{margin-bottom:24px;}
-.drawer-section-title{font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;}
-.drawer-stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
-.drawer-stat{background:var(--off);border-radius:10px;padding:14px;text-align:center;}
-.drawer-stat-val{font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.03em;}
+.drawer-body{padding:20px;}
+.drawer-section{margin-bottom:22px;}
+.drawer-section-title{font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.07em;margin-bottom:10px;}
+.drawer-stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.drawer-stat{background:var(--off);border-radius:10px;padding:12px;text-align:center;}
+.drawer-stat-val{font-size:20px;font-weight:800;color:var(--text);letter-spacing:-.03em;}
 .drawer-stat-val.green{color:var(--green);}
-.drawer-stat-label{font-size:10px;color:var(--muted);margin-top:3px;}
-.drawer-info-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:0.5px solid var(--border);font-size:13px;}
+.drawer-stat-label{font-size:10px;color:var(--muted);margin-top:2px;}
+.drawer-info-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:.5px solid var(--border);font-size:13px;}
 .drawer-info-row:last-child{border-bottom:none;}
 .drawer-info-label{color:var(--muted);}
-.drawer-info-val{color:var(--text);font-weight:500;text-align:right;max-width:280px;word-break:break-all;}
+.drawer-info-val{color:var(--text);font-weight:500;text-align:right;max-width:260px;word-break:break-all;}
 .drawer-actions{display:flex;gap:8px;flex-wrap:wrap;}
-.recent-appt-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:0.5px solid var(--border);font-size:12px;}
-.recent-appt-row:last-child{border-bottom:none;}
 .plan-select{padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:var(--font);outline:none;background:var(--white);cursor:pointer;}
 
 /* ── Modal ── */
-#modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:none;align-items:center;justify-content:center;}
+#modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:none;align-items:center;justify-content:center;padding:16px;}
 #modal-overlay.open{display:flex;}
-#modal-box{background:var(--white);border-radius:16px;padding:32px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.15);}
+#modal-box{background:var(--white);border-radius:16px;padding:28px;width:460px;max-width:100%;box-shadow:0 20px 60px rgba(0,0,0,.15);max-height:90vh;overflow-y:auto;}
 .modal-title{font-size:18px;font-weight:800;color:var(--text);letter-spacing:-.03em;margin-bottom:6px;}
-.modal-sub{font-size:13px;color:var(--muted);margin-bottom:24px;}
-.form-row{margin-bottom:14px;}
+.modal-sub{font-size:13px;color:var(--muted);margin-bottom:20px;}
+.form-row{margin-bottom:12px;}
 .form-label{font-size:12px;font-weight:600;color:var(--text);margin-bottom:5px;display:block;}
 .form-input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:var(--font);outline:none;transition:border .15s;}
 .form-input:focus{border-color:#aaa;}
-.form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;}
+.form-row-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;}
 .modal-err{font-size:13px;color:var(--red);margin-top:8px;display:none;}
 
 /* ── Toast ── */
 #toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#111;color:#fff;padding:10px 20px;border-radius:100px;font-size:13px;font-weight:600;z-index:9999;opacity:0;transition:opacity .2s;pointer-events:none;white-space:nowrap;}
 #toast.show{opacity:1;}
 
-/* ── Empty / loading states ── */
-.empty-state{padding:48px;text-align:center;color:var(--faint);font-size:13px;}
+/* ── States ── */
+.empty-state{padding:40px;text-align:center;color:var(--faint);font-size:13px;}
 .spinner{display:inline-block;width:16px;height:16px;border:2px solid #e5e7eb;border-top-color:var(--green);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px;}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* ── Responsive ── */
 @media(max-width:900px){
-  #app{grid-template-columns:1fr;}
-  #sidebar{display:none;}
+  #mobile-topbar{display:flex;}
+  #app-inner{grid-template-columns:1fr;padding-top:var(--topbar-h);}
+  #sidebar{
+    position:fixed;top:0;left:-240px;width:220px;height:100vh;
+    z-index:100;transition:left .25s cubic-bezier(.4,0,.2,1);
+  }
+  body.admin-sidebar-open #sidebar{left:0;}
   .metrics-grid{grid-template-columns:1fr 1fr;}
+  .drawer-stat-grid{grid-template-columns:repeat(2,1fr);}
   #drawer{width:100vw;right:-100vw;}
+  #drawer.open{right:0;}
+  .form-row-2{grid-template-columns:1fr;}
+  .page{padding:16px;}
+  .goal-banner-mrr{font-size:26px;}
+  .goal-banner-pct{font-size:20px;}
+}
+@media(max-width:480px){
+  .metrics-grid{grid-template-columns:1fr 1fr;}
+  .metric-value{font-size:22px;}
+  th,td{padding:10px 10px;}
 }
 </style>
 </head>
@@ -209,8 +272,22 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
   </div>
 </div>
 
+<!-- Mobile topbar -->
+<div id="mobile-topbar">
+  <button id="hamburger-btn" onclick="toggleAdminSidebar()">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <line x1="3" y1="5" x2="17" y2="5"/><line x1="3" y1="10" x2="17" y2="10"/><line x1="3" y1="15" x2="17" y2="15"/>
+    </svg>
+  </button>
+  <div id="mobile-topbar-title">ShopFlow <span class="mobile-topbar-badge">ADMIN</span></div>
+</div>
+
+<!-- Sidebar backdrop -->
+<div id="sidebar-backdrop" onclick="closeAdminSidebar()"></div>
+
 <!-- App -->
 <div id="app" style="display:none;">
+<div id="app-inner">
 
   <!-- Sidebar -->
   <div id="sidebar">
@@ -222,17 +299,31 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       </div>
     </div>
 
+    <!-- MRR goal widget -->
+    <div class="sb-goal">
+      <div class="sb-goal-label">Path to $25k MRR</div>
+      <div class="sb-goal-nums">
+        <div class="sb-goal-mrr" id="sb-mrr">$0</div>
+        <div class="sb-goal-target">$25,000</div>
+      </div>
+      <div class="sb-goal-bar"><div class="sb-goal-fill" id="sb-goal-fill" style="width:0%"></div></div>
+      <div class="sb-goal-pct" id="sb-goal-pct">0% there</div>
+    </div>
+
     <div class="sb-section">Platform</div>
-    <div class="sb-item active" data-page="overview" onclick="nav('overview')">
+    <div class="sb-item active" data-page="overview" onclick="nav('overview');closeAdminSidebar()">
       <span class="sb-item-icon">⊞</span>Overview
     </div>
-    <div class="sb-item" data-page="shops" onclick="nav('shops')">
+    <div class="sb-item" data-page="shops" onclick="nav('shops');closeAdminSidebar()">
       <span class="sb-item-icon">🏪</span>Shops
     </div>
-    <div class="sb-item" data-page="billing" onclick="nav('billing')">
+    <div class="sb-item" data-page="growth" onclick="nav('growth');closeAdminSidebar()">
+      <span class="sb-item-icon">📈</span>Growth
+    </div>
+    <div class="sb-item" data-page="billing" onclick="nav('billing');closeAdminSidebar()">
       <span class="sb-item-icon">💰</span>Billing
     </div>
-    <div class="sb-item" data-page="settings" onclick="nav('settings')">
+    <div class="sb-item" data-page="settings" onclick="nav('settings');closeAdminSidebar()">
       <span class="sb-item-icon">⚙️</span>Settings
     </div>
 
@@ -255,45 +346,65 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         <button class="btn btn-outline btn-sm" onclick="refreshAll()">↻ Refresh</button>
       </div>
 
+      <!-- Goal banner -->
+      <div class="goal-banner" id="goal-banner">
+        <div class="goal-banner-label">🎯 Goal: $25,000 MRR</div>
+        <div class="goal-banner-row">
+          <div>
+            <div class="goal-banner-mrr" id="banner-mrr">$0</div>
+            <div class="goal-banner-sub" id="banner-growth">Loading…</div>
+          </div>
+          <div class="goal-banner-right">
+            <div class="goal-banner-pct" id="banner-pct">0%</div>
+            <div class="goal-banner-of">of $25k goal</div>
+          </div>
+        </div>
+        <div class="goal-bar-wrap">
+          <div class="goal-bar-fill" id="banner-bar" style="width:0%"></div>
+        </div>
+        <div class="goal-milestones">
+          <span class="goal-milestone" id="ms-1k">$1k</span>
+          <span class="goal-milestone" id="ms-5k">$5k</span>
+          <span class="goal-milestone" id="ms-10k">$10k</span>
+          <span class="goal-milestone" id="ms-25k">$25k ✓</span>
+        </div>
+      </div>
+
+      <!-- Metrics -->
       <div class="metrics-grid">
         <div class="metric-card">
           <div class="metric-label">MRR</div>
           <div class="metric-value green" id="m-mrr">—</div>
-          <div class="metric-sub" id="m-arr">— ARR</div>
+          <div id="m-growth-badge"></div>
         </div>
         <div class="metric-card">
-          <div class="metric-label">Total Shops</div>
+          <div class="metric-label">Active Shops</div>
           <div class="metric-value" id="m-total">—</div>
-          <div class="metric-sub" id="m-active-shops">— active</div>
+          <div class="metric-sub" id="m-new-shops">— new this month</div>
         </div>
         <div class="metric-card">
-          <div class="metric-label">Active Today</div>
-          <div class="metric-value" id="m-today">—</div>
-          <div class="metric-sub" id="m-week">— this week</div>
+          <div class="metric-label">New MRR / Mo</div>
+          <div class="metric-value green" id="m-new-mrr">—</div>
+          <div class="metric-sub" id="m-new-mrr-sub">this month</div>
         </div>
         <div class="metric-card">
-          <div class="metric-label">Avg Revenue / Shop</div>
-          <div class="metric-value" id="m-avg">—</div>
-          <div class="metric-sub">per month</div>
+          <div class="metric-label">Churn Rate</div>
+          <div class="metric-value" id="m-churn">—</div>
+          <div class="metric-sub" id="m-churned">— shops lost</div>
         </div>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-        <!-- Plan breakdown -->
         <div class="card">
           <div class="card-header">
             <div class="card-title">Plan Breakdown</div>
           </div>
-          <div class="plan-bars" id="plan-bars">
-            <div class="empty-state">Loading...</div>
-          </div>
+          <div class="plan-bars" id="plan-bars"><div class="empty-state">Loading...</div></div>
         </div>
-
-        <!-- Recent signups -->
         <div class="card">
           <div class="card-header">
             <div class="card-title">Recent Signups</div>
-            <button class="btn btn-sm btn-green" onclick="openCreateModal()">+ Add Shop</button>
+            <button class="btn btn-sm btn-green" onclick="openCreateModal()">+ Add</button>
           </div>
           <div id="recent-signups"><div class="empty-state">Loading...</div></div>
         </div>
@@ -309,10 +420,9 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         </div>
         <button class="btn btn-green" onclick="openCreateModal()">+ Add Shop</button>
       </div>
-
       <div class="card" style="margin-bottom:0;">
         <div class="toolbar">
-          <input class="search-input" id="shop-search" placeholder="Search shops, email, slug…" oninput="filterShops()"/>
+          <input class="search-input" id="shop-search" placeholder="Search name, email, slug…" oninput="filterShops()"/>
           <select class="filter-select" id="shop-filter-plan" onchange="filterShops()">
             <option value="">All plans</option>
             <option value="starter">Starter</option>
@@ -333,16 +443,90 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
                 <th>Plan</th>
                 <th>Clients</th>
                 <th>Appts</th>
-                <th>Integrations</th>
-                <th>Last Active</th>
                 <th>Status</th>
                 <th></th>
               </tr>
             </thead>
             <tbody id="shops-tbody">
-              <tr><td colspan="8"><div class="empty-state"><span class="spinner"></span>Loading shops…</div></td></tr>
+              <tr><td colspan="6"><div class="empty-state"><span class="spinner"></span>Loading…</div></td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Growth page -->
+    <div id="page-growth" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Growth</div>
+          <div class="page-sub">Track your path to $25k MRR and sale-readiness</div>
+        </div>
+      </div>
+
+      <!-- Key SaaS metrics -->
+      <div class="metrics-grid" style="grid-template-columns:repeat(3,1fr);">
+        <div class="metric-card">
+          <div class="metric-label">ARR</div>
+          <div class="metric-value green" id="g-arr">—</div>
+          <div class="metric-sub">Annual run rate</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Avg MRR / Shop</div>
+          <div class="metric-value" id="g-avg">—</div>
+          <div class="metric-sub">Revenue per customer</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Est. LTV</div>
+          <div class="metric-value" id="g-ltv">—</div>
+          <div class="metric-sub">Per shop lifetime value</div>
+        </div>
+      </div>
+
+      <!-- Path to $25k -->
+      <div class="path-card">
+        <div class="path-title">Path to $25,000 MRR</div>
+        <div class="path-sub" id="path-sub">How many shops you need to hit the goal from here</div>
+        <div class="path-row">
+          <div>
+            <div class="path-plan">Starter plan</div>
+            <div class="path-price">$19.99/mo per shop</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="path-needed" id="path-starter">—</div>
+            <div class="path-note">more shops needed</div>
+          </div>
+        </div>
+        <div class="path-row">
+          <div>
+            <div class="path-plan">Pro plan</div>
+            <div class="path-price">$99/mo per shop</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="path-needed" id="path-pro">—</div>
+            <div class="path-note">more shops needed</div>
+          </div>
+        </div>
+        <div class="path-row">
+          <div>
+            <div class="path-plan">Shop plan</div>
+            <div class="path-price">$200/mo per shop</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="path-needed" id="path-shop">—</div>
+            <div class="path-note">more shops needed</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Sale-Readiness Checklist</div></div>
+          <div style="padding:16px;" id="sale-checklist"><div class="empty-state">Loading…</div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Engagement</div></div>
+          <div style="padding:16px;" id="g-engagement"><div class="empty-state">Loading…</div></div>
         </div>
       </div>
     </div>
@@ -351,11 +535,10 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div id="page-billing" class="page">
       <div class="page-header">
         <div>
-          <div class="page-title">Billing Overview</div>
+          <div class="page-title">Billing</div>
           <div class="page-sub">Subscription revenue breakdown</div>
         </div>
       </div>
-
       <div class="metrics-grid" style="grid-template-columns:repeat(3,1fr);">
         <div class="metric-card">
           <div class="metric-label">Monthly Recurring Revenue</div>
@@ -373,19 +556,14 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
           <div class="metric-sub">per month</div>
         </div>
       </div>
-
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
         <div class="card">
           <div class="card-header"><div class="card-title">Revenue by Plan</div></div>
-          <div id="billing-plan-detail" style="padding:20px;">
-            <div class="empty-state">Loading…</div>
-          </div>
+          <div id="billing-plan-detail" style="padding:18px;"><div class="empty-state">Loading…</div></div>
         </div>
         <div class="card">
           <div class="card-header"><div class="card-title">Plan Distribution</div></div>
-          <div id="billing-plan-bars" style="padding:20px;">
-            <div class="empty-state">Loading…</div>
-          </div>
+          <div id="billing-plan-bars" style="padding:18px;"><div class="empty-state">Loading…</div></div>
         </div>
       </div>
     </div>
@@ -401,64 +579,54 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 
       <div class="card" style="max-width:560px;">
         <div class="card-header">
-          <div>
-            <div class="card-title">Signup &amp; Access</div>
-            <div class="card-sub">Control who can create new shop accounts.</div>
-          </div>
+          <div><div class="card-title">Signup &amp; Access</div><div class="card-sub">Control who can create new shop accounts.</div></div>
         </div>
-        <div style="padding:20px;display:flex;flex-direction:column;gap:0;">
-
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--border);">
+        <div style="padding:18px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border);">
             <div>
               <div style="font-size:14px;font-weight:600;color:var(--text);">Require payment to sign up</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:3px;">When on, new accounts must complete Stripe checkout before signing up. Turn off to allow free signups (for testing or manual onboarding).</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:3px;">Turn off to allow free signups for testing or manual onboarding.</div>
             </div>
-            <label class="toggle" style="margin-left:24px;flex-shrink:0;">
+            <label class="toggle" style="margin-left:20px;flex-shrink:0;">
               <input type="checkbox" id="toggle-require-payment" onchange="saveRequirePayment(this.checked)"/>
               <span class="toggle-slider"></span>
             </label>
           </div>
-
-          <div style="padding:16px 0;">
+          <div style="padding:14px 0;">
             <div id="payment-gate-status" style="font-size:12px;color:var(--muted);"></div>
           </div>
-
         </div>
       </div>
 
       <div class="card" style="max-width:560px;">
         <div class="card-header">
-          <div>
-            <div class="card-title">Demo Data</div>
-            <div class="card-sub">Seed a realistic demo shop for testing and demos.</div>
-          </div>
+          <div><div class="card-title">Demo Data</div><div class="card-sub">Seed a realistic demo shop for testing.</div></div>
         </div>
-        <div style="padding:20px;">
-          <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">
-            Creates the <strong style="color:var(--text);">King's Cuts</strong> demo account with 20 clients, 3 barbers, and ~230 appointments spanning 30 days back and 7 days forward. Safe to re-run — replaces any existing demo account.
+        <div style="padding:18px;">
+          <div style="font-size:13px;color:var(--muted);margin-bottom:14px;">
+            Creates the <strong style="color:var(--text);">King's Cuts</strong> demo account with 20 clients, 3 barbers, and ~200 appointments. Safe to re-run — replaces existing demo account.
           </div>
-          <div style="background:var(--off);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted);margin-bottom:16px;font-family:monospace;">
+          <div style="background:var(--off);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--muted);margin-bottom:14px;font-family:monospace;">
             📧 demo@shopflow.com &nbsp;·&nbsp; 🔑 demo1234
           </div>
           <button class="btn btn-green" id="seed-btn" onclick="seedDemo()">⚡ Seed Demo Account</button>
-          <div id="seed-result" style="margin-top:12px;font-size:12px;color:var(--muted);display:none;"></div>
+          <div id="seed-result" style="margin-top:10px;font-size:12px;color:var(--muted);display:none;"></div>
         </div>
       </div>
     </div>
 
   </div><!-- /main -->
+</div><!-- /app-inner -->
 </div><!-- /app -->
 
-<!-- Shop profile drawer -->
+<!-- Shop drawer -->
 <div id="drawer-overlay" onclick="closeDrawer()"></div>
 <div id="drawer">
   <div class="drawer-topbar">
-    <div style="font-size:15px;font-weight:700;color:var(--text);" id="drawer-shop-name">Shop Profile</div>
+    <div style="font-size:15px;font-weight:700;" id="drawer-shop-name">Shop Profile</div>
     <button class="drawer-close" onclick="closeDrawer()">✕</button>
   </div>
-  <div class="drawer-body" id="drawer-body">
-    <div class="empty-state">Loading…</div>
-  </div>
+  <div class="drawer-body" id="drawer-body"><div class="empty-state">Loading…</div></div>
 </div>
 
 <!-- Create shop modal -->
@@ -502,19 +670,21 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
   </div>
 </div>
 
-<!-- Toast -->
 <div id="toast"></div>
 
 <script>
-// ── State ────────────────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────────
 let adminKey = '';
 let allShops = [];
 let statsData = {};
-
 const planPrices = { starter: 19.99, pro: 99, shop: 200 };
 const planColors = { starter: '#9ca3af', pro: '#2563eb', shop: '#16a34a' };
 
-// ── Auth ─────────────────────────────────────────────────────────────────────
+// ── Mobile sidebar ────────────────────────────────────────────────────────────
+function toggleAdminSidebar() { document.body.classList.toggle('admin-sidebar-open'); }
+function closeAdminSidebar()  { document.body.classList.remove('admin-sidebar-open'); }
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
 async function doLogin() {
   const key = document.getElementById('admin-key-input').value.trim();
   if (!key) return;
@@ -526,15 +696,11 @@ async function doLogin() {
     adminKey = key;
     sessionStorage.setItem('sf_admin_key', key);
     document.getElementById('auth-screen').style.display = 'none';
-    document.getElementById('app').style.display = 'grid';
+    document.getElementById('app').style.display = 'block';
     initApp();
   } catch(e) { err.textContent = 'Connection error.'; err.style.display = 'block'; }
 }
-
-function signOut() {
-  sessionStorage.removeItem('sf_admin_key');
-  location.reload();
-}
+function signOut() { sessionStorage.removeItem('sf_admin_key'); location.reload(); }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 function nav(page) {
@@ -542,21 +708,18 @@ function nav(page) {
   document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
   document.querySelector(`.sb-item[data-page="${page}"]`).classList.add('active');
-  if (page === 'shops' && !allShops.length) loadShops();
+  if (page === 'shops')   { if (!allShops.length) loadShops(); else filterShops(); }
   if (page === 'billing') renderBilling();
+  if (page === 'growth')  renderGrowth();
   if (page === 'settings') loadPlatformSettings();
 }
 
-// ── Init ─────────────────────────────────────────────────────────────────────
+// ── Init ──────────────────────────────────────────────────────────────────────
 async function initApp() {
-  document.getElementById('overview-date').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  document.getElementById('overview-date').textContent = new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   await Promise.all([loadStats(), loadShops()]);
 }
-
-async function refreshAll() {
-  await Promise.all([loadStats(), loadShops()]);
-  toast('Refreshed ✓');
-}
+async function refreshAll() { await Promise.all([loadStats(), loadShops()]); toast('Refreshed ✓'); }
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 async function loadStats() {
@@ -564,30 +727,62 @@ async function loadStats() {
     const res = await fetch('/api/admin/stats', { headers: { 'x-admin-key': adminKey } });
     statsData = await res.json();
     renderOverview(statsData);
-    renderBilling();
+    updateSidebarGoal(statsData);
   } catch(e) {}
 }
 
+function updateSidebarGoal(d) {
+  const pct = d.mrrPct || 0;
+  const el = document.getElementById('sb-mrr');
+  const fill = document.getElementById('sb-goal-fill');
+  const pctEl = document.getElementById('sb-goal-pct');
+  if (el) el.textContent = '$' + fmtK(d.mrr || 0);
+  if (fill) fill.style.width = pct + '%';
+  if (pctEl) pctEl.textContent = pct + '% there';
+}
+
 function renderOverview(d) {
-  const avgRev = d.totalShops ? (d.mrr / d.totalShops) : 0;
+  // Banner
+  document.getElementById('banner-mrr').textContent = '$' + fmt(d.mrr);
+  const growthTxt = d.mrrGrowth !== null && d.mrrGrowth !== undefined
+    ? (d.mrrGrowth >= 0 ? '▲ +' + d.mrrGrowth + '% MoM' : '▼ ' + d.mrrGrowth + '% MoM')
+    : 'First month 🚀';
+  document.getElementById('banner-growth').textContent = growthTxt;
+  document.getElementById('banner-pct').textContent = (d.mrrPct || 0) + '%';
+  document.getElementById('banner-bar').style.width = (d.mrrPct || 0) + '%';
+
+  // Milestones
+  const mrr = d.mrr || 0;
+  [['ms-1k',1000],['ms-5k',5000],['ms-10k',10000],['ms-25k',25000]].forEach(([id,v]) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('reached', mrr >= v);
+  });
+
+  // Metric cards
   document.getElementById('m-mrr').textContent = '$' + fmt(d.mrr);
-  document.getElementById('m-arr').textContent = '$' + fmtK(d.arr) + ' ARR';
-  document.getElementById('m-total').textContent = d.totalShops || 0;
-  document.getElementById('m-active-shops').textContent = (d.activeShops || 0) + ' active';
-  document.getElementById('m-today').textContent = d.activeToday || 0;
-  document.getElementById('m-week').textContent = (d.activeWeek || 0) + ' this week';
-  document.getElementById('m-avg').textContent = '$' + fmt(avgRev);
+  const growthBadge = document.getElementById('m-growth-badge');
+  if (growthBadge && d.mrrGrowth !== null && d.mrrGrowth !== undefined) {
+    const cls = d.mrrGrowth >= 0 ? 'up' : 'down';
+    growthBadge.innerHTML = `<div class="metric-badge ${cls}">${d.mrrGrowth >= 0 ? '▲' : '▼'} ${Math.abs(d.mrrGrowth)}% MoM</div>`;
+  }
+  document.getElementById('m-total').textContent = d.activeShops || 0;
+  document.getElementById('m-new-shops').textContent = '+' + (d.newShopsThisMonth || 0) + ' new this month';
+  document.getElementById('m-new-mrr').textContent = '+$' + fmt(d.newMrrThisMonth || 0);
+  document.getElementById('m-new-mrr-sub').textContent = 'new MRR this month';
+  document.getElementById('m-churn').textContent = (d.churnRate || 0) + '%';
+  document.getElementById('m-churn').className = 'metric-value ' + (d.churnRate > 5 ? 'red' : '');
+  document.getElementById('m-churned').textContent = (d.churnedShops || 0) + ' shops lost';
 
   // Plan bars
-  const total = d.totalShops || 1;
+  const total = d.activeShops || 1;
   const pb = d.planBreakdown || {};
   document.getElementById('plan-bars').innerHTML = ['starter','pro','shop'].map(plan => {
     const count = pb[plan] || 0;
-    const rev = (planPrices[plan] * count);
+    const rev = planPrices[plan] * count;
     const pct = Math.round((count / total) * 100);
     return `<div class="plan-row">
-      <div class="plan-label" style="color:${planColors[plan]};text-transform:capitalize;font-weight:700;">${plan}</div>
-      <div class="plan-bar-wrap"><div class="plan-bar ${plan}" style="width:${pct}%;"></div></div>
+      <div class="plan-label" style="color:${planColors[plan]};">${plan}</div>
+      <div class="plan-bar-wrap"><div class="plan-bar" style="width:${pct}%;background:${planColors[plan]};"></div></div>
       <div class="plan-count">${count}</div>
       <div class="plan-rev">$${fmtK(rev)}</div>
     </div>`;
@@ -599,14 +794,70 @@ function renderOverview(d) {
     <table style="width:100%;border-collapse:collapse;">
       ${shops.map(s => `
         <tr class="clickable" onclick="openDrawer('${s.id}')">
-          <td style="padding:11px 16px;">
-            <div style="font-size:13px;font-weight:600;color:var(--text);">${esc(s.shopName)}</div>
+          <td style="padding:10px 14px;">
+            <div style="font-size:13px;font-weight:600;">${esc(s.shopName)}</div>
             <div style="font-size:11px;color:var(--muted);">${esc(s.email||'')}</div>
           </td>
-          <td style="padding:11px 16px;"><span class="badge badge-${s.plan}">${s.plan}</span></td>
-          <td style="padding:11px 16px;font-size:11px;color:var(--faint);">${relTime(s.createdAt)}</td>
+          <td style="padding:10px 14px;"><span class="badge badge-${s.plan}">${s.plan}</span></td>
+          <td style="padding:10px 14px;font-size:11px;color:var(--faint);white-space:nowrap;">${relTime(s.createdAt)}</td>
         </tr>`).join('')}
     </table>` : '<div class="empty-state">No shops yet.</div>';
+}
+
+// ── Growth page ───────────────────────────────────────────────────────────────
+function renderGrowth() {
+  if (!statsData.mrr && statsData.mrr !== 0) return;
+  const d = statsData;
+
+  document.getElementById('g-arr').textContent = '$' + fmtK(d.arr || 0);
+  document.getElementById('g-avg').textContent = '$' + fmt(d.avgMrr || 0);
+  document.getElementById('g-ltv').textContent = '$' + fmtK(d.ltv || 0);
+
+  const toGoal = d.mrrToGoal || 0;
+  document.getElementById('path-sub').textContent = toGoal <= 0
+    ? '🎉 You\'ve hit $25k MRR! Time to sell.'
+    : `$${fmt(toGoal)} to go — here's what it takes:`;
+  document.getElementById('path-starter').textContent = (d.shopsNeeded?.starter || '—') + ' shops';
+  document.getElementById('path-pro').textContent     = (d.shopsNeeded?.pro     || '—') + ' shops';
+  document.getElementById('path-shop').textContent    = (d.shopsNeeded?.shop    || '—') + ' shops';
+
+  // Sale-readiness checklist
+  const mrr = d.mrr || 0;
+  const checks = [
+    { label: 'Hit $1k MRR',         done: mrr >= 1000,  note: 'Proof of concept' },
+    { label: 'Hit $5k MRR',         done: mrr >= 5000,  note: '~25 Pro shops' },
+    { label: 'Hit $10k MRR',        done: mrr >= 10000, note: 'Acquirers start noticing' },
+    { label: '20+ active shops',    done: (d.activeShops||0) >= 20, note: 'Shows repeatability' },
+    { label: 'Churn rate < 5%',     done: (d.churnRate||100) < 5,  note: 'Retention is king' },
+    { label: 'Hit $25k MRR',        done: mrr >= 25000, note: 'Exit-ready 🎯' },
+    { label: 'Twilio live',         done: false, note: 'Add Railway env vars' },
+    { label: 'Stripe billing live', done: false, note: 'LLC approval pending' },
+  ];
+  document.getElementById('sale-checklist').innerHTML = checks.map(c => `
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:.5px solid var(--border);">
+      <div style="width:22px;height:22px;border-radius:50%;background:${c.done?'var(--green)':'var(--off)'};border:2px solid ${c.done?'var(--green)':'var(--border)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;">
+        ${c.done?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':''}
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:${c.done?'500':'600'};color:${c.done?'var(--muted)':'var(--text)'};${c.done?'text-decoration:line-through;':''}">${c.label}</div>
+        <div style="font-size:11px;color:var(--faint);">${c.note}</div>
+      </div>
+    </div>`).join('');
+
+  // Engagement
+  document.getElementById('g-engagement').innerHTML = `
+    <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:.5px solid var(--border);font-size:13px;">
+      <span style="color:var(--muted);">Active today</span><strong>${d.activeToday||0}</strong>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:.5px solid var(--border);font-size:13px;">
+      <span style="color:var(--muted);">Active this week</span><strong>${d.activeWeek||0}</strong>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:.5px solid var(--border);font-size:13px;">
+      <span style="color:var(--muted);">Total shops</span><strong>${d.totalShops||0}</strong>
+    </div>
+    <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:13px;">
+      <span style="color:var(--muted);">Churned shops</span><strong style="color:${(d.churnedShops||0)>0?'var(--red)':'var(--text)'}">${d.churnedShops||0}</strong>
+    </div>`;
 }
 
 // ── Shops ─────────────────────────────────────────────────────────────────────
@@ -620,8 +871,8 @@ async function loadShops() {
 }
 
 function filterShops() {
-  const q = (document.getElementById('shop-search')?.value || '').toLowerCase();
-  const plan = document.getElementById('shop-filter-plan')?.value || '';
+  const q      = (document.getElementById('shop-search')?.value || '').toLowerCase();
+  const plan   = document.getElementById('shop-filter-plan')?.value   || '';
   const status = document.getElementById('shop-filter-status')?.value || '';
   const filtered = allShops.filter(s => {
     const matchQ = !q || (s.shopName||'').toLowerCase().includes(q) || (s.email||'').toLowerCase().includes(q) || (s.slug||'').toLowerCase().includes(q);
@@ -634,41 +885,29 @@ function filterShops() {
 
 function renderShopsTable(shops) {
   const tbody = document.getElementById('shops-tbody');
-  if (!shops.length) { tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">No shops found.</div></td></tr>'; return; }
+  if (!shops.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No shops found.</div></td></tr>'; return; }
   tbody.innerHTML = shops.map(s => `
     <tr class="clickable" onclick="openDrawer('${s.id}')">
       <td>
-        <div class="shop-name-cell">${esc(s.shopName)}</div>
-        <div class="shop-email-cell">${esc(s.email||'')}</div>
-        <div class="shop-slug-cell">/book/${esc(s.slug||'')}</div>
+        <div style="font-weight:600;color:var(--text);">${esc(s.shopName)}</div>
+        <div style="font-size:11px;color:var(--muted);">${esc(s.email||'')}</div>
+        <div style="font-size:11px;color:var(--faint);font-family:monospace;">/book/${esc(s.slug||'')}</div>
       </td>
       <td><span class="badge badge-${s.plan}">${s.plan}</span></td>
       <td style="font-weight:600;">${s.customers}</td>
       <td style="color:var(--muted);">${s.appointments}</td>
-      <td>
-        <div style="display:flex;gap:5px;flex-wrap:wrap;">
-          <span class="badge badge-${s.stripeConnected?'yes':'no'}" title="Stripe">💳 ${s.stripeConnected?'Yes':'No'}</span>
-          <span class="badge badge-${s.twilioConfigured?'yes':'no'}" title="SMS">💬 ${s.twilioConfigured?'Yes':'No'}</span>
-        </div>
-      </td>
-      <td style="font-size:12px;color:var(--faint);">${s.lastActivity ? relTime(s.lastActivity) : 'Never'}</td>
-      <td>
-        <span class="badge badge-${s.active?'active':'inactive'}">${s.active?'Active':'Inactive'}</span>
-      </td>
-      <td onclick="event.stopPropagation()">
-        <button class="btn btn-sm btn-outline" onclick="openDrawer('${s.id}')">View →</button>
-      </td>
+      <td><span class="badge badge-${s.active?'active':'inactive'}">${s.active?'Active':'Inactive'}</span></td>
+      <td><button class="btn btn-sm btn-outline" onclick="event.stopPropagation();openDrawer('${s.id}')">View →</button></td>
     </tr>`).join('');
 }
 
-// ── Shop drawer ───────────────────────────────────────────────────────────────
+// ── Drawer ────────────────────────────────────────────────────────────────────
 let currentShopId = null;
-
 async function openDrawer(shopId) {
   currentShopId = shopId;
   document.getElementById('drawer-overlay').style.display = 'block';
   document.getElementById('drawer').classList.add('open');
-  document.getElementById('drawer-body').innerHTML = '<div class="empty-state"><span class="spinner"></span>Loading profile…</div>';
+  document.getElementById('drawer-body').innerHTML = '<div class="empty-state"><span class="spinner"></span>Loading…</div>';
   document.getElementById('drawer-shop-name').textContent = 'Loading…';
   try {
     const res = await fetch('/api/admin/shop/' + shopId, { headers: { 'x-admin-key': adminKey } });
@@ -680,37 +919,20 @@ async function openDrawer(shopId) {
 }
 
 function renderDrawer(d) {
-  const shop = d.shop;
-  const s = d.settings;
-  const stats = d.stats;
+  const shop = d.shop, s = d.settings, stats = d.stats;
   const appts = d.recentAppointments || [];
   document.getElementById('drawer-shop-name').textContent = shop.shopName;
   document.getElementById('drawer-body').innerHTML = `
-
-    <!-- Stats row -->
     <div class="drawer-section">
       <div class="drawer-section-title">Stats</div>
       <div class="drawer-stat-grid">
-        <div class="drawer-stat">
-          <div class="drawer-stat-val green">${stats.totalCustomers}</div>
-          <div class="drawer-stat-label">Clients</div>
-        </div>
-        <div class="drawer-stat">
-          <div class="drawer-stat-val">${stats.totalAppointments}</div>
-          <div class="drawer-stat-label">Appts</div>
-        </div>
-        <div class="drawer-stat">
-          <div class="drawer-stat-val">${stats.apptThisMonth}</div>
-          <div class="drawer-stat-label">This Month</div>
-        </div>
-        <div class="drawer-stat">
-          <div class="drawer-stat-val">${stats.activeBarbers}</div>
-          <div class="drawer-stat-label">Barbers</div>
-        </div>
+        <div class="drawer-stat"><div class="drawer-stat-val green">${stats.totalCustomers}</div><div class="drawer-stat-label">Clients</div></div>
+        <div class="drawer-stat"><div class="drawer-stat-val">${stats.totalAppointments}</div><div class="drawer-stat-label">Appts</div></div>
+        <div class="drawer-stat"><div class="drawer-stat-val">${stats.apptThisMonth}</div><div class="drawer-stat-label">This Month</div></div>
+        <div class="drawer-stat"><div class="drawer-stat-val">${stats.activeBarbers}</div><div class="drawer-stat-label">Barbers</div></div>
       </div>
     </div>
 
-    <!-- Shop info -->
     <div class="drawer-section">
       <div class="drawer-section-title">Shop Info</div>
       <div>
@@ -718,13 +940,11 @@ function renderDrawer(d) {
         <div class="drawer-info-row"><span class="drawer-info-label">Email</span><span class="drawer-info-val">${esc(shop.email||'—')}</span></div>
         <div class="drawer-info-row"><span class="drawer-info-label">Phone</span><span class="drawer-info-val">${esc(shop.phone||'—')}</span></div>
         <div class="drawer-info-row"><span class="drawer-info-label">Booking URL</span><span class="drawer-info-val" style="color:var(--green);font-family:monospace;font-size:12px;">/book/${esc(shop.slug)}</span></div>
-        <div class="drawer-info-row"><span class="drawer-info-label">Shop ID</span><span class="drawer-info-val" style="font-family:monospace;font-size:11px;color:var(--faint);">${shop.id}</span></div>
         <div class="drawer-info-row"><span class="drawer-info-label">Joined</span><span class="drawer-info-val">${fmtDate(shop.createdAt)}</span></div>
         <div class="drawer-info-row"><span class="drawer-info-label">Last Active</span><span class="drawer-info-val">${shop.lastActivity ? relTime(shop.lastActivity) : 'Never'}</span></div>
       </div>
     </div>
 
-    <!-- Plan & Status -->
     <div class="drawer-section">
       <div class="drawer-section-title">Plan & Status</div>
       <div>
@@ -732,99 +952,85 @@ function renderDrawer(d) {
           <span class="drawer-info-label">Plan</span>
           <select class="plan-select" onchange="updateShop('${shop.id}','plan',this.value)">
             <option value="starter" ${shop.plan==='starter'?'selected':''}>Starter — $19.99/mo</option>
-            <option value="pro" ${shop.plan==='pro'?'selected':''}>Pro — $99/mo</option>
-            <option value="shop" ${shop.plan==='shop'?'selected':''}>Shop — $200/mo</option>
+            <option value="pro"     ${shop.plan==='pro'?'selected':''}>Pro — $99/mo</option>
+            <option value="shop"    ${shop.plan==='shop'?'selected':''}>Shop — $200/mo</option>
           </select>
         </div>
         <div class="drawer-info-row">
           <span class="drawer-info-label">Account Status</span>
-          <label class="toggle">
-            <input type="checkbox" ${shop.active?'checked':''} onchange="updateShop('${shop.id}','active',this.checked)"/>
-            <span class="toggle-slider"></span>
-          </label>
+          <label class="toggle"><input type="checkbox" ${shop.active?'checked':''} onchange="updateShop('${shop.id}','active',this.checked)"/><span class="toggle-slider"></span></label>
         </div>
         <div class="drawer-info-row">
-          <span class="drawer-info-label">Online Booking</span>
-          <span class="badge badge-${s.bookingEnabled?'yes':'no'}">${s.bookingEnabled?'Enabled':'Disabled'}</span>
+          <span class="drawer-info-label">MRR Contribution</span>
+          <span style="font-weight:700;color:var(--green);">$${planPrices[shop.plan]||0}/mo</span>
         </div>
       </div>
     </div>
 
-    <!-- Integrations -->
     <div class="drawer-section">
       <div class="drawer-section-title">Integrations</div>
       <div>
         <div class="drawer-info-row">
-          <span class="drawer-info-label">Stripe Payments</span>
+          <span class="drawer-info-label">Stripe</span>
           <span class="badge badge-${s.stripeConnected?'yes':'no'}">${s.stripeConnected?'✓ Connected':'Not connected'}</span>
         </div>
         <div class="drawer-info-row" style="align-items:center;gap:8px;">
-          <span class="drawer-info-label">SMS From Number</span>
+          <span class="drawer-info-label">SMS From #</span>
           <div style="display:flex;align-items:center;gap:6px;flex:1;justify-content:flex-end;">
             <input id="drawer-twilio-from" type="text" value="${esc(d.shop.twilioFromNumber||'')}" placeholder="+15055550100"
-              style="padding:5px 9px;border:1px solid var(--border);border-radius:7px;font-size:12px;width:140px;font-family:inherit;color:var(--text);background:var(--bg);"
+              style="padding:5px 9px;border:1px solid var(--border);border-radius:7px;font-size:12px;width:130px;font-family:inherit;"
               onkeydown="if(event.key==='Enter')saveTwilioFrom('${esc(d.shop.id)}')" />
-            <button onclick="saveTwilioFrom('${esc(d.shop.id)}')"
-              style="padding:5px 10px;background:var(--green);color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">Save</button>
+            <button onclick="saveTwilioFrom('${esc(d.shop.id)}')" style="padding:5px 10px;background:var(--green);color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">Save</button>
           </div>
         </div>
         <div class="drawer-info-row">
-          <span class="drawer-info-label">Deposit Required</span>
-          <span class="badge badge-${s.deposit?.enabled?'yes':'no'}">${s.deposit?.enabled?('$'+(s.deposit.amount||0)+' deposit'):'No'}</span>
-        </div>
-        <div class="drawer-info-row">
-          <span class="drawer-info-label">Google Review Link</span>
-          <span class="drawer-info-val">${s.googleReviewLink ? '<a href="'+esc(s.googleReviewLink)+'" target="_blank" style="color:var(--green);">Configured</a>' : '—'}</span>
+          <span class="drawer-info-label">Deposit</span>
+          <span class="badge badge-${s.deposit?.enabled?'yes':'no'}">${s.deposit?.enabled?('$'+(s.deposit.amount||0)+' required'):'Off'}</span>
         </div>
       </div>
     </div>
 
-    <!-- Team -->
     <div class="drawer-section">
-      <div class="drawer-section-title">Team (${d.barbers.length} barbers)</div>
+      <div class="drawer-section-title">Team (${d.barbers.length})</div>
       ${d.barbers.map(b => `
-        <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border);">
-          <div style="width:28px;height:28px;border-radius:50%;background:${b.color||'#9ca3af'};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;color:#fff;flex-shrink:0;">${(b.name||'?').slice(0,2).toUpperCase()}</div>
-          <div style="flex:1;font-size:13px;font-weight:600;color:var(--text);">${esc(b.name)}</div>
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:.5px solid var(--border);">
+          <div style="width:26px;height:26px;border-radius:50%;background:${b.color||'#9ca3af'};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;flex-shrink:0;">${(b.name||'?').slice(0,2).toUpperCase()}</div>
+          <div style="flex:1;font-size:13px;font-weight:600;">${esc(b.name)}</div>
           <span class="badge badge-${b.active!==false?'active':'inactive'}" style="font-size:10px;">${b.active!==false?'Active':'Off'}</span>
         </div>`).join('')}
     </div>
 
-    <!-- Services -->
     <div class="drawer-section">
       <div class="drawer-section-title">Services (${d.services.length})</div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;">
-        ${d.services.map(sv => `<span style="background:var(--off);border:1px solid var(--border);border-radius:100px;padding:4px 10px;font-size:11px;font-weight:600;color:var(--text);">${esc(sv.name)} — $${sv.price}</span>`).join('')}
+        ${d.services.map(sv => `<span style="background:var(--off);border:1px solid var(--border);border-radius:100px;padding:4px 10px;font-size:11px;font-weight:600;">${esc(sv.name)} — $${sv.price}</span>`).join('')}
       </div>
     </div>
 
-    <!-- Recent appointments -->
     ${appts.length ? `
     <div class="drawer-section">
       <div class="drawer-section-title">Recent Appointments</div>
-      ${appts.map(a => `
-        <div class="recent-appt-row">
+      ${appts.slice(0,6).map(a => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:.5px solid var(--border);font-size:12px;">
           <div>
-            <div style="font-weight:600;color:var(--text);">${esc(a.customerName||'Client')}</div>
-            <div style="color:var(--muted);margin-top:1px;">${esc(a.serviceName||'—')} · ${esc(a.barberName||'—')}</div>
+            <div style="font-weight:600;">${esc(a.customerName||'Client')}</div>
+            <div style="color:var(--muted);">${esc(a.serviceName||a.service||'—')} · ${esc(a.barberName||'—')}</div>
           </div>
           <div style="text-align:right;">
-            <div style="color:var(--text);font-weight:600;">$${a.price||0}</div>
-            <div style="color:var(--faint);">${a.date||''} ${a.time||''}</div>
+            <div style="font-weight:600;">$${a.price||0}</div>
+            <div style="color:var(--faint);">${a.date||''}</div>
           </div>
         </div>`).join('')}
     </div>` : ''}
 
-    <!-- Actions -->
     <div class="drawer-section">
       <div class="drawer-section-title">Actions</div>
       <div class="drawer-actions">
         <a href="/shop/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Open App</a>
         <a href="/book/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Booking Page</a>
-        <button class="btn btn-red btn-sm" onclick="deleteShop('${shop.id}','${esc(shop.shopName)}')">🗑 Delete Shop</button>
+        <button class="btn btn-red btn-sm" onclick="deleteShop('${shop.id}','${esc(shop.shopName)}')">🗑 Delete</button>
       </div>
-    </div>
-  `;
+    </div>`;
 }
 
 function closeDrawer() {
@@ -850,27 +1056,21 @@ async function updateShop(shopId, field, value) {
     });
     if (!res.ok) throw new Error();
     toast('Updated ✓');
-    // Sync local data
     const idx = allShops.findIndex(s => s.id === shopId);
     if (idx >= 0) allShops[idx][field] = value;
-    filterShops();
-    loadStats();
+    filterShops(); loadStats();
   } catch(e) { toast('Update failed'); }
 }
 
 async function deleteShop(shopId, shopName) {
-  if (!confirm(`Delete "${shopName}"?\n\nThis removes all shop data, clients, appointments, and credentials permanently. This cannot be undone.`)) return;
+  if (!confirm(`Delete "${shopName}"?\n\nThis removes all data permanently and cannot be undone.`)) return;
   try {
-    const res = await fetch('/api/admin/shop/' + shopId, {
-      method: 'DELETE',
-      headers: { 'x-admin-key': adminKey },
-    });
+    const res = await fetch('/api/admin/shop/' + shopId, { method: 'DELETE', headers: { 'x-admin-key': adminKey } });
     if (!res.ok) throw new Error();
     toast('Shop deleted ✓');
     closeDrawer();
     allShops = allShops.filter(s => s.id !== shopId);
-    filterShops();
-    loadStats();
+    filterShops(); loadStats();
   } catch(e) { toast('Delete failed'); }
 }
 
@@ -880,12 +1080,9 @@ function openCreateModal() {
   document.getElementById('new-plan').value = 'pro';
   document.getElementById('modal-err').style.display = 'none';
   document.getElementById('modal-overlay').classList.add('open');
-  document.getElementById('new-shopname').focus();
+  setTimeout(()=>document.getElementById('new-shopname').focus(),100);
 }
-
-function closeModal() {
-  document.getElementById('modal-overlay').classList.remove('open');
-}
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
 
 async function createShop() {
   const shopName = document.getElementById('new-shopname').value.trim();
@@ -907,13 +1104,52 @@ async function createShop() {
     });
     const data = await res.json();
     if (!data.ok) { errEl.textContent = data.error || 'Failed to create shop.'; errEl.style.display = 'block'; return; }
-    closeModal();
-    toast('Shop created ✓');
+    closeModal(); toast('Shop created ✓');
     await Promise.all([loadShops(), loadStats()]);
-    // Open new shop's profile
     setTimeout(() => openDrawer(data.shopId), 400);
   } catch(e) { errEl.textContent = 'Error: ' + e.message; errEl.style.display = 'block'; }
   finally { btn.textContent = 'Create Shop'; btn.disabled = false; }
+}
+
+// ── Billing ───────────────────────────────────────────────────────────────────
+function renderBilling() {
+  if (!statsData.mrr && statsData.mrr !== 0) return;
+  const d = statsData;
+  const avgRev = d.activeShops ? (d.mrr / d.activeShops) : 0;
+  document.getElementById('b-mrr').textContent = '$' + fmt(d.mrr);
+  document.getElementById('b-arr').textContent = '$' + fmtK(d.arr);
+  document.getElementById('b-avg').textContent = '$' + fmt(avgRev);
+  const pb = d.planBreakdown || {};
+  const total = d.activeShops || 1;
+  const planData = [
+    { plan:'Shop',    key:'shop',    price:200,   color:'#16a34a' },
+    { plan:'Pro',     key:'pro',     price:99,    color:'#2563eb' },
+    { plan:'Starter', key:'starter', price:19.99, color:'#9ca3af' },
+  ];
+  document.getElementById('billing-plan-detail').innerHTML = planData.map(p => {
+    const count = pb[p.key] || 0;
+    const rev = count * p.price;
+    return `<div style="padding:12px 0;border-bottom:.5px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:${p.color};flex-shrink:0;"></div>
+          <span style="font-size:14px;font-weight:700;">${p.plan}</span>
+        </div>
+        <span style="font-size:16px;font-weight:800;color:${p.color};">$${fmtK(rev)}<span style="font-size:11px;color:var(--muted);font-weight:400;">/mo</span></span>
+      </div>
+      <div style="font-size:12px;color:var(--muted);">${count} shop${count!==1?'s':''} × $${p.price}/mo</div>
+    </div>`;
+  }).join('');
+  document.getElementById('billing-plan-bars').innerHTML = planData.map(p => {
+    const count = pb[p.key] || 0;
+    const pct = Math.round((count / total) * 100);
+    return `<div class="plan-row">
+      <div class="plan-label" style="color:${p.color};">${p.plan}</div>
+      <div class="plan-bar-wrap"><div class="plan-bar" style="width:${pct}%;background:${p.color};"></div></div>
+      <div class="plan-count">${count}</div>
+      <div class="plan-rev">${pct}%</div>
+    </div>`;
+  }).join('');
 }
 
 // ── Platform Settings ─────────────────────────────────────────────────────────
@@ -926,7 +1162,6 @@ async function loadPlatformSettings() {
     updatePaymentGateStatus(d.requirePayment !== false);
   } catch(e) {}
 }
-
 async function saveRequirePayment(value) {
   try {
     await fetch('/api/admin/platform-settings', {
@@ -935,8 +1170,15 @@ async function saveRequirePayment(value) {
       body: JSON.stringify({ requirePayment: value }),
     });
     updatePaymentGateStatus(value);
-    toast(value ? 'Payment gate enabled ✓' : 'Payment gate disabled — free signups allowed');
+    toast(value ? 'Payment gate enabled ✓' : 'Payment gate disabled');
   } catch(e) { toast('Save failed'); }
+}
+function updatePaymentGateStatus(on) {
+  const el = document.getElementById('payment-gate-status');
+  if (!el) return;
+  el.innerHTML = on
+    ? '🔒 <strong style="color:var(--green);">Payment gate is ON</strong> — new signups must complete Stripe checkout.'
+    : '🔓 <strong style="color:var(--yellow);">Payment gate is OFF</strong> — anyone can sign up without paying.';
 }
 
 async function seedDemo() {
@@ -945,116 +1187,45 @@ async function seedDemo() {
   btn.textContent = '⏳ Seeding…'; btn.disabled = true;
   result.style.display = 'none';
   try {
-    const res = await fetch('/api/admin/seed-demo', {
-      method: 'POST',
-      headers: { 'x-admin-key': adminKey },
-    });
+    const res = await fetch('/api/admin/seed-demo', { method: 'POST', headers: { 'x-admin-key': adminKey } });
     const d = await res.json();
     if (!d.ok) throw new Error(d.error);
     result.style.display = 'block';
-    result.innerHTML = `✅ <strong style="color:var(--green);">Demo seeded!</strong> &nbsp;${d.clients} clients · ${d.appointments} appointments · $${Number(d.revenue).toLocaleString()} revenue<br><span style="color:var(--muted);">Login: demo@shopflow.com / demo1234</span>`;
-    toast('Demo account seeded ✓');
+    result.innerHTML = `✅ <strong style="color:var(--green);">Done!</strong> ${d.clients} clients · ${d.appointments} appointments · $${Number(d.revenue).toLocaleString()} revenue<br><span style="color:var(--muted);">demo@shopflow.com / demo1234</span>`;
+    toast('Demo seeded ✓');
     await Promise.all([loadShops(), loadStats()]);
   } catch(e) {
     result.style.display = 'block';
     result.innerHTML = `❌ <span style="color:var(--red);">Seed failed: ${e.message}</span>`;
-    toast('Seed failed');
-  } finally {
-    btn.textContent = '⚡ Seed Demo Account'; btn.disabled = false;
-  }
-}
-
-function updatePaymentGateStatus(on) {
-  const el = document.getElementById('payment-gate-status');
-  if (!el) return;
-  el.innerHTML = on
-    ? '🔒 <strong style="color:var(--green);">Payment gate is ON</strong> — new signups must complete Stripe checkout.'
-    : '🔓 <strong style="color:var(--yellow);">Payment gate is OFF</strong> — anyone can create an account without paying.';
-}
-
-// ── Billing ───────────────────────────────────────────────────────────────────
-function renderBilling() {
-  if (!statsData.mrr) return;
-  const d = statsData;
-  const avgRev = d.totalShops ? (d.mrr / d.totalShops) : 0;
-  document.getElementById('b-mrr').textContent = '$' + fmt(d.mrr);
-  document.getElementById('b-arr').textContent = '$' + fmtK(d.arr);
-  document.getElementById('b-avg').textContent = '$' + fmt(avgRev);
-
-  const pb = d.planBreakdown || {};
-  const total = d.totalShops || 1;
-  const planData = [
-    { plan: 'Shop', key: 'shop', price: 200, color: '#16a34a' },
-    { plan: 'Pro',  key: 'pro',  price: 99,  color: '#2563eb' },
-    { plan: 'Starter', key: 'starter', price: 19.99, color: '#9ca3af' },
-  ];
-
-  document.getElementById('billing-plan-detail').innerHTML = planData.map(p => {
-    const count = pb[p.key] || 0;
-    const rev = count * p.price;
-    return `<div style="padding:14px 0;border-bottom:0.5px solid var(--border);">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <div style="width:10px;height:10px;border-radius:50%;background:${p.color};flex-shrink:0;"></div>
-          <span style="font-size:14px;font-weight:700;color:var(--text);">${p.plan}</span>
-        </div>
-        <span style="font-size:16px;font-weight:800;color:${p.color};">$${fmtK(rev)}<span style="font-size:11px;color:var(--muted);font-weight:400;">/mo</span></span>
-      </div>
-      <div style="font-size:12px;color:var(--muted);">${count} shop${count!==1?'s':''} × $${p.price}/mo</div>
-    </div>`;
-  }).join('');
-
-  document.getElementById('billing-plan-bars').innerHTML = planData.map(p => {
-    const count = pb[p.key] || 0;
-    const pct = Math.round((count / total) * 100);
-    return `<div class="plan-row">
-      <div class="plan-label" style="color:${p.color};font-weight:700;">${p.plan}</div>
-      <div class="plan-bar-wrap"><div class="plan-bar" style="width:${pct}%;background:${p.color};"></div></div>
-      <div class="plan-count">${count}</div>
-      <div class="plan-rev" style="color:var(--muted);">${pct}%</div>
-    </div>`;
-  }).join('');
+  } finally { btn.textContent = '⚡ Seed Demo Account'; btn.disabled = false; }
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 function fmt(n) { return Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function fmtK(n) { return n >= 10000 ? (n/1000).toFixed(1)+'k' : Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0}); }
-function fmtDate(iso) { if(!iso) return '—'; return new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
+function fmtK(n) { return n>=10000?(n/1000).toFixed(1)+'k':Number(n||0).toLocaleString('en-US',{maximumFractionDigits:0}); }
+function fmtDate(iso) { if(!iso)return'—'; return new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}); }
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function relTime(iso) {
-  if (!iso) return '—';
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 2) return 'Just now';
-  if (mins < 60) return mins + 'm ago';
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return hrs + 'h ago';
-  const days = Math.floor(hrs / 24);
-  if (days < 30) return days + 'd ago';
+  if(!iso)return'—';
+  const diff=Date.now()-new Date(iso).getTime(), mins=Math.floor(diff/60000);
+  if(mins<2)return'Just now'; if(mins<60)return mins+'m ago';
+  const hrs=Math.floor(mins/60); if(hrs<24)return hrs+'h ago';
+  const days=Math.floor(hrs/24); if(days<30)return days+'d ago';
   return fmtDate(iso);
 }
-
 let toastTimer;
 function toast(msg) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('show');
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+  toastTimer=setTimeout(()=>el.classList.remove('show'),2500);
 }
 
-// ── Close modal on outside click ──────────────────────────────────────────────
-document.getElementById('modal-overlay').addEventListener('click', function(e) {
-  if (e.target === this) closeModal();
-});
+document.getElementById('modal-overlay').addEventListener('click',function(e){if(e.target===this)closeModal();});
 
-// ── Auto-login from session ───────────────────────────────────────────────────
-(function() {
-  const saved = sessionStorage.getItem('sf_admin_key');
-  if (saved) {
-    document.getElementById('admin-key-input').value = saved;
-    doLogin();
-  }
+(function(){
+  const saved=sessionStorage.getItem('sf_admin_key');
+  if(saved){document.getElementById('admin-key-input').value=saved;doLogin();}
 })();
 </script>
 </body>
