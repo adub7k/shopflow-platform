@@ -548,15 +548,9 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-        <div class="card">
-          <div class="card-header"><div class="card-title">Sale-Readiness Checklist</div></div>
-          <div style="padding:16px;" id="sale-checklist"><div class="empty-state">Loading…</div></div>
-        </div>
-        <div class="card">
-          <div class="card-header"><div class="card-title">Engagement</div></div>
-          <div style="padding:16px;" id="g-engagement"><div class="empty-state">Loading…</div></div>
-        </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Engagement</div></div>
+        <div style="padding:16px;" id="g-engagement"><div class="empty-state">Loading…</div></div>
       </div>
     </div>
 
@@ -875,29 +869,6 @@ function renderGrowth() {
   document.getElementById('path-starter').textContent = (d.shopsNeeded?.starter || '—') + ' shops';
   document.getElementById('path-pro').textContent     = (d.shopsNeeded?.pro     || '—') + ' shops';
   document.getElementById('path-shop').textContent    = (d.shopsNeeded?.shop    || '—') + ' shops';
-
-  // Sale-readiness checklist
-  const mrr = d.mrr || 0;
-  const checks = [
-    { label: 'Hit $1k MRR',         done: mrr >= 1000,  note: 'Proof of concept' },
-    { label: 'Hit $5k MRR',         done: mrr >= 5000,  note: '~25 Pro shops' },
-    { label: 'Hit $10k MRR',        done: mrr >= 10000, note: 'Acquirers start noticing' },
-    { label: '20+ active shops',    done: (d.activeShops||0) >= 20, note: 'Shows repeatability' },
-    { label: 'Churn rate < 5%',     done: (d.churnRate||100) < 5,  note: 'Retention is king' },
-    { label: 'Hit $25k MRR',        done: mrr >= 25000, note: 'Exit-ready 🎯' },
-    { label: 'Twilio live',         done: false, note: 'Add Railway env vars' },
-    { label: 'Stripe billing live', done: false, note: 'LLC approval pending' },
-  ];
-  document.getElementById('sale-checklist').innerHTML = checks.map(c => `
-    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:.5px solid var(--border);">
-      <div style="width:22px;height:22px;border-radius:50%;background:${c.done?'var(--green)':'var(--off)'};border:2px solid ${c.done?'var(--green)':'var(--border)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;">
-        ${c.done?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':''}
-      </div>
-      <div style="flex:1;">
-        <div style="font-size:13px;font-weight:${c.done?'500':'600'};color:${c.done?'var(--muted)':'var(--text)'};${c.done?'text-decoration:line-through;':''}">${c.label}</div>
-        <div style="font-size:11px;color:var(--faint);">${c.note}</div>
-      </div>
-    </div>`).join('');
 
   // Engagement
   document.getElementById('g-engagement').innerHTML = `
