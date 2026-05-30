@@ -178,6 +178,31 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 .btn-red{background:var(--red-lt);color:var(--red);border:1px solid #fecaca;}
 .btn-sm{padding:6px 12px;font-size:12px;}
 
+/* ── Checklist ── */
+.cl-section{background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:16px;overflow:hidden;}
+.cl-section-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;}
+.cl-section-title{font-size:14px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:10px;}
+.cl-section-icon{font-size:16px;}
+.cl-progress-pill{font-size:11px;font-weight:700;padding:2px 9px;border-radius:100px;background:var(--off);color:var(--muted);}
+.cl-progress-pill.done{background:var(--green-lt);color:var(--green);}
+.cl-progress-bar{height:3px;background:var(--off);}
+.cl-progress-bar-fill{height:100%;background:var(--green);transition:width .4s ease;}
+.cl-item{display:flex;align-items:flex-start;gap:12px;padding:13px 18px;border-bottom:.5px solid var(--border);transition:background .1s;cursor:pointer;}
+.cl-item:last-child{border-bottom:none;}
+.cl-item:hover{background:#fafafa;}
+.cl-item.checked{background:var(--green-lt);}
+.cl-checkbox{width:20px;height:20px;border-radius:5px;border:2px solid var(--border);background:var(--white);flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-top:1px;transition:all .15s;}
+.cl-item.checked .cl-checkbox{background:var(--green);border-color:var(--green);}
+.cl-item-body{flex:1;min-width:0;}
+.cl-item-label{font-size:13px;font-weight:600;color:var(--text);line-height:1.4;}
+.cl-item.checked .cl-item-label{text-decoration:line-through;color:var(--muted);}
+.cl-item-note{font-size:12px;color:var(--faint);margin-top:3px;line-height:1.4;}
+.cl-item-tag{display:inline-flex;align-items:center;padding:1px 7px;border-radius:100px;font-size:10px;font-weight:700;margin-top:5px;}
+.cl-tag-urgent{background:#fef2f2;color:var(--red);}
+.cl-tag-waiting{background:#fffbeb;color:var(--yellow);}
+.cl-tag-done{background:var(--green-lt);color:var(--green);}
+.cl-tag-soon{background:var(--blue-lt);color:var(--blue);}
+
 /* ── Toggle ── */
 .toggle{position:relative;width:36px;height:20px;flex-shrink:0;}
 .toggle input{opacity:0;width:0;height:0;}
@@ -322,6 +347,10 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     </div>
     <div class="sb-item" data-page="billing" onclick="nav('billing');closeAdminSidebar()">
       <span class="sb-item-icon">💰</span>Billing
+    </div>
+    <div class="sb-item" data-page="checklist" onclick="nav('checklist');closeAdminSidebar()">
+      <span class="sb-item-icon">✅</span>Checklist
+      <span id="sb-checklist-badge" style="margin-left:auto;background:#dc2626;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:100px;display:none;"></span>
     </div>
     <div class="sb-item" data-page="settings" onclick="nav('settings');closeAdminSidebar()">
       <span class="sb-item-icon">⚙️</span>Settings
@@ -568,6 +597,30 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       </div>
     </div>
 
+    <!-- Checklist page -->
+    <div id="page-checklist" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Go-Live Checklist</div>
+          <div class="page-sub">Everything you need to do to launch ShopFlow. Your business brain. 🧠</div>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="resetChecklist()">Reset All</button>
+      </div>
+
+      <div id="cl-overall-bar" style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;margin-bottom:20px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+          <div style="font-size:14px;font-weight:700;color:var(--text);">Overall Progress</div>
+          <div style="font-size:14px;font-weight:800;color:var(--green);" id="cl-overall-pct">0%</div>
+        </div>
+        <div style="height:8px;background:var(--off);border-radius:100px;overflow:hidden;">
+          <div id="cl-overall-fill" style="height:100%;background:linear-gradient(90deg,#16a34a,#4ade80);border-radius:100px;width:0%;transition:width .5s ease;"></div>
+        </div>
+        <div style="font-size:12px;color:var(--muted);margin-top:8px;" id="cl-overall-sub">0 of 0 tasks complete</div>
+      </div>
+
+      <div id="checklist-container"></div>
+    </div>
+
     <!-- Settings page -->
     <div id="page-settings" class="page">
       <div class="page-header">
@@ -711,13 +764,15 @@ function nav(page) {
   if (page === 'shops')   { if (!allShops.length) loadShops(); else filterShops(); }
   if (page === 'billing') renderBilling();
   if (page === 'growth')  renderGrowth();
-  if (page === 'settings') loadPlatformSettings();
+  if (page === 'settings')  loadPlatformSettings();
+  if (page === 'checklist') renderChecklist();
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 async function initApp() {
   document.getElementById('overview-date').textContent = new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   await Promise.all([loadStats(), loadShops()]);
+  renderChecklist(); // init badge count
 }
 async function refreshAll() { await Promise.all([loadStats(), loadShops()]); toast('Refreshed ✓'); }
 
@@ -1150,6 +1205,177 @@ function renderBilling() {
       <div class="plan-rev">${pct}%</div>
     </div>`;
   }).join('');
+}
+
+// ── Checklist ─────────────────────────────────────────────────────────────────
+const CHECKLIST = [
+  {
+    id: 'legal',
+    icon: '⚖️',
+    title: 'Legal & Business',
+    items: [
+      { id: 'llc-approved',   label: 'LLC approved (New Mexico)',             note: 'Pending with the state. Check your email for approval notice.',                                         tag: 'waiting' },
+      { id: 'bank-account',   label: 'Open a business bank account',          note: 'Use the LLC to open a dedicated business checking account. Keep finances separate from day 1.',        tag: 'waiting' },
+      { id: 'ein',            label: 'Get your EIN (Employer ID Number)',      note: 'Free from IRS.gov in 5 minutes. Needed for bank account and Stripe.',                                  tag: 'waiting' },
+      { id: 'stripe-account', label: 'Create Stripe account under the LLC',   note: 'Use the business name, EIN, and business bank account. This is your payment processor.',              tag: 'waiting' },
+    ],
+  },
+  {
+    id: 'stripe',
+    icon: '💳',
+    title: 'Stripe Setup',
+    items: [
+      { id: 'stripe-key',        label: 'STRIPE_SECRET_KEY added to Railway',           note: 'Already done ✓ — live key is in Railway environment variables.',                                                             tag: 'done' },
+      { id: 'stripe-onetime-pro',  label: 'Recreate Pro setup fee ($150) as One-time',  note: 'In Stripe dashboard → Products → archive the old recurring price → create new One-time price for $150. Copy the price ID.', tag: 'urgent' },
+      { id: 'stripe-onetime-shop', label: 'Recreate Shop setup fee ($500) as One-time', note: 'Same as above but $500. One-time type so it only charges once at signup, not monthly.',                                      tag: 'urgent' },
+      { id: 'stripe-update-ids',   label: 'Update price IDs in create-checkout.js',     note: 'File: shopflow-site/netlify/functions/create-checkout.js — replace setupFee price IDs with the new One-time ones.',          tag: 'urgent' },
+      { id: 'stripe-anchor',       label: 'Verify billing anchors to the 5th',          note: 'Monthly subscriptions should start billing on the 5th. The trial_end logic is already in create-checkout.js.',               tag: 'soon' },
+      { id: 'stripe-test',         label: 'Run end-to-end payment test',                note: 'Pricing page → Stripe checkout → success page → signup → CRM login. Use a Stripe test card first.',                          tag: 'urgent' },
+    ],
+  },
+  {
+    id: 'infrastructure',
+    icon: '🚀',
+    title: 'Infrastructure & Deploy',
+    items: [
+      { id: 'railway-deploy',   label: 'shopflow-multitenant live on Railway',     note: 'Already deployed ✓ — your CRM platform is running.',                                                                              tag: 'done' },
+      { id: 'railway-twilio',   label: 'Add Twilio env vars to Railway',           note: 'Railway dashboard → Variables → add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER. This activates SMS for all shops.', tag: 'urgent' },
+      { id: 'netlify-deploy',   label: 'Deploy shopflow-site to Netlify',          note: 'Drag and drop the full shopflow-site folder into Netlify. Includes fixed create-checkout.js, get-session.js, and success.html.',   tag: 'urgent' },
+      { id: 'custom-domain',    label: 'Point domain to Railway + Netlify',        note: 'app.shopflow.com → Railway. shopflow.com → Netlify. Set up in your domain registrar DNS settings.',                               tag: 'soon' },
+      { id: 'backup-plan',      label: 'Set up data backup for Railway volume',    note: 'Railway persistent volumes don\'t auto-backup. Consider a cron job to copy /data to S3 or GitHub daily.',                         tag: 'soon' },
+    ],
+  },
+  {
+    id: 'marketing',
+    icon: '📣',
+    title: 'Marketing & Sales',
+    items: [
+      { id: 'site-live',        label: 'shopflow-site fully live with pricing',    note: 'Marketing site needs to be on Netlify with working Stripe checkout before you can sell.',                                          tag: 'urgent' },
+      { id: 'google-review',    label: 'Set up Google Business Profile',           note: 'Create a Google Business listing for ShopFlow LLC. Helps with credibility and SEO.',                                              tag: 'soon' },
+      { id: 'first-customer',   label: 'Sign first paying customer',               note: 'Pitch a local barber or shop owner. Offer a 30-day free trial. Get real feedback.',                                               tag: 'soon' },
+      { id: 'case-study',       label: 'Get a testimonial / case study',           note: 'After first customer is using it, ask for a short quote and results. Put it on the site.',                                         tag: 'soon' },
+      { id: 'instagram',        label: 'Post demo videos on Instagram / TikTok',   note: 'Short screen recordings of the app in action — booking flow, client profile, dashboard. Show the barber audience.',               tag: 'soon' },
+    ],
+  },
+  {
+    id: 'product',
+    icon: '🛠️',
+    title: 'Product',
+    items: [
+      { id: 'sms-live',         label: 'SMS confirmations & reminders live',       note: 'Blocked on Twilio Railway env vars. Once those are added, SMS fires automatically on every booking.',                             tag: 'urgent' },
+      { id: 'rebook-nudge',     label: 'Rebook nudge scheduler live',              note: 'Code is done. Fires when Twilio is live. Customizable interval per shop in Settings.',                                            tag: 'soon' },
+      { id: 'booking-page',     label: 'Test public booking page per shop',        note: 'Visit /book/kings-cuts and book a test appointment end-to-end.',                                                                   tag: 'soon' },
+      { id: 'pwa-test',         label: 'Test PWA install on iPhone + Android',     note: 'Have a barber add it to their home screen. Should feel like a native app.',                                                        tag: 'soon' },
+      { id: 'stripe-connect',   label: 'Test Stripe Connect deposit flow',         note: 'Shop connects their Stripe account → client pays deposit at booking → barber gets paid.',                                         tag: 'soon' },
+    ],
+  },
+  {
+    id: 'exitready',
+    icon: '🎯',
+    title: 'Exit Ready ($25k MRR)',
+    items: [
+      { id: 'hit-1k',           label: 'Hit $1,000 MRR',                           note: 'First milestone — proof the product works.',                                                                                       tag: 'soon' },
+      { id: 'hit-5k',           label: 'Hit $5,000 MRR',                           note: '~50 Starter shops or ~50 Pro shops. Start tracking churn monthly.',                                                              tag: 'soon' },
+      { id: 'hit-10k',          label: 'Hit $10,000 MRR',                          note: 'Acquirers start paying attention at $10k MRR.',                                                                                    tag: 'soon' },
+      { id: 'churn-under-5',    label: 'Churn rate consistently under 5%',         note: 'Track monthly. High retention = high valuation multiple.',                                                                         tag: 'soon' },
+      { id: 'hit-25k',          label: 'Hit $25,000 MRR — list for sale',          note: '~$900k–$1.5M exit at 3–5x ARR. List on MicroAcquire, Acquire.com, or FE International.',                                         tag: 'soon' },
+    ],
+  },
+];
+
+const CL_STORAGE_KEY = 'sf_admin_checklist';
+
+function clLoad() {
+  try { return JSON.parse(localStorage.getItem(CL_STORAGE_KEY) || '{}'); } catch(e) { return {}; }
+}
+function clSave(state) { localStorage.setItem(CL_STORAGE_KEY, JSON.stringify(state)); }
+
+function renderChecklist() {
+  const state = clLoad();
+  const container = document.getElementById('checklist-container');
+  if (!container) return;
+
+  let totalItems = 0, totalDone = 0;
+
+  container.innerHTML = CHECKLIST.map(section => {
+    const items = section.items;
+    const doneCnt = items.filter(i => state[i.id]).length;
+    totalItems += items.length;
+    totalDone  += doneCnt;
+    const allDone = doneCnt === items.length;
+    const pct = Math.round((doneCnt / items.length) * 100);
+
+    return `<div class="cl-section">
+      <div class="cl-section-header" onclick="toggleSection('${section.id}')">
+        <div class="cl-section-title">
+          <span class="cl-section-icon">${section.icon}</span>
+          ${section.title}
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span class="cl-progress-pill ${allDone?'done':''}">${doneCnt}/${items.length}</span>
+          <span style="color:var(--faint);font-size:12px;" id="cl-arrow-${section.id}">▾</span>
+        </div>
+      </div>
+      <div class="cl-progress-bar"><div class="cl-progress-bar-fill" style="width:${pct}%"></div></div>
+      <div id="cl-body-${section.id}">
+        ${items.map(item => {
+          const checked = !!state[item.id];
+          const tagMap = { urgent:'cl-tag-urgent', waiting:'cl-tag-waiting', done:'cl-tag-done', soon:'cl-tag-soon' };
+          const tagLabel = { urgent:'🔴 Urgent', waiting:'⏳ Waiting on LLC', done:'✓ Done', soon:'🔵 Up Next' };
+          return `<div class="cl-item ${checked?'checked':''}" onclick="toggleItem('${item.id}')">
+            <div class="cl-checkbox">
+              ${checked?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':''}
+            </div>
+            <div class="cl-item-body">
+              <div class="cl-item-label">${item.label}</div>
+              <div class="cl-item-note">${item.note}</div>
+              ${item.tag ? `<span class="cl-item-tag ${tagMap[item.tag]||''}">${tagLabel[item.tag]||item.tag}</span>` : ''}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Overall progress
+  const overallPct = totalItems ? Math.round((totalDone / totalItems) * 100) : 0;
+  const pctEl  = document.getElementById('cl-overall-pct');
+  const fillEl = document.getElementById('cl-overall-fill');
+  const subEl  = document.getElementById('cl-overall-sub');
+  if (pctEl)  pctEl.textContent  = overallPct + '%';
+  if (fillEl) fillEl.style.width = overallPct + '%';
+  if (subEl)  subEl.textContent  = `${totalDone} of ${totalItems} tasks complete`;
+
+  // Sidebar badge — count urgent unchecked items
+  const urgentLeft = CHECKLIST.flatMap(s => s.items).filter(i => i.tag === 'urgent' && !state[i.id]).length;
+  const badge = document.getElementById('sb-checklist-badge');
+  if (badge) {
+    badge.textContent = urgentLeft;
+    badge.style.display = urgentLeft > 0 ? 'inline' : 'none';
+  }
+}
+
+function toggleItem(itemId) {
+  const state = clLoad();
+  state[itemId] = !state[itemId];
+  clSave(state);
+  renderChecklist();
+}
+
+function toggleSection(sectionId) {
+  const body  = document.getElementById('cl-body-' + sectionId);
+  const arrow = document.getElementById('cl-arrow-' + sectionId);
+  if (!body) return;
+  const hidden = body.style.display === 'none';
+  body.style.display  = hidden ? '' : 'none';
+  if (arrow) arrow.textContent = hidden ? '▾' : '▸';
+}
+
+function resetChecklist() {
+  if (!confirm('Reset all checklist items? Your progress will be cleared.')) return;
+  localStorage.removeItem(CL_STORAGE_KEY);
+  renderChecklist();
+  toast('Checklist reset');
 }
 
 // ── Platform Settings ─────────────────────────────────────────────────────────
