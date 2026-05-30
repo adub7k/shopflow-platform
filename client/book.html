@@ -4,773 +4,501 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-status-bar-style" content="black"/>
-<meta name="apple-mobile-web-app-title" content="ShopFlow"/>
-<meta name="application-name" content="ShopFlow"/>
-<link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png"/>
-<link rel="apple-touch-icon" href="/icons/icon-192.png"/>
-<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png"/>
-<link rel="icon" type="image/png" href="/icons/icon-192.png"/>
 <title>Book an Appointment</title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 :root{
-  --black:#0a0a0a;
-  --white:#ffffff;
-  --off:#f5f5f7;
-  --border:#d2d2d7;
-  --border-lt:#e8e8ed;
-  --muted:#6e6e73;
-  --faint:#aeaeb2;
-  --green:#1a8a3c;
-  --green-bg:#f0f9f3;
-  --green-border:#b3dfbf;
-  --red:#ff3b30;
-  --font:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',sans-serif;
-  --radius:14px;
-  --radius-sm:10px;
-  --shadow:0 2px 20px rgba(0,0,0,.08),0 1px 4px rgba(0,0,0,.04);
-  --shadow-sm:0 1px 8px rgba(0,0,0,.06);
+  --green:#16a34a;--green-lt:#f0fdf4;--green-md:#bbf7d0;
+  --text:#1d1d1f;--muted:#6e6e73;--faint:#aeaeb2;
+  --border:#d2d2d7;--surface:#f5f5f7;--white:#fff;
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --radius:14px;--shadow:0 2px 20px rgba(0,0,0,.08);
 }
-html{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;}
-body{background:var(--off);color:var(--black);font-family:var(--font);font-size:16px;line-height:1.5;min-height:100vh;}
-
-/* ── Outer wrap ── */
-.outer{max-width:430px;margin:0 auto;min-height:100vh;background:var(--white);position:relative;}
-@media(min-width:500px){
-  body{display:flex;align-items:flex-start;justify-content:center;padding:32px 16px 64px;}
-  .outer{min-height:auto;border-radius:24px;overflow:hidden;box-shadow:0 8px 48px rgba(0,0,0,.12),0 2px 8px rgba(0,0,0,.06);}
-}
-
-/* ── Header ── */
-.header{padding:28px 24px 20px;background:var(--white);border-bottom:0.5px solid var(--border-lt);}
-.header-logo{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
-.logo-mark{width:38px;height:38px;background:var(--black);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.logo-text{font-size:18px;font-weight:800;color:var(--black);letter-spacing:-.04em;}
-.header-shop-name{font-size:22px;font-weight:700;color:var(--black);letter-spacing:-.03em;margin-bottom:3px;}
-.header-tagline{font-size:14px;color:var(--muted);}
-
-/* ── Progress ── */
-.progress-wrap{height:2px;background:var(--border-lt);}
-.progress-bar{height:2px;background:var(--black);transition:width .4s cubic-bezier(.4,0,.2,1);}
-
-/* ── Steps ── */
-.step{display:none;padding:28px 24px;}
-.step.active{display:block;}
-.step-label{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:6px;}
-.step-title{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margin-bottom:4px;line-height:1.1;}
-.step-sub{font-size:14px;color:var(--muted);margin-bottom:24px;line-height:1.5;}
-
-/* ── Service list ── */
-.service-list{display:flex;flex-direction:column;gap:8px;}
-.service-item{
-  background:var(--white);
-  border:1px solid var(--border-lt);
-  border-radius:var(--radius);
-  padding:16px 18px;
-  display:flex;align-items:center;gap:14px;
-  cursor:pointer;
-  transition:all .15s cubic-bezier(.4,0,.2,1);
-  -webkit-tap-highlight-color:transparent;
-}
-.service-item:hover{border-color:var(--border);box-shadow:var(--shadow-sm);}
-.service-item.selected{border-color:var(--black);background:var(--black);}
-.service-item.selected .service-name{color:var(--white);}
-.service-item.selected .service-meta{color:rgba(255,255,255,.6);}
-.service-item.selected .service-price{color:var(--white);}
-.service-item.selected .service-check{opacity:1;}
-.service-icon-wrap{width:42px;height:42px;border-radius:10px;background:var(--off);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s;}
-.service-item.selected .service-icon-wrap{background:rgba(255,255,255,.15);}
-.service-icon{font-size:20px;}
-.service-info{flex:1;min-width:0;}
-.service-name{font-size:15px;font-weight:600;color:var(--black);margin-bottom:2px;transition:color .15s;}
-.service-meta{font-size:12px;color:var(--muted);transition:color .15s;}
-.service-price{font-size:17px;font-weight:700;color:var(--black);flex-shrink:0;letter-spacing:-.02em;transition:color .15s;}
-.service-check{opacity:0;width:20px;height:20px;flex-shrink:0;transition:opacity .15s;}
-
-/* ── Barber list ── */
-.barber-list{display:flex;flex-direction:column;gap:8px;}
-.barber-any{
-  background:var(--white);
-  border:1px solid var(--border-lt);
-  border-radius:var(--radius);
-  padding:14px 18px;
-  display:flex;align-items:center;gap:14px;
-  cursor:pointer;
-  transition:all .15s;
-  -webkit-tap-highlight-color:transparent;
-}
-.barber-any:hover{border-color:var(--border);box-shadow:var(--shadow-sm);}
-.barber-any.selected{border-color:var(--black);background:var(--black);}
-.barber-any.selected .barber-any-name{color:var(--white);}
-.barber-any.selected .barber-any-sub{color:rgba(255,255,255,.6);}
-.barber-any-avatar{width:44px;height:44px;border-radius:50%;background:var(--off);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;transition:background .15s;}
-.barber-any.selected .barber-any-avatar{background:rgba(255,255,255,.15);}
-.barber-any-name{font-size:15px;font-weight:600;color:var(--black);transition:color .15s;}
-.barber-any-sub{font-size:13px;color:var(--muted);margin-top:1px;transition:color .15s;}
-.barber-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
-.barber-card{
-  background:var(--white);
-  border:1px solid var(--border-lt);
-  border-radius:var(--radius);
-  padding:18px 14px;
-  text-align:center;
-  cursor:pointer;
-  transition:all .15s;
-  -webkit-tap-highlight-color:transparent;
-}
-.barber-card:hover{border-color:var(--border);box-shadow:var(--shadow-sm);}
-.barber-card.selected{border-color:var(--black);background:var(--black);}
-.barber-card.selected .barber-name{color:var(--white);}
-.barber-card.selected .barber-bio{color:rgba(255,255,255,.6);}
-.barber-avatar{width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;color:var(--white);margin:0 auto 10px;letter-spacing:-.02em;}
-.barber-name{font-size:14px;font-weight:600;color:var(--black);margin-bottom:3px;transition:color .15s;}
-.barber-bio{font-size:12px;color:var(--muted);line-height:1.4;transition:color .15s;}
-
-/* ── Calendar ── */
-.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;}
-.cal-month{font-size:17px;font-weight:600;color:var(--black);letter-spacing:-.02em;}
-.cal-btn{width:34px;height:34px;border:1px solid var(--border-lt);border-radius:50%;background:var(--white);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--muted);transition:all .15s;-webkit-tap-highlight-color:transparent;}
-.cal-btn:hover{border-color:var(--border);color:var(--black);}
-.cal-weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:8px;}
-.cal-weekday{text-align:center;font-size:11px;font-weight:500;color:var(--faint);padding:4px 0;letter-spacing:.02em;}
-.cal-days{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
-.cal-day{
-  aspect-ratio:1;display:flex;align-items:center;justify-content:center;
-  border-radius:50%;font-size:15px;font-weight:400;
-  cursor:pointer;color:var(--black);
-  transition:all .15s;
-  -webkit-tap-highlight-color:transparent;
-  position:relative;
-}
-.cal-day:hover:not(.cal-past):not(.cal-blocked):not(.cal-nowork){background:var(--off);}
-.cal-day.cal-today{font-weight:600;color:var(--black);}
-.cal-day.cal-today::after{content:'';width:4px;height:4px;border-radius:50%;background:var(--green);position:absolute;bottom:3px;}
-.cal-day.cal-selected{background:var(--black);color:var(--white);font-weight:600;}
-.cal-day.cal-selected::after{background:rgba(255,255,255,.5);}
-.cal-day.cal-past{color:var(--faint);cursor:not-allowed;pointer-events:none;}
-.cal-day.cal-blocked{color:var(--faint);cursor:not-allowed;pointer-events:none;text-decoration:line-through;}
-.cal-day.cal-nowork{color:var(--border);cursor:not-allowed;pointer-events:none;}
-.cal-day.cal-other{color:var(--faint);}
-.cal-day.cal-has::before{content:'';width:3px;height:3px;border-radius:50%;background:var(--green);position:absolute;top:4px;right:4px;}
-.cal-day.cal-selected.cal-has::before{background:rgba(255,255,255,.6);}
-
-/* ── Time slots ── */
-.time-section{margin-bottom:20px;}
-.time-section-label{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:10px;}
-.time-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
-.time-slot{
-  padding:13px 8px;border:1px solid var(--border-lt);border-radius:var(--radius-sm);
-  text-align:center;font-size:14px;font-weight:500;
-  cursor:pointer;background:var(--white);color:var(--black);
-  transition:all .15s;-webkit-tap-highlight-color:transparent;
-  font-family:var(--font);
-}
-.time-slot:hover{border-color:var(--border);box-shadow:var(--shadow-sm);}
-.time-slot.selected{background:var(--black);color:var(--white);border-color:var(--black);}
-.no-slots{text-align:center;padding:40px 20px;}
-.no-slots-icon{font-size:36px;margin-bottom:12px;}
-.no-slots-title{font-size:16px;font-weight:600;color:var(--black);margin-bottom:6px;}
-.no-slots-sub{font-size:14px;color:var(--muted);}
+html,body{height:100%;background:var(--surface);font-family:var(--font);color:var(--text);-webkit-font-smoothing:antialiased;}
 
 /* ── Loading ── */
-.loading-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 20px;}
-.spinner{width:28px;height:28px;border:2px solid var(--border-lt);border-top-color:var(--black);border-radius:50%;animation:spin .7s linear infinite;margin-bottom:14px;}
+#loading{position:fixed;inset:0;background:var(--white);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;transition:opacity .3s;}
+#loading.fade{opacity:0;pointer-events:none;}
+.loading-spinner{width:32px;height:32px;border:3px solid var(--green-md);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;margin-bottom:16px;}
 @keyframes spin{to{transform:rotate(360deg)}}
-.loading-text{font-size:14px;color:var(--muted);}
 
-/* ── Summary card ── */
-.summary-card{background:var(--off);border-radius:var(--radius);padding:18px;margin-bottom:24px;}
-.summary-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;}
-.summary-row:not(:last-child){border-bottom:0.5px solid var(--border-lt);}
-.summary-label{font-size:13px;color:var(--muted);}
-.summary-value{font-size:14px;font-weight:600;color:var(--black);text-align:right;max-width:200px;}
-.summary-price{font-size:18px;font-weight:700;color:var(--black);letter-spacing:-.02em;}
+/* ── Layout ── */
+.wrap{max-width:480px;margin:0 auto;padding:0 0 80px;}
+
+/* ── Shop Header ── */
+.shop-header{padding:36px 20px 24px;text-align:center;}
+.shop-avatar{width:68px;height:68px;border-radius:18px;background:var(--green);color:#fff;font-size:26px;font-weight:800;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;letter-spacing:-.03em;box-shadow:0 4px 16px rgba(22,163,74,.3);}
+.shop-name{font-size:24px;font-weight:800;letter-spacing:-.04em;color:var(--text);}
+.shop-tagline{font-size:14px;color:var(--muted);margin-top:5px;line-height:1.4;}
+.shop-msg{font-size:13px;color:var(--muted);margin-top:10px;line-height:1.5;padding:0 16px;}
+
+/* ── Progress ── */
+.progress{display:flex;align-items:center;justify-content:center;padding:0 20px 28px;}
+.step-dot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:all .25s;}
+.step-dot.done{background:var(--green);}
+.step-dot.active{width:24px;border-radius:4px;background:var(--green);}
+.step-line{flex:1;height:1px;background:var(--border);max-width:36px;margin:0 4px;transition:background .25s;}
+.step-line.done{background:var(--green);}
+
+/* ── Step titles ── */
+.step-title{font-size:21px;font-weight:800;letter-spacing:-.04em;padding:0 20px;margin-bottom:14px;}
+
+/* ── Service cards ── */
+.service-grid{display:flex;flex-direction:column;gap:10px;padding:0 20px;}
+.service-card{background:var(--white);border:2px solid var(--border);border-radius:var(--radius);padding:17px;cursor:pointer;transition:border-color .15s,background .15s;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow);}
+.service-card:active{transform:scale(.98);}
+.service-card.selected{border-color:var(--green);background:var(--green-lt);}
+.service-icon{width:44px;height:44px;border-radius:11px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
+.service-card.selected .service-icon{background:var(--green-md);}
+.service-name{font-size:15px;font-weight:700;color:var(--text);}
+.service-meta{font-size:12px;color:var(--muted);margin-top:2px;}
+.service-price{margin-left:auto;font-size:18px;font-weight:800;color:var(--green);flex-shrink:0;}
+
+/* ── Barber row ── */
+.barber-row{display:flex;gap:10px;padding:0 20px 20px;overflow-x:auto;scrollbar-width:none;}
+.barber-row::-webkit-scrollbar{display:none;}
+.barber-card{flex-shrink:0;width:104px;background:var(--white);border:2px solid var(--border);border-radius:var(--radius);padding:16px 10px;cursor:pointer;transition:border-color .15s,background .15s;text-align:center;box-shadow:var(--shadow);}
+.barber-card:active{transform:scale(.97);}
+.barber-card.selected{border-color:var(--green);background:var(--green-lt);}
+.barber-avatar{width:46px;height:46px;border-radius:50%;margin:0 auto 9px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;color:#fff;}
+.barber-card-name{font-size:12px;font-weight:700;color:var(--text);line-height:1.3;}
+.barber-card-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+
+/* ── Calendar ── */
+.cal-wrap{padding:0 20px;margin-bottom:20px;}
+.cal{background:var(--white);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);}
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
+.cal-nav-btn{width:36px;height:36px;border:none;background:var(--surface);border-radius:9px;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text);}
+.cal-month{font-size:15px;font-weight:700;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
+.cal-dh{text-align:center;font-size:11px;font-weight:700;color:var(--faint);padding:4px 0;}
+.cal-day{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:9px;font-size:13px;font-weight:500;cursor:pointer;transition:background .1s,color .1s;position:relative;}
+.cal-day:active{transform:scale(.9);}
+.cal-day.is-today{color:var(--green);font-weight:800;}
+.cal-day.is-sel{background:var(--green)!important;color:#fff!important;font-weight:800;}
+.cal-day.is-past,.cal-day.is-blocked{color:var(--faint);cursor:not-allowed;pointer-events:none;}
+
+/* ── Time slots ── */
+.slots-section{padding:0 20px 16px;}
+.slots-label{font-size:11px;font-weight:700;color:var(--faint);letter-spacing:.08em;margin-bottom:10px;}
+.slots-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.slot{background:var(--white);border:1.5px solid var(--border);border-radius:10px;padding:11px 8px;text-align:center;font-size:14px;font-weight:600;cursor:pointer;transition:all .12s;color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.04);}
+.slot:active{transform:scale(.94);}
+.slot.sel-slot{background:var(--green);border-color:var(--green);color:#fff;}
+.no-slots{text-align:center;padding:24px 0;color:var(--faint);font-size:14px;}
 
 /* ── Form ── */
-.field{margin-bottom:14px;}
-.field-label{font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px;letter-spacing:.02em;}
-.field-input{
-  width:100%;padding:14px 16px;
-  border:1px solid var(--border-lt);border-radius:var(--radius-sm);
-  font-size:16px;font-family:var(--font);
-  background:var(--white);color:var(--black);
-  outline:none;transition:border-color .15s;
-  -webkit-appearance:none;
-}
-.field-input:focus{border-color:var(--black);}
-.field-input::placeholder{color:var(--faint);}
-.field-note{font-size:12px;color:var(--faint);margin-top:5px;}
-.error-msg{background:#fff5f5;border:1px solid #ffd7d5;border-radius:var(--radius-sm);padding:12px 14px;font-size:13px;color:var(--red);margin-bottom:14px;display:none;line-height:1.5;}
+.form-wrap{padding:0 20px;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;margin-bottom:7px;}
+.field input,.field textarea{width:100%;padding:15px 16px;border:1.5px solid var(--border);border-radius:12px;font-size:16px;font-family:var(--font);background:var(--white);color:var(--text);outline:none;transition:border-color .15s;-webkit-appearance:none;}
+.field input:focus,.field textarea:focus{border-color:var(--text);}
+.field input::placeholder,.field textarea::placeholder{color:var(--faint);}
+.field textarea{min-height:82px;resize:none;line-height:1.5;}
+
+/* ── Summary ── */
+.summary-card{background:var(--white);border-radius:var(--radius);overflow:hidden;margin:0 20px 16px;box-shadow:var(--shadow);}
+.summary-row{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-bottom:1px solid var(--surface);}
+.summary-row:last-child{border:none;}
+.summary-label{font-size:13px;color:var(--muted);}
+.summary-val{font-size:13px;font-weight:700;text-align:right;}
+
+/* ── Deposit banner ── */
+.dep-banner{background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:14px 16px;margin:0 20px 20px;display:flex;gap:12px;align-items:flex-start;}
+.dep-icon{font-size:22px;line-height:1.2;flex-shrink:0;}
+.dep-txt{font-size:13px;color:#92400e;line-height:1.5;}
+.dep-amt{font-size:15px;font-weight:800;color:#92400e;margin-top:3px;}
 
 /* ── Buttons ── */
-.btn-primary{
-  width:100%;padding:17px;border:none;border-radius:var(--radius);
-  font-size:16px;font-weight:600;font-family:var(--font);
-  cursor:pointer;background:var(--black);color:var(--white);
-  transition:all .15s cubic-bezier(.4,0,.2,1);
-  margin-bottom:10px;letter-spacing:-.01em;
-  -webkit-tap-highlight-color:transparent;
-}
-.btn-primary:hover{background:#1a1a1a;}
-.btn-primary:active{transform:scale(.98);}
-.btn-primary:disabled{opacity:.4;cursor:not-allowed;transform:none;}
-.btn-back{
-  width:100%;padding:14px;border:1px solid var(--border-lt);border-radius:var(--radius);
-  font-size:15px;font-weight:500;font-family:var(--font);
-  cursor:pointer;background:transparent;color:var(--muted);
-  transition:all .15s;-webkit-tap-highlight-color:transparent;
-}
-.btn-back:hover{border-color:var(--border);color:var(--black);}
+.cta{padding:0 20px;}
+.btn-main{width:100%;padding:17px;border:none;border-radius:14px;font-size:17px;font-weight:700;font-family:var(--font);cursor:pointer;background:var(--text);color:var(--white);transition:opacity .15s;letter-spacing:-.02em;margin-bottom:10px;}
+.btn-main:active{opacity:.82;}
+.btn-main:disabled{opacity:.32;cursor:not-allowed;}
+.btn-main.green-btn{background:var(--green);}
+.btn-back{width:100%;padding:13px;border:none;background:none;font-size:15px;font-weight:600;font-family:var(--font);color:var(--muted);cursor:pointer;}
+.btn-back:active{opacity:.6;}
 
-/* ── Screens ── */
-.error-screen,.unavail-screen,.success-screen{text-align:center;padding:56px 24px;}
-.screen-icon{font-size:48px;margin-bottom:20px;}
-.screen-title{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margin-bottom:8px;}
-.screen-sub{font-size:15px;color:var(--muted);line-height:1.6;margin-bottom:28px;}
-.retry-btn{padding:14px 32px;background:var(--black);color:var(--white);border:none;border-radius:var(--radius);font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font);}
+/* ── Confirmation ── */
+#confirmed{display:none;max-width:480px;margin:0 auto;padding:60px 20px 40px;text-align:center;}
+.conf-icon{font-size:72px;animation:pop .4s cubic-bezier(.175,.885,.32,1.275);margin-bottom:22px;}
+@keyframes pop{from{transform:scale(.4);opacity:0;}to{transform:scale(1);opacity:1;}}
+.conf-title{font-size:26px;font-weight:800;letter-spacing:-.04em;margin-bottom:8px;}
+.conf-sub{font-size:15px;color:var(--muted);line-height:1.6;margin-bottom:28px;}
+.conf-card{background:var(--white);border-radius:var(--radius);padding:20px;text-align:left;box-shadow:var(--shadow);margin-bottom:20px;}
 
-/* ── Success ── */
-.success-check{width:72px;height:72px;border-radius:50%;background:var(--green-bg);border:1.5px solid var(--green-border);display:flex;align-items:center;justify-content:center;margin:0 auto 24px;animation:pop .4s cubic-bezier(.175,.885,.32,1.275);}
-@keyframes pop{0%{transform:scale(.5);opacity:0}100%{transform:scale(1);opacity:1}}
-.success-check-svg{width:28px;height:28px;}
-.confirm-card{background:var(--off);border-radius:var(--radius);padding:18px;text-align:left;margin-bottom:20px;}
-.confirm-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:14px;}
-.confirm-row:not(:last-child){border-bottom:0.5px solid var(--border-lt);}
-.confirm-label{color:var(--muted);}
-.confirm-value{font-weight:600;color:var(--black);}
-.sms-pill{display:inline-flex;align-items:center;gap:7px;background:var(--green-bg);border:1px solid var(--green-border);border-radius:100px;padding:8px 16px;font-size:13px;color:var(--green);font-weight:500;}
+/* ── Closed ── */
+#closed{display:none;max-width:480px;margin:0 auto;padding:100px 20px;text-align:center;}
+.closed-icon{font-size:56px;margin-bottom:20px;}
+.closed-title{font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:10px;}
+.closed-sub{font-size:14px;color:var(--muted);line-height:1.7;}
 
-/* ── Powered ── */
-.powered{text-align:center;padding:24px;font-size:12px;color:var(--faint);}
-.powered strong{color:var(--black);}
+/* ── Error ── */
+.err-banner{background:#fff5f5;border:1.5px solid #fecaca;border-radius:10px;padding:12px 16px;font-size:13px;color:#dc2626;margin:0 20px 16px;display:none;line-height:1.5;}
 </style>
-<script src="https://js.stripe.com/v3/"></script>
 </head>
 <body>
-<div class="outer">
+
+<!-- Loading -->
+<div id="loading">
+  <div class="loading-spinner"></div>
+  <div style="font-size:14px;color:var(--muted);">Loading...</div>
+</div>
+
+<!-- Booking closed -->
+<div id="closed">
+  <div class="closed-icon">✂️</div>
+  <div class="closed-title">Booking Unavailable</div>
+  <div class="closed-sub">Online booking is currently turned off for this shop.<br>Please reach out to them directly to schedule.</div>
+</div>
+
+<!-- Confirmed -->
+<div id="confirmed">
+  <div class="conf-icon">🎉</div>
+  <div class="conf-title">You're booked!</div>
+  <div class="conf-sub" id="conf-sub"></div>
+  <div class="conf-card" id="conf-detail"></div>
+  <div style="font-size:13px;color:var(--faint);" id="conf-sms"></div>
+</div>
+
+<!-- App -->
+<div id="app" style="display:none;">
+<div class="wrap">
 
   <!-- Header -->
-  <div class="header" id="page-header" style="display:none;">
-
-    <div class="header-shop-name" id="shop-name">Loading...</div>
-    <div class="header-tagline" id="shop-tag"></div>
+  <div class="shop-header">
+    <div class="shop-avatar" id="sh-av">✂</div>
+    <div class="shop-name" id="sh-name"></div>
+    <div class="shop-tagline" id="sh-tag"></div>
+    <div class="shop-msg" id="sh-msg"></div>
   </div>
-  <div class="progress-wrap"><div class="progress-bar" id="progress-bar" style="width:0%"></div></div>
 
-  <!-- Loading -->
-  <div class="step active" id="step-loading">
-    <div class="loading-wrap" style="min-height:60vh;">
-      <div class="spinner"></div>
-      <div class="loading-text">Loading...</div>
-    </div>
+  <!-- Progress -->
+  <div class="progress">
+    <div class="step-dot active" id="pd-1"></div>
+    <div class="step-line" id="pl-1"></div>
+    <div class="step-dot" id="pd-2"></div>
+    <div class="step-line" id="pl-2"></div>
+    <div class="step-dot" id="pd-3"></div>
+    <div class="step-line" id="pl-3"></div>
+    <div class="step-dot" id="pd-4"></div>
   </div>
 
   <!-- Error -->
-  <div class="step" id="step-error">
-    <div class="error-screen">
-      <div class="screen-icon">⚠️</div>
-      <div class="screen-title">Something went wrong</div>
-      <div class="screen-sub" id="error-msg">Could not load booking page. Please check your connection and try again.</div>
-      <button class="retry-btn" onclick="Book.init()">Try Again</button>
-    </div>
-  </div>
-
-  <!-- Unavailable -->
-  <div class="step" id="step-unavail">
-    <div class="unavail-screen">
-      <div class="screen-icon">🔒</div>
-      <div class="screen-title">Booking unavailable</div>
-      <div class="screen-sub" id="unavail-msg">Online booking is currently turned off. Please call us to book your appointment.</div>
-    </div>
-  </div>
+  <div class="err-banner" id="err"></div>
 
   <!-- Step 1: Service -->
-  <div class="step" id="step-1">
-    <div class="step-label">Step 1 of 5</div>
+  <div id="s1">
     <div class="step-title">Choose a service</div>
-    <div class="step-sub">What are you coming in for?</div>
-    <div class="service-list" id="service-list"></div>
+    <div class="service-grid" id="svc-list"></div>
+    <div style="padding:20px 20px 0;">
+      <button class="btn-main" id="s1-btn" disabled onclick="B.go(2)">Continue →</button>
+    </div>
   </div>
 
-  <!-- Step 2: Barber -->
-  <div class="step" id="step-2">
-    <div class="step-label">Step 2 of 5</div>
+  <!-- Step 2: Barber + Date/Time -->
+  <div id="s2" style="display:none;">
     <div class="step-title">Choose a barber</div>
-    <div class="step-sub">Pick who you'd like, or let us assign the next available.</div>
-    <div class="barber-list" id="barber-list"></div>
-    <div style="margin-top:16px;"><button class="btn-back" onclick="Book.goTo(1)">← Back</button></div>
-  </div>
+    <div class="barber-row" id="barber-row"></div>
 
-  <!-- Step 3: Date -->
-  <div class="step" id="step-3">
-    <div class="step-label">Step 3 of 5</div>
-    <div class="step-title">Pick a date</div>
-    <div class="step-sub" id="date-step-sub">Select your preferred day</div>
-    <div class="cal-nav">
-      <button class="cal-btn" onclick="Book.prevMonth()">‹</button>
-      <div class="cal-month" id="cal-month-label"></div>
-      <button class="cal-btn" onclick="Book.nextMonth()">›</button>
-    </div>
-    <div class="cal-weekdays">
-      <div class="cal-weekday">SUN</div><div class="cal-weekday">MON</div>
-      <div class="cal-weekday">TUE</div><div class="cal-weekday">WED</div>
-      <div class="cal-weekday">THU</div><div class="cal-weekday">FRI</div>
-      <div class="cal-weekday">SAT</div>
-    </div>
-    <div class="cal-days" id="cal-days"></div>
-    <div style="margin-top:20px;"><button class="btn-back" onclick="Book.goTo(2)">← Back</button></div>
-  </div>
-
-  <!-- Step 4: Time -->
-  <div class="step" id="step-4">
-    <div class="step-label">Step 4 of 5</div>
-    <div class="step-title">Pick a time</div>
-    <div class="step-sub" id="time-step-sub">Available times</div>
-    <div id="time-content"></div>
-    <div style="margin-top:16px;"><button class="btn-back" onclick="Book.goTo(3)">← Back</button></div>
-  </div>
-
-  <!-- Step 4b: Deposit -->
-  <div class="step" id="step-deposit">
-    <div class="step-label">Almost there</div>
-    <div class="step-title">Secure your spot</div>
-    <div class="step-sub" id="deposit-msg">A deposit is required to confirm your booking.</div>
-    <div style="background:var(--off);border-radius:var(--radius);padding:18px;margin-bottom:20px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:14px;color:var(--muted);">Deposit amount</span>
-        <span style="font-size:22px;font-weight:800;color:var(--black);" id="deposit-amount-display">$10</span>
-      </div>
-      <div style="font-size:12px;color:var(--faint);margin-top:6px;">Applied toward your total at checkout</div>
-    </div>
-    <div style="margin-bottom:16px;">
-      <div class="field-label">Card details</div>
-      <div id="card-element" style="padding:14px 16px;border:1px solid var(--border-lt);border-radius:var(--radius-sm);background:var(--white);"></div>
-      <div id="card-error" style="color:var(--red);font-size:13px;margin-top:8px;display:none;"></div>
-    </div>
-    <div class="error-msg" id="deposit-error"></div>
-    <button class="btn-primary" id="deposit-btn" onclick="Book.payDeposit()">Pay Deposit & Confirm</button>
-    <button class="btn-back" onclick="Book.goTo(4)">← Back</button>
-  </div>
-
-  <!-- Step 5: Info -->
-  <div class="step" id="step-5">
-    <div class="step-label">Step 5 of 5</div>
-    <div class="step-title">Your details</div>
-    <div class="step-sub">Enter your info to confirm the booking.</div>
-    <div class="summary-card" id="booking-summary"></div>
-    <div class="field">
-      <label class="field-label">Full name</label>
-      <input class="field-input" id="b-name" type="text" placeholder="First and last name" autocomplete="name"/>
-    </div>
-    <div class="field">
-      <label class="field-label">Phone number</label>
-      <input class="field-input" id="b-phone" type="tel" placeholder="(505) 555-0100" autocomplete="tel"/>
-      <div class="field-note">We'll send a confirmation text to this number</div>
-    </div>
-    <div class="field">
-      <label class="field-label">Email <span style="font-weight:400;color:var(--faint);">(optional)</span></label>
-      <input class="field-input" id="b-email" type="email" placeholder="your@email.com" autocomplete="email"/>
-    </div>
-    <div class="field" style="margin-bottom:20px;">
-      <label class="field-label">Notes <span style="font-weight:400;color:var(--faint);">(optional)</span></label>
-      <input class="field-input" id="b-notes" placeholder="Anything we should know?"/>
-    </div>
-    <div class="error-msg" id="book-error"></div>
-    <button class="btn-primary" id="book-btn" onclick="Book.submit()">Confirm Appointment</button>
-    <button class="btn-back" onclick="Book.goTo(4)">← Back</button>
-  </div>
-
-  <!-- Success -->
-  <div class="step" id="step-success">
-    <div class="success-screen">
-      <div class="success-check">
-        <svg class="success-check-svg" viewBox="0 0 28 28" fill="none">
-          <path d="M6 14l5.5 5.5L22 8" stroke="#1a8a3c" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-      </div>
-      <div class="screen-title">You're booked!</div>
-      <div class="screen-sub" id="success-sub">Your appointment is confirmed.</div>
-      <div class="confirm-card" id="confirm-card"></div>
-      <div class="sms-pill" id="sms-pill" style="display:none;">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="9" rx="2" stroke="#1a8a3c" stroke-width="1.3"/><path d="M4 11l1.5 1.5L7 11" stroke="#1a8a3c" stroke-width="1.3" stroke-linecap="round"/></svg>
-        Confirmation text sent to your phone
+    <div class="step-title" style="margin-bottom:14px;">Pick a date</div>
+    <div class="cal-wrap">
+      <div class="cal">
+        <div class="cal-nav">
+          <button class="cal-nav-btn" onclick="B.cMonth(-1)">‹</button>
+          <div class="cal-month" id="cal-lbl"></div>
+          <button class="cal-nav-btn" onclick="B.cMonth(1)">›</button>
+        </div>
+        <div class="cal-grid" id="cal-hdr"></div>
+        <div class="cal-grid" id="cal-body"></div>
       </div>
     </div>
+
+    <div class="slots-section" id="slots-sec" style="display:none;">
+      <div class="slots-label" id="slots-lbl"></div>
+      <div class="slots-grid" id="slots-body"></div>
+    </div>
+
+    <div style="padding:0 20px;">
+      <button class="btn-main" id="s2-btn" disabled onclick="B.go(3)">Continue →</button>
+      <button class="btn-back" onclick="B.go(1)">← Back</button>
+    </div>
   </div>
 
-  <div class="powered">Booking powered by <strong>ShopFlow</strong></div>
+  <!-- Step 3: Details -->
+  <div id="s3" style="display:none;">
+    <div class="step-title">Your info</div>
+    <div class="form-wrap">
+      <div class="field"><label>FULL NAME *</label><input id="f-name" type="text" placeholder="e.g. Marcus Williams" autocomplete="name" /></div>
+      <div class="field"><label>PHONE NUMBER *</label><input id="f-phone" type="tel" placeholder="(505) 555-0100" autocomplete="tel" inputmode="tel" /></div>
+      <div class="field"><label>EMAIL (optional)</label><input id="f-email" type="email" placeholder="you@email.com" autocomplete="email" /></div>
+      <div class="field"><label>NOTES (optional)</label><textarea id="f-notes" placeholder="Anything the barber should know..."></textarea></div>
+      <button class="btn-main" onclick="B.go(4)">Review Booking →</button>
+      <button class="btn-back" onclick="B.go(2)">← Back</button>
+    </div>
+  </div>
+
+  <!-- Step 4: Review -->
+  <div id="s4" style="display:none;">
+    <div class="step-title">Review & confirm</div>
+    <div class="summary-card" id="sum-card"></div>
+    <div class="dep-banner" id="dep-banner" style="display:none;">
+      <div class="dep-icon">💳</div>
+      <div>
+        <div class="dep-txt" id="dep-msg"></div>
+        <div class="dep-amt" id="dep-amt"></div>
+      </div>
+    </div>
+    <div class="cta">
+      <button class="btn-main" id="s4-btn" onclick="B.confirm()">Confirm Appointment</button>
+      <button class="btn-back" onclick="B.go(3)">← Back</button>
+    </div>
+  </div>
+
+</div>
 </div>
 
 <script>
-const Book = {
-  _info: null,
-  _service: null,
-  _barber: null,
-  _date: null,
-  _time: null,
-  _cy: new Date().getFullYear(),
-  _cm: new Date().getMonth(),
+const B = {
+  slug: '',
+  shop: null,
+  step: 1,
+  sel: { svcId:null, svcName:'', svcPrice:0, svcDur:45, barberId:null, barberName:'', date:null, time:null, name:'', phone:'', email:'', notes:'' },
+  _cal: new Date(),
+  _cache: {},
 
   async init() {
-    this._show('step-loading');
+    this.slug = location.pathname.replace(/^\/book\/?/,'').split('/')[0].split('?')[0];
+    if (!this.slug) { this.closed(); return; }
     try {
-      const slug = window.location.pathname.split('/book/')[1]?.split('/')[0];
-      if (!slug) throw new Error('Invalid booking URL');
-      const res = await fetch('/api/public/'+slug+'/info');
-      if (!res.ok) throw new Error('Server error ' + res.status);
-      const info = await res.json();
-      if (info.error) throw new Error(info.message || info.error);
-      this._info = info;
+      const info = await fetch('/api/public/'+this.slug+'/info').then(r=>r.json());
+      if (!info.shopName || info.bookingEnabled===false) { this.closed(); return; }
+      this.shop = info;
+      this._header(info);
+      this._svcs(info.services||[]);
+      document.getElementById('app').style.display='';
+      const ld = document.getElementById('loading');
+      ld.classList.add('fade'); setTimeout(()=>ld.style.display='none',320);
+    } catch(e) { this.closed(); }
+  },
 
-      // Apply accent color override if set
-      if (info.accentColor && info.accentColor !== '#16a34a') {
-        document.documentElement.style.setProperty('--black', info.accentColor);
-      }
+  _header(i) {
+    const av = document.getElementById('sh-av');
+    av.textContent = i.shopName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    av.style.background = i.accentColor||'#16a34a';
+    av.style.boxShadow = '0 4px 16px '+hex2rgba(i.accentColor||'#16a34a',.28);
+    document.getElementById('sh-name').textContent = i.shopName;
+    document.getElementById('sh-tag').textContent  = i.tagline||'';
+    const m = (i.bookingMessage||'').replace('Book your appointment below!','');
+    document.getElementById('sh-msg').textContent  = m;
+    document.title = 'Book — '+i.shopName;
+  },
 
-      document.getElementById('shop-name').textContent = info.shopName || 'ShopFlow';
-      document.getElementById('shop-tag').textContent  = info.tagline || '';
-      document.title = 'Book — ' + (info.shopName || 'ShopFlow');
-      document.getElementById('page-header').style.display = 'block';
+  _svcIcon(c){ return {cut:'✂️',beard:'🪒',combo:'✂️',color:'🎨',design:'💈',other:'💈'}[c]||'✂️'; },
 
-      if (!info.bookingEnabled) {
-        document.getElementById('unavail-msg').textContent = info.bookingMessage || 'Online booking is currently turned off.';
-        this._show('step-unavail');
-        return;
-      }
+  _svcs(svcs) {
+    document.getElementById('svc-list').innerHTML = svcs.length
+      ? svcs.map(s=>`<div class="service-card" id="sc-${s.id}" onclick="B.pickSvc('${s.id}','${es(s.name)}',${s.price},${s.duration||45},'${s.category||'cut'}')">
+          <div class="service-icon">${this._svcIcon(s.category)}</div>
+          <div style="flex:1;"><div class="service-name">${s.name}</div><div class="service-meta">${s.duration||45} min</div></div>
+          <div class="service-price">$${s.price}</div>
+        </div>`).join('')
+      : '<div style="padding:24px;text-align:center;color:var(--faint);">No services listed yet.</div>';
+  },
 
-      this._buildServices();
-      this._buildBarbers();
-      this._progress(5);
-      this._show('step-1');
-    } catch(e) {
-      console.error(e);
-      document.getElementById('error-msg').textContent = e.message || 'Could not connect. Please try again.';
-      this._show('step-error');
+  pickSvc(id,name,price,dur) {
+    document.querySelectorAll('.service-card').forEach(c=>c.classList.remove('selected'));
+    document.getElementById('sc-'+id)?.classList.add('selected');
+    Object.assign(this.sel,{svcId:id,svcName:name,svcPrice:price,svcDur:dur});
+    document.getElementById('s1-btn').disabled=false;
+  },
+
+  go(n) {
+    if (n===4) {
+      const name  = document.getElementById('f-name')?.value.trim();
+      const phone = document.getElementById('f-phone')?.value.trim();
+      if (!name)  { this.err('Please enter your full name.'); return; }
+      if (!phone||phone.replace(/\D/g,'').length<10) { this.err('Please enter a valid phone number.'); return; }
+      Object.assign(this.sel,{name,phone,email:document.getElementById('f-email')?.value.trim()||'',notes:document.getElementById('f-notes')?.value.trim()||''});
+      this._summary();
     }
+    this.err('');
+    document.getElementById('s'+this.step).style.display='none';
+    if (n===2 && this.step===1) { this._barbers(this.shop.barbers||[]); this._cal=new Date(); this._calDraw(); }
+    this.step=n;
+    document.getElementById('s'+n).style.display='';
+    this._prog(n);
+    window.scrollTo({top:0,behavior:'smooth'});
   },
 
-  _show(id) {
-    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
-    document.getElementById(id)?.classList.add('active');
-    window.scrollTo(0, 0);
+  _prog(step) {
+    for(let i=1;i<=4;i++){
+      const d=document.getElementById('pd-'+i); if(!d)continue;
+      d.classList.remove('active','done');
+      if(i<step)d.classList.add('done'); else if(i===step)d.classList.add('active');
+    }
+    for(let i=1;i<=3;i++){const l=document.getElementById('pl-'+i);if(l)l.classList.toggle('done',i<step);}
   },
 
-  _progress(pct) {
-    document.getElementById('progress-bar').style.width = pct + '%';
+  err(msg){const e=document.getElementById('err');if(e){e.textContent=msg;e.style.display=msg?'block':'none';}},
+
+  _barbers(barbs) {
+    const ini = n=>n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    let h=`<div class="barber-card selected" id="b-any" onclick="B.pickBarber(null,'')">
+      <div class="barber-avatar" style="background:#6e6e73;font-size:20px;">✂</div>
+      <div class="barber-card-name">Any Barber</div>
+      <div class="barber-card-sub">First available</div></div>`;
+    barbs.forEach(b=>{h+=`<div class="barber-card" id="b-${b.id}" onclick="B.pickBarber('${b.id}','${es(b.name)}')">
+      <div class="barber-avatar" style="background:${b.color||'#16a34a'}">${ini(b.name)}</div>
+      <div class="barber-card-name">${b.name}</div>
+      <div class="barber-card-sub">${b.bio||'Chair '+b.chair}</div></div>`;});
+    document.getElementById('barber-row').innerHTML=h;
+    this.sel.barberId=null; this.sel.barberName='';
   },
 
-  // ── Step 1 ─────────────────────────────────────────────────────────────────
-  _buildServices() {
-    const el = document.getElementById('service-list');
-    const svcs = this._info?.services || [];
-    const icons = { cut:'✂️', fade:'✂️', taper:'✂️', beard:'🧔', combo:'✂️', color:'🎨', design:'⭐', kids:'👦', other:'💈' };
-    if (!svcs.length) { el.innerHTML = '<p style="color:var(--faint);font-size:14px;">No services available.</p>'; return; }
-    el.innerHTML = svcs.map(s => {
-      const icon = icons[s.name?.toLowerCase()] || icons[s.category?.toLowerCase()] || '💈';
-      return `<div class="service-item" id="svc-${s.id}" onclick="Book._pickSvc('${s.id}','${s.name.replace(/'/g,"\\'")}',${s.price},${s.duration||45})">
-        <div class="service-icon-wrap"><span class="service-icon">${icon}</span></div>
-        <div class="service-info">
-          <div class="service-name">${s.name}</div>
-          <div class="service-meta">${s.duration||45} min</div>
-        </div>
-        <div class="service-price">$${s.price}</div>
-        <svg class="service-check" width="20" height="20" viewBox="0 0 20 20" fill="none">
-          <circle cx="10" cy="10" r="9" fill="rgba(255,255,255,.2)"/>
-          <path d="M6 10l3 3 5-5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+  pickBarber(id,name){
+    document.querySelectorAll('.barber-card').forEach(c=>c.classList.remove('selected'));
+    document.getElementById(id?'b-'+id:'b-any')?.classList.add('selected');
+    this.sel.barberId=id; this.sel.barberName=name;
+    this.sel.time=null; document.getElementById('s2-btn').disabled=true;
+    if(this.sel.date){this._cache={};this._slots(this.sel.date);}
+  },
+
+  _calDraw(){
+    const DAYS=['S','M','T','W','T','F','S'];
+    document.getElementById('cal-hdr').innerHTML=DAYS.map(d=>`<div class="cal-dh">${d}</div>`).join('');
+    this._calBody();
+  },
+
+  _calBody(){
+    const y=this._cal.getFullYear(),m=this._cal.getMonth();
+    document.getElementById('cal-lbl').textContent=this._cal.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+    const first=new Date(y,m,1).getDay(), days=new Date(y,m+1,0).getDate();
+    const todayStr=new Date().toISOString().split('T')[0];
+    const blocked=new Set(this.shop.blockedDates||[]);
+    let h='';
+    for(let i=0;i<first;i++)h+='<div></div>';
+    for(let d=1;d<=days;d++){
+      const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const past=ds<todayStr, bl=blocked.has(ds), sel=ds===this.sel.date, tod=ds===todayStr;
+      let cls='cal-day';
+      if(past||bl)cls+=' is-past'; else if(sel)cls+=' is-sel'; else if(tod)cls+=' is-today';
+      h+=`<div class="${cls}" onclick="B.pickDate('${ds}')">${d}</div>`;
+    }
+    document.getElementById('cal-body').innerHTML=h;
+  },
+
+  cMonth(d){this._cal=new Date(this._cal.getFullYear(),this._cal.getMonth()+d,1);this._calBody();},
+
+  async pickDate(date){
+    if(date<new Date().toISOString().split('T')[0])return;
+    this.sel.date=date; this.sel.time=null; document.getElementById('s2-btn').disabled=true;
+    this._calBody(); await this._slots(date);
+  },
+
+  async _slots(date){
+    const key=date+(this.sel.barberId||'any');
+    const sec=document.getElementById('slots-sec'),body=document.getElementById('slots-body'),lbl=document.getElementById('slots-lbl');
+    sec.style.display='';
+    const dt=new Date(date+'T12:00:00');
+    lbl.textContent=dt.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'}).toUpperCase();
+    body.innerHTML='<div class="no-slots" style="font-size:13px;">Checking availability…</div>';
+    if(this._cache[key]){this._renderSlots(this._cache[key]);return;}
+    try{
+      const qs='?date='+date+(this.sel.barberId?'&barberId='+this.sel.barberId:'');
+      const slots=await fetch('/api/public/'+this.slug+'/availability'+qs).then(r=>r.json());
+      this._cache[key]=slots; this._renderSlots(slots);
+    }catch(e){body.innerHTML='<div class="no-slots">Could not load times. Try again.</div>';}
+  },
+
+  _renderSlots(slots){
+    const body=document.getElementById('slots-body');
+    if(!slots.length){body.innerHTML='<div class="no-slots">No availability on this day.</div>';return;}
+    body.innerHTML=slots.map(t=>`<div class="slot${t===this.sel.time?' sel-slot':''}" onclick="B.pickTime('${t}')">${t}</div>`).join('');
+  },
+
+  pickTime(t){
+    this.sel.time=t;
+    document.querySelectorAll('.slot').forEach(s=>s.classList.toggle('sel-slot',s.textContent.trim()===t));
+    document.getElementById('s2-btn').disabled=false;
+  },
+
+  _summary(){
+    const s=this.sel, dep=this.shop.deposit;
+    const dt=new Date(s.date+'T12:00:00');
+    const dateStr=dt.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+    document.getElementById('sum-card').innerHTML=`
+      <div class="summary-row"><div class="summary-label">Service</div><div class="summary-val">${s.svcName}</div></div>
+      <div class="summary-row"><div class="summary-label">Price</div><div class="summary-val" style="color:var(--green);font-size:17px;">$${s.svcPrice}</div></div>
+      ${s.barberName?`<div class="summary-row"><div class="summary-label">Barber</div><div class="summary-val">${s.barberName}</div></div>`:''}
+      <div class="summary-row"><div class="summary-label">Date</div><div class="summary-val">${dateStr}</div></div>
+      <div class="summary-row"><div class="summary-label">Time</div><div class="summary-val">${s.time}</div></div>
+      <div class="summary-row"><div class="summary-label">Name</div><div class="summary-val">${s.name}</div></div>
+      <div class="summary-row"><div class="summary-label">Phone</div><div class="summary-val">${s.phone}</div></div>
+      ${s.notes?`<div class="summary-row"><div class="summary-label">Notes</div><div class="summary-val" style="font-weight:400;">${s.notes}</div></div>`:''}
+    `;
+    const db=document.getElementById('dep-banner'), btn=document.getElementById('s4-btn');
+    if(dep?.enabled){
+      document.getElementById('dep-msg').textContent=dep.message||'A deposit is required to secure your spot.';
+      document.getElementById('dep-amt').textContent='$'+dep.amount+' deposit due now';
+      db.style.display='flex';
+      btn.textContent='Pay $'+dep.amount+' Deposit & Book →';
+      btn.classList.add('green-btn');
+    }else{db.style.display='none';btn.textContent='Confirm Appointment';btn.classList.remove('green-btn');}
+  },
+
+  async confirm(){
+    const btn=document.getElementById('s4-btn');
+    btn.disabled=true; btn.textContent='Booking…';
+    const s=this.sel, dep=this.shop.deposit;
+    try{
+      const bookRes=await fetch('/api/public/'+this.slug+'/book',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({customerName:s.name,customerPhone:s.phone,customerEmail:s.email,barberId:s.barberId,barberName:s.barberName,serviceId:s.svcId,serviceName:s.svcName,servicePrice:s.svcPrice,date:s.date,time:s.time,notes:s.notes,status:dep?.enabled?'pending-deposit':'confirmed'})
+      }).then(r=>r.json());
+      if(!bookRes.ok){this.err(bookRes.error||'Booking failed. Please try again.');btn.disabled=false;btn.textContent='Confirm Appointment';return;}
+
+      if(dep?.enabled){
+        const depRes=await fetch('/api/public/'+this.slug+'/deposit-session',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({appointmentId:bookRes.appointmentId,amount:dep.amount})
+        }).then(r=>r.json());
+        if(depRes.ok&&depRes.url){window.location.href=depRes.url;return;}
+        // deposit session failed — still show confirmation (appointment exists)
+      }
+
+      this._confirmed(bookRes.smsSent);
+    }catch(e){this.err('Something went wrong. Please try again.');btn.disabled=false;btn.textContent='Confirm Appointment';}
+  },
+
+  _confirmed(smsSent){
+    document.getElementById('app').style.display='none';
+    const s=this.sel;
+    const dt=new Date(s.date+'T12:00:00');
+    const dateStr=dt.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+    document.getElementById('conf-sub').textContent='See you '+dateStr+' at '+s.time+'!';
+    document.getElementById('conf-detail').innerHTML=`
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div style="display:flex;justify-content:space-between;"><span style="font-size:13px;color:var(--muted);">Service</span><span style="font-size:13px;font-weight:700;">${s.svcName}</span></div>
+        ${s.barberName?`<div style="display:flex;justify-content:space-between;"><span style="font-size:13px;color:var(--muted);">Barber</span><span style="font-size:13px;font-weight:700;">${s.barberName}</span></div>`:''}
+        <div style="display:flex;justify-content:space-between;"><span style="font-size:13px;color:var(--muted);">Date</span><span style="font-size:13px;font-weight:700;">${dateStr}</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="font-size:13px;color:var(--muted);">Time</span><span style="font-size:13px;font-weight:700;">${s.time}</span></div>
+        <div style="display:flex;justify-content:space-between;"><span style="font-size:13px;color:var(--muted);">Shop</span><span style="font-size:13px;font-weight:700;">${this.shop.shopName}</span></div>
       </div>`;
-    }).join('');
+    document.getElementById('conf-sms').textContent=smsSent?'📱 Confirmation text sent to '+s.phone:'';
+    document.getElementById('confirmed').style.display='block';
+    window.scrollTo({top:0,behavior:'smooth'});
   },
 
-  _pickSvc(id, name, price, duration) {
-    this._service = { id, name, price, duration };
-    document.querySelectorAll('.service-item').forEach(c => c.classList.remove('selected'));
-    document.getElementById('svc-'+id)?.classList.add('selected');
-    setTimeout(() => this.goTo(2), 200);
+  closed(){
+    document.getElementById('loading').style.display='none';
+    document.getElementById('closed').style.display='block';
   },
-
-  // ── Step 2 ─────────────────────────────────────────────────────────────────
-  _buildBarbers() {
-    const el = document.getElementById('barber-list');
-    const barbers = this._info?.barbers || [];
-    let html = `<div class="barber-any" id="barber-any" onclick="Book._pickBarber(null,null,'No preference')">
-      <div class="barber-any-avatar">✂️</div>
-      <div>
-        <div class="barber-any-name">No preference</div>
-        <div class="barber-any-sub">First available barber</div>
-      </div>
-    </div>`;
-    if (barbers.length) {
-      html += '<div class="barber-grid">' + barbers.map(b => `
-        <div class="barber-card" id="barber-${b.id}" onclick="Book._pickBarber('${b.id}','${b.name.replace(/'/g,"\\'")}','${b.name.replace(/'/g,"\\'")}')">
-          <div class="barber-avatar" style="background:${b.color||'#0a0a0a'}">${(b.name||'?').slice(0,2).toUpperCase()}</div>
-          <div class="barber-name">${b.name}</div>
-          <div class="barber-bio">${b.bio||'Chair '+b.chair}</div>
-        </div>`).join('') + '</div>';
-    }
-    el.innerHTML = html;
-  },
-
-  _pickBarber(id, name, label) {
-    this._barber = { id, name, label };
-    document.querySelectorAll('.barber-any,.barber-card').forEach(c => c.classList.remove('selected'));
-    document.getElementById(id ? 'barber-'+id : 'barber-any')?.classList.add('selected');
-    setTimeout(() => this.goTo(3), 200);
-  },
-
-  // ── Step 3 ─────────────────────────────────────────────────────────────────
-  _buildCal() {
-    const y = this._cy, m = this._cm;
-    const label = new Date(y, m).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    document.getElementById('cal-month-label').textContent = label;
-    const first = new Date(y, m, 1).getDay();
-    const days  = new Date(y, m+1, 0).getDate();
-    const now   = new Date(); now.setHours(0,0,0,0);
-    const blocked = this._info?.blockedDates || [];
-    const barbers = this._info?.barbers || [];
-    let workDays;
-    if (this._barber?.id) {
-      const b = barbers.find(x => x.id === this._barber.id);
-      workDays = b?.schedule?.workDays || [1,2,3,4,5,6];
-    } else {
-      const all = new Set();
-      barbers.forEach(b => (b.schedule?.workDays||[1,2,3,4,5,6]).forEach(d => all.add(d)));
-      workDays = [...all];
-    }
-    let html = '';
-    for (let i = 0; i < first; i++) html += '<div></div>';
-    for (let d = 1; d <= days; d++) {
-      const ds = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-      const dt = new Date(y, m, d);
-      const dow = dt.getDay();
-      const isPast = dt < now;
-      const isBlocked = blocked.includes(ds);
-      const isNoWork = !workDays.includes(dow);
-      const isToday = dt.getTime() === now.getTime();
-      const isSel = ds === this._date;
-      let cls = 'cal-day';
-      if (isPast) cls += ' cal-past';
-      else if (isBlocked) cls += ' cal-blocked';
-      else if (isNoWork) cls += ' cal-nowork';
-      else if (isSel) cls += ' cal-selected';
-      else if (isToday) cls += ' cal-today';
-      const clickable = !isPast && !isBlocked && !isNoWork;
-      html += `<div class="${cls}"${clickable ? ` onclick="Book._pickDate('${ds}')"` : ''}>${d}</div>`;
-    }
-    document.getElementById('cal-days').innerHTML = html;
-  },
-
-  prevMonth() { this._cm--; if(this._cm<0){this._cm=11;this._cy--;} this._buildCal(); },
-  nextMonth() { this._cm++; if(this._cm>11){this._cm=0;this._cy++;} this._buildCal(); },
-
-  _pickDate(date) {
-    this._date = date;
-    this._buildCal();
-    setTimeout(() => this.goTo(4), 200);
-  },
-
-  // ── Step 4 ─────────────────────────────────────────────────────────────────
-  async _buildTimes() {
-    const el = document.getElementById('time-content');
-    const sub = document.getElementById('time-step-sub');
-    if (this._date && sub) {
-      const dt = new Date(this._date + 'T12:00:00');
-      sub.textContent = dt.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
-    }
-    el.innerHTML = '<div class="loading-wrap" style="padding:40px 0;"><div class="spinner"></div><div class="loading-text">Checking availability...</div></div>';
-    try {
-      const params = new URLSearchParams({ date: this._date });
-      if (this._barber?.id) params.append('barberId', this._barber.id);
-      const slug = window.location.pathname.split('/book/')[1]?.split('/')[0];
-      const res = await fetch('/api/public/'+slug+'/availability?' + params);
-      if (!res.ok) throw new Error();
-      const slots = await res.json();
-      if (!slots.length) {
-        el.innerHTML = `<div class="no-slots"><div class="no-slots-icon">😔</div><div class="no-slots-title">No times available</div><div class="no-slots-sub">Try a different day or barber</div></div>`;
-        return;
-      }
-      const am = slots.filter(s => s.includes('AM'));
-      const pm = slots.filter(s => s.includes('PM'));
-      let html = '';
-      if (am.length) {
-        html += '<div class="time-section"><div class="time-section-label">Morning</div><div class="time-grid">';
-        html += am.map(t => `<div class="time-slot${this._time===t?' selected':''}" onclick="Book._pickTime('${t}')">${t}</div>`).join('');
-        html += '</div></div>';
-      }
-      if (pm.length) {
-        html += '<div class="time-section"><div class="time-section-label">Afternoon</div><div class="time-grid">';
-        html += pm.map(t => `<div class="time-slot${this._time===t?' selected':''}" onclick="Book._pickTime('${t}')">${t}</div>`).join('');
-        html += '</div></div>';
-      }
-      el.innerHTML = html;
-    } catch(e) {
-      el.innerHTML = '<div class="no-slots"><div class="no-slots-icon">⚠️</div><div class="no-slots-title">Could not load times</div><div class="no-slots-sub">Please try again</div></div>';
-    }
-  },
-
-  _pickTime(t) {
-    this._time = t;
-    document.querySelectorAll('.time-slot').forEach(b => b.classList.remove('selected'));
-    event.target.classList.add('selected');
-    setTimeout(() => this.goTo(5), 200);
-  },
-
-  // ── Step 5 ─────────────────────────────────────────────────────────────────
-  _buildSummary() {
-    const el = document.getElementById('booking-summary');
-    const dt = new Date(this._date + 'T12:00:00');
-    const dateLabel = dt.toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' });
-    el.innerHTML = `
-      <div class="summary-row"><span class="summary-label">Service</span><span class="summary-value">${this._service?.name}</span></div>
-      <div class="summary-row"><span class="summary-label">Barber</span><span class="summary-value">${this._barber?.label||'No preference'}</span></div>
-      <div class="summary-row"><span class="summary-label">Date</span><span class="summary-value">${dateLabel}</span></div>
-      <div class="summary-row"><span class="summary-label">Time</span><span class="summary-value">${this._time}</span></div>
-      <div class="summary-row"><span class="summary-label">Price</span><span class="summary-price">$${this._service?.price}</span></div>`;
-  },
-
-  // ── Navigation ──────────────────────────────────────────────────────────────
-  goTo(step) {
-    const pcts = { 1:5, 2:25, 3:45, 4:65, deposit:88, 5:85, success:100 };
-    this._progress(pcts[step] || 0);
-    this._show(typeof step === 'number' ? 'step-'+step : 'step-'+step);
-    if (step === 3) this._buildCal();
-    if (step === 4) this._buildTimes();
-    if (step === 5) this._buildSummary();
-  },
-
-  // ── Submit ──────────────────────────────────────────────────────────────────
-  _stripe: null,
-  _cardElement: null,
-  _pendingAppointmentId: null,
-
-  async submit() {
-    const name  = document.getElementById('b-name')?.value.trim();
-    const phone = document.getElementById('b-phone')?.value.trim();
-    const email = document.getElementById('b-email')?.value.trim();
-    const notes = document.getElementById('b-notes')?.value.trim();
-    const errEl = document.getElementById('book-error');
-    errEl.style.display = 'none';
-    if (!name) { errEl.textContent='Please enter your full name.'; errEl.style.display='block'; document.getElementById('b-name')?.focus(); return; }
-    if (!phone || phone.replace(/\D/g,'').length < 10) { errEl.textContent='Please enter a valid 10-digit phone number.'; errEl.style.display='block'; document.getElementById('b-phone')?.focus(); return; }
-
-    const btn = document.getElementById('book-btn');
-    btn.textContent = 'Confirming...'; btn.disabled = true;
-
-    try {
-      // Check if deposit required
-      const dep = this._info?.deposit;
-      if (dep?.enabled && this._info?.stripePublishableKey && this._info?.stripeAccountId) {
-        // Create the appointment first (unconfirmed until deposit paid)
-        const slug = window.location.pathname.split('/book/')[1]?.split('/')[0];
-      const res = await fetch('/api/public/'+slug+'/book', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ customerName:name, customerPhone:phone, customerEmail:email||'', barberId:this._barber?.id||null, barberName:this._barber?.name||null, serviceId:this._service?.id||null, serviceName:this._service?.name, servicePrice:this._service?.price, date:this._date, time:this._time, notes:notes||'', status:'pending-deposit' })
-        });
-        const data = await res.json();
-        if (!data.ok) throw new Error(data.error||'Booking failed');
-        this._pendingAppointmentId = data.appointmentId;
-        this._pendingEmail = email;
-
-        // Go to deposit step
-        btn.textContent = 'Confirm Appointment'; btn.disabled = false;
-        this._initDepositStep(dep.amount, dep.message);
-        this.goTo('deposit');
-        return;
-      }
-
-      // No deposit — book directly
-      await this._bookDirectly(name, phone, email, notes, btn);
-    } catch(e) {
-      errEl.textContent = e.message || 'Could not complete booking. Please try again.';
-      errEl.style.display = 'block';
-      btn.textContent = 'Confirm Appointment'; btn.disabled = false;
-    }
-  },
-
-  async _bookDirectly(name, phone, email, notes, btn) {
-    const slug = window.location.pathname.split('/book/')[1]?.split('/')[0];
-      const res = await fetch('/api/public/'+slug+'/book', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ customerName:name, customerPhone:phone, customerEmail:email||'', barberId:this._barber?.id||null, barberName:this._barber?.name||null, serviceId:this._service?.id||null, serviceName:this._service?.name, servicePrice:this._service?.price, date:this._date, time:this._time, notes:notes||'' })
-    });
-    const data = await res.json();
-    if (data.ok) {
-      this._showSuccess(data.smsSent);
-    } else { throw new Error(data.error || 'Booking failed.'); }
-    if (btn) { btn.textContent = 'Confirm Appointment'; btn.disabled = false; }
-  },
-
-  _showSuccess(smsSent) {
-    const dt = new Date(this._date + 'T12:00:00');
-    document.getElementById('success-sub').textContent = 'See you '+dt.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+' at '+this._time+'.';
-    document.getElementById('confirm-card').innerHTML =
-      '<div class="confirm-row"><span class="confirm-label">Service</span><span class="confirm-value">'+this._service?.name+'</span></div>'+
-      '<div class="confirm-row"><span class="confirm-label">Barber</span><span class="confirm-value">'+(this._barber?.label||'Next available')+'</span></div>'+
-      '<div class="confirm-row"><span class="confirm-label">Date</span><span class="confirm-value">'+dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</span></div>'+
-      '<div class="confirm-row"><span class="confirm-label">Time</span><span class="confirm-value">'+this._time+'</span></div>'+
-      '<div class="confirm-row"><span class="confirm-label">Price</span><span class="confirm-value">$'+this._service?.price+'</span></div>';
-    if (smsSent) document.getElementById('sms-pill').style.display = 'inline-flex';
-    this.goTo('success');
-  },
-
-  _initDepositStep(amount, message) {
-    document.getElementById('deposit-msg').textContent = message || 'A deposit is required to confirm your booking.';
-    document.getElementById('deposit-amount-display').textContent = '$'+amount;
-    // Init Stripe
-    if (!this._stripe && this._info?.stripePublishableKey) {
-      this._stripe = Stripe(this._info.stripePublishableKey, { stripeAccount: this._info.stripeAccountId });
-      const elements = this._stripe.elements();
-      this._cardElement = elements.create('card', {
-        style: { base: { fontFamily:'-apple-system,BlinkMacSystemFont,sans-serif', fontSize:'16px', color:'#0a0a0a', '::placeholder':{ color:'#aeaeb2' } } }
-      });
-      this._cardElement.mount('#card-element');
-      this._cardElement.on('change', e => {
-        const errEl = document.getElementById('card-error');
-        if (errEl) { errEl.textContent = e.error?.message||''; errEl.style.display = e.error?'block':'none'; }
-      });
-    }
-  },
-
-  async payDeposit() {
-    const btn = document.getElementById('deposit-btn');
-    const errEl = document.getElementById('deposit-error');
-    errEl.style.display = 'none';
-    btn.textContent = 'Processing...'; btn.disabled = true;
-
-    try {
-      // Create PaymentIntent
-      const slug = window.location.pathname.split('/book/')[1]?.split('/')[0];
-      const dres = await fetch('/api/public/'+slug+'/deposit/create', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appointmentId: this._pendingAppointmentId, customerName: document.getElementById('b-name')?.value.trim(), customerEmail: this._pendingEmail||'' })
-      });
-      const data = await dres.json();
-      if (!data.ok) throw new Error(data.error||'Could not process deposit');
-
-      // Confirm payment
-      const result = await this._stripe.confirmCardPayment(data.clientSecret, {
-        payment_method: { card: this._cardElement }
-      });
-
-      if (result.error) throw new Error(result.error.message);
-
-      // Mark deposit as paid
-      await fetch('/api/deposit/confirm', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appointmentId: this._pendingAppointmentId, paymentIntentId: result.paymentIntent.id, amount: data.amount })
-      });
-
-      this._showSuccess(false);
-    } catch(e) {
-      errEl.textContent = e.message || 'Payment failed. Please try again.';
-      errEl.style.display = 'block';
-      btn.textContent = 'Pay Deposit & Confirm'; btn.disabled = false;
-    }
-  }
 };
 
-document.addEventListener('DOMContentLoaded', () => Book.init());
+function es(s){return String(s||'').replace(/'/g,"\\'");}
+function hex2rgba(hex,a){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return `rgba(${r},${g},${b},${a})`;}
+
+B.init();
 </script>
 </body>
 </html>

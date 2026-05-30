@@ -720,6 +720,55 @@ app.get('/api/shop/checkout/verify/:sessionId', requireAuth, shopRoute(async (re
   } catch(e) { res.status(500).json({ paid: false, error: e.message }); }
 }));
 
+// ── PUBLIC: Deposit session for booking page ──────────────────────────────────
+app.post('/api/public/:shopSlug/deposit-session', async (req, res) => {
+  try {
+    const shop = master.get('shops').find({ slug: req.params.shopSlug, active: true }).value();
+    if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
+    const db = getShopDb(shop.id);
+    const s = db.get('settings').value() || {};
+    const accountId = s.stripe?.connectAccountId;
+    if (!accountId || !s.stripe?.onboardingComplete) return res.status(400).json({ ok: false, error: 'Stripe not connected' });
+    const { appointmentId, amount } = req.body;
+    const total = Math.round(Number(amount || 10) * 100);
+    const h = shopHelpers(db);
+    const appt = h.getById('appointments', appointmentId);
+    if (!appt) return res.status(404).json({ ok: false, error: 'Appointment not found' });
+    const stripe = getStripe();
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [{ price_data: { currency: 'usd', product_data: { name: 'Deposit — '+appt.service, description: s.shopName+' · '+appt.date+' at '+appt.time }, unit_amount: total }, quantity: 1 }],
+      mode: 'payment',
+      success_url: APP_URL + '/booking-deposit-success?session={CHECKOUT_SESSION_ID}&appt=' + appointmentId + '&shop=' + shop.id,
+      cancel_url:  APP_URL + '/book/' + req.params.shopSlug + '?deposit=cancelled',
+      metadata: { appointmentId, shopId: shop.id },
+      payment_intent_data: { transfer_data: { destination: accountId } },
+    });
+    res.json({ ok: true, url: session.url });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── PUBLIC: Deposit success callback ─────────────────────────────────────────
+app.get('/booking-deposit-success', async (req, res) => {
+  try {
+    const { session: sessionId, appt: apptId, shop: shopId } = req.query;
+    if (sessionId && apptId && shopId) {
+      const stripe = getStripe();
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      if (session.payment_status === 'paid') {
+        const db = getShopDb(shopId);
+        const h = shopHelpers(db);
+        const appt = h.getById('appointments', apptId);
+        if (appt && appt.status === 'pending-deposit') {
+          appt.status = 'confirmed'; appt.depositPaid = true; appt.depositAmount = session.amount_total / 100; appt.depositSessionId = sessionId;
+          h.upsert('appointments', appt);
+        }
+      }
+    }
+  } catch(e) {}
+  res.send(`<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="font-family:-apple-system,sans-serif;text-align:center;padding:60px 20px;background:#f5f5f7;"><div style="font-size:64px;margin-bottom:20px;">🎉</div><div style="font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:8px;">You're booked!</div><div style="font-size:15px;color:#6e6e73;line-height:1.6;margin-bottom:24px;">Your deposit was received and your appointment is confirmed.</div><div style="font-size:13px;color:#aeaeb2;">You can close this tab.</div></body></html>`);
+});
+
 // ── Checkout success/cancel pages (redirect back to app) ──────────────────────
 app.get('/checkout-success', (req, res) => res.send(`<html><body style="font-family:sans-serif;text-align:center;padding:60px;"><div style="font-size:48px;margin-bottom:16px;">✅</div><div style="font-size:22px;font-weight:700;margin-bottom:8px;">Payment received!</div><div style="color:#6b7280;margin-bottom:24px;">You can close this tab.</div></body></html>`));
 app.get('/checkout-cancel',  (req, res) => res.send(`<html><body style="font-family:sans-serif;text-align:center;padding:60px;"><div style="font-size:48px;margin-bottom:16px;">↩️</div><div style="font-size:22px;font-weight:700;margin-bottom:8px;">Payment cancelled.</div><div style="color:#6b7280;margin-bottom:24px;">You can close this tab.</div></body></html>`));
