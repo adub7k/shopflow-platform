@@ -761,6 +761,129 @@ app.patch('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+// ── ADMIN: seed demo account ──────────────────────────────────────────────────
+app.post('/api/admin/seed-demo', requireAdmin, async (req, res) => {
+  try {
+    const DEMO_EMAIL = 'demo@shopflow.com';
+    const DEMO_PASS  = 'demo1234';
+    const DEMO_SHOP  = "King's Cuts";
+
+    // Remove existing demo account if present
+    const existing = master.get('accounts').find({ email: DEMO_EMAIL }).value();
+    if (existing) {
+      const oldShopId = existing.shopId;
+      master.get('accounts').remove({ email: DEMO_EMAIL }).write();
+      master.get('shops').remove({ id: oldShopId }).write();
+      try {
+        const oldDir = path.join(SHOPS_DIR, oldShopId);
+        if (fs.existsSync(oldDir)) fs.rmSync(oldDir, { recursive: true, force: true });
+      } catch(e) {}
+    }
+
+    const shopId    = uuidv4();
+    const accountId = uuidv4();
+    const shopSlug  = 'kings-cuts';
+    const passwordHash = await bcrypt.hash(DEMO_PASS, 10);
+
+    master.get('shops').push({ id: shopId, accountId, shopName: DEMO_SHOP, slug: shopSlug, email: DEMO_EMAIL, phone: '(505) 555-0192', plan: 'pro', active: true, createdAt: new Date().toISOString(), lastActivity: new Date().toISOString() }).write();
+    master.get('accounts').push({ id: accountId, shopId, email: DEMO_EMAIL, passwordHash, plan: 'pro', active: true, createdAt: new Date().toISOString() }).write();
+
+    // Init shop DB
+    const shopDb = getShopDb(shopId);
+    shopDb.defaults({ settings:{}, barbers:[], services:[], customers:[], appointments:[], conversations:[], blockedDates:[] }).write();
+
+    shopDb.set('settings', { shopName: DEMO_SHOP, tagline: 'Fresh Cuts. Clean Lines. Every Time.', phone: '(505) 555-0192', address: '4820 Central Ave SW, Albuquerque, NM 87105', email: DEMO_EMAIL, bookingEnabled: true, bookingMessage: 'Book your appointment below! Walk-ins also welcome.', accentColor: '#16a34a', pin: '1234', pinEnabled: false, rebookInterval: 21, loyalty: { enabled: true, visitsForReward: 10, rewardDescription: 'Free shape up or beard lineup' }, twilio: {}, googleReviewLink: '', emailSmtp: { host:'', port:587, user:'', pass:'' }, deposit: { enabled: false, amount: 10, message: '' }, stripe: { connectAccountId:'', onboardingComplete: false }, remindersSent: [], scheduledReminders: [], smsTemplates: {} }).write();
+
+    const BARBERS = [
+      { id:'b1', name:'Marcus', chair:1, phone:'(505) 555-0201', bio:'Master barber, 10+ years.', color:'#16a34a', active:true, joinedAt: daysAgo(180), schedule:{ workDays:[1,2,3,4,5,6], startTime:'9:00 AM',  endTime:'6:00 PM', slotMinutes:30 } },
+      { id:'b2', name:'Dre',    chair:2, phone:'(505) 555-0202', bio:'Classic cuts and beard work.', color:'#2563eb', active:true, joinedAt: daysAgo(90),  schedule:{ workDays:[2,3,4,5,6],   startTime:'10:00 AM', endTime:'7:00 PM', slotMinutes:30 } },
+      { id:'b3', name:'Tony',   chair:3, phone:'(505) 555-0203', bio:'Kids cuts specialist.', color:'#d97706', active:true, joinedAt: daysAgo(45),  schedule:{ workDays:[1,3,4,5,6],   startTime:'9:00 AM',  endTime:'5:00 PM', slotMinutes:30 } },
+    ];
+    const SERVICES = [
+      { id:'s1', name:'Haircut',      category:'cut',   price:35, duration:45 },
+      { id:'s2', name:'Skin Fade',    category:'cut',   price:40, duration:45 },
+      { id:'s3', name:'Beard Lineup', category:'beard', price:15, duration:20 },
+      { id:'s4', name:'Kids Cut',     category:'cut',   price:25, duration:30 },
+      { id:'s5', name:'Cut + Beard',  category:'combo', price:50, duration:60 },
+      { id:'s6', name:'Shape Up',     category:'cut',   price:20, duration:20 },
+    ];
+    const CLIENT_DATA = [
+      { name:'Jordan Rivera',    phone:'(505) 555-1001', email:'jordan.r@email.com', notes:'Prefers Marcus. Always asks for skin fade.', loyalty:9,  noShows:0 },
+      { name:'Marcus Webb',      phone:'(505) 555-1002', email:'mwebb@gmail.com',    notes:'Bi-weekly regular. Good tipper.',            loyalty:7,  noShows:0 },
+      { name:'DeShawn Carter',   phone:'(505) 555-1003', email:'',                   notes:'Taper fade, leave length on top.',           loyalty:5,  noShows:1 },
+      { name:'Tyler Brooks',     phone:'(505) 555-1004', email:'',                   notes:'Comes in every 3 weeks.',                   loyalty:4,  noShows:0 },
+      { name:'Isaiah Flores',    phone:'(505) 555-1005', email:'',                   notes:'Kids cut — very particular dad.',            loyalty:6,  noShows:0 },
+      { name:'Cameron Nash',     phone:'(505) 555-1006', email:'cnash@email.com',    notes:'Beard only. Every 2 weeks.',                loyalty:3,  noShows:0 },
+      { name:'Elijah Monroe',    phone:'(505) 555-1007', email:'',                   notes:'Low fade, Edgar top.',                      loyalty:8,  noShows:0 },
+      { name:'Aiden Torres',     phone:'(505) 555-1008', email:'',                   notes:'Always brings his son too.',                loyalty:2,  noShows:1 },
+      { name:'Noah Castillo',    phone:'(505) 555-1009', email:'',                   notes:"Hates clippers past a 2.",                  loyalty:5,  noShows:0 },
+      { name:'Liam Ortega',      phone:'(505) 555-1010', email:'liamo@email.com',    notes:'Curly top, tight sides.',                   loyalty:3,  noShows:0 },
+      { name:'Xavier Price',     phone:'(505) 555-1011', email:'',                   notes:'High top fade. Comes in every 10 days.',    loyalty:9,  noShows:0 },
+      { name:'Jaylen Scott',     phone:'(505) 555-1012', email:'jscott@gmail.com',   notes:'Waves — 360 brushwork requested.',          loyalty:6,  noShows:2 },
+      { name:'Malik Thompson',   phone:'(505) 555-1013', email:'',                   notes:'Hot towel shave every time.',               loyalty:4,  noShows:0 },
+      { name:'Caleb Washington', phone:'(505) 555-1014', email:'cwash@email.com',    notes:'Cut + beard combo always.',                 loyalty:7,  noShows:0 },
+      { name:'Ethan Powell',     phone:'(505) 555-1015', email:'',                   notes:'New client — referred by Jordan.',          loyalty:2,  noShows:0 },
+      { name:'Zion Hughes',      phone:'(505) 555-1016', email:'zhughes@gmail.com',  notes:'Taper, line it up.',                        loyalty:5,  noShows:0 },
+      { name:'Andre Mitchell',   phone:'(505) 555-1017', email:'',                   notes:'Prefers Dre. They go way back.',            loyalty:8,  noShows:0 },
+      { name:'Dominic Reed',     phone:'(505) 555-1018', email:'dreed@outlook.com',  notes:'Kid — comes with dad every month.',         loyalty:3,  noShows:0 },
+      { name:'Chris Lawson',     phone:'(505) 555-1019', email:'',                   notes:'Shape up only. Quick in-out.',              loyalty:1,  noShows:0 },
+      { name:'Kevin James',      phone:'(505) 555-1020', email:'kj@email.com',       notes:'Skin fade every 2 weeks.',                  loyalty:10, noShows:0 },
+    ];
+    const customers = CLIENT_DATA.map((c, i) => ({ id:'c'+(i+1).toString().padStart(3,'0'), name:c.name, phone:c.phone, email:c.email, notes:c.notes, loyaltyVisits:c.loyalty, loyaltyRewardedAt: c.loyalty>=10 ? daysAgo(15) : null, noShows:c.noShows, createdAt: daysAgo(randInt(30,120)) }));
+
+    const TIMES = ['9:00 AM','9:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM','12:00 PM','12:30 PM','1:00 PM','1:30 PM','2:00 PM','2:30 PM','3:00 PM','3:30 PM','4:00 PM','4:30 PM','5:00 PM'];
+    const CUT_NOTES = [
+      'Clean skin fade, 0 on sides, ~2 inches on top.',
+      'Low taper, disconnected — more length requested this time.',
+      'Skin fade with hard part on left. Beard lined up tight.',
+      'Kids cut — scissor on top, short taper. Sat still great.',
+      'Waves — 1.5 sides, 3 on top. Brushwork done post-cut.',
+      'Cut and full beard lineup. Trimmed to ~half inch.',
+      'High top fade — 0 to 1 skin transition, length left on top.',
+      'Shape up only — hairline and sideburns.',
+      'Classic taper, scissor finish on top. No clipper-over-comb.',
+      'Mid fade, curly top left natural. Curl cream applied.',
+      'Beard lineup only — cheek line set higher per client request.',
+      'First visit consultation — medium fade. Tighter next time.',
+    ];
+
+    const appointments = [];
+    for (let day = -30; day <= 7; day++) {
+      if (day === 0) continue;
+      const isPast = day < 0;
+      const count = isPast ? randInt(4,9) : randInt(2,6);
+      const used = new Set();
+      for (let a = 0; a < count; a++) {
+        let time, tries=0;
+        do { time = TIMES[randInt(0,TIMES.length-1)]; tries++; } while(used.has(time)&&tries<20);
+        used.add(time);
+        const cust = customers[randInt(0,customers.length-1)];
+        const barb = BARBERS[randInt(0,BARBERS.length-1)];
+        const svc  = SERVICES[randInt(0,SERVICES.length-1)];
+        const noshow = isPast && Math.random()<0.05;
+        const tip = noshow ? 0 : [0,0,0,5,5,10,10,10,15,20][randInt(0,9)];
+        appointments.push({ id:'a'+Math.random().toString(36).slice(2,10), customerId:cust.id, barberId:barb.id, serviceId:svc.id, date: daysAgo(-day), time, duration:svc.duration, price:svc.price, tip, status: isPast?(noshow?'noshow':'done'):'upcoming', cutNotes: (!noshow&&isPast&&Math.random()<0.7)?CUT_NOTES[randInt(0,CUT_NOTES.length-1)]:'', bookedAt: new Date(Date.now()+day*864e5-2*864e5).toISOString(), source: Math.random()<0.3?'online':'walk-in' });
+      }
+    }
+    appointments.sort((a,b)=>a.date!==b.date?a.date.localeCompare(b.date):a.time.localeCompare(b.time));
+
+    shopDb.set('barbers', BARBERS).write();
+    shopDb.set('services', SERVICES).write();
+    shopDb.set('customers', customers).write();
+    shopDb.set('appointments', appointments).write();
+
+    const done = appointments.filter(a=>a.status==='done');
+    res.json({ ok:true, shopId, slug: shopSlug, email: DEMO_EMAIL, password: DEMO_PASS, clients: customers.length, appointments: appointments.length, completed: done.length, revenue: done.reduce((s,a)=>s+a.price+a.tip,0) });
+  } catch(e) {
+    console.error('Seed demo error:', e);
+    res.status(500).json({ ok:false, error: e.message });
+  }
+});
+
+// helpers used by seed
+function daysAgo(n) { const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().split('T')[0]; }
+function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+
 // ── ADMIN: platform settings (get) ───────────────────────────────────────────
 app.get('/api/admin/platform-settings', requireAdmin, (req, res) => {
   const ps = master.get('platformSettings').value() || {};

@@ -425,6 +425,25 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 
         </div>
       </div>
+
+      <div class="card" style="max-width:560px;">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Demo Data</div>
+            <div class="card-sub">Seed a realistic demo shop for testing and demos.</div>
+          </div>
+        </div>
+        <div style="padding:20px;">
+          <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">
+            Creates the <strong style="color:var(--text);">King's Cuts</strong> demo account with 20 clients, 3 barbers, and ~230 appointments spanning 30 days back and 7 days forward. Safe to re-run — replaces any existing demo account.
+          </div>
+          <div style="background:var(--off);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:12px;color:var(--muted);margin-bottom:16px;font-family:monospace;">
+            📧 demo@shopflow.com &nbsp;·&nbsp; 🔑 demo1234
+          </div>
+          <button class="btn btn-green" id="seed-btn" onclick="seedDemo()">⚡ Seed Demo Account</button>
+          <div id="seed-result" style="margin-top:12px;font-size:12px;color:var(--muted);display:none;"></div>
+        </div>
+      </div>
     </div>
 
   </div><!-- /main -->
@@ -918,6 +937,31 @@ async function saveRequirePayment(value) {
     updatePaymentGateStatus(value);
     toast(value ? 'Payment gate enabled ✓' : 'Payment gate disabled — free signups allowed');
   } catch(e) { toast('Save failed'); }
+}
+
+async function seedDemo() {
+  const btn = document.getElementById('seed-btn');
+  const result = document.getElementById('seed-result');
+  btn.textContent = '⏳ Seeding…'; btn.disabled = true;
+  result.style.display = 'none';
+  try {
+    const res = await fetch('/api/admin/seed-demo', {
+      method: 'POST',
+      headers: { 'x-admin-key': adminKey },
+    });
+    const d = await res.json();
+    if (!d.ok) throw new Error(d.error);
+    result.style.display = 'block';
+    result.innerHTML = `✅ <strong style="color:var(--green);">Demo seeded!</strong> &nbsp;${d.clients} clients · ${d.appointments} appointments · $${Number(d.revenue).toLocaleString()} revenue<br><span style="color:var(--muted);">Login: demo@shopflow.com / demo1234</span>`;
+    toast('Demo account seeded ✓');
+    await Promise.all([loadShops(), loadStats()]);
+  } catch(e) {
+    result.style.display = 'block';
+    result.innerHTML = `❌ <span style="color:var(--red);">Seed failed: ${e.message}</span>`;
+    toast('Seed failed');
+  } finally {
+    btn.textContent = '⚡ Seed Demo Account'; btn.disabled = false;
+  }
 }
 
 function updatePaymentGateStatus(on) {
