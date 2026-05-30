@@ -78,6 +78,7 @@ const Dashboard = {
 const Appointments = {
   _data: [], _barbers: [], _services: [],
   _selected: today(),
+  _prefill: null, // set by Clients.bookAppointment to pre-fill form after nav
 
   _view: 'month', // 'month' or 'week'
 
@@ -136,6 +137,12 @@ const Appointments = {
         html.push('</div>');
       }
       el.innerHTML = html.join('');
+
+      // If navigated here from a client profile, open the pre-filled form
+      if (this._prefill) {
+        const p = this._prefill; this._prefill = null;
+        setTimeout(() => this.openFormPrefilled(p.customerId, p.customerName, p.customerPhone), 100);
+      }
     } catch(e) { el.innerHTML = '<div class="card"><p style="color:var(--muted)">Could not load appointments</p></div>'; }
   },
 
@@ -257,6 +264,25 @@ const Appointments = {
     setTimeout(()=>{
       makeAutocomplete('fa-name','fa-list',(id,name,phone)=>{document.getElementById('fa-name').value=name;document.getElementById('fa-cid').value=id;document.getElementById('fa-phone').value=phone||'';});
     },150);
+  },
+
+  openFormPrefilled(customerId, customerName, customerPhone) {
+    // Ensure barbers/services are loaded then open a new appointment form pre-filled with client
+    const load = (this._barbers.length && this._services.length)
+      ? Promise.resolve()
+      : Promise.all([db.barbers.all(), db.services.all()]).then(([b,s])=>{ this._barbers=b; this._services=s; });
+    load.then(() => {
+      this.openForm(null);
+      // After form renders, fill in the client fields
+      setTimeout(() => {
+        const nameEl  = document.getElementById('fa-name');
+        const cidEl   = document.getElementById('fa-cid');
+        const phoneEl = document.getElementById('fa-phone');
+        if (nameEl)  nameEl.value  = customerName;
+        if (cidEl)   cidEl.value   = customerId;
+        if (phoneEl) phoneEl.value = customerPhone;
+      }, 80);
+    });
   },
 
   _svcChange() {
@@ -742,7 +768,10 @@ const Clients = {
           <div style="font-size:18px;font-weight:800;color:var(--text);letter-spacing:-.03em;">${c.name}</div>
           <div style="font-size:12px;color:var(--muted);">${c.phone||'No phone'}${c.email?' · '+c.email:''}</div>
         </div>
-        <button onclick="Clients.openForm('${c.id}')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text);">Edit</button>
+        <div style="display:flex;gap:6px;">
+          <button onclick="Clients.bookAppointment('${c.id}')" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">📅 Book</button>
+          <button onclick="Clients.openForm('${c.id}')" style="background:none;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text);">Edit</button>
+        </div>
       </div>`;
 
       // ── Stats ──
@@ -830,6 +859,13 @@ const Clients = {
   },
 
   _back() { this._view='list'; this._profileId=null; this.render(); },
+
+  bookAppointment(id) {
+    // Store client id so Appointments picks it up after render
+    const c = this._profileData?.customer;
+    Appointments._prefill = { customerId: id, customerName: c?.name||'', customerPhone: c?.phone||'' };
+    App.nav('appointments');
+  },
 
   async sendMessage() {
     const input = document.getElementById('chat-input');
