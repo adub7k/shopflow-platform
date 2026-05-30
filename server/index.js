@@ -112,6 +112,10 @@ function requireAuth(req, res, next) {
   if (!token) return res.status(401).json({ error: 'Not authenticated' });
   try {
     const payload = jwt.verify(token, JWT_SECRET);
+    // Hard check: shop must still exist and be active
+    const shop = master.get('shops').find({ id: payload.shopId }).value();
+    if (!shop) return res.status(401).json({ error: 'Account not found' });
+    if (!shop.active) return res.status(401).json({ error: 'Account suspended. Contact support.' });
     req.shopId = payload.shopId;
     req.accountId = payload.accountId;
     next();

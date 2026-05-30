@@ -36,8 +36,13 @@ h1{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margi
     <img class="logo-img" src="/icons/icon-192.png" />
     <div class="logo-text">ShopFlow</div>
   </div>
-  <h1>Get started free</h1>
-  <div class="subtitle">Set up your shop in 2 minutes. No credit card required to start.</div>
+  <h1 id="page-title">Get started</h1>
+  <div class="subtitle" id="page-sub">Set up your shop in 2 minutes.</div>
+
+  <!-- Plan badge shown when coming from payment -->
+  <div id="plan-confirm" style="display:none;background:#f0fdf4;border:1px solid #b3dfbf;border-radius:10px;padding:11px 14px;font-size:13px;color:#16a34a;font-weight:600;margin-bottom:18px;display:none;">
+    ✓ Payment confirmed — <span id="plan-confirm-label"></span>
+  </div>
 
   <div class="error" id="err"></div>
 
@@ -67,6 +72,37 @@ h1{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margi
 </div>
 
 <script>
+// ── Pre-fill from URL params (set by payment success page) ───────────────────
+const planLabels = { starter: 'Starter Plan', pro: 'Pro Plan', shop: 'Shop Plan' };
+(function prefillFromUrl() {
+  const p = new URLSearchParams(location.search);
+  const plan     = p.get('plan');
+  const email    = p.get('email');
+  const name     = p.get('name');
+  const business = p.get('business');
+
+  if (plan) {
+    document.getElementById('plan').value = plan;
+    const badge = document.getElementById('plan-confirm');
+    document.getElementById('plan-confirm-label').textContent = planLabels[plan] || plan;
+    badge.style.display = 'block';
+    document.getElementById('page-title').textContent = 'Set up your shop';
+    document.getElementById('page-sub').textContent = 'Your payment is confirmed. Create your account below.';
+  }
+  if (email) {
+    const el = document.getElementById('email');
+    el.value = decodeURIComponent(email);
+    el.readOnly = true;
+    el.style.background = '#f5f5f7';
+    el.style.color = '#6e6e73';
+  }
+  if (business) {
+    const el = document.getElementById('shopName');
+    el.value = decodeURIComponent(business);
+    setTimeout(updateSlug, 200);
+  }
+})();
+
 async function updateSlug() {
   const name = document.getElementById('shopName').value;
   if (name.length < 2) { document.getElementById('slug-preview').textContent = ''; return; }
