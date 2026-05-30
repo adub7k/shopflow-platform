@@ -498,8 +498,10 @@ app.get('/api/shop/customers/:id', requireAuth, shopRoute(async (req, res, db, h
   const c = h.getById('customers', req.params.id); if (!c) return res.status(404).json({ error: 'Not found' });
   const appts = h.getAll('appointments').filter(a => a.customerId===c.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
   const done = appts.filter(a => a.status==='done');
+  const lastVisitDate = done.length ? done.sort((a,b)=>b.date.localeCompare(a.date))[0].date : null;
+  const daysSinceLast = lastVisitDate ? Math.floor((Date.now()-new Date(lastVisitDate+'T12:00:00'))/(1000*60*60*24)) : null;
   const loyalty = (db.get('settings').value()||{}).loyalty || { visitsForReward:10 };
-  res.json({ customer:c, appointments:appts, totalVisits:done.length, totalRevenue:done.reduce((s,a)=>s+Number(a.price||0),0), loyaltyPoints:c.loyaltyPoints||0, rewardReady:(c.loyaltyPoints||0)>=(loyalty.visitsForReward||10), visitsForReward:loyalty.visitsForReward||10 });
+  res.json({ customer:{...c, lastVisit:lastVisitDate}, appointments:appts, totalVisits:done.length, totalRevenue:done.reduce((s,a)=>s+Number(a.price||0),0), loyaltyPoints:c.loyaltyPoints||0, rewardReady:(c.loyaltyPoints||0)>=(loyalty.visitsForReward||10), visitsForReward:loyalty.visitsForReward||10, daysSinceLast });
 }));
 app.post('/api/shop/customers', requireAuth, shopRoute(async (req, res, db, h) => {
   const c = req.body; if (!c.id) c.id = genId('c'); h.upsert('customers', c); res.json({ id: c.id });

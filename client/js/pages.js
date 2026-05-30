@@ -758,7 +758,7 @@ const Clients = {
 
       // Work out automation statuses
       const nextAppt = (data.appointments||[]).filter(a=>a.status==='confirmed'&&a.date>=today()).sort((a,b)=>a.date.localeCompare(b.date))[0];
-      const daysSinceLast = c.lastVisit ? Math.floor((new Date()-new Date(c.lastVisit+'T12:00:00'))/(1000*60*60*24)) : null;
+      const daysSinceLast = data.daysSinceLast ?? null;
       const nudgeDue = daysSinceLast !== null && daysSinceLast >= 21;
 
       let html = '';
@@ -778,9 +778,14 @@ const Clients = {
       </div>`;
 
       // ── Stats ──
-      html += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:20px;">
+      const dslColor = daysSinceLast === null ? 'var(--text)' : daysSinceLast >= 21 ? '#dc2626' : daysSinceLast >= 14 ? '#d97706' : 'var(--text)';
+      const dslBg    = daysSinceLast === null ? 'var(--surface)' : daysSinceLast >= 21 ? '#fff5f5' : daysSinceLast >= 14 ? '#fffbeb' : 'var(--surface)';
+      const dslBorder= daysSinceLast === null ? 'var(--border)'  : daysSinceLast >= 21 ? '#fecaca' : daysSinceLast >= 14 ? '#fde68a' : 'var(--border)';
+      const dslLabel = daysSinceLast === null ? '—' : daysSinceLast === 0 ? 'Today' : daysSinceLast === 1 ? '1 day' : daysSinceLast + ' days';
+      html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center;"><div style="font-size:10px;color:var(--faint);margin-bottom:3px;">VISITS</div><div style="font-size:22px;font-weight:800;">${data.totalVisits}</div></div>
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center;"><div style="font-size:10px;color:var(--faint);margin-bottom:3px;">SPENT</div><div style="font-size:18px;font-weight:800;color:var(--green);">${fmtMoney(data.totalRevenue)}</div></div>
+        <div style="background:${dslBg};border:1px solid ${dslBorder};border-radius:10px;padding:10px;text-align:center;"><div style="font-size:10px;color:var(--faint);margin-bottom:3px;">LAST VISIT</div><div style="font-size:18px;font-weight:800;color:${dslColor};">${dslLabel}</div></div>
         <div style="background:${data.rewardReady?'var(--green-lt)':'var(--surface)'};border:1px solid ${data.rewardReady?'#b3dfbf':'var(--border)'};border-radius:10px;padding:10px;text-align:center;"><div style="font-size:10px;color:var(--faint);margin-bottom:3px;">LOYALTY</div><div style="font-size:18px;font-weight:800;color:${data.rewardReady?'var(--green)':'var(--text)'};">${data.loyaltyPoints||0}/${data.visitsForReward}</div></div>
       </div>`;
 
