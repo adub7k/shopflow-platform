@@ -1271,59 +1271,93 @@ const CHECKLIST = [
   },
 ];
 
-const CL_STORAGE_KEY = 'sf_admin_checklist';
+const CL_STORAGE_KEY    = 'sf_admin_checklist_v2';
+const CL_CUSTOM_KEY     = 'sf_admin_checklist_custom';
+const tagMap   = { urgent:'cl-tag-urgent', waiting:'cl-tag-waiting', done:'cl-tag-done', soon:'cl-tag-soon' };
+const tagLabel = { urgent:'🔴 Urgent', waiting:'⏳ Waiting on LLC', done:'✓ Done', soon:'🔵 Up Next' };
 
-function clLoad() {
-  try { return JSON.parse(localStorage.getItem(CL_STORAGE_KEY) || '{}'); } catch(e) { return {}; }
+function clLoadState()   { try { return JSON.parse(localStorage.getItem(CL_STORAGE_KEY)  || '{}'); } catch(e) { return {}; } }
+function clLoadCustom()  { try { return JSON.parse(localStorage.getItem(CL_CUSTOM_KEY)   || '[]'); } catch(e) { return []; } }
+function clSaveState(s)  { localStorage.setItem(CL_STORAGE_KEY,  JSON.stringify(s)); }
+function clSaveCustom(c) { localStorage.setItem(CL_CUSTOM_KEY,   JSON.stringify(c)); }
+
+// Merge built-in sections with custom sections stored in localStorage
+function clAllSections() {
+  const custom = clLoadCustom(); // [{ id, icon, title, items:[{id,label,note,tag}] }]
+  return [...CHECKLIST, ...custom];
 }
-function clSave(state) { localStorage.setItem(CL_STORAGE_KEY, JSON.stringify(state)); }
 
 function renderChecklist() {
-  const state = clLoad();
+  const state    = clLoadState();
+  const sections = clAllSections();
   const container = document.getElementById('checklist-container');
   if (!container) return;
 
   let totalItems = 0, totalDone = 0;
 
-  container.innerHTML = CHECKLIST.map(section => {
-    const items = section.items;
-    const doneCnt = items.filter(i => state[i.id]).length;
-    totalItems += items.length;
+  container.innerHTML = sections.map(section => {
+    const isCustomSection = !CHECKLIST.find(s => s.id === section.id);
+    // Only show items that are NOT completed
+    const allItems    = section.items || [];
+    const pending     = allItems.filter(i => !state[i.id]);
+    const doneCnt     = allItems.length - pending.length;
+    totalItems += allItems.length;
     totalDone  += doneCnt;
-    const allDone = doneCnt === items.length;
-    const pct = Math.round((doneCnt / items.length) * 100);
+    const pct = allItems.length ? Math.round((doneCnt / allItems.length) * 100) : 0;
+    const allDone = doneCnt === allItems.length && allItems.length > 0;
 
     return `<div class="cl-section">
       <div class="cl-section-header" onclick="toggleSection('${section.id}')">
         <div class="cl-section-title">
           <span class="cl-section-icon">${section.icon}</span>
-          ${section.title}
+          ${esc(section.title)}
+          ${isCustomSection ? `<button onclick="event.stopPropagation();deleteSection('${section.id}')" style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:13px;padding:0 4px;" title="Delete section">✕</button>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
-          <span class="cl-progress-pill ${allDone?'done':''}">${doneCnt}/${items.length}</span>
+          <span class="cl-progress-pill ${allDone?'done':''}">${doneCnt}/${allItems.length}</span>
           <span style="color:var(--faint);font-size:12px;" id="cl-arrow-${section.id}">▾</span>
         </div>
       </div>
       <div class="cl-progress-bar"><div class="cl-progress-bar-fill" style="width:${pct}%"></div></div>
       <div id="cl-body-${section.id}">
-        ${items.map(item => {
-          const checked = !!state[item.id];
-          const tagMap = { urgent:'cl-tag-urgent', waiting:'cl-tag-waiting', done:'cl-tag-done', soon:'cl-tag-soon' };
-          const tagLabel = { urgent:'🔴 Urgent', waiting:'⏳ Waiting on LLC', done:'✓ Done', soon:'🔵 Up Next' };
-          return `<div class="cl-item ${checked?'checked':''}" onclick="toggleItem('${item.id}')">
-            <div class="cl-checkbox">
-              ${checked?'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':''}
-            </div>
+        ${pending.map(item => `
+          <div class="cl-item" onclick="completeItem('${item.id}','${section.id}')">
+            <div class="cl-checkbox"></div>
             <div class="cl-item-body">
-              <div class="cl-item-label">${item.label}</div>
-              <div class="cl-item-note">${item.note}</div>
+              <div class="cl-item-label">${esc(item.label)}</div>
+              ${item.note ? `<div class="cl-item-note">${esc(item.note)}</div>` : ''}
               ${item.tag ? `<span class="cl-item-tag ${tagMap[item.tag]||''}">${tagLabel[item.tag]||item.tag}</span>` : ''}
             </div>
-          </div>`;
-        }).join('')}
+            <button onclick="event.stopPropagation();deleteItem('${item.id}','${section.id}')" style="background:none;border:none;color:var(--faint);cursor:pointer;font-size:16px;padding:0 6px;flex-shrink:0;line-height:1;" title="Remove task">×</button>
+          </div>`).join('')}
+        ${allDone && allItems.length > 0 ? `<div style="padding:14px 18px;font-size:13px;color:var(--green);font-weight:600;">🎉 All done in this section!</div>` : ''}
+        <!-- Add task row -->
+        <div style="padding:10px 14px;border-top:.5px solid var(--border);display:flex;gap:8px;align-items:center;">
+          <input id="cl-add-input-${section.id}" class="form-input" placeholder="Add a task…" style="font-size:13px;padding:7px 10px;"
+            onkeydown="if(event.key==='Enter')addTask('${section.id}')" />
+          <button onclick="addTask('${section.id}')" class="btn btn-green btn-sm" style="white-space:nowrap;flex-shrink:0;">+ Add</button>
+        </div>
       </div>
     </div>`;
   }).join('');
+
+  // Add new section button
+  container.innerHTML += `
+    <div style="margin-top:8px;">
+      <div id="cl-new-section-form" style="display:none;background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px;margin-bottom:12px;">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px;">New Section</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <input id="cl-new-section-icon"  class="form-input" placeholder="Icon (emoji)" style="width:80px;font-size:18px;text-align:center;padding:7px;" maxlength="2"/>
+          <input id="cl-new-section-title" class="form-input" placeholder="Section name…" style="font-size:13px;padding:7px 10px;"
+            onkeydown="if(event.key==='Enter')addSection()" />
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="addSection()" class="btn btn-green btn-sm">Create Section</button>
+          <button onclick="document.getElementById('cl-new-section-form').style.display='none'" class="btn btn-outline btn-sm">Cancel</button>
+        </div>
+      </div>
+      <button onclick="document.getElementById('cl-new-section-form').style.display='block';document.getElementById('cl-new-section-title').focus()" class="btn btn-outline btn-sm">+ New Section</button>
+    </div>`;
 
   // Overall progress
   const overallPct = totalItems ? Math.round((totalDone / totalItems) * 100) : 0;
@@ -1334,20 +1368,86 @@ function renderChecklist() {
   if (fillEl) fillEl.style.width = overallPct + '%';
   if (subEl)  subEl.textContent  = `${totalDone} of ${totalItems} tasks complete`;
 
-  // Sidebar badge — count urgent unchecked items
-  const urgentLeft = CHECKLIST.flatMap(s => s.items).filter(i => i.tag === 'urgent' && !state[i.id]).length;
+  // Sidebar badge
+  const urgentLeft = sections.flatMap(s => (s.items||[])).filter(i => i.tag === 'urgent' && !state[i.id]).length;
   const badge = document.getElementById('sb-checklist-badge');
-  if (badge) {
-    badge.textContent = urgentLeft;
-    badge.style.display = urgentLeft > 0 ? 'inline' : 'none';
-  }
+  if (badge) { badge.textContent = urgentLeft; badge.style.display = urgentLeft > 0 ? 'inline' : 'none'; }
 }
 
-function toggleItem(itemId) {
-  const state = clLoad();
-  state[itemId] = !state[itemId];
-  clSave(state);
+function completeItem(itemId, sectionId) {
+  // Animate then remove from view
+  const state = clLoadState();
+  state[itemId] = true;
+  clSaveState(state);
+  // Small delay so the check feels satisfying
+  setTimeout(() => renderChecklist(), 200);
+}
+
+function deleteItem(itemId, sectionId) {
+  // Remove from custom sections if custom; for built-in just mark done
+  const custom = clLoadCustom();
+  const sec = custom.find(s => s.id === sectionId);
+  if (sec) {
+    sec.items = sec.items.filter(i => i.id !== itemId);
+    clSaveCustom(custom);
+  }
+  // Also remove state entry
+  const state = clLoadState();
+  delete state[itemId];
+  clSaveState(state);
   renderChecklist();
+}
+
+function deleteSection(sectionId) {
+  if (!confirm('Delete this section and all its tasks?')) return;
+  const custom = clLoadCustom().filter(s => s.id !== sectionId);
+  clSaveCustom(custom);
+  renderChecklist();
+  toast('Section deleted');
+}
+
+function addTask(sectionId) {
+  const input = document.getElementById('cl-add-input-' + sectionId);
+  const label = input?.value.trim();
+  if (!label) return;
+
+  const itemId = 'custom-' + Date.now();
+
+  // Check if built-in section
+  const builtIn = CHECKLIST.find(s => s.id === sectionId);
+  if (builtIn) {
+    // Store custom items for built-in sections in their own custom section clone
+    let custom = clLoadCustom();
+    let clone = custom.find(s => s.id === sectionId + '-extra');
+    if (!clone) {
+      // Add tasks directly into a mirrored custom list — but easier: just store in a flat custom array on state
+      // Actually: store extra items per section in custom array using a special marker
+      clone = { id: sectionId + '-extra', _parentId: sectionId, icon: builtIn.icon, title: builtIn.title + ' (custom)', items: [] };
+      custom.push(clone);
+    }
+    clone.items.push({ id: itemId, label, note: '', tag: '' });
+    clSaveCustom(custom);
+  } else {
+    // It's a custom section — add item to it
+    const custom = clLoadCustom();
+    const sec = custom.find(s => s.id === sectionId);
+    if (sec) { sec.items.push({ id: itemId, label, note: '', tag: '' }); clSaveCustom(custom); }
+  }
+
+  input.value = '';
+  renderChecklist();
+  toast('Task added ✓');
+}
+
+function addSection() {
+  const icon  = document.getElementById('cl-new-section-icon')?.value.trim()  || '📋';
+  const title = document.getElementById('cl-new-section-title')?.value.trim();
+  if (!title) return;
+  const custom = clLoadCustom();
+  custom.push({ id: 'cs-' + Date.now(), icon, title, items: [] });
+  clSaveCustom(custom);
+  renderChecklist();
+  toast('Section created ✓');
 }
 
 function toggleSection(sectionId) {
@@ -1360,8 +1460,9 @@ function toggleSection(sectionId) {
 }
 
 function resetChecklist() {
-  if (!confirm('Reset all checklist items? Your progress will be cleared.')) return;
+  if (!confirm('Reset everything? This clears all completed items AND custom tasks/sections.')) return;
   localStorage.removeItem(CL_STORAGE_KEY);
+  localStorage.removeItem(CL_CUSTOM_KEY);
   renderChecklist();
   toast('Checklist reset');
 }
