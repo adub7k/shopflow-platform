@@ -698,9 +698,15 @@ function renderDrawer(d) {
           <span class="drawer-info-label">Stripe Payments</span>
           <span class="badge badge-${s.stripeConnected?'yes':'no'}">${s.stripeConnected?'✓ Connected':'Not connected'}</span>
         </div>
-        <div class="drawer-info-row">
-          <span class="drawer-info-label">Twilio SMS</span>
-          <span class="badge badge-${s.twilioConfigured?'yes':'no'}">${s.twilioConfigured?'✓ Configured':'Not configured'}</span>
+        <div class="drawer-info-row" style="align-items:center;gap:8px;">
+          <span class="drawer-info-label">SMS From Number</span>
+          <div style="display:flex;align-items:center;gap:6px;flex:1;justify-content:flex-end;">
+            <input id="drawer-twilio-from" type="text" value="${esc(d.shop.twilioFromNumber||'')}" placeholder="+15055550100"
+              style="padding:5px 9px;border:1px solid var(--border);border-radius:7px;font-size:12px;width:140px;font-family:inherit;color:var(--text);background:var(--bg);"
+              onkeydown="if(event.key==='Enter')saveTwilioFrom('${esc(d.shop.id)}')" />
+            <button onclick="saveTwilioFrom('${esc(d.shop.id)}')"
+              style="padding:5px 10px;background:var(--green);color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">Save</button>
+          </div>
         </div>
         <div class="drawer-info-row">
           <span class="drawer-info-label">Deposit Required</span>
@@ -768,6 +774,13 @@ function closeDrawer() {
 }
 
 // ── Shop CRUD ─────────────────────────────────────────────────────────────────
+async function saveTwilioFrom(shopId) {
+  const val = document.getElementById('drawer-twilio-from')?.value.trim();
+  if (!val && !confirm('Clear the SMS number for this shop?')) return;
+  await updateShop(shopId, 'twilioFromNumber', val || '');
+  toast(val ? 'SMS number saved ✓' : 'SMS number cleared');
+}
+
 async function updateShop(shopId, field, value) {
   try {
     const res = await fetch('/api/admin/shop/' + shopId, {

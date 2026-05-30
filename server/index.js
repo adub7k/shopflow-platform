@@ -9,6 +9,22 @@ const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? require('stripe')(process.env.STRIPE_SECRET_KEY)
+  : null;
+
+// ── Platform-level Twilio client (shared across all shops) ────────────────────
+const twilioClient = (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN)
+  ? require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
+  : null;
+const TWILIO_DEFAULT_FROM = process.env.TWILIO_FROM_NUMBER || null;
+
+// Returns the fromNumber for a shop: shop-specific number > platform default
+function shopFromNumber(shopId) {
+  const shop = master.get('shops').find({ id: shopId }).value();
+  return (shop && shop.twilioFromNumber) || TWILIO_DEFAULT_FROM;
+}
+
 const app  = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'shopflow-dev-secret-change-in-production';
@@ -40,6 +56,7 @@ const master = low(masterAdapter);
 master.defaults({
   shops: [],
   accounts: [],
+  usedSessions: [],   // consumed Stripe session IDs — prevents reuse
 }).write();
 
 console.log('ShopFlow Platform running on port', PORT);
@@ -133,9 +150,32 @@ app.use('/api', rateLimit({ windowMs: 60000, max: 500 }));
 // ── PUBLIC: Account signup ────────────────────────────────────────────────────
 app.post('/api/accounts/signup', async (req, res) => {
   try {
-    const { shopName, email, password, phone, plan } = req.body;
+    const { shopName, email, password, phone, plan, sessionId } = req.body;
     if (!shopName || !email || !password) return res.status(400).json({ ok: false, error: 'Shop name, email, and password are required' });
     if (password.length < 6) return res.status(400).json({ ok: false, error: 'Password must be at least 6 characters' });
+
+    // ── Payment gate ───────────────────────────────────────────────────────────
+    if (!sessionId) {
+      return res.status(403).json({ ok: false, error: 'A paid subscription is required to create an account. Please visit our pricing page.' });
+    }
+    // Check session hasn't already been used to create an account
+    const alreadyUsed = master.get('usedSessions').find({ sessionId }).value();
+    if (alreadyUsed) {
+      return res.status(403).json({ ok: false, error: 'This payment session has already been used. Please contact support if you need help.' });
+    }
+    // Verify with Stripe that the session is actually paid
+    if (stripe) {
+      try {
+        const session = await stripe.checkout.sessions.retrieve(sessionId);
+        const paid = session.payment_status === 'paid' || session.status === 'complete';
+        if (!paid) {
+          return res.status(403).json({ ok: false, error: 'Payment not confirmed. Please complete checkout before creating your account.' });
+        }
+      } catch (stripeErr) {
+        console.error('Stripe session verify error:', stripeErr.message);
+        return res.status(403).json({ ok: false, error: 'Could not verify payment. Please contact support.' });
+      }
+    }
 
     // Check if email already exists
     const existing = master.get('accounts').find({ email: email.toLowerCase() }).value();
@@ -181,6 +221,11 @@ app.post('/api/accounts/signup', async (req, res) => {
     // Initialize shop database
     const shopDb = getShopDb(shopId);
     initShopDb(shopDb, { shopName, email, phone });
+
+    // Mark session as consumed so it can't be reused
+    if (sessionId) {
+      master.get('usedSessions').push({ sessionId, shopId, usedAt: new Date().toISOString() }).write();
+    }
 
     // Generate token
     const token = jwt.sign({ shopId, accountId, email, shopSlug: finalSlug }, JWT_SECRET, { expiresIn: '30d' });
@@ -344,15 +389,14 @@ app.post('/api/public/:shopSlug/book', async (req, res) => {
     const appt = { id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '', barberId: barberId || null, barberName: barberName || null, serviceId: serviceId || null, service: serviceName || 'Appointment', price, duration, date, time, status: status === 'pending-deposit' ? 'pending-deposit' : 'confirmed', notes: notes || '', source: 'booking-page', createdAt: new Date().toISOString() };
     upsert('appointments', appt);
 
-    // Send confirmation SMS
+    // Send confirmation SMS via platform Twilio account
     const s = db.get('settings').value() || {};
-    const cfg = s.twilio || {};
     let smsSent = false;
-    if (cfg.accountSid && cfg.authToken && cfg.fromNumber && digits.length >= 10) {
+    const fromNum = shopFromNumber(shop.id);
+    if (twilioClient && fromNum && digits.length >= 10) {
       try {
-        const twilio = require('twilio')(cfg.accountSid, cfg.authToken);
         const msg = `Hi ${customerName.split(' ')[0]}! Your appointment at ${s.shopName || 'the shop'} is confirmed for ${date} at ${time}${barberName ? ' with ' + barberName : ''}. See you then! ✂️`;
-        await twilio.messages.create({ from: cfg.fromNumber, to: '+1' + digits, body: msg });
+        await twilioClient.messages.create({ from: fromNum, to: '+1' + digits, body: msg });
         smsSent = true;
       } catch(e) { console.log('SMS failed:', e.message); }
     }
@@ -549,11 +593,10 @@ app.post('/api/shop/conversations', requireAuth, shopRoute(async (req, res, db, 
 // ── PROTECTED: SMS ────────────────────────────────────────────────────────────
 app.post('/api/shop/sms/send', requireAuth, shopRoute(async (req, res, db, h) => {
   const { to, body, customerId, customerName } = req.body;
-  const cfg = (db.get('settings').value()||{}).twilio||{};
-  if (!cfg.accountSid||!cfg.authToken||!cfg.fromNumber) return res.json({ ok:false, error:'Twilio not configured' });
+  const fromNum = shopFromNumber(req.shopId);
+  if (!twilioClient || !fromNum) return res.json({ ok:false, error:'SMS not available for this shop yet. Contact ShopFlow support.' });
   try {
-    const twilio = require('twilio')(cfg.accountSid, cfg.authToken);
-    await twilio.messages.create({ from:cfg.fromNumber, to:'+1'+to.replace(/\D/g,''), body });
+    await twilioClient.messages.create({ from:fromNum, to:'+1'+to.replace(/\D/g,''), body });
     h.upsert('conversations',{id:genId('msg'),customerId,customerName,type:'sms',direction:'outbound',body,sentAt:new Date().toISOString(),read:true});
     res.json({ ok: true });
   } catch(e) { res.json({ ok:false, error:e.message }); }
@@ -622,7 +665,7 @@ app.get('/api/admin/shops', requireAdmin, (req, res) => {
       services     = (db.get('services').value()     || []).length;
       const settings = db.get('settings').value() || {};
       stripeConnected  = !!(settings.stripe?.connectAccountId && settings.stripe?.onboardingComplete);
-      twilioConfigured = !!(settings.twilio?.accountSid && settings.twilio?.fromNumber);
+      twilioConfigured = !!(twilioClient && shopFromNumber(s.id));
       bookingEnabled   = settings.bookingEnabled !== false;
     } catch(e) {}
     return { id: s.id, shopName: s.shopName, slug: s.slug, email: s.email, phone: s.phone, plan: s.plan, active: s.active, createdAt: s.createdAt, lastActivity: s.lastActivity, customers, appointments, barbers, services, stripeConnected, twilioConfigured, bookingEnabled };
@@ -645,7 +688,7 @@ app.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   const apptThisMonth = appointments.filter(a => a.date && a.date.startsWith(thisMonth)).length;
   const recentAppts = [...appointments].sort((a, b) => new Date(b.date + 'T' + (b.time || '00:00')) - new Date(a.date + 'T' + (a.time || '00:00'))).slice(0, 10);
   res.json({
-    shop, settings: { shopName: settings.shopName, tagline: settings.tagline, phone: settings.phone, address: settings.address, bookingEnabled: settings.bookingEnabled, accentColor: settings.accentColor, googleReviewLink: settings.googleReviewLink, loyalty: settings.loyalty, deposit: settings.deposit, stripeConnected: !!(settings.stripe?.connectAccountId && settings.stripe?.onboardingComplete), twilioConfigured: !!(settings.twilio?.accountSid && settings.twilio?.fromNumber) },
+    shop, settings: { shopName: settings.shopName, tagline: settings.tagline, phone: settings.phone, address: settings.address, bookingEnabled: settings.bookingEnabled, accentColor: settings.accentColor, googleReviewLink: settings.googleReviewLink, loyalty: settings.loyalty, deposit: settings.deposit, stripeConnected: !!(settings.stripe?.connectAccountId && settings.stripe?.onboardingComplete), twilioConfigured: !!(twilioClient && shopFromNumber(shop.id)) },
     barbers, services,
     stats: { totalCustomers: customers.length, totalAppointments: appointments.length, apptThisMonth, activeBarbers: barbers.filter(b => b.active !== false).length },
     recentAppointments: recentAppts,
@@ -677,7 +720,7 @@ app.post('/api/admin/shops/create', requireAdmin, async (req, res) => {
 app.patch('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   const shop = master.get('shops').find({ id: req.params.shopId }).value();
   if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
-  const allowed = ['plan', 'active', 'shopName', 'phone', 'email'];
+  const allowed = ['plan', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber'];
   const updates = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
   master.get('shops').find({ id: req.params.shopId }).assign(updates).write();
@@ -886,11 +929,10 @@ async function runScheduler() {
     const shops = master.get('shops').value().filter(s => s.active);
     for (const shop of shops) {
       try {
+        const fromNum = shopFromNumber(shop.id);
+        if (!twilioClient || !fromNum) continue;  // skip shops without SMS configured
         const db = getShopDb(shop.id);
         const s = db.get('settings').value()||{};
-        const cfg = s.twilio||{};
-        if (!cfg.accountSid||!cfg.authToken||!cfg.fromNumber) continue;
-        const twilio = require('twilio')(cfg.accountSid, cfg.authToken);
 
         // ── 24hr appointment reminders ──
         const tomorrow = new Date(Date.now()+24*3600000).toISOString().split('T')[0];
@@ -901,7 +943,7 @@ async function runScheduler() {
           const phone = (appt.customerPhone||'').replace(/[^0-9]/g,'');
           if (phone.length<10) continue;
           const msg = `Hi ${(appt.customerName||'').split(' ')[0]||'there'}! Reminder: your appointment at ${s.shopName||'the shop'} is tomorrow at ${appt.time}${appt.barberName?' with '+appt.barberName:''}. See you then! ✂️`;
-          try { await twilio.messages.create({from:cfg.fromNumber,to:'+1'+phone,body:msg}); sentIds.push(appt.id); } catch(e){}
+          try { await twilioClient.messages.create({from:fromNum,to:'+1'+phone,body:msg}); sentIds.push(appt.id); } catch(e){}
         }
         if (toRemind.length) db.get('settings').assign({ remindersSent:sentIds.slice(-500) }).write();
 
@@ -909,7 +951,6 @@ async function runScheduler() {
         const nudgeSentIds = s.nudgesSent||[];
         const cutoffDate = new Date(Date.now()-21*24*3600000).toISOString().split('T')[0];
         const recentCutoff = new Date(Date.now()-22*24*3600000).toISOString().split('T')[0];
-        // Find customers whose last completed appointment was exactly 21 days ago (within the window)
         const allAppts = db.get('appointments').value().filter(a=>a.status==='done');
         const lastVisit = {};
         allAppts.forEach(a=>{ if(!lastVisit[a.customerId]||a.date>lastVisit[a.customerId].date) lastVisit[a.customerId]={date:a.date,name:a.customerName,phone:a.customerPhone}; });
@@ -921,7 +962,7 @@ async function runScheduler() {
           if (phone.length<10) continue;
           const firstName = (v.name||'').split(' ')[0]||'there';
           const msg = `Hey ${firstName}! It's been a few weeks — we'd love to have you back at ${s.shopName||'the shop'}. Book your next cut anytime 💈`;
-          try { await twilio.messages.create({from:cfg.fromNumber,to:'+1'+phone,body:msg}); nudgeSentIds.push(nudgeKey); } catch(e){}
+          try { await twilioClient.messages.create({from:fromNum,to:'+1'+phone,body:msg}); nudgeSentIds.push(nudgeKey); } catch(e){}
         }
         if (toNudge.length) db.get('settings').assign({ nudgesSent:nudgeSentIds.slice(-1000) }).write();
 

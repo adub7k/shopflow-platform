@@ -65,6 +65,7 @@ h1{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margi
   </div>
 
   <input type="hidden" id="plan" value="starter" />
+  <input type="hidden" id="sessionId" value="" />
 
   <button class="btn" id="signup-btn" onclick="signup()">Create my ShopFlow →</button>
   <div class="terms">By signing up you agree to our <a href="/terms.html">Terms of Service</a> and <a href="/privacy.html">Privacy Policy</a></div>
@@ -76,10 +77,11 @@ h1{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margi
 const planLabels = { starter: 'Starter Plan', pro: 'Pro Plan', shop: 'Shop Plan' };
 (function prefillFromUrl() {
   const p = new URLSearchParams(location.search);
-  const plan     = p.get('plan');
-  const email    = p.get('email');
-  const name     = p.get('name');
-  const business = p.get('business');
+  const plan      = p.get('plan');
+  const email     = p.get('email');
+  const name      = p.get('name');
+  const business  = p.get('business');
+  const sessionId = p.get('session_id');
 
   if (plan) {
     document.getElementById('plan').value = plan;
@@ -101,6 +103,9 @@ const planLabels = { starter: 'Starter Plan', pro: 'Pro Plan', shop: 'Shop Plan'
     el.value = decodeURIComponent(business);
     setTimeout(updateSlug, 200);
   }
+  if (sessionId) {
+    document.getElementById('sessionId').value = sessionId;
+  }
 })();
 
 async function updateSlug() {
@@ -120,8 +125,9 @@ async function signup() {
   const email    = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value;
   const phone    = document.getElementById('phone').value.trim();
-  const plan     = document.getElementById('plan').value;
-  const errEl    = document.getElementById('err');
+  const plan      = document.getElementById('plan').value;
+  const sessionId = document.getElementById('sessionId').value;
+  const errEl     = document.getElementById('err');
   errEl.style.display = 'none';
 
   if (!shopName) { errEl.textContent='Enter your shop name.'; errEl.style.display='block'; return; }
@@ -134,7 +140,7 @@ async function signup() {
   try {
     const res = await fetch('/api/accounts/signup', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ shopName, email, password, phone, plan })
+      body: JSON.stringify({ shopName, email, password, phone, plan, sessionId })
     });
     const data = await res.json();
     if (data.ok) {
