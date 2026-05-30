@@ -901,59 +901,69 @@ const Clients = {
 
 // ── Automations ───────────────────────────────────────────────────────────────
 const Automations = {
-  render() {
+  async render() {
     const el = document.getElementById('page-automations'); if(!el) return;
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px;">Loading…</div>';
+
+    let s = {};
+    try { s = await db.settings.get(); } catch(e) {}
+    const smsActive = s.twilioConfigured;
+    const tpl = s.smsTemplates || {};
+    const defConfirm  = "Hi {name}! Your appointment at {shop} is confirmed for {date} at {time}{barber}. See you then! ✂️";
+    const defReminder = "Hi {name}! Reminder: your appointment at {shop} is tomorrow at {time}{barber}. See you then! ✂️";
+    const defRebook   = "Hey {name}! It's been a few weeks — we'd love to have you back at {shop}. Book your next cut anytime 💈";
 
     const automations = [
       {
-        id: 'reminder-24h',
-        icon: '⏰',
-        title: '24-Hour Booking Reminder',
-        desc: 'Automatically texts clients the day before their appointment. Reduces no-shows.',
-        status: 'active',
-        badge: 'Active',
-        badgeColor: 'var(--green)',
+        icon: '📩',
+        title: 'Booking Confirmation',
+        desc: 'Sent immediately when a client books online.',
+        message: tpl.confirmation || defConfirm,
       },
       {
-        id: 'rebook-21d',
+        icon: '⏰',
+        title: '24-Hour Reminder',
+        desc: 'Sent the day before each confirmed appointment to reduce no-shows.',
+        message: tpl.reminder || defReminder,
+      },
+      {
         icon: '🔁',
         title: '21-Day Rebook Nudge',
-        desc: 'Texts clients who haven\'t booked again after 21 days to bring them back in.',
-        status: 'active',
-        badge: 'Active',
-        badgeColor: 'var(--green)',
+        desc: 'Sent to clients who haven\'t rebooked after 21 days.',
+        message: tpl.rebook || defRebook,
       },
     ];
 
     let html = [];
-    html.push('<div style="padding:4px 0 16px;"><div style="font-size:13px;color:var(--muted);">Your active automations run automatically in the background — no extra setup needed.</div></div>');
 
-    html.push('<div class="section-header">Active Automations</div>');
+    // SMS status banner
+    html.push(`<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;margin-bottom:20px;background:${smsActive?'var(--green-lt)':'var(--surface2)'};border:1px solid ${smsActive?'var(--green-md)':'var(--border)'};">
+      <div style="width:10px;height:10px;border-radius:50%;background:${smsActive?'var(--green)':'#d1d5db'};flex-shrink:0;"></div>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:700;color:${smsActive?'var(--green)':'var(--text)'};">${smsActive?'SMS is active — automations are running':'SMS not yet active'}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:1px;">${smsActive?'All three automations below are firing automatically.':'Contact ShopFlow support to activate SMS for your shop.'}</div>
+      </div>
+    </div>`);
+
+    html.push('<div class="section-header">Your Automations</div>');
     html.push('<div class="list-card">');
     automations.forEach(a => {
       html.push(`
         <div class="list-row" style="align-items:flex-start;gap:14px;padding:16px;">
-          <div style="font-size:28px;line-height:1;flex-shrink:0;">${a.icon}</div>
+          <div style="font-size:26px;line-height:1;flex-shrink:0;">${a.icon}</div>
           <div style="flex:1;">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
               <div style="font-size:14px;font-weight:700;color:var(--text);">${a.title}</div>
-              <span style="font-size:10px;font-weight:700;color:#fff;background:${a.badgeColor};border-radius:20px;padding:2px 8px;">${a.badge}</span>
+              <span style="font-size:10px;font-weight:700;color:${smsActive?'#fff':'var(--muted)'};background:${smsActive?'var(--green)':'var(--border)'};border-radius:20px;padding:2px 8px;">${smsActive?'Active':'Pending'}</span>
             </div>
-            <div style="font-size:12px;color:var(--muted);line-height:1.5;">${a.desc}</div>
-            <div style="font-size:11px;color:var(--faint);margin-top:6px;">Requires Twilio SMS to be configured in Settings</div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:6px;">${a.desc}</div>
+            <div style="font-size:12px;color:var(--text);background:var(--off);border-radius:7px;padding:8px 10px;font-style:italic;">"${a.message}"</div>
           </div>
         </div>`);
     });
     html.push('</div>');
 
-    html.push('<div class="section-header" style="margin-top:24px;">Add Automation</div>');
-    html.push(`
-      <div class="card" style="text-align:center;padding:28px 20px;cursor:pointer;" onclick="Automations.showUpgrade()">
-        <div style="font-size:36px;margin-bottom:10px;">+</div>
-        <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px;">Add More Automations</div>
-        <div style="font-size:12px;color:var(--muted);">Upgrade your plan to unlock custom automations, win-back campaigns, birthday messages, and more.</div>
-        <div style="margin-top:16px;"><span style="background:var(--green);color:#fff;font-size:13px;font-weight:700;padding:8px 20px;border-radius:8px;">Upgrade Plan →</span></div>
-      </div>`);
+    html.push(`<div style="margin-top:12px;"><div style="font-size:12px;color:var(--faint);text-align:center;">Edit your message templates in <a href="#" onclick="App.nav('settings');return false;" style="color:var(--green);font-weight:600;">Settings → SMS Messaging</a></div></div>`);
 
     el.innerHTML = html.join('');
   },
@@ -1070,16 +1080,26 @@ const Settings = {
       html.push(`<div class="form-group"><label class="form-label">Reward description</label><input class="form-input" id="s-lrew" value="${s.loyalty?.rewardDescription||'One free haircut'}" /></div>`);
       html.push('</div>');
 
-      // SMS status — managed by ShopFlow, not the shop owner
+      // SMS — status + customizable templates
       html.push('<div class="section-header">SMS Messaging</div><div class="card">');
-      const smsActive = settings.twilioConfigured;
-      html.push(`<div style="display:flex;align-items:center;gap:10px;padding:4px 0;">
+      const smsActive = s.twilioConfigured;
+      html.push(`<div style="display:flex;align-items:center;gap:10px;padding:4px 0 14px;">
         <div style="width:10px;height:10px;border-radius:50%;background:${smsActive?'#16a34a':'#d1d5db'};flex-shrink:0;"></div>
         <div>
           <div style="font-size:14px;font-weight:600;color:var(--text);">${smsActive?'SMS Active':'SMS Not Yet Active'}</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px;">${smsActive?'Appointment reminders and booking confirmations are firing automatically.':'SMS is managed by ShopFlow. Contact support to get your number activated.'}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;">${smsActive?'Reminders and confirmations are firing automatically.':'Managed by ShopFlow. Contact support to activate.'}</div>
         </div>
-      </div>`);
+      </div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:8px;">CUSTOMIZE YOUR MESSAGES</div>
+      <div style="font-size:11px;color:var(--faint);margin-bottom:12px;">Variables you can use: <code style="background:var(--off);padding:1px 5px;border-radius:4px;">{name}</code> <code style="background:var(--off);padding:1px 5px;border-radius:4px;">{shop}</code> <code style="background:var(--off);padding:1px 5px;border-radius:4px;">{date}</code> <code style="background:var(--off);padding:1px 5px;border-radius:4px;">{time}</code> <code style="background:var(--off);padding:1px 5px;border-radius:4px;">{barber}</code></div>`);
+      const tpl = s.smsTemplates || {};
+      const defConfirm = "Hi {name}! Your appointment at {shop} is confirmed for {date} at {time}{barber}. See you then! ✂️";
+      const defReminder = "Hi {name}! Reminder: your appointment at {shop} is tomorrow at {time}{barber}. See you then! ✂️";
+      const defRebook   = "Hey {name}! It's been a few weeks — we'd love to have you back at {shop}. Book your next cut anytime 💈";
+      html.push(`<div class="form-group"><label class="form-label">Booking Confirmation</label><textarea class="form-input" id="s-tpl-confirm" rows="2" placeholder="${defConfirm}">${tpl.confirmation||''}</textarea></div>`);
+      html.push(`<div class="form-group"><label class="form-label">24-Hour Reminder</label><textarea class="form-input" id="s-tpl-reminder" rows="2" placeholder="${defReminder}">${tpl.reminder||''}</textarea></div>`);
+      html.push(`<div class="form-group"><label class="form-label">21-Day Rebook Nudge</label><textarea class="form-input" id="s-tpl-rebook" rows="2" placeholder="${defRebook}">${tpl.rebook||''}</textarea></div>`);
+      html.push(`<div style="font-size:11px;color:var(--faint);">Leave blank to use the default message shown as placeholder.</div>`);
       html.push('</div>');
 
       // Google Reviews
@@ -1327,7 +1347,11 @@ const Settings = {
   async save() {
     const data={shopName:document.getElementById('s-name')?.value.trim(),tagline:document.getElementById('s-tag')?.value.trim(),phone:document.getElementById('s-phone')?.value.trim(),address:document.getElementById('s-addr')?.value.trim(),email:document.getElementById('s-email')?.value.trim(),bookingMessage:document.getElementById('s-bmsg')?.value.trim(),bookingEnabled:document.getElementById('s-benabled')?.checked!==false};
     const lv=document.getElementById('s-lvis')?.value; if(lv)data.loyalty={visitsForReward:parseInt(lv),rewardDescription:document.getElementById('s-lrew')?.value.trim()||'One free haircut'};
-    // Twilio is managed at the platform level — no per-shop credentials
+    // SMS templates (empty string = use server default)
+    const tc=document.getElementById('s-tpl-confirm')?.value.trim();
+    const tr=document.getElementById('s-tpl-reminder')?.value.trim();
+    const tk=document.getElementById('s-tpl-rebook')?.value.trim();
+    data.smsTemplates={ confirmation:tc||'', reminder:tr||'', rebook:tk||'' };
     const gr=document.getElementById('s-grev')?.value.trim(); if(gr)data.googleReviewLink=gr;
     const ehost=document.getElementById('s-ehost')?.value.trim();
     const euser=document.getElementById('s-euser')?.value.trim();

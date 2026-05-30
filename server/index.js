@@ -62,6 +62,23 @@ master.defaults({
 console.log('ShopFlow Platform running on port', PORT);
 console.log('Master data:', MASTER_DIR);
 
+// ── SMS template helpers ──────────────────────────────────────────────────────
+const SMS_DEFAULTS = {
+  confirmation: "Hi {name}! Your appointment at {shop} is confirmed for {date} at {time}{barber}. See you then! ✂️",
+  reminder:     "Hi {name}! Reminder: your appointment at {shop} is tomorrow at {time}{barber}. See you then! ✂️",
+  rebook:       "Hey {name}! It's been a few weeks — we'd love to have you back at {shop}. Book your next cut anytime 💈",
+};
+
+function buildSms(type, vars, settings) {
+  const tpl = (settings.smsTemplates && settings.smsTemplates[type]) || SMS_DEFAULTS[type];
+  return tpl
+    .replace(/{name}/g,   vars.name   || 'there')
+    .replace(/{shop}/g,   vars.shop   || 'the shop')
+    .replace(/{date}/g,   vars.date   || '')
+    .replace(/{time}/g,   vars.time   || '')
+    .replace(/{barber}/g, vars.barber ? ` with ${vars.barber}` : '');
+}
+
 // ── Per-shop database ─────────────────────────────────────────────────────────
 function getShopDb(shopId) {
   const shopDir = path.join(SHOPS_DIR, shopId);
@@ -395,7 +412,12 @@ app.post('/api/public/:shopSlug/book', async (req, res) => {
     const fromNum = shopFromNumber(shop.id);
     if (twilioClient && fromNum && digits.length >= 10) {
       try {
-        const msg = `Hi ${customerName.split(' ')[0]}! Your appointment at ${s.shopName || 'the shop'} is confirmed for ${date} at ${time}${barberName ? ' with ' + barberName : ''}. See you then! ✂️`;
+        const msg = buildSms('confirmation', {
+          name: customerName.split(' ')[0],
+          shop: s.shopName,
+          date, time,
+          barber: barberName,
+        }, s);
         await twilioClient.messages.create({ from: fromNum, to: '+1' + digits, body: msg });
         smsSent = true;
       } catch(e) { console.log('SMS failed:', e.message); }
@@ -942,7 +964,7 @@ async function runScheduler() {
         for (const appt of toRemind) {
           const phone = (appt.customerPhone||'').replace(/[^0-9]/g,'');
           if (phone.length<10) continue;
-          const msg = `Hi ${(appt.customerName||'').split(' ')[0]||'there'}! Reminder: your appointment at ${s.shopName||'the shop'} is tomorrow at ${appt.time}${appt.barberName?' with '+appt.barberName:''}. See you then! ✂️`;
+          const msg = buildSms('reminder', { name:(appt.customerName||'').split(' ')[0], shop:s.shopName, time:appt.time, barber:appt.barberName }, s);
           try { await twilioClient.messages.create({from:fromNum,to:'+1'+phone,body:msg}); sentIds.push(appt.id); } catch(e){}
         }
         if (toRemind.length) db.get('settings').assign({ remindersSent:sentIds.slice(-500) }).write();
@@ -961,7 +983,7 @@ async function runScheduler() {
           const phone = (v.phone||'').replace(/[^0-9]/g,'');
           if (phone.length<10) continue;
           const firstName = (v.name||'').split(' ')[0]||'there';
-          const msg = `Hey ${firstName}! It's been a few weeks — we'd love to have you back at ${s.shopName||'the shop'}. Book your next cut anytime 💈`;
+          const msg = buildSms('rebook', { name:firstName, shop:s.shopName }, s);
           try { await twilioClient.messages.create({from:fromNum,to:'+1'+phone,body:msg}); nudgeSentIds.push(nudgeKey); } catch(e){}
         }
         if (toNudge.length) db.get('settings').assign({ nudgesSent:nudgeSentIds.slice(-1000) }).write();
