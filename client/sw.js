@@ -1,11 +1,34 @@
-const CACHE = 'woods-test-v1';
-const ASSETS = ['/', '/index.html', '/css/app.css', '/js/api.js', '/js/utils.js', '/js/app.js',
-  '/js/dashboard.js', '/js/leads.js', '/js/jobs.js', '/js/customers.js', '/js/appointments.js',
-  '/js/invoices.js', '/js/fleet.js', '/js/followups.js', '/js/revenue.js', '/js/settings.js'];
+const CACHE = 'shopflow-v1';
+const STATIC = [
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/css/app.css',
+];
 
-self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())));
-self.addEventListener('activate', e => e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+self.addEventListener('install', e => {
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(c => c.addAll(STATIC))
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+
 self.addEventListener('fetch', e => {
+  // Never intercept API calls
   if (e.request.url.includes('/api/')) return;
+  // Network-first for HTML pages so updates land immediately
+  if (e.request.headers.get('accept')?.includes('text/html')) {
+    e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
+    return;
+  }
+  // Cache-first for static assets
   e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
 });
