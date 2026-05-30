@@ -500,8 +500,10 @@ app.get('/api/shop/customers/:id', requireAuth, shopRoute(async (req, res, db, h
   const done = appts.filter(a => a.status==='done');
   const lastVisitDate = done.length ? done.sort((a,b)=>b.date.localeCompare(a.date))[0].date : null;
   const daysSinceLast = lastVisitDate ? Math.floor((Date.now()-new Date(lastVisitDate+'T12:00:00'))/(1000*60*60*24)) : null;
-  const loyalty = (db.get('settings').value()||{}).loyalty || { visitsForReward:10 };
-  res.json({ customer:{...c, lastVisit:lastVisitDate}, appointments:appts, totalVisits:done.length, totalRevenue:done.reduce((s,a)=>s+Number(a.price||0),0), loyaltyPoints:c.loyaltyPoints||0, rewardReady:(c.loyaltyPoints||0)>=(loyalty.visitsForReward||10), visitsForReward:loyalty.visitsForReward||10, daysSinceLast });
+  const shopSettings = db.get('settings').value()||{};
+  const loyalty = shopSettings.loyalty || { visitsForReward:10 };
+  const rebookInterval = shopSettings.rebookInterval || 21;
+  res.json({ customer:{...c, lastVisit:lastVisitDate}, appointments:appts, totalVisits:done.length, totalRevenue:done.reduce((s,a)=>s+Number(a.price||0),0), loyaltyPoints:c.loyaltyPoints||0, rewardReady:(c.loyaltyPoints||0)>=(loyalty.visitsForReward||10), visitsForReward:loyalty.visitsForReward||10, daysSinceLast, rebookInterval });
 }));
 app.post('/api/shop/customers', requireAuth, shopRoute(async (req, res, db, h) => {
   const c = req.body; if (!c.id) c.id = genId('c'); h.upsert('customers', c); res.json({ id: c.id });
@@ -971,14 +973,15 @@ async function runScheduler() {
         }
         if (toRemind.length) db.get('settings').assign({ remindersSent:sentIds.slice(-500) }).write();
 
-        // ── 21-day rebook nudges ──
+        // ── Rebook nudges (interval set per shop, default 21 days) ──
+        const rebookDays = Math.min(90, Math.max(7, s.rebookInterval || 21));
         const nudgeSentIds = s.nudgesSent||[];
-        const cutoffDate = new Date(Date.now()-21*24*3600000).toISOString().split('T')[0];
+        const cutoffDate = new Date(Date.now()-rebookDays*24*3600000).toISOString().split('T')[0];
         // Find each customer's most recent completed appointment
         const allAppts = db.get('appointments').value().filter(a=>a.status==='done');
         const lastVisit = {};
         allAppts.forEach(a=>{ if(!lastVisit[a.customerId]||a.date>lastVisit[a.customerId].date) lastVisit[a.customerId]={date:a.date,name:a.customerName,phone:a.customerPhone}; });
-        // Anyone whose last visit was 21+ days ago and hasn't been nudged yet
+        // Anyone whose last visit was rebookDays+ ago and hasn't been nudged yet
         const toNudge = Object.values(lastVisit).filter(v=>v.date<=cutoffDate&&v.phone);
         for (const v of toNudge) {
           const nudgeKey = v.phone+':'+v.date;

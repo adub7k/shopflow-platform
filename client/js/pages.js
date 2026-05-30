@@ -861,7 +861,8 @@ const Clients = {
       // Work out automation statuses
       const nextAppt = (data.appointments||[]).filter(a=>a.status==='confirmed'&&a.date>=today()).sort((a,b)=>a.date.localeCompare(b.date))[0];
       const daysSinceLast = data.daysSinceLast ?? null;
-      const nudgeDue = daysSinceLast !== null && daysSinceLast >= 21;
+      const rebookInterval = data.rebookInterval || 21;
+      const nudgeDue = daysSinceLast !== null && daysSinceLast >= rebookInterval;
 
       let html = '';
 
@@ -880,9 +881,10 @@ const Clients = {
       </div>`;
 
       // ── Stats ──
-      const dslColor = daysSinceLast === null ? 'var(--text)' : daysSinceLast >= 21 ? '#dc2626' : daysSinceLast >= 14 ? '#d97706' : 'var(--text)';
-      const dslBg    = daysSinceLast === null ? 'var(--surface)' : daysSinceLast >= 21 ? '#fff5f5' : daysSinceLast >= 14 ? '#fffbeb' : 'var(--surface)';
-      const dslBorder= daysSinceLast === null ? 'var(--border)'  : daysSinceLast >= 21 ? '#fecaca' : daysSinceLast >= 14 ? '#fde68a' : 'var(--border)';
+      const warnAt   = Math.round(rebookInterval * 0.67); // amber at ~2/3 of the interval
+      const dslColor = daysSinceLast === null ? 'var(--text)' : daysSinceLast >= rebookInterval ? '#dc2626' : daysSinceLast >= warnAt ? '#d97706' : 'var(--text)';
+      const dslBg    = daysSinceLast === null ? 'var(--surface)' : daysSinceLast >= rebookInterval ? '#fff5f5' : daysSinceLast >= warnAt ? '#fffbeb' : 'var(--surface)';
+      const dslBorder= daysSinceLast === null ? 'var(--border)'  : daysSinceLast >= rebookInterval ? '#fecaca' : daysSinceLast >= warnAt ? '#fde68a' : 'var(--border)';
       const dslLabel = daysSinceLast === null ? '—' : daysSinceLast === 0 ? 'Today' : daysSinceLast === 1 ? '1 day' : daysSinceLast + ' days';
       html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px;">
         <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center;"><div style="font-size:10px;color:var(--faint);margin-bottom:3px;">VISITS</div><div style="font-size:22px;font-weight:800;">${data.totalVisits}</div></div>
@@ -908,8 +910,8 @@ const Clients = {
         </div>
         <div style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;">
           <div>
-            <div style="font-size:13px;font-weight:600;">🔁 21-Day Rebook Nudge</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px;">${daysSinceLast===null ? 'No visits yet' : nudgeDue ? 'Nudge sent or due — '+daysSinceLast+' days since last visit' : 'Last visit '+daysSinceLast+' days ago · nudge at 21 days'}</div>
+            <div style="font-size:13px;font-weight:600;">🔁 ${rebookInterval}-Day Rebook Nudge</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">${daysSinceLast===null ? 'No visits yet' : nudgeDue ? 'Nudge sent or due — '+daysSinceLast+' days since last visit' : 'Last visit '+daysSinceLast+' days ago · nudge at '+rebookInterval+' days'}</div>
           </div>
           <span style="font-size:11px;font-weight:700;padding:3px 8px;border-radius:20px;background:${nudgeDue?'#fff5f5':'var(--surface)'};color:${nudgeDue?'#dc2626':'var(--faint)'};">${nudgeDue?'Due':'Watching'}</span>
         </div>
@@ -1035,8 +1037,8 @@ const Automations = {
       },
       {
         icon: '🔁',
-        title: '21-Day Rebook Nudge',
-        desc: 'Sent to clients who haven\'t rebooked after 21 days.',
+        title: `${s.rebookInterval || 21}-Day Rebook Nudge`,
+        desc: `Sent to clients who haven't rebooked after ${s.rebookInterval || 21} days.`,
         message: tpl.rebook || defRebook,
       },
     ];
@@ -1205,8 +1207,10 @@ const Settings = {
       const defRebook   = "Hey {name}! It's been a few weeks — we'd love to have you back at {shop}. Book your next cut anytime 💈";
       html.push(`<div class="form-group"><label class="form-label">Booking Confirmation</label><textarea class="form-input" id="s-tpl-confirm" rows="2" placeholder="${defConfirm}">${tpl.confirmation||''}</textarea></div>`);
       html.push(`<div class="form-group"><label class="form-label">24-Hour Reminder</label><textarea class="form-input" id="s-tpl-reminder" rows="2" placeholder="${defReminder}">${tpl.reminder||''}</textarea></div>`);
-      html.push(`<div class="form-group"><label class="form-label">21-Day Rebook Nudge</label><textarea class="form-input" id="s-tpl-rebook" rows="2" placeholder="${defRebook}">${tpl.rebook||''}</textarea></div>`);
-      html.push(`<div style="font-size:11px;color:var(--faint);">Leave blank to use the default message shown as placeholder.</div>`);
+      const rebookDays = s.rebookInterval || 21;
+      html.push(`<div class="form-group"><label class="form-label">Rebook Nudge — Days Since Last Visit</label><div style="display:flex;align-items:center;gap:10px;"><input class="form-input" id="s-rebook-days" type="number" min="7" max="90" value="${rebookDays}" style="width:90px;" /><span style="font-size:13px;color:var(--muted);">days after last visit</span></div></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Rebook Nudge Message</label><textarea class="form-input" id="s-tpl-rebook" rows="2" placeholder="${defRebook}">${tpl.rebook||''}</textarea></div>`);
+      html.push(`<div style="font-size:11px;color:var(--faint);">Leave message blank to use the default shown as placeholder.</div>`);
       html.push('</div>');
 
       // Google Reviews
@@ -1459,6 +1463,8 @@ const Settings = {
     const tr=document.getElementById('s-tpl-reminder')?.value.trim();
     const tk=document.getElementById('s-tpl-rebook')?.value.trim();
     data.smsTemplates={ confirmation:tc||'', reminder:tr||'', rebook:tk||'' };
+    const rd=parseInt(document.getElementById('s-rebook-days')?.value)||21;
+    data.rebookInterval=Math.min(90,Math.max(7,rd));
     const gr=document.getElementById('s-grev')?.value.trim(); if(gr)data.googleReviewLink=gr;
     const ehost=document.getElementById('s-ehost')?.value.trim();
     const euser=document.getElementById('s-euser')?.value.trim();
