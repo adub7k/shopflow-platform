@@ -841,11 +841,12 @@ app.post('/api/shop/stripe/connect/disconnect', requireAuth, shopRoute(async (re
 
 // ── Checkout: cash ────────────────────────────────────────────────────────────
 app.post('/api/shop/checkout/cash', requireAuth, shopRoute(async (req, res, db, h) => {
-  const { appointmentId, amount, tip } = req.body;
+  const { appointmentId, amount, tip, cutNotes } = req.body;
   const total = Number(amount||0) + Number(tip||0);
   const appt = h.getById('appointments', appointmentId);
   if (!appt) return res.status(404).json({ ok: false });
   appt.status = 'done'; appt.price = total; appt.tip = Number(tip||0); appt.paymentMethod = 'cash'; appt.paidAt = new Date().toISOString();
+  if (cutNotes) appt.cutNotes = cutNotes;
   h.upsert('appointments', appt);
   if (appt.customerId) { const c = h.getById('customers', appt.customerId); if(c){c.loyaltyPoints=(c.loyaltyPoints||0)+1;c.lastJobDate=appt.date;h.upsert('customers',c);} }
   res.json({ ok: true });

@@ -498,6 +498,10 @@ const Appointments = {
         <input type="hidden" id="cc-tip" value="0" />
         <input class="form-input" id="cc-tip-custom" type="number" placeholder="Custom tip amount" style="display:none;margin-top:8px;" oninput="document.getElementById('cc-tip').value=this.value||0;Appointments._updateTotal()" />
       </div>
+      <div class="form-group">
+        <label class="form-label">Cut Notes <span style="font-weight:400;color:var(--faint);">(optional)</span></label>
+        <textarea class="form-input" id="cc-notes" rows="2" placeholder="e.g. 2 on sides, scissors on top, blended fade, no product…"></textarea>
+      </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
         <span style="font-size:13px;font-weight:600;color:var(--muted);">Total</span>
         <span id="cc-total" style="font-size:22px;font-weight:800;color:var(--green);">${fmtMoney(a.price||35)}</span>
@@ -536,8 +540,9 @@ const Appointments = {
 
   async _checkoutCash() {
     const { id, price, tip } = Appointments._co;
+    const cutNotes = document.getElementById('cc-notes')?.value.trim() || '';
     try {
-      await db.checkout.cash({ appointmentId: id, amount: price, tip });
+      await db.checkout.cash({ appointmentId: id, amount: price, tip, cutNotes });
       Modal.close(); toast('💵 Cash payment logged ✓');
       await Appointments.render(); Dashboard.render();
     } catch(e) { toast('Error logging payment','error'); }
@@ -545,6 +550,7 @@ const Appointments = {
 
   async _checkoutCard() {
     Appointments._updateTotal(); // capture latest values before switching modal
+    Appointments._co.cutNotes = document.getElementById('cc-notes')?.value.trim() || '';
     const { id, price, tip, phone, name } = Appointments._co;
     const total = price + tip;
     Modal.show(`
@@ -917,14 +923,61 @@ const Clients = {
         </div>
       </div>`;
 
+      // ── Spend Trends ──
+      if (doneAppts.length >= 2) {
+        const avgTicket = data.totalRevenue / data.totalVisits;
+        // Visit frequency — avg days between visits
+        const dates = doneAppts.map(a=>new Date(a.date+'T12:00:00')).sort((a,b)=>a-b);
+        let avgFreq = null;
+        if (dates.length >= 2) {
+          const gaps = [];
+          for (let i=1;i<dates.length;i++) gaps.push((dates[i]-dates[i-1])/(1000*60*60*24));
+          avgFreq = Math.round(gaps.reduce((s,g)=>s+g,0)/gaps.length);
+        }
+        // Trend — compare last 3 vs previous 3 avg ticket
+        const recent3  = doneAppts.slice(0,3).reduce((s,a)=>s+Number(a.price||0),0) / Math.min(3,doneAppts.length);
+        const prev3    = doneAppts.slice(3,6).length ? doneAppts.slice(3,6).reduce((s,a)=>s+Number(a.price||0),0)/doneAppts.slice(3,6).length : null;
+        const trendUp  = prev3 !== null && recent3 > prev3 + 1;
+        const trendDn  = prev3 !== null && recent3 < prev3 - 1;
+        const trendIcon = trendUp ? '📈' : trendDn ? '📉' : '➡️';
+        const trendTxt  = trendUp ? 'Spending more lately' : trendDn ? 'Spending less lately' : 'Consistent spend';
+
+        html += `<div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:8px;">SPEND TRENDS</div>`;
+        html += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:20px;">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:10px;color:var(--faint);margin-bottom:3px;">AVG TICKET</div>
+            <div style="font-size:16px;font-weight:800;color:var(--green);">${fmtMoney(avgTicket)}</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:10px;color:var(--faint);margin-bottom:3px;">AVG FREQUENCY</div>
+            <div style="font-size:16px;font-weight:800;">${avgFreq ? 'every '+avgFreq+'d' : '—'}</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:10px;color:var(--faint);margin-bottom:3px;">TREND</div>
+            <div style="font-size:16px;font-weight:800;">${trendIcon}</div>
+            <div style="font-size:9px;color:var(--muted);margin-top:1px;">${trendTxt}</div>
+          </div>
+        </div>`;
+      }
+
       // ── Visit History ──
       if (doneAppts.length) {
         html += `<div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:8px;">VISIT HISTORY</div>`;
         html += `<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px;">`;
-        doneAppts.slice(0,6).forEach((a,i)=>{
-          html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;${i>0?'border-top:1px solid var(--border)':''};">
-            <div><div style="font-size:13px;font-weight:600;">${a.service}</div><div style="font-size:11px;color:var(--muted);">${fmtDateShort(a.date)}${a.barberName?' · '+a.barberName:''}</div></div>
-            <div style="font-size:14px;font-weight:700;color:var(--green);">${fmtMoney(a.price)}</div>
+        doneAppts.slice(0,10).forEach((a,i)=>{
+          const hasCutNotes = !!a.cutNotes;
+          html += `<div style="${i>0?'border-top:1px solid var(--border)':''}">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;${hasCutNotes?'cursor:pointer;':''}" ${hasCutNotes?`onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'"`:''}>
+              <div>
+                <div style="font-size:13px;font-weight:600;">${a.service}</div>
+                <div style="font-size:11px;color:var(--muted);">${fmtDateShort(a.date)}${a.barberName?' · '+a.barberName:''}${hasCutNotes?' · <span style="color:var(--green);">✂ notes</span>':''}</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <div style="font-size:14px;font-weight:700;color:var(--green);">${fmtMoney(a.price)}</div>
+                ${hasCutNotes?'<span style="font-size:10px;color:var(--faint);">▼</span>':''}
+              </div>
+            </div>
+            ${hasCutNotes?`<div style="display:none;padding:0 14px 10px;font-size:12px;color:var(--muted);font-style:italic;background:var(--off);">✂️ ${a.cutNotes}</div>`:''}
           </div>`;
         });
         html += `</div>`;
