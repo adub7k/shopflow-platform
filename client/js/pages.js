@@ -336,33 +336,149 @@ const Appointments = {
       </div>`);
   },
 
+  // Stores amount/tip/url/sessionId between the two checkout modal steps
+  _co: { id:null, price:0, tip:0, url:'', sessionId:'', phone:'', name:'' },
+
   async complete(id) {
-    const a=this._data.find(x=>x.id===id); if(!a)return;
+    const a = this._data.find(x=>x.id===id); if(!a) return;
+    this._co = { id, price: Number(a.price||35), tip:0, url:'', sessionId:'', phone: a.customerPhone||'', name: a.customerName||'' };
+    let stripeConnected = false;
+    try { const st = await db.stripe.status(); stripeConnected = st.connected; } catch(e) {}
+
     Modal.show(`
-      <div class="modal-title">✓ Complete Service</div>
-      <div style="font-size:14px;font-weight:600;margin-bottom:16px;">${a.customerName} · ${a.service}</div>
-      <div class="form-group"><label class="form-label">Amount charged</label>
-        <div style="position:relative;"><div style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:20px;font-weight:700;color:var(--green);">$</div>
-        <input class="form-input" id="cc-price" type="number" value="${a.price}" style="font-size:24px;font-weight:700;padding-left:28px;" /></div>
+      <div class="modal-title">💈 Checkout</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">${a.customerName} · ${a.service}</div>
+      <div class="form-group">
+        <label class="form-label">Amount</label>
+        <div style="position:relative;">
+          <div style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:18px;font-weight:700;color:var(--green);">$</div>
+          <input class="form-input" id="cc-price" type="number" value="${a.price||35}" style="font-size:22px;font-weight:700;padding-left:28px;" oninput="Appointments._updateTotal()" />
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+          ${[25,30,35,40,45,50,60].map(p=>`<button class="btn btn-sm" onclick="document.getElementById('cc-price').value=${p};Appointments._updateTotal()">${fmtMoney(p)}</button>`).join('')}
+        </div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
-        ${[20,25,30,35,40,45,50].map(p=>`<button class="btn btn-sm" onclick="document.getElementById('cc-price').value=${p}">${fmtMoney(p)}</button>`).join('')}
+      <div class="form-group">
+        <label class="form-label">Tip</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${[0,2,5,10].map(t=>`<button class="btn btn-sm" id="tip-${t}" onclick="Appointments._setTip(${t})" style="${t===0?'background:var(--text);color:#fff;border-color:var(--text);':''}">${t===0?'No tip':'$'+t}</button>`).join('')}
+          <button class="btn btn-sm" onclick="Appointments._setTip('custom')">Custom</button>
+        </div>
+        <input type="hidden" id="cc-tip" value="0" />
+        <input class="form-input" id="cc-tip-custom" type="number" placeholder="Custom tip amount" style="display:none;margin-top:8px;" oninput="document.getElementById('cc-tip').value=this.value||0;Appointments._updateTotal()" />
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:13px;font-weight:600;color:var(--muted);">Total</span>
+        <span id="cc-total" style="font-size:22px;font-weight:800;color:var(--green);">${fmtMoney(a.price||35)}</span>
       </div>
       <div class="modal-actions">
-        <button id="cc-btn" class="btn btn-green btn-full" onclick="Appointments._doComplete('${id}')">✓ Log Service</button>
+        <button class="btn btn-full" style="background:var(--text);color:#fff;" onclick="Appointments._checkoutCash()">💵 Cash</button>
+        ${stripeConnected
+          ? `<button class="btn btn-full btn-green" onclick="Appointments._checkoutCard()">💳 Send Card Link</button>`
+          : `<button class="btn btn-full" style="opacity:.5;cursor:default;" disabled>💳 Card (connect Stripe in Settings)</button>`
+        }
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
       </div>`);
-    setTimeout(()=>document.getElementById('cc-price')?.select(),150);
   },
 
-  async _doComplete(id) {
-    const price=parseFloat(document.getElementById('cc-price')?.value)||0;
-    const btn=document.getElementById('cc-btn'); disableBtn(btn);
-    try{
-      await db.appointments.complete(id,{price});
-      Modal.close(); toast('Service logged ✓ Loyalty point awarded!');
-      await this.render(); Dashboard.render();
-    }catch(e){toast('Error','error');enableBtn(btn);}
+  _setTip(val) {
+    document.querySelectorAll('[id^="tip-"]').forEach(b=>{ b.style.background=''; b.style.color=''; b.style.borderColor=''; });
+    if (val === 'custom') {
+      document.getElementById('cc-tip-custom').style.display = 'block';
+    } else {
+      document.getElementById('cc-tip-custom').style.display = 'none';
+      document.getElementById('cc-tip').value = val;
+      const btn = document.getElementById('tip-'+val);
+      if (btn) { btn.style.background='var(--text)'; btn.style.color='#fff'; btn.style.borderColor='var(--text)'; }
+      Appointments._updateTotal();
+    }
+  },
+
+  _updateTotal() {
+    const price = parseFloat(document.getElementById('cc-price')?.value)||0;
+    const tip   = parseFloat(document.getElementById('cc-tip')?.value)||0;
+    Appointments._co.price = price;
+    Appointments._co.tip   = tip;
+    const el = document.getElementById('cc-total');
+    if (el) el.textContent = '$'+(price+tip).toFixed(2).replace(/\.00$/,'');
+  },
+
+  async _checkoutCash() {
+    const { id, price, tip } = Appointments._co;
+    try {
+      await db.checkout.cash({ appointmentId: id, amount: price, tip });
+      Modal.close(); toast('💵 Cash payment logged ✓');
+      await Appointments.render(); Dashboard.render();
+    } catch(e) { toast('Error logging payment','error'); }
+  },
+
+  async _checkoutCard() {
+    Appointments._updateTotal(); // capture latest values before switching modal
+    const { id, price, tip, phone, name } = Appointments._co;
+    const total = price + tip;
+    Modal.show(`
+      <div class="modal-title">💳 Card Payment</div>
+      <div style="font-size:22px;font-weight:800;color:var(--green);text-align:center;margin-bottom:4px;">${fmtMoney(total)}</div>
+      <div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:20px;">for ${name}</div>
+      <div id="card-status" style="text-align:center;padding:16px 0;">
+        <div style="font-size:13px;color:var(--muted);">Generating payment link...</div>
+      </div>
+      <div style="margin-top:12px;">
+        <button class="btn btn-full" onclick="Appointments._checkoutCash()">Switch to Cash Instead</button>
+      </div>`);
+    try {
+      const r = await db.checkout.session({ appointmentId: id, amount: price, tip });
+      const statusEl = document.getElementById('card-status');
+      if (!statusEl) return; // modal was closed
+      if (!r || !r.ok) { toast(r?.error||'Could not create payment link — check Stripe settings','error'); return; }
+
+      // Store URL safely — never embed in onclick strings
+      Appointments._co.url       = r.url;
+      Appointments._co.sessionId = r.sessionId;
+
+      const hasPhone = phone && phone.replace(/\D/g,'').length >= 10;
+      statusEl.innerHTML = `
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Share this link with the client to collect payment:</div>
+        <div style="display:flex;gap:6px;margin-bottom:12px;">
+          <input class="form-input" id="pay-link-input" readonly style="font-size:11px;flex:1;" onclick="this.select()" />
+          <button class="btn btn-sm" onclick="navigator.clipboard.writeText(Appointments._co.url);toast('Link copied ✓')">Copy</button>
+        </div>
+        ${hasPhone ? `<button class="btn btn-green btn-full" id="send-link-btn" onclick="Appointments._textPayLink()">📱 Text to ${phone}</button>` : ''}
+        <div style="margin-top:10px;">
+          <button class="btn btn-full" id="verify-btn" onclick="Appointments._verifyPayment(this)">✓ Check Payment</button>
+        </div>`;
+      // Set URL value via JS to avoid HTML encoding issues
+      const linkInput = document.getElementById('pay-link-input');
+      if (linkInput) linkInput.value = r.url;
+    } catch(e) { toast('Could not create payment link — check Stripe settings','error'); }
+  },
+
+  async _textPayLink() {
+    const { phone, name, url } = Appointments._co;
+    const btn = document.getElementById('send-link-btn'); if(btn){btn.disabled=true;btn.textContent='Sending...';}
+    const firstName = name.split(' ')[0];
+    const msg = `Hi ${firstName}! Here's your payment link for today's visit: ${url}`;
+    try {
+      await db.sms.send({ to: phone, body: msg, customerName: name });
+      if(btn){btn.textContent='✓ Sent!';btn.style.background='var(--green)';}
+      toast('Payment link sent via text ✓');
+    } catch(e) { toast('Could not send text','error'); if(btn){btn.disabled=false;btn.textContent='📱 Text to '+phone;} }
+  },
+
+  async _verifyPayment(btn) {
+    const { sessionId, id } = Appointments._co;
+    const origText = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Checking...';
+    try {
+      const r = await db.checkout.verify(sessionId, id);
+      if (r.paid) {
+        Modal.close(); toast('💳 Card payment confirmed ✓');
+        await Appointments.render(); Dashboard.render();
+      } else {
+        btn.disabled = false; btn.textContent = origText;
+        toast('Payment not received yet — try again in a moment','warning');
+      }
+    } catch(e) { btn.disabled=false; btn.textContent=origText; toast('Could not verify','error'); }
   },
 
   async noShow(id) {
@@ -949,7 +1065,7 @@ const Settings = {
 
       // Stripe Connect
       let stripeStatus = { connected:false };
-      try { stripeStatus = await fetch('/api/stripe/connect/status').then(r=>r.json()); } catch(e) {}
+      try { stripeStatus = await db.stripe.status(); } catch(e) {}
       const deposit = s.deposit||{enabled:false,amount:10,message:'A deposit is required to secure your appointment.'};
 
       html.push('<div class="section-header">Deposits & Payments</div><div class="card">');
@@ -1115,20 +1231,15 @@ const Settings = {
   async connectStripe() {
     const btn = document.getElementById('stripe-connect-btn'); if(btn){btn.textContent='Connecting...';btn.disabled=true;}
     try {
-      const res = await fetch('/api/stripe/connect/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
-      const data = await res.json();
-      if (data.ok && data.url) {
-        window.location.href = data.url;
-      } else {
-        toast(data.error||'Could not connect Stripe. Make sure STRIPE_SECRET_KEY is set in Railway.','error');
-        if(btn){btn.textContent='Connect Stripe Account';btn.disabled=false;}
-      }
+      const data = await db.stripe.onboard();
+      if (data.ok && data.url) { window.location.href = data.url; }
+      else { toast(data.error||'Could not connect Stripe. Make sure STRIPE_SECRET_KEY is set in Railway.','error'); if(btn){btn.textContent='Connect Stripe Account';btn.disabled=false;} }
     } catch(e) { toast('Error connecting Stripe','error'); if(btn){btn.textContent='Connect Stripe Account';btn.disabled=false;} }
   },
 
   async disconnectStripe() {
-    if (!confirm('Disconnect Stripe? Deposits will stop working.')) return;
-    await fetch('/api/stripe/connect/disconnect',{method:'POST'});
+    if (!confirm('Disconnect Stripe? Card payments and deposits will stop working.')) return;
+    await db.stripe.disconnect();
     toast('Stripe disconnected');
     this.render();
   },

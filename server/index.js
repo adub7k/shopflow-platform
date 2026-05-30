@@ -591,6 +591,139 @@ app.get('/api/admin/stats', (req, res) => {
   });
 });
 
+// ── Stripe helpers ────────────────────────────────────────────────────────────
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) throw new Error('STRIPE_SECRET_KEY not set');
+  return require('stripe')(key);
+}
+const APP_URL = process.env.APP_URL || 'https://shopflowio.up.railway.app';
+
+// ── Stripe Connect: status ────────────────────────────────────────────────────
+app.get('/api/shop/stripe/connect/status', requireAuth, shopRoute(async (req, res, db) => {
+  const s = db.get('settings').value()||{};
+  const accountId = s.stripe?.connectAccountId;
+  if (!accountId) return res.json({ connected: false });
+  try {
+    const stripe = getStripe();
+    const account = await stripe.accounts.retrieve(accountId);
+    if (account.charges_enabled && !s.stripe?.onboardingComplete) {
+      db.get('settings').assign({ stripe: { connectAccountId: accountId, onboardingComplete: true } }).write();
+    }
+    res.json({ connected: account.charges_enabled, email: account.email });
+  } catch(e) { res.json({ connected: false }); }
+}));
+
+// ── Stripe Connect: start onboarding ─────────────────────────────────────────
+app.post('/api/shop/stripe/connect/onboard', requireAuth, shopRoute(async (req, res, db) => {
+  try {
+    const stripe = getStripe();
+    const shop = master.get('shops').find({ id: req.shopId }).value();
+    const s = db.get('settings').value()||{};
+    let accountId = s.stripe?.connectAccountId;
+    if (!accountId) {
+      const account = await stripe.accounts.create({ type: 'express', email: shop.email, metadata: { shopId: req.shopId } });
+      accountId = account.id;
+      db.get('settings').assign({ stripe: { connectAccountId: accountId, onboardingComplete: false } }).write();
+    }
+    const link = await stripe.accountLinks.create({
+      account: accountId,
+      refresh_url: APP_URL + '/api/stripe/connect/refresh?shopId=' + req.shopId,
+      return_url:  APP_URL + '/api/stripe/connect/return?shopId='  + req.shopId,
+      type: 'account_onboarding',
+    });
+    res.json({ ok: true, url: link.url });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+}));
+
+// ── Stripe Connect: return & refresh ─────────────────────────────────────────
+app.get('/api/stripe/connect/return', async (req, res) => {
+  const shop = master.get('shops').find({ id: req.query.shopId }).value();
+  if (!shop) return res.redirect('/login');
+  try {
+    const stripe = getStripe();
+    const db = getShopDb(req.query.shopId);
+    const s = db.get('settings').value()||{};
+    const accountId = s.stripe?.connectAccountId;
+    if (accountId) {
+      const account = await stripe.accounts.retrieve(accountId);
+      if (account.charges_enabled) db.get('settings').assign({ stripe: { connectAccountId: accountId, onboardingComplete: true } }).write();
+    }
+  } catch(e) {}
+  res.redirect('/shop/' + shop.slug + '?stripe=connected');
+});
+app.get('/api/stripe/connect/refresh', (req, res) => {
+  const shop = master.get('shops').find({ id: req.query.shopId }).value();
+  res.redirect(shop ? '/shop/' + shop.slug : '/login');
+});
+
+// ── Stripe Connect: disconnect ────────────────────────────────────────────────
+app.post('/api/shop/stripe/connect/disconnect', requireAuth, shopRoute(async (req, res, db) => {
+  db.get('settings').assign({ stripe: { connectAccountId: '', onboardingComplete: false } }).write();
+  res.json({ ok: true });
+}));
+
+// ── Checkout: cash ────────────────────────────────────────────────────────────
+app.post('/api/shop/checkout/cash', requireAuth, shopRoute(async (req, res, db, h) => {
+  const { appointmentId, amount, tip } = req.body;
+  const total = Number(amount||0) + Number(tip||0);
+  const appt = h.getById('appointments', appointmentId);
+  if (!appt) return res.status(404).json({ ok: false });
+  appt.status = 'done'; appt.price = total; appt.tip = Number(tip||0); appt.paymentMethod = 'cash'; appt.paidAt = new Date().toISOString();
+  h.upsert('appointments', appt);
+  if (appt.customerId) { const c = h.getById('customers', appt.customerId); if(c){c.loyaltyPoints=(c.loyaltyPoints||0)+1;c.lastJobDate=appt.date;h.upsert('customers',c);} }
+  res.json({ ok: true });
+}));
+
+// ── Checkout: create card payment session ─────────────────────────────────────
+app.post('/api/shop/checkout/session', requireAuth, shopRoute(async (req, res, db, h) => {
+  try {
+    const { appointmentId, amount, tip } = req.body;
+    const total = Math.round((Number(amount||0) + Number(tip||0)) * 100);
+    const s = db.get('settings').value()||{};
+    const accountId = s.stripe?.connectAccountId;
+    if (!accountId || !s.stripe?.onboardingComplete) return res.status(400).json({ ok: false, error: 'Stripe not connected. Go to Settings → Deposits & Payments to connect.' });
+    const appt = h.getById('appointments', appointmentId);
+    if (!appt) return res.status(404).json({ ok: false, error: 'Appointment not found' });
+    const stripe = getStripe();
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [{ price_data: { currency: 'usd', product_data: { name: appt.service||'Haircut', description: `${s.shopName||'the shop'}${appt.barberName?' · with '+appt.barberName:''}` }, unit_amount: total }, quantity: 1 }],
+      mode: 'payment',
+      success_url: APP_URL + '/checkout-success?session={CHECKOUT_SESSION_ID}&appt=' + appointmentId,
+      cancel_url:  APP_URL + '/checkout-cancel',
+      metadata: { appointmentId, shopId: req.shopId },
+      payment_intent_data: { transfer_data: { destination: accountId } },
+    });
+    res.json({ ok: true, url: session.url, sessionId: session.id });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+}));
+
+// ── Checkout: verify card payment ─────────────────────────────────────────────
+app.get('/api/shop/checkout/verify/:sessionId', requireAuth, shopRoute(async (req, res, db, h) => {
+  try {
+    const stripe = getStripe();
+    const session = await stripe.checkout.sessions.retrieve(req.params.sessionId);
+    const paid = session.payment_status === 'paid';
+    if (paid) {
+      const apptId = req.query.apptId || session.metadata?.appointmentId;
+      if (apptId) {
+        const appt = h.getById('appointments', apptId);
+        if (appt && appt.status !== 'done') {
+          appt.status = 'done'; appt.paymentMethod = 'card'; appt.stripeSessionId = session.id; appt.paidAt = new Date().toISOString();
+          h.upsert('appointments', appt);
+          if (appt.customerId) { const c = h.getById('customers', appt.customerId); if(c){c.loyaltyPoints=(c.loyaltyPoints||0)+1;c.lastJobDate=appt.date;h.upsert('customers',c);} }
+        }
+      }
+    }
+    res.json({ paid });
+  } catch(e) { res.status(500).json({ paid: false, error: e.message }); }
+}));
+
+// ── Checkout success/cancel pages (redirect back to app) ──────────────────────
+app.get('/checkout-success', (req, res) => res.send(`<html><body style="font-family:sans-serif;text-align:center;padding:60px;"><div style="font-size:48px;margin-bottom:16px;">✅</div><div style="font-size:22px;font-weight:700;margin-bottom:8px;">Payment received!</div><div style="color:#6b7280;margin-bottom:24px;">You can close this tab.</div></body></html>`));
+app.get('/checkout-cancel',  (req, res) => res.send(`<html><body style="font-family:sans-serif;text-align:center;padding:60px;"><div style="font-size:48px;margin-bottom:16px;">↩️</div><div style="font-size:22px;font-weight:700;margin-bottom:8px;">Payment cancelled.</div><div style="color:#6b7280;margin-bottom:24px;">You can close this tab.</div></body></html>`));
+
 // ── Scheduler: 24hr reminders + 21-day rebook nudges ─────────────────────────
 async function runScheduler() {
   try {
