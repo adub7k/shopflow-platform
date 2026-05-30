@@ -255,7 +255,7 @@ const Appointments = {
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
       </div>`);
     setTimeout(()=>{
-      makeAutocomplete('fa-name','fa-list',(id,name)=>{document.getElementById('fa-name').value=name;document.getElementById('fa-cid').value=id;});
+      makeAutocomplete('fa-name','fa-list',(id,name,phone)=>{document.getElementById('fa-name').value=name;document.getElementById('fa-cid').value=id;document.getElementById('fa-phone').value=phone||'';});
     },150);
   },
 
@@ -381,7 +381,7 @@ const Appointments = {
     const a = this._data.find(x=>x.id===id);
     if (!confirm('Waive the deposit for '+(a?.customerName||'this client')+'? They will not need to pay before arriving.')) return;
     try {
-      await fetch('/api/appointments/'+id+'/waive-deposit',{method:'POST'});
+      await apiFetch('/appointments/'+id+'/waive-deposit',{method:'POST'});
       Modal.close(); toast('Deposit waived ✓'); await this.render();
     } catch(e) { toast('Error','error'); }
   },
@@ -395,7 +395,7 @@ const Appointments = {
 
 // ── Clients ───────────────────────────────────────────────────────────────────
 const Clients = {
-  _data: [], _search: '',
+  _data: [], _search: '', _retentionDays: 90, _retentionOpen: false,
 
   async render() {
     const el=document.getElementById('page-clients'); if(!el)return;
@@ -410,7 +410,30 @@ const Clients = {
         <button class="btn btn-green" onclick="Clients.openForm(null)">+ Add</button>
       </div>`);
 
+      // ── Client Retention ──
+      const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - this._retentionDays);
+      const cutoffStr = cutoff.toISOString().split('T')[0];
+      const atRisk = this._data.filter(c => c.lastVisit && c.lastVisit < cutoffStr);
+      const noVisitYet = this._data.filter(c => !c.lastVisit);
+
+      html.push(`<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px;">
+        <div onclick="Clients._toggleRetention()" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;cursor:pointer;background:var(--surface);user-select:none;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:20px;">📉</span>
+            <div>
+              <div style="font-size:14px;font-weight:700;color:var(--text);">Client Retention</div>
+              <div style="font-size:11px;color:var(--muted);margin-top:1px;">${atRisk.length} client${atRisk.length!==1?'s':''} haven't been in over ${this._retentionDays} days</div>
+            </div>
+          </div>
+          <span style="font-size:18px;color:var(--muted);transform:${this._retentionOpen?'rotate(180deg)':'rotate(0deg)'};transition:transform .2s;">⌄</span>
+        </div>
+        ${this._retentionOpen ? this._buildRetention(atRisk, noVisitYet) : ''}
+      </div>`);
+
+      // ── All Clients ──
       const filtered = this._search ? this._data.filter(c=>c.name.toLowerCase().includes(this._search.toLowerCase())||(c.phone||'').includes(this._search)) : this._data;
+
+      html.push(`<div class="section-header">All Clients <span style="font-size:11px;font-weight:400;color:var(--faint);">${filtered.length} total</span></div>`);
 
       if(!filtered.length){
         html.push('<div class="card"><div class="empty-state"><div class="empty-icon">👤</div><div class="empty-text">'+(this._search?'No clients found':'No clients yet')+'</div></div></div>');
@@ -434,6 +457,108 @@ const Clients = {
       }
       el.innerHTML=html.join('');
     }catch(e){el.innerHTML='<div class="card"><p style="color:var(--muted)">Could not load clients</p></div>';}
+  },
+
+  _toggleRetention() { this._retentionOpen=!this._retentionOpen; this.render(); },
+
+  _buildRetention(atRisk, noVisitYet) {
+    let html = '';
+
+    // Description + day selector
+    html += `<div style="padding:14px 16px;border-top:1px solid var(--border);background:#fff;">
+      <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px;">
+        These are clients who visited before but haven't been back in a while. Use this to reach out, offer a deal, or just check in — before they forget about you.
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+        <span style="font-size:12px;font-weight:600;color:var(--muted);">Flag clients inactive after</span>
+        <select onchange="Clients._retentionDays=parseInt(this.value);Clients.render()" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-weight:700;color:var(--text);background:#fff;">
+          ${[30,45,60,75,90,120].map(d=>`<option value="${d}"${this._retentionDays===d?' selected':''}>${d} days</option>`).join('')}
+        </select>
+      </div>`;
+
+    if (!atRisk.length) {
+      html += `<div style="text-align:center;padding:20px 0;color:var(--faint);font-size:13px;">No at-risk clients right now — nice work! 💪</div>`;
+    } else {
+      html += `<div style="display:flex;flex-direction:column;gap:10px;">`;
+      atRisk.sort((a,b)=>a.lastVisit.localeCompare(b.lastVisit)).forEach(c=>{
+        const daysSince = Math.floor((new Date()-new Date(c.lastVisit+'T12:00:00'))/(1000*60*60*24));
+        html += `<div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface);border-radius:10px;border:1px solid var(--border);">
+          ${avatarEl(c.name,38)}
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;color:var(--text);">${c.name}</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">Last in ${fmtDateShort(c.lastVisit)} · <span style="color:#dc2626;font-weight:600;">${daysSince} days ago</span></div>
+          </div>
+          <button class="btn btn-sm btn-green" onclick="Clients.retentionAction('${c.id}','${c.name}','${c.phone||''}')">Reach Out</button>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+
+    html += `</div>`;
+    return html;
+  },
+
+  retentionAction(id, name, phone) {
+    const hasPhone = phone && phone.length > 0;
+    Modal.show(`
+      <div class="modal-title">📉 Re-capture ${name}</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.6;">Choose how you want to reach out and bring them back.</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        ${hasPhone ? `
+        <button class="btn btn-full" onclick="Clients.sendRetentionText('${id}','${name}','${phone}','checkin')">
+          💬 Send a Check-in Text
+        </button>
+        <button class="btn btn-full" onclick="Clients.sendRetentionText('${id}','${name}','${phone}','discount')">
+          🎟️ Text Them a Discount Offer
+        </button>` : `
+        <div style="background:#fff5f5;border:1px solid #ffd7d5;border-radius:8px;padding:10px 12px;font-size:13px;color:#dc2626;margin-bottom:4px;">No phone number on file for this client.</div>`}
+        <button class="btn btn-full" onclick="Clients.markContacted('${id}','${name}')">
+          ✅ Mark as Contacted
+        </button>
+        <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
+      </div>`);
+  },
+
+  sendRetentionText(id, name, phone, type) {
+    const firstName = name.split(' ')[0];
+    const checkin = `Hey ${firstName}! It's been a while — we'd love to have you back in the chair. Book anytime at ${location.host}/book/ ✂️`;
+    const discount = `Hey ${firstName}! We miss you! Come back in and we'll take care of you — mention this text for a special deal. Book at ${location.host}/book/ ✂️`;
+    const defaultMsg = type==='discount' ? discount : checkin;
+
+    Modal.show(`
+      <div class="modal-title">${type==='discount'?'🎟️ Discount Offer':'💬 Check-in Text'}</div>
+      <div class="form-group">
+        <label class="form-label">Message to ${name}</label>
+        <textarea class="form-input" id="ret-msg" style="min-height:100px;">${defaultMsg}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Phone</label>
+        <input class="form-input" id="ret-phone" value="${phone}" />
+      </div>
+      <div class="modal-actions">
+        <button id="ret-btn" class="btn btn-green btn-full" onclick="Clients._doRetentionSend('${id}','${name}')">Send Text</button>
+        <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
+      </div>`);
+  },
+
+  async _doRetentionSend(customerId, customerName) {
+    const msg = document.getElementById('ret-msg')?.value.trim();
+    const phone = document.getElementById('ret-phone')?.value.trim();
+    if (!msg || !phone) { toast('Fill in all fields','warning'); return; }
+    const btn = document.getElementById('ret-btn'); disableBtn(btn);
+    try {
+      const r = await db.sms.send({ to: phone, body: msg, customerId, customerName });
+      if (r.ok) { Modal.close(); toast('Text sent ✓'); }
+      else toast(r.error||'Could not send text — check Twilio settings','error');
+    } catch(e) { toast('Could not send text','error'); enableBtn(btn); }
+  },
+
+  async markContacted(id, name) {
+    Modal.close();
+    toast(name+' marked as contacted ✓');
+    // Bump their lastVisit to today so they fall off the at-risk list
+    const c = this._data.find(x=>x.id===id);
+    if (c) { await db.customers.save({...c, lastVisit: today(), contactedAt: today()}); this.render(); }
   },
 
   _filter(v) { this._search=v; this.render(); },
@@ -482,7 +607,7 @@ const Clients = {
         ${data.appointments?.filter(a=>a.status==='done').slice(0,4).map(a=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px;"><div>${a.service}<div style="font-size:11px;color:var(--faint);">${fmtDateShort(a.date)}${a.barberName?' · '+a.barberName:''}</div></div><div style="font-weight:700;">${fmtMoney(a.price)}</div></div>`).join('')||''}
         <div class="modal-actions" style="margin-top:16px;">
           ${data.rewardReady?`<button class="btn btn-green btn-full" onclick="Clients.redeemReward('${c.id}','${c.name}')">🎉 Redeem Reward</button>`:''}
-          <button class="btn btn-full" onclick="Clients.openForm('${c.id}');Modal.close()">Edit</button>
+          <button class="btn btn-full" onclick="Clients.openForm('${c.id}')">Edit</button>
           <button class="btn btn-full" onclick="Modal.close()">Close</button>
         </div>`);
     }catch(e){toast('Could not load client','error');}
@@ -499,6 +624,83 @@ const Clients = {
     if(!confirm('Delete this client? This cannot be undone.'))return;
     await db.customers.delete(id);
     Modal.close(); this.render(); toast('Client deleted');
+  },
+};
+
+// ── Automations ───────────────────────────────────────────────────────────────
+const Automations = {
+  render() {
+    const el = document.getElementById('page-automations'); if(!el) return;
+
+    const automations = [
+      {
+        id: 'reminder-24h',
+        icon: '⏰',
+        title: '24-Hour Booking Reminder',
+        desc: 'Automatically texts clients the day before their appointment. Reduces no-shows.',
+        status: 'active',
+        badge: 'Active',
+        badgeColor: 'var(--green)',
+      },
+      {
+        id: 'rebook-21d',
+        icon: '🔁',
+        title: '21-Day Rebook Nudge',
+        desc: 'Texts clients who haven\'t booked again after 21 days to bring them back in.',
+        status: 'active',
+        badge: 'Active',
+        badgeColor: 'var(--green)',
+      },
+    ];
+
+    let html = [];
+    html.push('<div style="padding:4px 0 16px;"><div style="font-size:13px;color:var(--muted);">Your active automations run automatically in the background — no extra setup needed.</div></div>');
+
+    html.push('<div class="section-header">Active Automations</div>');
+    html.push('<div class="list-card">');
+    automations.forEach(a => {
+      html.push(`
+        <div class="list-row" style="align-items:flex-start;gap:14px;padding:16px;">
+          <div style="font-size:28px;line-height:1;flex-shrink:0;">${a.icon}</div>
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <div style="font-size:14px;font-weight:700;color:var(--text);">${a.title}</div>
+              <span style="font-size:10px;font-weight:700;color:#fff;background:${a.badgeColor};border-radius:20px;padding:2px 8px;">${a.badge}</span>
+            </div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.5;">${a.desc}</div>
+            <div style="font-size:11px;color:var(--faint);margin-top:6px;">Requires Twilio SMS to be configured in Settings</div>
+          </div>
+        </div>`);
+    });
+    html.push('</div>');
+
+    html.push('<div class="section-header" style="margin-top:24px;">Add Automation</div>');
+    html.push(`
+      <div class="card" style="text-align:center;padding:28px 20px;cursor:pointer;" onclick="Automations.showUpgrade()">
+        <div style="font-size:36px;margin-bottom:10px;">+</div>
+        <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:6px;">Add More Automations</div>
+        <div style="font-size:12px;color:var(--muted);">Upgrade your plan to unlock custom automations, win-back campaigns, birthday messages, and more.</div>
+        <div style="margin-top:16px;"><span style="background:var(--green);color:#fff;font-size:13px;font-weight:700;padding:8px 20px;border-radius:8px;">Upgrade Plan →</span></div>
+      </div>`);
+
+    el.innerHTML = html.join('');
+  },
+
+  showUpgrade() {
+    Modal.show(`
+      <div class="modal-title">⚡ Unlock More Automations</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.6;">Your current plan includes the 24-hour reminder and 21-day rebook nudge. Upgrade to Pro or Shop to unlock:</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px;">
+        <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="font-size:18px;">🎂</span> Birthday messages</div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="font-size:18px;">💤</span> Win-back campaigns for inactive clients</div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="font-size:18px;">⭐</span> Post-visit review requests</div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="font-size:18px;">🎉</span> Loyalty milestone alerts</div>
+        <div style="display:flex;align-items:center;gap:10px;font-size:13px;"><span style="font-size:18px;">✏️</span> Custom message builder</div>
+      </div>
+      <div class="modal-actions">
+        <a href="mailto:support@shopflow.io?subject=Upgrade Plan" class="btn btn-primary btn-full" style="text-decoration:none;text-align:center;">Contact Us to Upgrade</a>
+        <button class="btn btn-full" onclick="Modal.close()">Maybe Later</button>
+      </div>`);
   },
 };
 

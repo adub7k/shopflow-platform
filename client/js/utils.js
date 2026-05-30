@@ -7,7 +7,7 @@ const fmtDateFull = (d) => { if(!d)return '—'; const dt=new Date(d+'T12:00:00'
 const initials = (name) => (name||'?').split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
 const avatarColor = (name) => { const colors=['#16a34a','#2563eb','#d97706','#7c3aed','#dc2626','#0891b2']; let h=0; for(const c of (name||'?'))h=c.charCodeAt(0)+((h<<5)-h); return colors[Math.abs(h)%colors.length]; };
 const avatarEl = (name, size=36) => `<div class="avatar" style="width:${size}px;height:${size}px;background:${avatarColor(name)};">${initials(name)}</div>`;
-const statusBadge = (s) => { const m={confirmed:'badge-green',done:'badge-blue','in-progress':'badge-yellow',cancelled:'badge-red','no-show':'badge-red',pending:'badge-gray'}; return `<span class="badge ${m[s]||'badge-gray'}">${s}</span>`; };
+const statusBadge = (s) => { const m={confirmed:'badge-green',done:'badge-blue','in-progress':'badge-yellow',cancelled:'badge-red','no-show':'badge-red',pending:'badge-gray','pending-deposit':'badge-yellow'}; const labels={'pending-deposit':'deposit pending','no-show':'no show','in-progress':'in progress'}; return `<span class="badge ${m[s]||'badge-gray'}">${labels[s]||s}</span>`; };
 const disableBtn = (btn) => { if(btn){btn.disabled=true;btn._txt=btn.innerHTML;btn.innerHTML='<span style="opacity:.5">Saving...</span>';} };
 const enableBtn  = (btn) => { if(btn){btn.disabled=false;btn.innerHTML=btn._txt||btn.innerHTML;} };
 
@@ -38,10 +38,10 @@ function makeAutocomplete(inputId, listId, onSelect) {
       try{
         const results=await db.customers.search(q);
         if(!results.length){list.classList.remove('open');return;}
-        list.innerHTML=results.slice(0,6).map(c=>`<div class="autocomplete-item" data-id="${c.id}" data-name="${c.name}">${c.name}<span style="font-size:11px;color:var(--faint);margin-left:6px;">${c.phone||''}</span></div>`).join('');
+        list.innerHTML=results.slice(0,6).map(c=>`<div class="autocomplete-item" data-id="${c.id}" data-name="${c.name}" data-phone="${c.phone||''}">${c.name}<span style="font-size:11px;color:var(--faint);margin-left:6px;">${c.phone||''}</span></div>`).join('');
         list.classList.add('open');
         list.querySelectorAll('.autocomplete-item').forEach(item=>{
-          item.addEventListener('click',()=>{ onSelect(item.dataset.id,item.dataset.name); list.classList.remove('open'); });
+          item.addEventListener('click',()=>{ onSelect(item.dataset.id,item.dataset.name,item.dataset.phone||''); list.classList.remove('open'); });
         });
       }catch(e){}
     },300);

@@ -7,7 +7,7 @@ const App = {
     document.querySelectorAll('.nav-item,.bottom-nav-item').forEach(b=>b.classList.remove('active'));
     const el=document.getElementById('page-'+page); if(el)el.classList.add('active');
     document.querySelectorAll('[data-page="'+page+'"]').forEach(b=>b.classList.add('active'));
-    const titles={dashboard:'Dashboard',appointments:'Appointments',clients:'Clients',revenue:'Revenue',settings:'Settings'};
+    const titles={dashboard:'Dashboard',appointments:'Appointments',clients:'Clients',revenue:'Revenue',automations:'Automations',settings:'Settings'};
     const tt=document.getElementById('topbar-title'); if(tt&&titles[page])tt.textContent=titles[page];
     this._render(page);
   },
@@ -16,6 +16,7 @@ const App = {
     if(page==='appointments')Appointments.render();
     if(page==='clients')     Clients.render();
     if(page==='revenue')     Revenue.render();
+    if(page==='automations') Automations.render();
     if(page==='settings')    Settings.render();
   },
   refresh() { this._render(this._page); }

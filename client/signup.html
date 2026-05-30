@@ -26,13 +26,6 @@ h1{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margi
 .error{background:#fff5f5;border:1px solid #ffd7d5;border-radius:8px;padding:10px 12px;font-size:13px;color:var(--red);margin-bottom:12px;display:none;}
 .login-link{text-align:center;margin-top:20px;font-size:14px;color:var(--muted);}
 .login-link a{color:var(--black);font-weight:600;text-decoration:none;}
-.plan-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px;}
-.plan-card{border:1.5px solid var(--border);border-radius:10px;padding:12px 10px;text-align:center;cursor:pointer;transition:all .15s;}
-.plan-card:hover{border-color:var(--black);}
-.plan-card.selected{border-color:var(--black);background:var(--black);}
-.plan-card.selected .plan-name,.plan-card.selected .plan-price{color:var(--white);}
-.plan-name{font-size:13px;font-weight:700;color:var(--black);margin-bottom:4px;}
-.plan-price{font-size:12px;color:var(--muted);}
 .terms{font-size:12px;color:var(--faint);text-align:center;margin-top:12px;line-height:1.5;}
 .terms a{color:var(--muted);}
 </style>
@@ -66,24 +59,7 @@ h1{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margi
     <input id="phone" type="tel" placeholder="(505) 555-0100" />
   </div>
 
-  <div class="field">
-    <label>Choose your plan</label>
-    <div class="plan-cards">
-      <div class="plan-card selected" id="plan-starter" onclick="selectPlan('starter')">
-        <div class="plan-name">Starter</div>
-        <div class="plan-price">$19.99/mo</div>
-      </div>
-      <div class="plan-card" id="plan-pro" onclick="selectPlan('pro')">
-        <div class="plan-name">Pro</div>
-        <div class="plan-price">$99/mo</div>
-      </div>
-      <div class="plan-card" id="plan-shop" onclick="selectPlan('shop')">
-        <div class="plan-name">Shop</div>
-        <div class="plan-price">$200/mo</div>
-      </div>
-    </div>
-    <input type="hidden" id="plan" value="starter" />
-  </div>
+  <input type="hidden" id="plan" value="starter" />
 
   <button class="btn" id="signup-btn" onclick="signup()">Create my ShopFlow →</button>
   <div class="terms">By signing up you agree to our <a href="/terms.html">Terms of Service</a> and <a href="/privacy.html">Privacy Policy</a></div>
@@ -91,16 +67,6 @@ h1{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margi
 </div>
 
 <script>
-let selectedPlan = 'starter';
-
-function selectPlan(plan) {
-  selectedPlan = plan;
-  document.getElementById('plan').value = plan;
-  ['starter','pro','shop'].forEach(p => {
-    document.getElementById('plan-'+p).classList.toggle('selected', p===plan);
-  });
-}
-
 async function updateSlug() {
   const name = document.getElementById('shopName').value;
   if (name.length < 2) { document.getElementById('slug-preview').textContent = ''; return; }
@@ -108,7 +74,7 @@ async function updateSlug() {
     const res = await fetch('/api/accounts/check-slug?name='+encodeURIComponent(name));
     const data = await res.json();
     const el = document.getElementById('slug-preview');
-    el.textContent = data.available ? '✓ Your booking link: shopflow.io/book/'+data.slug : '⚠ That name is taken — try adding your city';
+    el.textContent = data.available ? '✓ Your booking link: '+location.host+'/book/'+data.slug : '⚠ That name is taken — try adding your city';
     el.style.color = data.available ? '#16a34a' : '#ff3b30';
   } catch(e) {}
 }
