@@ -1,4 +1,103 @@
 
+// ── Onboarding checklist ──────────────────────────────────────────────────────
+function renderOnboarding(settings, barbers) {
+  if (localStorage.getItem('sf_onboarding_dismissed') === 'true') return '';
+
+  const steps = [
+    {
+      key: 'shopName',
+      icon: '🏪',
+      label: 'Name your shop',
+      desc: 'Set your shop name, tagline, and address',
+      done: !!(settings.shopName && settings.shopName !== 'My Shop' && settings.phone),
+      action: `App.nav('settings')`,
+    },
+    {
+      key: 'addBarber',
+      icon: '✂️',
+      label: 'Add your barbers',
+      desc: 'Replace the default barber with your real team',
+      done: barbers.some(b => b.name && b.name !== 'Barber 1'),
+      action: `App.nav('settings')`,
+    },
+    {
+      key: 'stripe',
+      icon: '💳',
+      label: 'Connect Stripe for payments',
+      desc: 'Accept card payments and deposits from clients',
+      done: !!(settings.stripe?.onboardingComplete),
+      action: `App.nav('settings')`,
+    },
+    {
+      key: 'review',
+      icon: '⭐',
+      label: 'Add your Google review link',
+      desc: 'Sent to clients 48 hours after each visit automatically',
+      done: !!(settings.googleReviewLink),
+      action: `App.nav('settings')`,
+    },
+    {
+      key: 'bookingLink',
+      icon: '📲',
+      label: 'Share your booking link',
+      desc: 'Your public booking page is live — copy the link and share it',
+      done: false,
+      action: `App.nav('settings')`,
+      alwaysShow: true,
+    },
+  ];
+
+  const doneCount = steps.filter(s => s.done && !s.alwaysShow).length;
+  const totalTracked = steps.filter(s => !s.alwaysShow).length;
+  const allDone = doneCount === totalTracked;
+  const pct = Math.round((doneCount / totalTracked) * 100);
+
+  if (allDone && localStorage.getItem('sf_onboarding_all_done')) return '';
+
+  const stepsHtml = steps.map(s => {
+    const isDone = s.done;
+    return `<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:0.5px solid var(--border);">
+      <div style="width:28px;height:28px;border-radius:50%;background:${isDone?'var(--green)':'var(--off)'};border:${isDone?'2px solid var(--green)':'2px solid var(--border)'};display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:${isDone?'14':'13'}px;">
+        ${isDone?'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>':s.icon}
+      </div>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:${isDone?'500':'600'};color:${isDone?'var(--muted)':'var(--text)'};${isDone?'text-decoration:line-through;':''}">${s.label}</div>
+        ${!isDone?`<div style="font-size:11px;color:var(--faint);margin-top:1px;">${s.desc}</div>`:''}
+      </div>
+      ${!isDone && s.action?`<button onclick="${s.action}" style="background:var(--off);border:1px solid var(--border);border-radius:7px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--text);cursor:pointer;white-space:nowrap;flex-shrink:0;">Set up →</button>`:''}
+    </div>`;
+  }).join('');
+
+  if (allDone) {
+    localStorage.setItem('sf_onboarding_all_done', 'true');
+    return `<div style="background:var(--green-lt);border:1px solid var(--green-md);border-radius:12px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:12px;">
+      <div style="font-size:22px;">🎉</div>
+      <div style="flex:1;">
+        <div style="font-size:14px;font-weight:700;color:var(--green);">Your shop is fully set up!</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px;">Everything is configured and running. Time to start booking.</div>
+      </div>
+      <button onclick="localStorage.setItem('sf_onboarding_dismissed','true');this.closest('[data-onboarding]').remove()" style="background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:4px;">✕</button>
+    </div>`;
+  }
+
+  return `<div data-onboarding style="background:var(--white);border:1px solid var(--border);border-radius:12px;margin-bottom:20px;overflow:hidden;">
+    <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-size:14px;font-weight:700;color:var(--text);">Complete your setup</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:1px;">${doneCount} of ${totalTracked} done</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <div style="width:100px;height:5px;background:var(--off);border-radius:100px;overflow:hidden;">
+          <div style="height:100%;width:${pct}%;background:var(--green);border-radius:100px;transition:width .4s;"></div>
+        </div>
+        <span style="font-size:12px;font-weight:700;color:var(--green);">${pct}%</span>
+        <button onclick="localStorage.setItem('sf_onboarding_dismissed','true');document.querySelector('[data-onboarding]').remove()" style="background:transparent;border:none;color:var(--faint);font-size:18px;cursor:pointer;padding:2px 4px;" title="Dismiss">✕</button>
+      </div>
+    </div>
+    <div style="padding:0 18px;">${stepsHtml}</div>
+  </div>`;
+}
+
 // ── Dashboard ─────────────────────────────────────────────────────────────────
 const Dashboard = {
   async render() {
@@ -13,6 +112,9 @@ const Dashboard = {
       try{settings=await db.settings.get();}catch(e){console.warn('Settings:',e.message);}
       try{barbers=await db.barbers.all();}catch(e){console.warn('Barbers:',e.message);}
       const html = [];
+
+      // Onboarding checklist
+      html.push(renderOnboarding(settings, barbers));
 
       // Greeting
       const hr = new Date().getHours();
