@@ -575,20 +575,123 @@ app.post('/api/shop/deposit/confirm', requireAuth, shopRoute(async (req, res, db
   h.upsert('appointments',a); res.json({ ok: true });
 }));
 
-// ── ADMIN: ShopFlow dashboard ─────────────────────────────────────────────────
-app.get('/api/admin/stats', (req, res) => {
+// ── ADMIN: auth middleware ────────────────────────────────────────────────────
+function requireAdmin(req, res, next) {
   const adminKey = req.headers['x-admin-key'];
   if (adminKey !== (process.env.ADMIN_KEY || 'shopflow-admin')) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
+
+// ── ADMIN: overview stats ─────────────────────────────────────────────────────
+app.get('/api/admin/stats', requireAdmin, (req, res) => {
   const shops = master.get('shops').value() || [];
-  const accounts = master.get('accounts').value() || [];
+  const planPrices = { starter: 19.99, pro: 99, shop: 200 };
   const planCounts = {};
-  shops.forEach(s => { planCounts[s.plan]=(planCounts[s.plan]||0)+1; });
+  shops.forEach(s => { planCounts[s.plan] = (planCounts[s.plan] || 0) + 1; });
+  const mrr = Object.entries(planCounts).reduce((sum, [plan, count]) => sum + (planPrices[plan] || 0) * count, 0);
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
   res.json({
     totalShops: shops.length,
-    activeShops: shops.filter(s=>s.active).length,
+    activeShops: shops.filter(s => s.active).length,
+    activeToday: shops.filter(s => s.lastActivity && s.lastActivity > oneDayAgo).length,
+    activeWeek: shops.filter(s => s.lastActivity && s.lastActivity > oneWeekAgo).length,
+    mrr,
+    arr: mrr * 12,
     planBreakdown: planCounts,
-    recentShops: shops.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)).slice(0,10).map(s=>({shopName:s.shopName,plan:s.plan,createdAt:s.createdAt,lastActivity:s.lastActivity})),
+    recentShops: [...shops].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 5).map(s => ({
+      id: s.id, shopName: s.shopName, plan: s.plan, email: s.email, createdAt: s.createdAt, active: s.active,
+    })),
   });
+});
+
+// ── ADMIN: all shops with per-shop stats ──────────────────────────────────────
+app.get('/api/admin/shops', requireAdmin, (req, res) => {
+  const shops = master.get('shops').value() || [];
+  const result = shops.map(s => {
+    let customers = 0, appointments = 0, barbers = 0, services = 0, stripeConnected = false, twilioConfigured = false, bookingEnabled = true;
+    try {
+      const db = getShopDb(s.id);
+      customers    = (db.get('customers').value()    || []).length;
+      appointments = (db.get('appointments').value() || []).length;
+      barbers      = (db.get('barbers').value()      || []).filter(b => b.active !== false).length;
+      services     = (db.get('services').value()     || []).length;
+      const settings = db.get('settings').value() || {};
+      stripeConnected  = !!(settings.stripe?.connectAccountId && settings.stripe?.onboardingComplete);
+      twilioConfigured = !!(settings.twilio?.accountSid && settings.twilio?.fromNumber);
+      bookingEnabled   = settings.bookingEnabled !== false;
+    } catch(e) {}
+    return { id: s.id, shopName: s.shopName, slug: s.slug, email: s.email, phone: s.phone, plan: s.plan, active: s.active, createdAt: s.createdAt, lastActivity: s.lastActivity, customers, appointments, barbers, services, stripeConnected, twilioConfigured, bookingEnabled };
+  });
+  res.json(result);
+});
+
+// ── ADMIN: single shop profile ────────────────────────────────────────────────
+app.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
+  const shop = master.get('shops').find({ id: req.params.shopId }).value();
+  if (!shop) return res.status(404).json({ error: 'Shop not found' });
+  const db = getShopDb(shop.id);
+  const settings    = db.get('settings').value()    || {};
+  const barbers     = db.get('barbers').value()      || [];
+  const services    = db.get('services').value()     || [];
+  const customers   = db.get('customers').value()    || [];
+  const appointments = db.get('appointments').value() || [];
+  const now = new Date();
+  const thisMonth = now.toISOString().slice(0, 7);
+  const apptThisMonth = appointments.filter(a => a.date && a.date.startsWith(thisMonth)).length;
+  const recentAppts = [...appointments].sort((a, b) => new Date(b.date + 'T' + (b.time || '00:00')) - new Date(a.date + 'T' + (a.time || '00:00'))).slice(0, 10);
+  res.json({
+    shop, settings: { shopName: settings.shopName, tagline: settings.tagline, phone: settings.phone, address: settings.address, bookingEnabled: settings.bookingEnabled, accentColor: settings.accentColor, googleReviewLink: settings.googleReviewLink, loyalty: settings.loyalty, deposit: settings.deposit, stripeConnected: !!(settings.stripe?.connectAccountId && settings.stripe?.onboardingComplete), twilioConfigured: !!(settings.twilio?.accountSid && settings.twilio?.fromNumber) },
+    barbers, services,
+    stats: { totalCustomers: customers.length, totalAppointments: appointments.length, apptThisMonth, activeBarbers: barbers.filter(b => b.active !== false).length },
+    recentAppointments: recentAppts,
+  });
+});
+
+// ── ADMIN: create shop ────────────────────────────────────────────────────────
+app.post('/api/admin/shops/create', requireAdmin, async (req, res) => {
+  try {
+    const { shopName, email, password, phone, plan } = req.body;
+    if (!shopName || !email || !password) return res.status(400).json({ ok: false, error: 'shopName, email, password required' });
+    const existing = master.get('accounts').find({ email: email.toLowerCase() }).value();
+    if (existing) return res.status(400).json({ ok: false, error: 'Email already exists' });
+    const shopId = uuidv4();
+    const shopSlug = slug(shopName) || genId('shop');
+    const slugExists = master.get('shops').find({ slug: shopSlug }).value();
+    const finalSlug = slugExists ? shopSlug + '-' + genId('') : shopSlug;
+    const passwordHash = await bcrypt.hash(password, 10);
+    const accountId = uuidv4();
+    master.get('accounts').push({ id: accountId, shopId, email: email.toLowerCase(), passwordHash, createdAt: new Date().toISOString(), plan: plan || 'pro', active: true }).write();
+    master.get('shops').push({ id: shopId, accountId, shopName, slug: finalSlug, email: email.toLowerCase(), phone: phone || '', plan: plan || 'pro', active: true, createdAt: new Date().toISOString(), lastActivity: new Date().toISOString() }).write();
+    const shopDb = getShopDb(shopId);
+    initShopDb(shopDb, { shopName, email, phone });
+    res.json({ ok: true, shopId, shopSlug: finalSlug, shopName, crmUrl: '/shop/' + finalSlug, bookUrl: '/book/' + finalSlug });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── ADMIN: update shop (plan, active, name) ───────────────────────────────────
+app.patch('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
+  const shop = master.get('shops').find({ id: req.params.shopId }).value();
+  if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
+  const allowed = ['plan', 'active', 'shopName', 'phone', 'email'];
+  const updates = {};
+  allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
+  master.get('shops').find({ id: req.params.shopId }).assign(updates).write();
+  master.get('accounts').find({ id: shop.accountId }).assign(updates.plan ? { plan: updates.plan } : {}).assign(updates.active !== undefined ? { active: updates.active } : {}).write();
+  res.json({ ok: true });
+});
+
+// ── ADMIN: delete shop ────────────────────────────────────────────────────────
+app.delete('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
+  const shop = master.get('shops').find({ id: req.params.shopId }).value();
+  if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
+  try {
+    const shopDir = path.join(SHOPS_DIR, req.params.shopId);
+    if (fs.existsSync(shopDir)) fs.rmSync(shopDir, { recursive: true, force: true });
+  } catch(e) { console.error('Delete shop dir error:', e.message); }
+  master.get('shops').remove({ id: req.params.shopId }).write();
+  master.get('accounts').remove({ shopId: req.params.shopId }).write();
+  res.json({ ok: true });
 });
 
 // ── Stripe helpers ────────────────────────────────────────────────────────────
