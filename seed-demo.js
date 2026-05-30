@@ -158,19 +158,23 @@ for (let day = -30; day <= -1; day++) {
     const tip       = isNoShow ? 0 : [0,0,0,5,5,10,10,10,15,20][randInt(0,9)];
 
     appointments.push({
-      id:         uid('a'),
-      customerId: customer.id,
-      barberId:   barber.id,
-      serviceId:  service.id,
-      date:       dateStr(day),
+      id:           uid('a'),
+      customerId:   customer.id,
+      customerName: customer.name,
+      customerPhone:customer.phone,
+      barberId:     barber.id,
+      barberName:   barber.name,
+      serviceId:    service.id,
+      service:      service.name,
+      date:         dateStr(day),
       time,
-      duration:   service.duration,
-      price:      service.price,
-      tip:        isNoShow ? 0 : tip,
-      status:     isNoShow ? 'noshow' : 'done',
-      cutNotes:   (!isNoShow && Math.random() < 0.7) ? randFrom(CUT_NOTES) : '',
-      bookedAt:   new Date(Date.now() + day*24*3600000 - 2*24*3600000).toISOString(),
-      source:     Math.random() < 0.3 ? 'online' : 'walk-in',
+      duration:     service.duration,
+      price:        service.price,
+      tip:          isNoShow ? 0 : tip,
+      status:       isNoShow ? 'no-show' : 'done',
+      cutNotes:     (!isNoShow && Math.random() < 0.7) ? randFrom(CUT_NOTES) : '',
+      bookedAt:     new Date(Date.now() + day*24*3600000 - 2*24*3600000).toISOString(),
+      source:       Math.random() < 0.3 ? 'online' : 'walk-in',
     });
   }
 }
@@ -193,19 +197,23 @@ for (let day = 0; day <= 7; day++) {
     const service  = randFrom(SERVICES);
 
     appointments.push({
-      id:         uid('a'),
-      customerId: customer.id,
-      barberId:   barber.id,
-      serviceId:  service.id,
-      date:       dateStr(day),
+      id:           uid('a'),
+      customerId:   customer.id,
+      customerName: customer.name,
+      customerPhone:customer.phone,
+      barberId:     barber.id,
+      barberName:   barber.name,
+      serviceId:    service.id,
+      service:      service.name,
+      date:         dateStr(day),
       time,
-      duration:   service.duration,
-      price:      service.price,
-      tip:        0,
-      status:     'upcoming',
-      cutNotes:   '',
-      bookedAt:   new Date(Date.now() - randInt(1,5)*24*3600000).toISOString(),
-      source:     Math.random() < 0.4 ? 'online' : 'walk-in',
+      duration:     service.duration,
+      price:        service.price,
+      tip:          0,
+      status:       'confirmed',
+      cutNotes:     '',
+      bookedAt:     new Date(Date.now() - randInt(1,5)*24*3600000).toISOString(),
+      source:       Math.random() < 0.4 ? 'online' : 'walk-in',
     });
   }
 }
@@ -259,8 +267,8 @@ db.set('blockedDates', []).write();
 
 // ── Summary ───────────────────────────────────────────────────────────────────
 const done     = appointments.filter(a => a.status === 'done');
-const upcoming = appointments.filter(a => a.status === 'upcoming');
-const noshow   = appointments.filter(a => a.status === 'noshow');
+const upcoming = appointments.filter(a => a.status === 'confirmed');
+const noshow   = appointments.filter(a => a.status === 'no-show');
 const revenue  = done.reduce((s,a) => s + a.price + a.tip, 0);
 
 console.log('');

@@ -503,14 +503,22 @@ app.get('/api/shop/customers/search', requireAuth, shopRoute(async (req, res, db
 }));
 app.get('/api/shop/customers/:id', requireAuth, shopRoute(async (req, res, db, h) => {
   const c = h.getById('customers', req.params.id); if (!c) return res.status(404).json({ error: 'Not found' });
-  const appts = h.getAll('appointments').filter(a => a.customerId===c.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const barbers  = h.getAll('barbers');
+  const services = h.getAll('services');
+  const rawAppts = h.getAll('appointments').filter(a => a.customerId===c.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const appts = rawAppts.map(a => {
+    const barber  = barbers.find(b => b.id === a.barberId);
+    const service = a.serviceId ? services.find(s => s.id === a.serviceId) : null;
+    return { ...a, barberName: a.barberName || barber?.name || null, service: a.service || service?.name || 'Haircut' };
+  });
   const done = appts.filter(a => a.status==='done');
   const lastVisitDate = done.length ? done.sort((a,b)=>b.date.localeCompare(a.date))[0].date : null;
   const daysSinceLast = lastVisitDate ? Math.floor((Date.now()-new Date(lastVisitDate+'T12:00:00'))/(1000*60*60*24)) : null;
   const shopSettings = db.get('settings').value()||{};
   const loyalty = shopSettings.loyalty || { visitsForReward:10 };
   const rebookInterval = shopSettings.rebookInterval || 21;
-  res.json({ customer:{...c, lastVisit:lastVisitDate}, appointments:appts, totalVisits:done.length, totalRevenue:done.reduce((s,a)=>s+Number(a.price||0),0), loyaltyPoints:c.loyaltyPoints||0, rewardReady:(c.loyaltyPoints||0)>=(loyalty.visitsForReward||10), visitsForReward:loyalty.visitsForReward||10, daysSinceLast, rebookInterval });
+  const loyaltyVisits = c.loyaltyVisits || c.loyaltyPoints || 0;
+  res.json({ customer:{...c, lastVisit:lastVisitDate}, appointments:appts, totalVisits:done.length, totalRevenue:done.reduce((s,a)=>s+Number(a.price||0),0), loyaltyPoints:loyaltyVisits, rewardReady:loyaltyVisits>=(loyalty.visitsForReward||10), visitsForReward:loyalty.visitsForReward||10, daysSinceLast, rebookInterval });
 }));
 app.post('/api/shop/customers', requireAuth, shopRoute(async (req, res, db, h) => {
   const c = req.body; if (!c.id) c.id = genId('c'); h.upsert('customers', c); res.json({ id: c.id });
@@ -525,12 +533,25 @@ app.post('/api/shop/customers/:id/redeem', requireAuth, shopRoute(async (req, re
 // ── PROTECTED: Appointments ───────────────────────────────────────────────────
 app.get('/api/shop/appointments', requireAuth, shopRoute(async (req, res, db, h) => {
   const { date, month } = req.query;
-  const barbers = h.getAll('barbers');
+  const barbers  = h.getAll('barbers');
   const customers = h.getAll('customers');
+  const services  = h.getAll('services');
   let appts = h.getAll('appointments');
-  if (date) appts = appts.filter(a => a.date===date);
+  if (date)  appts = appts.filter(a => a.date===date);
   if (month) appts = appts.filter(a => (a.date||'').startsWith(month));
-  res.json(appts.sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)).map(a=>({...a, barberColor:barbers.find(b=>b.id===a.barberId)?.color||'#ccc', customerPhone:a.customerId?customers.find(c=>c.id===a.customerId)?.phone||'':a.customerPhone||''})));
+  res.json(appts.sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time)).map(a => {
+    const barber   = barbers.find(b => b.id === a.barberId);
+    const customer = a.customerId ? customers.find(c => c.id === a.customerId) : null;
+    const service  = a.serviceId  ? services.find(s => s.id === a.serviceId)   : null;
+    return {
+      ...a,
+      customerName:  a.customerName  || customer?.name  || 'Unknown Client',
+      barberName:    a.barberName    || barber?.name     || null,
+      barberColor:   barber?.color   || '#ccc',
+      service:       a.service       || service?.name    || 'Haircut',
+      customerPhone: a.customerPhone || customer?.phone  || '',
+    };
+  }));
 }));
 app.post('/api/shop/appointments', requireAuth, shopRoute(async (req, res, db, h) => {
   const a = req.body; if (!a.id) a.id = genId('a');
@@ -548,7 +569,7 @@ app.post('/api/shop/appointments', requireAuth, shopRoute(async (req, res, db, h
 app.post('/api/shop/appointments/:id/complete', requireAuth, shopRoute(async (req, res, db, h) => {
   const a = h.getById('appointments', req.params.id); if(!a) return res.status(404).json({ error:'Not found' });
   a.status='done'; a.price=req.body.price||a.price||0; h.upsert('appointments',a);
-  if (a.customerId) { const c=h.getById('customers',a.customerId); if(c){c.loyaltyPoints=(c.loyaltyPoints||0)+1;c.lastJobDate=a.date;h.upsert('customers',c);} }
+  if (a.customerId) { const c=h.getById('customers',a.customerId); if(c){c.loyaltyVisits=(c.loyaltyVisits||c.loyaltyPoints||0)+1;c.loyaltyPoints=c.loyaltyVisits;c.lastJobDate=a.date;h.upsert('customers',c);} }
   res.json({ ok: true });
 }));
 app.post('/api/shop/appointments/:id/noshow', requireAuth, shopRoute(async (req, res, db, h) => {
@@ -567,12 +588,29 @@ app.delete('/api/shop/appointments/:id', requireAuth, shopRoute(async (req, res,
 
 // ── PROTECTED: Revenue ────────────────────────────────────────────────────────
 app.get('/api/shop/revenue', requireAuth, shopRoute(async (req, res, db, h) => {
-  const done = h.getAll('appointments').filter(a=>a.status==='done');
+  const barbers   = h.getAll('barbers');
+  const customers = h.getAll('customers');
+  const services  = h.getAll('services');
+
+  // Resolve denormalized fields for any appointment
+  function resolveAppt(a) {
+    const barber   = barbers.find(b => b.id === a.barberId);
+    const customer = a.customerId ? customers.find(c => c.id === a.customerId) : null;
+    const service  = a.serviceId  ? services.find(s => s.id === a.serviceId)   : null;
+    return {
+      ...a,
+      customerName: a.customerName || customer?.name || 'Unknown Client',
+      barberName:   a.barberName   || barber?.name   || 'Unknown',
+      barberColor:  barber?.color  || '#ccc',
+      service:      a.service      || service?.name  || 'Haircut',
+    };
+  }
+
+  const done = h.getAll('appointments').filter(a=>a.status==='done').map(resolveAppt);
   const ms = today().slice(0,7)+'-01';
   const thisMonth = done.filter(a=>a.date>=ms);
-  const barbers = h.getAll('barbers');
   const byBarber = {};
-  done.forEach(a=>{if(!byBarber[a.barberId])byBarber[a.barberId]={name:a.barberName||'Unknown',color:barbers.find(b=>b.id===a.barberId)?.color||'#ccc',revenue:0,count:0};byBarber[a.barberId].revenue+=Number(a.price||0);byBarber[a.barberId].count++;});
+  done.forEach(a=>{if(!byBarber[a.barberId])byBarber[a.barberId]={name:a.barberName,color:a.barberColor,revenue:0,count:0};byBarber[a.barberId].revenue+=Number(a.price||0);byBarber[a.barberId].count++;});
   const byMonth = {};
   done.forEach(a=>{const m=(a.date||'').slice(0,7);if(!byMonth[m])byMonth[m]=0;byMonth[m]+=Number(a.price||0);});
   const loyalty = (db.get('settings').value()||{}).loyalty||{enabled:true,visitsForReward:10};
@@ -583,8 +621,8 @@ app.get('/api/shop/revenue', requireAuth, shopRoute(async (req, res, db, h) => {
     avgTicket: thisMonth.length?Math.round(thisMonth.reduce((s,a)=>s+Number(a.price||0),0)/thisMonth.length):0,
     byBarber: Object.values(byBarber).sort((a,b)=>b.revenue-a.revenue),
     byMonth: Object.entries(byMonth).sort((a,b)=>a[0].localeCompare(b[0])).map(([month,revenue])=>({month,revenue})),
-    recentDone: done.sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,5),
-    loyaltyAlerts: loyalty.enabled?h.getAll('customers').filter(c=>(c.loyaltyPoints||0)>=(loyalty.visitsForReward||10)):[],
+    recentDone: [...done].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,5),
+    loyaltyAlerts: loyalty.enabled?h.getAll('customers').filter(c=>(c.loyaltyVisits||c.loyaltyPoints||0)>=(loyalty.visitsForReward||10)):[],
   });
 }));
 
@@ -862,7 +900,7 @@ app.post('/api/admin/seed-demo', requireAdmin, async (req, res) => {
         const svc  = SERVICES[randInt(0,SERVICES.length-1)];
         const noshow = isPast && Math.random()<0.05;
         const tip = noshow ? 0 : [0,0,0,5,5,10,10,10,15,20][randInt(0,9)];
-        appointments.push({ id:'a'+Math.random().toString(36).slice(2,10), customerId:cust.id, barberId:barb.id, serviceId:svc.id, date: daysAgo(-day), time, duration:svc.duration, price:svc.price, tip, status: isPast?(noshow?'noshow':'done'):'upcoming', cutNotes: (!noshow&&isPast&&Math.random()<0.7)?CUT_NOTES[randInt(0,CUT_NOTES.length-1)]:'', bookedAt: new Date(Date.now()+day*864e5-2*864e5).toISOString(), source: Math.random()<0.3?'online':'walk-in' });
+        appointments.push({ id:'a'+Math.random().toString(36).slice(2,10), customerId:cust.id, customerName:cust.name, customerPhone:cust.phone, barberId:barb.id, barberName:barb.name, serviceId:svc.id, service:svc.name, date: daysAgo(-day), time, duration:svc.duration, price:svc.price, tip, status: isPast?(noshow?'no-show':'done'):'confirmed', cutNotes: (!noshow&&isPast&&Math.random()<0.7)?CUT_NOTES[randInt(0,CUT_NOTES.length-1)]:'', bookedAt: new Date(Date.now()+day*864e5-2*864e5).toISOString(), source: Math.random()<0.3?'online':'walk-in' });
       }
     }
     appointments.sort((a,b)=>a.date!==b.date?a.date.localeCompare(b.date):a.time.localeCompare(b.time));
