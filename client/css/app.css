@@ -100,5 +100,15 @@ textarea.form-input{resize:vertical;min-height:80px;}
 .bottom-nav-item{display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0;flex:1;cursor:pointer;color:var(--faint);font-size:10px;font-weight:500;transition:color .15s;border:none;background:none;font-family:var(--font);}
 .bottom-nav-item.active{color:var(--green);}
 .bottom-nav-icon{font-size:20px;line-height:1;}
-@media(max-width:640px){#sidebar{display:none;}#bottom-nav{display:flex;}#main{padding-bottom:70px;}.form-row{grid-template-columns:1fr;}}
-@media(min-width:641px){#topbar-menu-btn{display:none;}}
+/* ── Mobile sidebar drawer ── */
+#sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:90;backdrop-filter:blur(1px);}
+body.sidebar-open #sidebar-backdrop{display:block;}
+@media(max-width:640px){
+  #sidebar{position:fixed;top:0;left:-220px;bottom:0;width:210px;z-index:100;box-shadow:4px 0 24px rgba(0,0,0,.12);transition:left .25s cubic-bezier(.4,0,.2,1);}
+  body.sidebar-open #sidebar{left:0;}
+  #sidebar-close-btn{display:flex!important;}
+  #bottom-nav{display:flex;}
+  #main{padding-bottom:70px;}
+  .form-row{grid-template-columns:1fr;}
+}
+@media(min-width:641px){#topbar-menu-btn{display:none;}#sidebar-backdrop{display:none!important;}}

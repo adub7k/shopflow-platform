@@ -1,3 +1,7 @@
+// ── Sidebar ───────────────────────────────────────────────────────────────────
+function toggleSidebar(){document.body.classList.toggle('sidebar-open');}
+function closeSidebar(){document.body.classList.remove('sidebar-open');}
+
 // ── ShopFlow Starter App ──────────────────────────────────────────────────────
 const App = {
   _page: 'dashboard',
@@ -28,6 +32,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load settings
     const s = await db.settings.get();
     const tt=document.getElementById('topbar-title'); if(tt)tt.textContent=s.shopName||'ShopFlow';
+    const sn=document.getElementById('sidebar-shop-name'); if(sn&&s.shopName)sn.textContent=s.shopName;
     const ts=document.getElementById('topbar-sub');   if(ts&&s.tagline)ts.textContent=s.tagline;
 
     // Boot dashboard
