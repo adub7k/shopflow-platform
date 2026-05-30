@@ -232,6 +232,9 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div class="sb-item" data-page="billing" onclick="nav('billing')">
       <span class="sb-item-icon">💰</span>Billing
     </div>
+    <div class="sb-item" data-page="settings" onclick="nav('settings')">
+      <span class="sb-item-icon">⚙️</span>Settings
+    </div>
 
     <div class="sb-footer">
       <div class="sb-footer-text">ShopFlow Platform</div>
@@ -387,6 +390,43 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       </div>
     </div>
 
+    <!-- Settings page -->
+    <div id="page-settings" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Platform Settings</div>
+          <div class="page-sub">Controls that apply across the entire ShopFlow platform.</div>
+        </div>
+      </div>
+
+      <div class="card" style="max-width:560px;">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Signup &amp; Access</div>
+            <div class="card-sub">Control who can create new shop accounts.</div>
+          </div>
+        </div>
+        <div style="padding:20px;display:flex;flex-direction:column;gap:0;">
+
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 0;border-bottom:1px solid var(--border);">
+            <div>
+              <div style="font-size:14px;font-weight:600;color:var(--text);">Require payment to sign up</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:3px;">When on, new accounts must complete Stripe checkout before signing up. Turn off to allow free signups (for testing or manual onboarding).</div>
+            </div>
+            <label class="toggle" style="margin-left:24px;flex-shrink:0;">
+              <input type="checkbox" id="toggle-require-payment" onchange="saveRequirePayment(this.checked)"/>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div style="padding:16px 0;">
+            <div id="payment-gate-status" style="font-size:12px;color:var(--muted);"></div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
   </div><!-- /main -->
 </div><!-- /app -->
 
@@ -485,6 +525,7 @@ function nav(page) {
   document.querySelector(`.sb-item[data-page="${page}"]`).classList.add('active');
   if (page === 'shops' && !allShops.length) loadShops();
   if (page === 'billing') renderBilling();
+  if (page === 'settings') loadPlatformSettings();
 }
 
 // ── Init ─────────────────────────────────────────────────────────────────────
@@ -854,6 +895,37 @@ async function createShop() {
     setTimeout(() => openDrawer(data.shopId), 400);
   } catch(e) { errEl.textContent = 'Error: ' + e.message; errEl.style.display = 'block'; }
   finally { btn.textContent = 'Create Shop'; btn.disabled = false; }
+}
+
+// ── Platform Settings ─────────────────────────────────────────────────────────
+async function loadPlatformSettings() {
+  try {
+    const res = await fetch('/api/admin/platform-settings', { headers: { 'x-admin-key': adminKey } });
+    const d = await res.json();
+    const toggle = document.getElementById('toggle-require-payment');
+    if (toggle) toggle.checked = d.requirePayment !== false;
+    updatePaymentGateStatus(d.requirePayment !== false);
+  } catch(e) {}
+}
+
+async function saveRequirePayment(value) {
+  try {
+    await fetch('/api/admin/platform-settings', {
+      method: 'PATCH',
+      headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ requirePayment: value }),
+    });
+    updatePaymentGateStatus(value);
+    toast(value ? 'Payment gate enabled ✓' : 'Payment gate disabled — free signups allowed');
+  } catch(e) { toast('Save failed'); }
+}
+
+function updatePaymentGateStatus(on) {
+  const el = document.getElementById('payment-gate-status');
+  if (!el) return;
+  el.innerHTML = on
+    ? '🔒 <strong style="color:var(--green);">Payment gate is ON</strong> — new signups must complete Stripe checkout.'
+    : '🔓 <strong style="color:var(--yellow);">Payment gate is OFF</strong> — anyone can create an account without paying.';
 }
 
 // ── Billing ───────────────────────────────────────────────────────────────────

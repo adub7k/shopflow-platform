@@ -57,6 +57,9 @@ master.defaults({
   shops: [],
   accounts: [],
   usedSessions: [],   // consumed Stripe session IDs — prevents reuse
+  platformSettings: {
+    requirePayment: true,   // toggle in admin → Settings
+  },
 }).write();
 
 console.log('ShopFlow Platform running on port', PORT);
@@ -171,26 +174,30 @@ app.post('/api/accounts/signup', async (req, res) => {
     if (!shopName || !email || !password) return res.status(400).json({ ok: false, error: 'Shop name, email, and password are required' });
     if (password.length < 6) return res.status(400).json({ ok: false, error: 'Password must be at least 6 characters' });
 
-    // ── Payment gate ───────────────────────────────────────────────────────────
-    if (!sessionId) {
-      return res.status(403).json({ ok: false, error: 'A paid subscription is required to create an account. Please visit our pricing page.' });
-    }
-    // Check session hasn't already been used to create an account
-    const alreadyUsed = master.get('usedSessions').find({ sessionId }).value();
-    if (alreadyUsed) {
-      return res.status(403).json({ ok: false, error: 'This payment session has already been used. Please contact support if you need help.' });
-    }
-    // Verify with Stripe that the session is actually paid
-    if (stripe) {
-      try {
-        const session = await stripe.checkout.sessions.retrieve(sessionId);
-        const paid = session.payment_status === 'paid' || session.status === 'complete';
-        if (!paid) {
-          return res.status(403).json({ ok: false, error: 'Payment not confirmed. Please complete checkout before creating your account.' });
+    // ── Payment gate (toggled from admin → Settings) ───────────────────────────
+    const platformSettings = master.get('platformSettings').value() || {};
+    const requirePayment = platformSettings.requirePayment !== false; // default on
+    if (requirePayment) {
+      if (!sessionId) {
+        return res.status(403).json({ ok: false, error: 'A paid subscription is required to create an account. Please visit our pricing page.' });
+      }
+      // Check session hasn't already been used to create an account
+      const alreadyUsed = master.get('usedSessions').find({ sessionId }).value();
+      if (alreadyUsed) {
+        return res.status(403).json({ ok: false, error: 'This payment session has already been used. Please contact support if you need help.' });
+      }
+      // Verify with Stripe that the session is actually paid
+      if (stripe) {
+        try {
+          const session = await stripe.checkout.sessions.retrieve(sessionId);
+          const paid = session.payment_status === 'paid' || session.status === 'complete';
+          if (!paid) {
+            return res.status(403).json({ ok: false, error: 'Payment not confirmed. Please complete checkout before creating your account.' });
+          }
+        } catch (stripeErr) {
+          console.error('Stripe session verify error:', stripeErr.message);
+          return res.status(403).json({ ok: false, error: 'Could not verify payment. Please contact support.' });
         }
-      } catch (stripeErr) {
-        console.error('Stripe session verify error:', stripeErr.message);
-        return res.status(403).json({ ok: false, error: 'Could not verify payment. Please contact support.' });
       }
     }
 
@@ -751,6 +758,21 @@ app.patch('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
   master.get('shops').find({ id: req.params.shopId }).assign(updates).write();
   master.get('accounts').find({ id: shop.accountId }).assign(updates.plan ? { plan: updates.plan } : {}).assign(updates.active !== undefined ? { active: updates.active } : {}).write();
+  res.json({ ok: true });
+});
+
+// ── ADMIN: platform settings (get) ───────────────────────────────────────────
+app.get('/api/admin/platform-settings', requireAdmin, (req, res) => {
+  const ps = master.get('platformSettings').value() || {};
+  res.json({ requirePayment: ps.requirePayment !== false });
+});
+
+// ── ADMIN: platform settings (update) ────────────────────────────────────────
+app.patch('/api/admin/platform-settings', requireAdmin, (req, res) => {
+  const allowed = ['requirePayment'];
+  const updates = {};
+  allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
+  master.get('platformSettings').assign(updates).write();
   res.json({ ok: true });
 });
 
