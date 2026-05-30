@@ -8,17 +8,17 @@
       "phone": "(505) 555-0192",
       "plan": "pro",
       "active": true,
-      "createdAt": "2026-03-31T16:00:37.818Z"
+      "createdAt": "2026-03-31T16:17:41.417Z"
     }
   ],
   "accounts": [
     {
-      "id": "72c2f891-7b03-495f-846c-1117fff3a93d",
+      "id": "37e7e53a-6448-4346-87e8-cfba78be707d",
       "shopId": "63c73352-6448-45d3-b90d-9f746ea5cec0",
       "email": "demo@shopflow.com",
-      "passwordHash": "$2a$10$hYGRjXMGzFbpW1EsGJSNU.QHRIat.rXgLY67hVDjYiJGxTy846D5i",
+      "passwordHash": "$2a$10$GBH58S/LWw6s2kt0B7Cb3ukt3qPYUL4958S5QklOK51H4PM23Mf0y",
       "plan": "pro",
-      "createdAt": "2026-03-31T16:00:37.819Z"
+      "createdAt": "2026-03-31T16:17:41.418Z"
     }
   ],
   "usedSessions": []
