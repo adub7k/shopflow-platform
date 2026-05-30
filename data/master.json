@@ -1,0 +1,25 @@
+{
+  "shops": [
+    {
+      "id": "63c73352-6448-45d3-b90d-9f746ea5cec0",
+      "shopName": "King's Cuts",
+      "slug": "kings-cuts",
+      "email": "demo@shopflow.com",
+      "phone": "(505) 555-0192",
+      "plan": "pro",
+      "active": true,
+      "createdAt": "2026-03-31T16:00:37.818Z"
+    }
+  ],
+  "accounts": [
+    {
+      "id": "72c2f891-7b03-495f-846c-1117fff3a93d",
+      "shopId": "63c73352-6448-45d3-b90d-9f746ea5cec0",
+      "email": "demo@shopflow.com",
+      "passwordHash": "$2a$10$hYGRjXMGzFbpW1EsGJSNU.QHRIat.rXgLY67hVDjYiJGxTy846D5i",
+      "plan": "pro",
+      "createdAt": "2026-03-31T16:00:37.819Z"
+    }
+  ],
+  "usedSessions": []
+}
