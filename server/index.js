@@ -972,11 +972,12 @@ async function runScheduler() {
         // ── 21-day rebook nudges ──
         const nudgeSentIds = s.nudgesSent||[];
         const cutoffDate = new Date(Date.now()-21*24*3600000).toISOString().split('T')[0];
-        const recentCutoff = new Date(Date.now()-22*24*3600000).toISOString().split('T')[0];
+        // Find each customer's most recent completed appointment
         const allAppts = db.get('appointments').value().filter(a=>a.status==='done');
         const lastVisit = {};
         allAppts.forEach(a=>{ if(!lastVisit[a.customerId]||a.date>lastVisit[a.customerId].date) lastVisit[a.customerId]={date:a.date,name:a.customerName,phone:a.customerPhone}; });
-        const toNudge = Object.values(lastVisit).filter(v=>v.date<=cutoffDate&&v.date>recentCutoff&&v.phone);
+        // Anyone whose last visit was 21+ days ago and hasn't been nudged yet
+        const toNudge = Object.values(lastVisit).filter(v=>v.date<=cutoffDate&&v.phone);
         for (const v of toNudge) {
           const nudgeKey = v.phone+':'+v.date;
           if (nudgeSentIds.includes(nudgeKey)) continue;
@@ -986,7 +987,7 @@ async function runScheduler() {
           const msg = buildSms('rebook', { name:firstName, shop:s.shopName }, s);
           try { await twilioClient.messages.create({from:fromNum,to:'+1'+phone,body:msg}); nudgeSentIds.push(nudgeKey); } catch(e){}
         }
-        if (toNudge.length) db.get('settings').assign({ nudgesSent:nudgeSentIds.slice(-1000) }).write();
+        db.get('settings').assign({ nudgesSent:nudgeSentIds.slice(-1000) }).write();
 
       } catch(e) {}
     }
