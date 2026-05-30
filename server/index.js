@@ -591,7 +591,7 @@ app.get('/api/admin/stats', (req, res) => {
   });
 });
 
-// ── 24hr Reminder Scheduler ───────────────────────────────────────────────────
+// ── Scheduler: 24hr reminders + 21-day rebook nudges ─────────────────────────
 async function runScheduler() {
   try {
     const shops = master.get('shops').value().filter(s => s.active);
@@ -601,19 +601,41 @@ async function runScheduler() {
         const s = db.get('settings').value()||{};
         const cfg = s.twilio||{};
         if (!cfg.accountSid||!cfg.authToken||!cfg.fromNumber) continue;
+        const twilio = require('twilio')(cfg.accountSid, cfg.authToken);
+
+        // ── 24hr appointment reminders ──
         const tomorrow = new Date(Date.now()+24*3600000).toISOString().split('T')[0];
         const appts = db.get('appointments').value().filter(a=>a.date===tomorrow&&a.status==='confirmed');
         const sentIds = s.remindersSent||[];
-        const toSend = appts.filter(a=>!sentIds.includes(a.id)&&a.customerPhone);
-        if (!toSend.length) continue;
-        const twilio = require('twilio')(cfg.accountSid, cfg.authToken);
-        for (const appt of toSend) {
+        const toRemind = appts.filter(a=>!sentIds.includes(a.id)&&a.customerPhone);
+        for (const appt of toRemind) {
           const phone = (appt.customerPhone||'').replace(/[^0-9]/g,'');
           if (phone.length<10) continue;
           const msg = `Hi ${(appt.customerName||'').split(' ')[0]||'there'}! Reminder: your appointment at ${s.shopName||'the shop'} is tomorrow at ${appt.time}${appt.barberName?' with '+appt.barberName:''}. See you then! ✂️`;
           try { await twilio.messages.create({from:cfg.fromNumber,to:'+1'+phone,body:msg}); sentIds.push(appt.id); } catch(e){}
         }
-        db.get('settings').assign({ remindersSent:sentIds.slice(-500) }).write();
+        if (toRemind.length) db.get('settings').assign({ remindersSent:sentIds.slice(-500) }).write();
+
+        // ── 21-day rebook nudges ──
+        const nudgeSentIds = s.nudgesSent||[];
+        const cutoffDate = new Date(Date.now()-21*24*3600000).toISOString().split('T')[0];
+        const recentCutoff = new Date(Date.now()-22*24*3600000).toISOString().split('T')[0];
+        // Find customers whose last completed appointment was exactly 21 days ago (within the window)
+        const allAppts = db.get('appointments').value().filter(a=>a.status==='done');
+        const lastVisit = {};
+        allAppts.forEach(a=>{ if(!lastVisit[a.customerId]||a.date>lastVisit[a.customerId].date) lastVisit[a.customerId]={date:a.date,name:a.customerName,phone:a.customerPhone}; });
+        const toNudge = Object.values(lastVisit).filter(v=>v.date<=cutoffDate&&v.date>recentCutoff&&v.phone);
+        for (const v of toNudge) {
+          const nudgeKey = v.phone+':'+v.date;
+          if (nudgeSentIds.includes(nudgeKey)) continue;
+          const phone = (v.phone||'').replace(/[^0-9]/g,'');
+          if (phone.length<10) continue;
+          const firstName = (v.name||'').split(' ')[0]||'there';
+          const msg = `Hey ${firstName}! It's been a few weeks — we'd love to have you back at ${s.shopName||'the shop'}. Book your next cut anytime 💈`;
+          try { await twilio.messages.create({from:cfg.fromNumber,to:'+1'+phone,body:msg}); nudgeSentIds.push(nudgeKey); } catch(e){}
+        }
+        if (toNudge.length) db.get('settings').assign({ nudgesSent:nudgeSentIds.slice(-1000) }).write();
+
       } catch(e) {}
     }
   } catch(e) { console.error('Scheduler error:', e.message); }
