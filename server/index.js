@@ -56,10 +56,9 @@ const master = low(masterAdapter);
 master.defaults({
   shops: [],
   accounts: [],
-  usedSessions: [],   // consumed Stripe session IDs — prevents reuse
-  platformSettings: {
-    requirePayment: true,   // toggle in admin → Settings
-  },
+  usedSessions: [],
+  platformSettings: { requirePayment: true },
+  demos: [],
 }).write();
 
 console.log('ShopFlow Platform running on port', PORT);
@@ -722,6 +721,48 @@ app.post('/api/shop/deposit/confirm', requireAuth, shopRoute(async (req, res, db
   h.upsert('appointments',a); res.json({ ok: true });
 }));
 
+// ── PROTECTED: Feature flags for current shop ─────────────────────────────────
+app.get('/api/shop/features', requireAuth, (req, res) => {
+  const shop = master.get('shops').find({ id: req.shopId }).value();
+  const features = (shop && shop.features) || {};
+  res.json({ manualSms: features.manualSms !== false }); // default ON
+});
+
+// ── PUBLIC: Demo booking ──────────────────────────────────────────────────────
+app.get('/api/public/demo/slots', (req, res) => {
+  const { date } = req.query;
+  if (!date) return res.status(400).json({ error: 'date required' });
+  const booked = master.get('demos').value()
+    .filter(d => d.date === date && d.status !== 'cancelled')
+    .map(d => d.time);
+  const slots = [];
+  for (let h = 18; h < 22; h++) {
+    for (let m = 0; m < 60; m += 15) {
+      const time = `${h === 12 ? 12 : h % 12 || 12}:${String(m).padStart(2,'0')} ${h < 12 ? 'AM' : 'PM'}`;
+      if (!booked.includes(time)) slots.push(time);
+    }
+  }
+  res.json(slots);
+});
+
+app.post('/api/public/demo/book', async (req, res) => {
+  try {
+    const { name, shopName, phone, currentTool, date, time } = req.body;
+    if (!name || !phone || !date || !time) return res.status(400).json({ ok: false, error: 'Missing required fields' });
+    // Check slot not taken
+    const taken = master.get('demos').value().find(d => d.date === date && d.time === time && d.status !== 'cancelled');
+    if (taken) return res.status(409).json({ ok: false, error: 'That time slot was just taken. Please choose another.' });
+    const demo = { id: uuidv4(), name, shopName: shopName||'', phone, currentTool: currentTool||'', date, time, status: 'scheduled', notes: '', bookedAt: new Date().toISOString() };
+    master.get('demos').push(demo).write();
+    // Send confirmation SMS
+    if (twilioClient && TWILIO_DEFAULT_FROM) {
+      const msg = `Hey ${name}! Your ShopFlow demo is confirmed for ${date} at ${time}. We'll walk you through everything — see you then! 🚀`;
+      try { await twilioClient.messages.create({ from: TWILIO_DEFAULT_FROM, to: '+1' + phone.replace(/\D/g,''), body: msg }); } catch(e) { console.error('Demo SMS error:', e.message); }
+    }
+    res.json({ ok: true, id: demo.id });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ── ADMIN: auth middleware ────────────────────────────────────────────────────
 function requireAdmin(req, res, next) {
   const adminKey = req.headers['x-admin-key'];
@@ -873,7 +914,7 @@ app.post('/api/admin/shops/create', requireAdmin, async (req, res) => {
 app.patch('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   const shop = master.get('shops').find({ id: req.params.shopId }).value();
   if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
-  const allowed = ['plan', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber'];
+  const allowed = ['plan', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber', 'features'];
   const updates = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
   master.get('shops').find({ id: req.params.shopId }).assign(updates).write();
@@ -992,6 +1033,37 @@ app.post('/api/admin/seed-demo', requireAdmin, async (req, res) => {
     shopDb.set('customers', customers).write();
     shopDb.set('appointments', appointments).write();
 
+    // Seed realistic SMS conversations
+    const msgId = () => 'msg' + Math.random().toString(36).slice(2,10);
+    const daysAgoISO = (n, h=12, m=0) => { const d=new Date(); d.setDate(d.getDate()-n); d.setHours(h,m,0,0); return d.toISOString(); };
+    const conversations = [
+      // Jordan Rivera — recent booking thread
+      { id:msgId(), customerId:'c001', customerName:'Jordan Rivera', type:'sms', direction:'outbound', body:"Hi Jordan! Your appointment at King's Cuts is confirmed for tomorrow at 10:00 AM with Marcus. See you then! ✂️", sentAt:daysAgoISO(2,9,1), read:true },
+      { id:msgId(), customerId:'c001', customerName:'Jordan Rivera', type:'sms', direction:'inbound',  body:'Perfect, thanks! Can I add a beard lineup too?', sentAt:daysAgoISO(2,9,15), read:true },
+      { id:msgId(), customerId:'c001', customerName:'Jordan Rivera', type:'sms', direction:'outbound', body:"Absolutely! We'll take care of you. Marcus is great with beards.", sentAt:daysAgoISO(2,9,22), read:true },
+      { id:msgId(), customerId:'c001', customerName:'Jordan Rivera', type:'sms', direction:'inbound',  body:'Bet, see you tomorrow 🤙', sentAt:daysAgoISO(2,9,30), read:true },
+      // Marcus Webb — rebook nudge thread
+      { id:msgId(), customerId:'c002', customerName:'Marcus Webb', type:'sms', direction:'outbound', body:"Hey Marcus! It's been a few weeks — we'd love to have you back at King's Cuts. Book your next cut anytime 💈", sentAt:daysAgoISO(5,11,0), read:true },
+      { id:msgId(), customerId:'c002', customerName:'Marcus Webb', type:'sms', direction:'inbound',  body:'yeah been busy, can I come in Saturday?', sentAt:daysAgoISO(5,11,45), read:true },
+      { id:msgId(), customerId:'c002', customerName:'Marcus Webb', type:'sms', direction:'outbound', body:'Saturday works! Book at shopflow.com/book/kings-cuts or just walk in. We open at 9.', sentAt:daysAgoISO(5,12,2), read:true },
+      { id:msgId(), customerId:'c002', customerName:'Marcus Webb', type:'sms', direction:'inbound',  body:'cool ill be there around 11', sentAt:daysAgoISO(5,12,10), read:true },
+      // Kevin James — loyalty reward notification
+      { id:msgId(), customerId:'c020', customerName:'Kevin James', type:'sms', direction:'outbound', body:"Kevin! 🎉 You've hit 10 visits at King's Cuts — your next cut is on us! Come in anytime and show this message.", sentAt:daysAgoISO(3,10,0), read:true },
+      { id:msgId(), customerId:'c020', customerName:'Kevin James', type:'sms', direction:'inbound',  body:'No way!! Thanks bro that's crazy', sentAt:daysAgoISO(3,10,18), read:true },
+      { id:msgId(), customerId:'c020', customerName:'Kevin James', type:'sms', direction:'inbound',  body:'Coming in Thursday, gonna tell my boys about this place', sentAt:daysAgoISO(3,10,19), read:false },
+      // Ethan Powell — new client inquiry (unread)
+      { id:msgId(), customerId:'c015', customerName:'Ethan Powell', type:'sms', direction:'inbound',  body:'Hey I got your number from Jordan, do you guys do walk-ins?', sentAt:daysAgoISO(0,8,42), read:false },
+      { id:msgId(), customerId:'c015', customerName:'Ethan Powell', type:'sms', direction:'inbound',  body:'Or should I book online?', sentAt:daysAgoISO(0,8,43), read:false },
+      // DeShawn Carter — reminder thread
+      { id:msgId(), customerId:'c003', customerName:'DeShawn Carter', type:'sms', direction:'outbound', body:"Hi DeShawn! Reminder: your appointment at King's Cuts is tomorrow at 2:00 PM with Dre. See you then! ✂️", sentAt:daysAgoISO(8,9,0), read:true },
+      { id:msgId(), customerId:'c003', customerName:'DeShawn Carter', type:'sms', direction:'inbound',  body:'actually can we move it to 3?', sentAt:daysAgoISO(8,9,35), read:true },
+      { id:msgId(), customerId:'c003', customerName:'DeShawn Carter', type:'sms', direction:'outbound', body:"3 PM works, I've updated your appointment. See you then!", sentAt:daysAgoISO(8,9,48), read:true },
+    ];
+    shopDb.set('conversations', conversations).write();
+
+    // Enable all features for demo
+    master.get('shops').find({ id: shopId }).assign({ features: { manualSms: true } }).write();
+
     const done = appointments.filter(a=>a.status==='done');
     res.json({ ok:true, shopId, slug: shopSlug, email: DEMO_EMAIL, password: DEMO_PASS, clients: customers.length, appointments: appointments.length, completed: done.length, revenue: done.reduce((s,a)=>s+a.price+a.tip,0) });
   } catch(e) {
@@ -1016,6 +1088,25 @@ app.patch('/api/admin/platform-settings', requireAdmin, (req, res) => {
   const updates = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
   master.get('platformSettings').assign(updates).write();
+  res.json({ ok: true });
+});
+
+// ── ADMIN: demos ─────────────────────────────────────────────────────────────
+app.get('/api/admin/demos', requireAdmin, (req, res) => {
+  res.json(master.get('demos').value().sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time)));
+});
+app.patch('/api/admin/demos/:id', requireAdmin, (req, res) => {
+  const demo = master.get('demos').find({ id: req.params.id }).value();
+  if (!demo) return res.status(404).json({ ok: false });
+  const { status, notes } = req.body;
+  const updates = {};
+  if (status !== undefined) updates.status = status;
+  if (notes  !== undefined) updates.notes  = notes;
+  master.get('demos').find({ id: req.params.id }).assign(updates).write();
+  res.json({ ok: true });
+});
+app.delete('/api/admin/demos/:id', requireAdmin, (req, res) => {
+  master.get('demos').remove({ id: req.params.id }).write();
   res.json({ ok: true });
 });
 
@@ -1270,6 +1361,7 @@ setTimeout(runScheduler, 30000);
 // ── Serve pages ───────────────────────────────────────────────────────────────
 app.get('/shop/*', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app.html')));
 app.get('/book/*', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'book.html')));
+app.get('/demo',    (req, res) => res.sendFile(path.join(CLIENT_DIR, 'demo.html')));
 app.get('/signup',  (req, res) => res.sendFile(path.join(CLIENT_DIR, 'signup.html')));
 app.get('/login',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'login.html')));
 app.get('/admin',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'admin.html')));

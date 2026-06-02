@@ -1549,6 +1549,24 @@ const Messages = {
   },
 
   async _renderInbox(el) {
+    // Check feature flag first
+    try {
+      const features = await db.features.get();
+      if (!features.manualSms) {
+        el.innerHTML = `<div class="card" style="text-align:center;padding:40px 24px;">
+          <div style="font-size:40px;margin-bottom:16px;">💬</div>
+          <div style="font-size:17px;font-weight:700;color:var(--text);margin-bottom:8px;">Manual Messaging</div>
+          <div style="font-size:14px;color:var(--muted);max-width:280px;margin:0 auto 20px;">
+            Send and receive SMS messages with your clients directly from ShopFlow.
+          </div>
+          <div style="background:var(--green-lt);border:1px solid var(--green-md);border-radius:10px;padding:14px;font-size:13px;color:var(--green);font-weight:600;">
+            Contact ShopFlow to enable messaging for your account.
+          </div>
+        </div>`;
+        return;
+      }
+    } catch(e) {}
+
     try {
       this._threads = await db.conversations.all();
     } catch(e) { this._threads = []; }

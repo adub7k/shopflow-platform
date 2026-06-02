@@ -345,6 +345,9 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div class="sb-item" data-page="growth" onclick="nav('growth');closeAdminSidebar()">
       <span class="sb-item-icon">📈</span>Growth
     </div>
+    <div class="sb-item" data-page="demos" onclick="nav('demos');closeAdminSidebar()">
+      <span class="sb-item-icon">🚀</span>Demos
+    </div>
     <div class="sb-item" data-page="billing" onclick="nav('billing');closeAdminSidebar()">
       <span class="sb-item-icon">💰</span>Billing
     </div>
@@ -591,6 +594,58 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       </div>
     </div>
 
+    <!-- Demos page -->
+    <div id="page-demos" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Demo Pipeline</div>
+          <div class="page-sub">Booked demos and conversion tracking</div>
+        </div>
+        <a href="/demo" target="_blank" class="btn btn-green btn-sm">↗ Share Demo Page</a>
+      </div>
+
+      <div class="metrics-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;">
+        <div class="metric-card">
+          <div class="metric-label">Total Demos</div>
+          <div class="metric-value" id="dm-total">—</div>
+          <div class="metric-sub" id="dm-scheduled">— scheduled</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Converted</div>
+          <div class="metric-value green" id="dm-converted">—</div>
+          <div class="metric-sub">became paying customers</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Conversion Rate</div>
+          <div class="metric-value" id="dm-rate">—</div>
+          <div class="metric-sub">demos → customers</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">All Demos</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Contact</th>
+                <th>Date & Time</th>
+                <th>Current Tool</th>
+                <th>Status</th>
+                <th>Notes</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="demos-tbody">
+              <tr><td colspan="6"><div class="empty-state"><span class="spinner"></span>Loading…</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- Checklist page -->
     <div id="page-checklist" class="page">
       <div class="page-header">
@@ -760,6 +815,7 @@ function nav(page) {
   if (page === 'growth')  renderGrowth();
   if (page === 'settings')  loadPlatformSettings();
   if (page === 'checklist') renderChecklist();
+  if (page === 'demos')     loadDemos();
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -994,6 +1050,22 @@ function renderDrawer(d) {
     </div>
 
     <div class="drawer-section">
+      <div class="drawer-section-title">Features</div>
+      <div>
+        <div class="drawer-info-row">
+          <div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);">Manual Messaging</div>
+            <div style="font-size:11px;color:var(--muted);">SMS inbox & send from the CRM</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" ${(shop.features?.manualSms !== false)?'checked':''} onchange="toggleFeature('${shop.id}','manualSms',this.checked)"/>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="drawer-section">
       <div class="drawer-section-title">Integrations</div>
       <div>
         <div class="drawer-info-row">
@@ -1176,6 +1248,100 @@ function renderBilling() {
       <div class="plan-rev">${pct}%</div>
     </div>`;
   }).join('');
+}
+
+// ── Feature toggles ───────────────────────────────────────────────────────────
+async function toggleFeature(shopId, feature, value) {
+  const shop = master_local_get(shopId); // local reference for optimism
+  try {
+    // Get current features then patch
+    const shopData = allShops.find(s => s.id === shopId);
+    const currentFeatures = shopData?.features || {};
+    currentFeatures[feature] = value;
+    await updateShop(shopId, 'features', currentFeatures);
+    toast(`${feature === 'manualSms' ? 'Messaging' : feature} ${value ? 'enabled' : 'disabled'} ✓`);
+  } catch(e) { toast('Update failed'); }
+}
+function master_local_get(shopId) { return allShops.find(s => s.id === shopId) || {}; }
+
+// ── Demos ─────────────────────────────────────────────────────────────────────
+const DEMO_STATUSES = ['scheduled','completed','converted','no-show','cancelled'];
+const DEMO_STATUS_COLORS = { scheduled:'badge-blue', completed:'badge-gray', converted:'badge-shop', 'no-show':'badge-inactive', cancelled:'badge-inactive' };
+
+async function loadDemos() {
+  try {
+    const res = await fetch('/api/admin/demos', { headers: { 'x-admin-key': adminKey } });
+    const demos = await res.json();
+    renderDemos(demos);
+  } catch(e) {
+    document.getElementById('demos-tbody').innerHTML = '<tr><td colspan="6"><div class="empty-state">Failed to load demos.</div></td></tr>';
+  }
+}
+
+function renderDemos(demos) {
+  const total     = demos.length;
+  const scheduled = demos.filter(d => d.status === 'scheduled').length;
+  const converted = demos.filter(d => d.status === 'converted').length;
+  const completed = demos.filter(d => ['completed','converted','no-show'].includes(d.status)).length;
+  const rate      = completed > 0 ? Math.round((converted / completed) * 100) : 0;
+
+  document.getElementById('dm-total').textContent     = total;
+  document.getElementById('dm-scheduled').textContent = scheduled + ' upcoming';
+  document.getElementById('dm-converted').textContent = converted;
+  document.getElementById('dm-rate').textContent      = rate + '%';
+
+  const tbody = document.getElementById('demos-tbody');
+  if (!demos.length) {
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No demos booked yet.<br><a href="/demo" target="_blank" style="color:var(--green);">Share your demo page →</a></div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = demos.map(d => `
+    <tr>
+      <td>
+        <div style="font-weight:600;">${esc(d.name)}</div>
+        <div style="font-size:11px;color:var(--muted);">${esc(d.shopName||'—')}</div>
+        <div style="font-size:11px;color:var(--faint);">${esc(d.phone||'')}</div>
+      </td>
+      <td style="white-space:nowrap;">
+        <div style="font-weight:600;">${esc(d.date||'—')}</div>
+        <div style="font-size:11px;color:var(--muted);">${esc(d.time||'')}</div>
+      </td>
+      <td style="font-size:12px;color:var(--muted);">${esc(d.currentTool||'—')}</td>
+      <td>
+        <select class="filter-select" style="font-size:11px;padding:4px 6px;" onchange="updateDemo('${d.id}','status',this.value)">
+          ${DEMO_STATUSES.map(s => `<option value="${s}" ${d.status===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <input type="text" value="${esc(d.notes||'')}" placeholder="Add notes…"
+          style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;width:160px;font-family:inherit;"
+          onblur="updateDemo('${d.id}','notes',this.value)"
+          onkeydown="if(event.key==='Enter')this.blur()" />
+      </td>
+      <td>
+        <button class="btn btn-sm btn-red" onclick="deleteDemo('${d.id}')">✕</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function updateDemo(id, field, value) {
+  try {
+    await fetch('/api/admin/demos/' + id, {
+      method: 'PATCH',
+      headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: value }),
+    });
+    if (field === 'status') { toast('Status updated ✓'); loadDemos(); }
+  } catch(e) { toast('Update failed'); }
+}
+
+async function deleteDemo(id) {
+  if (!confirm('Remove this demo record?')) return;
+  try {
+    await fetch('/api/admin/demos/' + id, { method: 'DELETE', headers: { 'x-admin-key': adminKey } });
+    toast('Removed ✓'); loadDemos();
+  } catch(e) { toast('Failed'); }
 }
 
 // ── Checklist ─────────────────────────────────────────────────────────────────

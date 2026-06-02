@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Book a ShopFlow Demo</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{--green:#16a34a;--green-lt:#f0fdf4;--green-md:#bbf7d0;--border:#e5e7eb;--text:#111827;--muted:#6b7280;--faint:#9ca3af;--font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
+body{font-family:var(--font);background:#f9fafb;min-height:100vh;-webkit-font-smoothing:antialiased;color:var(--text);}
+.wrap{max-width:520px;margin:0 auto;padding:40px 20px 80px;}
+.header{text-align:center;margin-bottom:36px;}
+.logo{display:inline-flex;align-items:center;gap:10px;margin-bottom:24px;}
+.logo-mark{width:44px;height:44px;background:var(--green);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;}
+.logo-text{font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.03em;}
+h1{font-size:26px;font-weight:800;color:var(--text);letter-spacing:-.03em;margin-bottom:8px;}
+.subtitle{font-size:15px;color:var(--muted);line-height:1.5;}
+.card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:28px;}
+.form-group{margin-bottom:18px;}
+.form-label{display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px;}
+.form-input{width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:10px;font-size:15px;font-family:var(--font);color:var(--text);outline:none;transition:border .15s;background:#fff;}
+.form-input:focus{border-color:var(--green);}
+select.form-input{cursor:pointer;}
+.section-label{font-size:12px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;margin-top:6px;}
+/* Date buttons */
+.date-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:4px;}
+.date-btn{padding:10px 4px;border:1px solid var(--border);border-radius:10px;background:#fff;text-align:center;cursor:pointer;transition:all .15s;}
+.date-btn:hover{border-color:var(--green);color:var(--green);}
+.date-btn.selected{background:var(--green);border-color:var(--green);color:#fff;}
+.date-btn .dow{font-size:10px;font-weight:600;text-transform:uppercase;opacity:.7;}
+.date-btn .day{font-size:18px;font-weight:800;line-height:1.2;}
+/* Time slots */
+.time-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.time-btn{padding:10px 4px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px;font-weight:500;text-align:center;cursor:pointer;transition:all .15s;}
+.time-btn:hover{border-color:var(--green);color:var(--green);}
+.time-btn.selected{background:var(--green);border-color:var(--green);color:#fff;}
+.time-btn.booked{background:#f3f4f6;color:#d1d5db;cursor:not-allowed;border-color:var(--border);}
+.submit-btn{width:100%;padding:15px;background:var(--green);color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;font-family:var(--font);cursor:pointer;margin-top:24px;transition:opacity .15s;}
+.submit-btn:hover{opacity:.9;}
+.submit-btn:disabled{opacity:.5;cursor:not-allowed;}
+.err{color:#dc2626;font-size:13px;margin-top:8px;display:none;}
+.success-wrap{text-align:center;padding:40px 20px;}
+.success-icon{font-size:56px;margin-bottom:16px;}
+.success-title{font-size:22px;font-weight:800;color:var(--text);margin-bottom:8px;}
+.success-sub{font-size:15px;color:var(--muted);line-height:1.5;}
+.success-detail{background:var(--green-lt);border:1px solid var(--green-md);border-radius:12px;padding:16px;margin-top:20px;font-size:14px;color:var(--green);font-weight:600;}
+.pitch-points{margin:28px 0;display:grid;gap:12px;}
+.pitch-point{display:flex;align-items:flex-start;gap:12px;padding:14px;background:#fff;border:1px solid var(--border);border-radius:12px;}
+.pitch-icon{font-size:22px;flex-shrink:0;}
+.pitch-text strong{display:block;font-size:14px;font-weight:700;color:var(--text);margin-bottom:2px;}
+.pitch-text span{font-size:13px;color:var(--muted);}
+.loading-slots{text-align:center;padding:20px;color:var(--faint);font-size:13px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="logo">
+      <div class="logo-mark">✂️</div>
+      <div class="logo-text">ShopFlow</div>
+    </div>
+    <h1>See ShopFlow in action</h1>
+    <p class="subtitle">Book a free 15-minute demo. We'll show you exactly how ShopFlow works for your shop — no pressure, no BS.</p>
+  </div>
+
+  <div class="pitch-points">
+    <div class="pitch-point"><div class="pitch-icon">📅</div><div class="pitch-text"><strong>Smart booking & reminders</strong><span>Clients book online. SMS reminders go out automatically. No more no-shows.</span></div></div>
+    <div class="pitch-point"><div class="pitch-icon">👤</div><div class="pitch-text"><strong>Client profiles with history</strong><span>Every cut, tip, and note — all in one place per client.</span></div></div>
+    <div class="pitch-point"><div class="pitch-icon">💰</div><div class="pitch-text"><strong>Revenue dashboard</strong><span>See your numbers in real time. Know which barber is making you the most money.</span></div></div>
+  </div>
+
+  <div class="card" id="form-card">
+    <div id="form-wrap">
+      <div class="form-group">
+        <label class="form-label">Your name *</label>
+        <input class="form-input" id="f-name" placeholder="Marcus Johnson" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Shop name</label>
+        <input class="form-input" id="f-shop" placeholder="Off Kut Barbershop" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Your phone number *</label>
+        <input class="form-input" id="f-phone" type="tel" placeholder="(505) 555-0100" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">What do you currently use for bookings?</label>
+        <select class="form-input" id="f-tool">
+          <option value="">Select one…</option>
+          <option value="Nothing / pen & paper">Nothing / pen &amp; paper</option>
+          <option value="Phone calls / texts">Phone calls / texts only</option>
+          <option value="Google Calendar">Google Calendar</option>
+          <option value="Booksy">Booksy</option>
+          <option value="Square Appointments">Square Appointments</option>
+          <option value="Vagaro">Vagaro</option>
+          <option value="StyleSeat">StyleSeat</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+
+      <div class="section-label">Pick a day</div>
+      <div class="date-grid" id="date-grid"></div>
+      <div style="margin-bottom:18px;"></div>
+
+      <div id="slots-section" style="display:none;">
+        <div class="section-label">Pick a time <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--faint);">(6 PM – 10 PM)</span></div>
+        <div class="time-grid" id="time-grid">
+          <div class="loading-slots">Select a day first</div>
+        </div>
+      </div>
+
+      <div class="err" id="form-err"></div>
+      <button class="submit-btn" id="submit-btn" onclick="submitDemo()">Book My Demo →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let selectedDate = null;
+let selectedTime = null;
+
+// Build next 10 weekdays
+function buildDateGrid() {
+  const grid = document.getElementById('date-grid');
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dates = [];
+  let d = new Date(); d.setHours(12,0,0,0);
+  // Start tomorrow
+  d.setDate(d.getDate()+1);
+  while (dates.length < 10) {
+    const dow = d.getDay();
+    if (dow !== 0 && dow !== 6) { // weekdays only
+      dates.push(new Date(d));
+    }
+    d.setDate(d.getDate()+1);
+  }
+  grid.innerHTML = dates.map((dt,i) => {
+    const iso = dt.toISOString().split('T')[0];
+    return `<div class="date-btn" data-date="${iso}" onclick="selectDate('${iso}',this)">
+      <div class="dow">${days[dt.getDay()]}</div>
+      <div class="day">${dt.getDate()}</div>
+      <div class="dow">${months[dt.getMonth()]}</div>
+    </div>`;
+  }).join('');
+}
+
+async function selectDate(date, el) {
+  selectedDate = date; selectedTime = null;
+  document.querySelectorAll('.date-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('slots-section').style.display = 'block';
+  document.getElementById('time-grid').innerHTML = '<div class="loading-slots">Loading slots…</div>';
+  try {
+    const res = await fetch('/api/public/demo/slots?date=' + date);
+    const slots = await res.json();
+    if (!slots.length) {
+      document.getElementById('time-grid').innerHTML = '<div class="loading-slots">No slots available this day.</div>';
+      return;
+    }
+    // All possible slots for reference (to show booked ones)
+    const all = [];
+    for (let h=18;h<22;h++) for (let m=0;m<60;m+=15) {
+      const t = `${h===12?12:h%12||12}:${String(m).padStart(2,'0')} ${h<12?'AM':'PM'}`;
+      all.push(t);
+    }
+    document.getElementById('time-grid').innerHTML = all.map(t => {
+      const avail = slots.includes(t);
+      return `<div class="time-btn ${avail?'':'booked'}" onclick="${avail?`selectTime('${t}',this)`:''}">${t}</div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('time-grid').innerHTML = '<div class="loading-slots">Could not load slots.</div>';
+  }
+}
+
+function selectTime(time, el) {
+  selectedTime = time;
+  document.querySelectorAll('.time-btn:not(.booked)').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+async function submitDemo() {
+  const name  = document.getElementById('f-name').value.trim();
+  const shop  = document.getElementById('f-shop').value.trim();
+  const phone = document.getElementById('f-phone').value.trim();
+  const tool  = document.getElementById('f-tool').value;
+  const errEl = document.getElementById('form-err');
+  errEl.style.display = 'none';
+
+  if (!name)         { errEl.textContent = 'Please enter your name.'; errEl.style.display='block'; return; }
+  if (!phone)        { errEl.textContent = 'Please enter your phone number.'; errEl.style.display='block'; return; }
+  if (!selectedDate) { errEl.textContent = 'Please select a day.'; errEl.style.display='block'; return; }
+  if (!selectedTime) { errEl.textContent = 'Please select a time slot.'; errEl.style.display='block'; return; }
+
+  const btn = document.getElementById('submit-btn');
+  btn.textContent = 'Booking…'; btn.disabled = true;
+
+  try {
+    const res = await fetch('/api/public/demo/book', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, shopName: shop, phone, currentTool: tool, date: selectedDate, time: selectedTime }),
+    });
+    const data = await res.json();
+    if (!data.ok) { errEl.textContent = data.error || 'Booking failed. Please try again.'; errEl.style.display='block'; btn.textContent='Book My Demo →'; btn.disabled=false; return; }
+
+    // Success
+    document.getElementById('form-wrap').innerHTML = `
+      <div class="success-wrap">
+        <div class="success-icon">🎉</div>
+        <div class="success-title">You're booked!</div>
+        <div class="success-sub">We'll see you on <strong>${selectedDate}</strong> at <strong>${selectedTime}</strong>.</div>
+        <div class="success-detail">📱 Check your phone — we just sent you a confirmation text.</div>
+      </div>`;
+  } catch(e) {
+    errEl.textContent = 'Something went wrong. Please try again.';
+    errEl.style.display = 'block';
+    btn.textContent = 'Book My Demo →'; btn.disabled = false;
+  }
+}
+
+buildDateGrid();
+</script>
+</body>
+</html>
