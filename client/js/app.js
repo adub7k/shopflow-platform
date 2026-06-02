@@ -7,16 +7,19 @@ const App = {
   _page: 'dashboard',
   nav(page) {
     this._page = page;
+    // Close message thread when navigating away
+    if (page !== 'messages') Messages._currentThread = null;
     document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
     document.querySelectorAll('.nav-item,.bottom-nav-item').forEach(b=>b.classList.remove('active'));
     const el=document.getElementById('page-'+page); if(el)el.classList.add('active');
     document.querySelectorAll('[data-page="'+page+'"]').forEach(b=>b.classList.add('active'));
-    const titles={dashboard:'Dashboard',appointments:'Appointments',clients:'Clients',revenue:'Revenue',automations:'Automations',settings:'Settings'};
+    const titles={dashboard:'Dashboard',messages:'Messages',appointments:'Appointments',clients:'Clients',revenue:'Revenue',automations:'Automations',settings:'Settings'};
     const tt=document.getElementById('topbar-title'); if(tt&&titles[page])tt.textContent=titles[page];
     this._render(page);
   },
   _render(page) {
     if(page==='dashboard')   Dashboard.render();
+    if(page==='messages')    Messages.render();
     if(page==='appointments')Appointments.render();
     if(page==='clients')     Clients.render();
     if(page==='revenue')     Revenue.render();
@@ -37,6 +40,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Boot dashboard
     await Dashboard.render();
+
+    // Load unread badge in background
+    db.conversations.all().then(threads => Messages.updateBadge(threads)).catch(()=>{});
+
     document.getElementById('loading')?.classList.add('hidden');
     document.getElementById('loading').style.display='none';
 

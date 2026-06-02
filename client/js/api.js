@@ -37,7 +37,7 @@ const db = {
   customers:     { all: () => apiFetch('/customers'), search: (q) => apiFetch('/customers/search?q='+encodeURIComponent(q)), get: (id) => apiFetch('/customers/'+id), save: (c) => apiFetch('/customers',{method:'POST',body:c}), delete: (id) => apiFetch('/customers/'+id,{method:'DELETE'}), redeem: (id) => apiFetch('/customers/'+id+'/redeem',{method:'POST'}) },
   appointments:  { all: (p) => apiFetch('/appointments'+(p?'?'+new URLSearchParams(p):'')), save: (a) => apiFetch('/appointments',{method:'POST',body:a}), complete: (id,d) => apiFetch('/appointments/'+id+'/complete',{method:'POST',body:d}), noshow: (id) => apiFetch('/appointments/'+id+'/noshow',{method:'POST'}), delete: (id) => apiFetch('/appointments/'+id,{method:'DELETE'}) },
   revenue:       { get: () => apiFetch('/revenue') },
-  conversations: { forCustomer: (cid) => apiFetch('/conversations/customer/'+cid), save: (c) => apiFetch('/conversations',{method:'POST',body:c}) },
+  conversations: { all: () => apiFetch('/conversations'), forCustomer: (cid) => apiFetch('/conversations/customer/'+cid), markRead: (cid) => apiFetch('/conversations/read/'+cid,{method:'POST'}), save: (c) => apiFetch('/conversations',{method:'POST',body:c}) },
   sms:           { send: (o) => apiFetch('/sms/send',{method:'POST',body:o}) },
   auth:          { verifyPin: (pin) => apiFetch('/auth/verify-pin',{method:'POST',body:{pin}}), changePin: (cur,n) => apiFetch('/auth/change-pin',{method:'POST',body:{currentPin:cur,newPin:n}}) },
   blockedDates:  { all: () => apiFetch('/blocked-dates'), block: (date,reason) => apiFetch('/blocked-dates',{method:'POST',body:{date,reason}}), unblock: (date) => apiFetch('/blocked-dates/'+date,{method:'DELETE'}) },

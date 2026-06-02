@@ -654,9 +654,38 @@ app.post('/api/shop/auth/reset-pin', async (req, res) => {
 });
 
 // ── PROTECTED: Conversations ──────────────────────────────────────────────────
+
+// Global inbox — one thread summary per customer, sorted by latest message
+app.get('/api/shop/conversations', requireAuth, shopRoute(async (req, res, db, h) => {
+  const convos    = h.getAll('conversations');
+  const customers = h.getAll('customers');
+  const threads   = {};
+  convos.forEach(c => {
+    const cid = c.customerId || 'unknown';
+    if (!threads[cid]) threads[cid] = { customerId:cid, customerName:c.customerName||'Unknown', customerPhone:'', lastMessage:null, unreadCount:0 };
+    if (!threads[cid].lastMessage || new Date(c.sentAt) > new Date(threads[cid].lastMessage.sentAt)) threads[cid].lastMessage = c;
+    if (c.direction === 'inbound' && !c.read) threads[cid].unreadCount++;
+  });
+  Object.values(threads).forEach(t => {
+    const cust = customers.find(c => c.id === t.customerId);
+    if (cust) { t.customerPhone = cust.phone||''; t.customerName = t.customerName||cust.name; }
+  });
+  res.json(Object.values(threads).sort((a,b) => new Date(b.lastMessage?.sentAt||0) - new Date(a.lastMessage?.sentAt||0)));
+}));
+
+// Per-customer thread
 app.get('/api/shop/conversations/customer/:cid', requireAuth, shopRoute(async (req, res, db, h) => {
   res.json(h.getAll('conversations').filter(c=>c.customerId===req.params.cid).sort((a,b)=>new Date(a.sentAt)-new Date(b.sentAt)));
 }));
+
+// Mark all inbound messages from a customer as read
+app.post('/api/shop/conversations/read/:customerId', requireAuth, shopRoute(async (req, res, db, h) => {
+  h.getAll('conversations')
+    .filter(c => c.customerId === req.params.customerId && c.direction === 'inbound' && !c.read)
+    .forEach(c => { c.read = true; h.upsert('conversations', c); });
+  res.json({ ok: true });
+}));
+
 app.post('/api/shop/conversations', requireAuth, shopRoute(async (req, res, db, h) => {
   const c = req.body; if(!c.id)c.id=genId('msg'); h.upsert('conversations',c); res.json({ id:c.id });
 }));

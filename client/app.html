@@ -58,6 +58,10 @@
     </div>
     <div class="nav-section">Menu</div>
     <div class="nav-item active" data-page="dashboard"    onclick="App.nav('dashboard');closeSidebar()"><span class="nav-item-icon">⊞</span>Dashboard</div>
+    <div class="nav-item" data-page="messages"            onclick="App.nav('messages');closeSidebar()">
+      <span class="nav-item-icon">💬</span>Messages
+      <span id="sidebar-msg-badge" class="nav-badge" style="display:none;"></span>
+    </div>
     <div class="nav-item" data-page="appointments"        onclick="App.nav('appointments');closeSidebar()"><span class="nav-item-icon">📅</span>Appointments</div>
     <div class="nav-item" data-page="clients"             onclick="App.nav('clients');closeSidebar()"><span class="nav-item-icon">👤</span>Clients</div>
     <div class="nav-item" data-page="revenue"             onclick="App.nav('revenue');closeSidebar()"><span class="nav-item-icon">📈</span>Revenue</div>
@@ -70,21 +74,25 @@
 
   <!-- Main content -->
   <div id="main">
-    <div id="page-dashboard"   class="page active"></div>
+    <div id="page-dashboard"    class="page active"></div>
+    <div id="page-messages"     class="page"></div>
     <div id="page-appointments" class="page"></div>
-    <div id="page-clients"     class="page"></div>
-    <div id="page-revenue"     class="page"></div>
-    <div id="page-automations" class="page"></div>
-    <div id="page-settings"    class="page"></div>
+    <div id="page-clients"      class="page"></div>
+    <div id="page-revenue"      class="page"></div>
+    <div id="page-automations"  class="page"></div>
+    <div id="page-settings"     class="page"></div>
   </div>
 </div>
 
 <!-- Bottom nav (mobile) -->
 <div id="bottom-nav">
-  <button class="bottom-nav-item active" data-page="dashboard" onclick="App.nav('dashboard')"><span class="bottom-nav-icon">⊞</span>Home</button>
+  <button class="bottom-nav-item" data-page="messages" onclick="App.nav('messages')" style="position:relative;">
+    <span class="bottom-nav-icon">💬</span>Messages
+    <span id="bottom-msg-badge" style="display:none;position:absolute;top:4px;right:calc(50% - 18px);background:var(--red);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:100px;line-height:1.4;"></span>
+  </button>
   <button class="bottom-nav-item" data-page="appointments" onclick="App.nav('appointments')"><span class="bottom-nav-icon">📅</span>Bookings</button>
+  <button class="bottom-nav-item active" data-page="dashboard" onclick="App.nav('dashboard')"><span class="bottom-nav-icon">⊞</span>Home</button>
   <button class="bottom-nav-item" data-page="clients" onclick="App.nav('clients')"><span class="bottom-nav-icon">👤</span>Clients</button>
-  <button class="bottom-nav-item" data-page="revenue" onclick="App.nav('revenue')"><span class="bottom-nav-icon">📈</span>Revenue</button>
   <button class="bottom-nav-item" data-page="settings" onclick="App.nav('settings')"><span class="bottom-nav-icon">⚙️</span>Settings</button>
 </div>
 
