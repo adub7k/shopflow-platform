@@ -3,74 +3,171 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>ShopFlow — Business Management for Local Shops</title>
+<title>ShopFlow — The CRM Built for Barbershops</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
-:root{--black:#0a0a0a;--white:#fff;--off:#f5f5f7;--border:#d2d2d7;--muted:#6e6e73;--green:#16a34a;--green-lt:#f0fdf4;--font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
-body{font-family:var(--font);background:var(--white);color:var(--black);-webkit-font-smoothing:antialiased;}
-nav{display:flex;align-items:center;justify-content:space-between;padding:20px 40px;border-bottom:0.5px solid var(--border);}
+:root{
+  --black:#080808;--white:#fff;--off:#f5f5f7;--border:#e5e7eb;
+  --muted:#6b7280;--faint:#9ca3af;
+  --green:#16a34a;--green-lt:#f0fdf4;--green-md:#bbf7d0;--green-bright:#4ade80;
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+body{font-family:var(--font);background:var(--white);color:var(--black);-webkit-font-smoothing:antialiased;overflow-x:hidden;}
+
+/* ── Nav ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:16px 40px;background:rgba(8,8,8,.85);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,.08);}
 .nav-logo{display:flex;align-items:center;gap:10px;text-decoration:none;}
-.nav-logo img{width:32px;height:32px;border-radius:8px;}
-.nav-logo-text{font-size:17px;font-weight:800;color:var(--black);letter-spacing:-.04em;}
+.nav-logo img{width:30px;height:30px;border-radius:8px;}
+.nav-logo-text{font-size:17px;font-weight:800;color:#fff;letter-spacing:-.04em;}
 .nav-links{display:flex;align-items:center;gap:24px;}
-.nav-links a{font-size:14px;color:var(--muted);text-decoration:none;}
-.nav-cta{background:var(--black);color:var(--white);padding:10px 20px;border-radius:100px;font-size:14px;font-weight:600;text-decoration:none;transition:opacity .15s;}
-.nav-cta:hover{opacity:.85;}
-.hero{text-align:center;padding:100px 40px 80px;max-width:720px;margin:0 auto;}
-.hero-badge{display:inline-flex;align-items:center;gap:6px;background:var(--green-lt);border:1px solid #b3dfbf;border-radius:100px;padding:6px 14px;font-size:12px;font-weight:600;color:var(--green);margin-bottom:24px;}
-.hero-title{font-size:56px;font-weight:900;letter-spacing:-.05em;line-height:1.0;margin-bottom:20px;}
-.hero-title span{color:var(--green);}
-.hero-sub{font-size:18px;color:var(--muted);line-height:1.65;margin-bottom:36px;max-width:520px;margin-left:auto;margin-right:auto;}
-.hero-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
-.btn-primary{background:var(--black);color:var(--white);padding:16px 32px;border-radius:100px;font-size:16px;font-weight:600;text-decoration:none;transition:opacity .15s;}
-.btn-primary:hover{opacity:.85;}
-.btn-secondary{background:var(--off);color:var(--black);padding:16px 32px;border-radius:100px;font-size:16px;font-weight:600;text-decoration:none;border:1px solid var(--border);}
-.features{padding:80px 40px;background:var(--off);}
-.features-inner{max-width:900px;margin:0 auto;}
-.features-label{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--green);margin-bottom:12px;}
-.features-title{font-size:36px;font-weight:800;letter-spacing:-.04em;margin-bottom:48px;}
-.features-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px;}
-.feature-card{background:var(--white);border-radius:16px;padding:24px;border:1px solid var(--border);}
-.feature-icon{font-size:28px;margin-bottom:14px;}
-.feature-name{font-size:16px;font-weight:700;color:var(--black);margin-bottom:8px;letter-spacing:-.02em;}
-.feature-desc{font-size:14px;color:var(--muted);line-height:1.65;}
-.pricing{padding:80px 40px;text-align:center;}
-.pricing-inner{max-width:860px;margin:0 auto;}
-.pricing-label{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--green);margin-bottom:12px;}
-.pricing-title{font-size:36px;font-weight:800;letter-spacing:-.04em;margin-bottom:48px;}
-.pricing-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px;}
-.pricing-card{border:1.5px solid var(--border);border-radius:20px;padding:32px 24px;text-align:left;}
-.pricing-card.featured{border-color:var(--black);background:var(--black);color:var(--white);}
-.pricing-plan{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px;}
-.pricing-card.featured .pricing-plan{color:rgba(255,255,255,.6);}
-.pricing-amount{font-size:42px;font-weight:900;letter-spacing:-.05em;margin-bottom:4px;}
-.pricing-period{font-size:14px;color:var(--muted);}
-.pricing-card.featured .pricing-period{color:rgba(255,255,255,.6);}
-.pricing-divider{border:none;border-top:0.5px solid var(--border);margin:20px 0;}
-.pricing-card.featured .pricing-divider{border-color:rgba(255,255,255,.15);}
-.pricing-feature{font-size:14px;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:8px;}
-.pricing-card.featured .pricing-feature{color:rgba(255,255,255,.8);}
-.pricing-btn{display:block;text-align:center;padding:14px;border-radius:100px;font-size:15px;font-weight:600;text-decoration:none;margin-top:24px;transition:opacity .15s;}
-.pricing-btn-black{background:var(--black);color:var(--white);}
-.pricing-btn-white{background:var(--white);color:var(--black);}
-.pricing-btn:hover{opacity:.85;}
-.cta{background:var(--black);padding:100px 40px;text-align:center;}
-.cta-title{font-size:42px;font-weight:900;color:var(--white);letter-spacing:-.05em;margin-bottom:16px;}
-.cta-sub{font-size:18px;color:rgba(255,255,255,.6);margin-bottom:36px;}
-.cta-btn{background:var(--white);color:var(--black);padding:18px 40px;border-radius:100px;font-size:16px;font-weight:700;text-decoration:none;display:inline-block;}
-footer{padding:40px;border-top:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
-.footer-text{font-size:13px;color:var(--muted);}
+.nav-links a{font-size:14px;color:rgba(255,255,255,.6);text-decoration:none;transition:color .15s;}
+.nav-links a:hover{color:#fff;}
+.nav-cta{background:var(--green);color:#fff;padding:9px 20px;border-radius:100px;font-size:14px;font-weight:600;text-decoration:none;transition:opacity .15s;}
+.nav-cta:hover{opacity:.88;}
+
+/* ── Hero ── */
+.hero{min-height:100vh;background:var(--black);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:120px 24px 80px;position:relative;overflow:hidden;}
+.hero::before{content:'';position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:800px;height:800px;background:radial-gradient(circle,rgba(22,163,74,.18) 0%,transparent 70%);pointer-events:none;}
+.hero::after{content:'';position:absolute;bottom:-100px;right:-100px;width:400px;height:400px;background:radial-gradient(circle,rgba(22,163,74,.08) 0%,transparent 70%);pointer-events:none;}
+
+.hero-eyebrow{display:inline-flex;align-items:center;gap:8px;background:rgba(22,163,74,.12);border:1px solid rgba(22,163,74,.25);border-radius:100px;padding:7px 16px;font-size:12px;font-weight:700;color:var(--green-bright);letter-spacing:.04em;text-transform:uppercase;margin-bottom:32px;}
+.hero-eyebrow span{width:6px;height:6px;background:var(--green-bright);border-radius:50%;display:inline-block;animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+
+.hero-title{font-size:72px;font-weight:900;letter-spacing:-.05em;line-height:1;margin-bottom:12px;color:#fff;}
+.hero-title .green{background:linear-gradient(135deg,var(--green) 0%,var(--green-bright) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.hero-title .line2{display:block;font-size:72px;}
+
+.hero-sub{font-size:19px;color:rgba(255,255,255,.55);line-height:1.65;max-width:540px;margin:20px auto 40px;}
+
+.hero-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:56px;}
+.btn-green{background:var(--green);color:#fff;padding:16px 36px;border-radius:100px;font-size:16px;font-weight:700;text-decoration:none;transition:all .2s;box-shadow:0 0 40px rgba(22,163,74,.35);}
+.btn-green:hover{opacity:.9;box-shadow:0 0 60px rgba(22,163,74,.5);transform:translateY(-1px);}
+.btn-ghost{background:rgba(255,255,255,.07);color:rgba(255,255,255,.8);padding:16px 36px;border-radius:100px;font-size:16px;font-weight:600;text-decoration:none;border:1px solid rgba(255,255,255,.12);transition:all .2s;}
+.btn-ghost:hover{background:rgba(255,255,255,.12);color:#fff;}
+
+/* ── Competitor bar ── */
+.vs-bar{display:flex;align-items:center;justify-content:center;gap:0;border:1px solid rgba(255,255,255,.1);border-radius:16px;overflow:hidden;max-width:600px;margin:0 auto;}
+.vs-item{flex:1;padding:14px 16px;text-align:center;border-right:1px solid rgba(255,255,255,.08);}
+.vs-item:last-child{border-right:none;}
+.vs-item.ours{background:rgba(22,163,74,.12);}
+.vs-name{font-size:11px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;}
+.vs-price{font-size:22px;font-weight:900;color:rgba(255,255,255,.3);letter-spacing:-.03em;}
+.vs-item.ours .vs-price{color:var(--green-bright);}
+.vs-item.ours .vs-name{color:var(--green-bright);}
+.vs-label{font-size:9px;color:rgba(255,255,255,.25);margin-top:2px;}
+.vs-item.ours .vs-label{color:rgba(74,222,128,.5);}
+
+/* ── Stats strip ── */
+.stats{background:#111;border-top:1px solid #1a1a1a;border-bottom:1px solid #1a1a1a;padding:28px 40px;}
+.stats-inner{max-width:900px;margin:0 auto;display:flex;justify-content:space-around;gap:20px;flex-wrap:wrap;}
+.stat-item{text-align:center;}
+.stat-num{font-size:32px;font-weight:900;color:#fff;letter-spacing:-.04em;}
+.stat-num span{color:var(--green-bright);}
+.stat-label{font-size:12px;color:rgba(255,255,255,.4);margin-top:4px;}
+
+/* ── Features ── */
+.features{padding:100px 40px;background:#0d0d0d;}
+.features-inner{max-width:960px;margin:0 auto;}
+.section-label{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--green-bright);margin-bottom:14px;}
+.section-title{font-size:42px;font-weight:900;letter-spacing:-.04em;color:#fff;line-height:1.1;margin-bottom:16px;}
+.section-sub{font-size:16px;color:rgba(255,255,255,.45);max-width:480px;line-height:1.65;margin-bottom:56px;}
+.features-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;}
+.feature-card{background:#141414;border:1px solid #222;border-radius:20px;padding:28px;transition:border-color .2s;}
+.feature-card:hover{border-color:rgba(22,163,74,.4);}
+.feature-icon-wrap{width:44px;height:44px;background:rgba(22,163,74,.12);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:16px;}
+.feature-name{font-size:16px;font-weight:700;color:#fff;margin-bottom:8px;letter-spacing:-.02em;}
+.feature-desc{font-size:14px;color:rgba(255,255,255,.45);line-height:1.65;}
+
+/* ── Why ShopFlow ── */
+.why{padding:100px 40px;background:#080808;}
+.why-inner{max-width:960px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center;}
+.why-content{}
+.why-list{margin-top:32px;display:flex;flex-direction:column;gap:20px;}
+.why-item{display:flex;align-items:flex-start;gap:14px;}
+.why-check{width:22px;height:22px;background:rgba(22,163,74,.15);border:1px solid rgba(22,163,74,.3);border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;}
+.why-check svg{display:block;}
+.why-item-text strong{display:block;font-size:15px;font-weight:700;color:#fff;margin-bottom:3px;}
+.why-item-text span{font-size:13px;color:rgba(255,255,255,.4);line-height:1.5;}
+.why-visual{background:#111;border:1px solid #1f1f1f;border-radius:24px;padding:24px;position:relative;}
+.why-visual::before{content:'';position:absolute;inset:0;border-radius:24px;background:linear-gradient(135deg,rgba(22,163,74,.06),transparent);pointer-events:none;}
+.mock-header{display:flex;align-items:center;gap:10px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #1f1f1f;}
+.mock-dot{width:10px;height:10px;border-radius:50%;background:rgba(22,163,74,.4);}
+.mock-title{font-size:13px;font-weight:600;color:rgba(255,255,255,.5);}
+.mock-stat{background:#161616;border:1px solid #222;border-radius:12px;padding:14px 16px;margin-bottom:10px;}
+.mock-stat-label{font-size:10px;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;}
+.mock-stat-val{font-size:24px;font-weight:800;color:var(--green-bright);}
+.mock-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #1a1a1a;}
+.mock-row:last-child{border-bottom:none;}
+.mock-avatar{width:32px;height:32px;border-radius:50%;background:rgba(22,163,74,.2);flex-shrink:0;}
+.mock-name{font-size:13px;font-weight:600;color:rgba(255,255,255,.7);}
+.mock-time{font-size:11px;color:rgba(255,255,255,.3);margin-top:2px;}
+.mock-badge{margin-left:auto;background:rgba(22,163,74,.15);color:var(--green-bright);font-size:10px;font-weight:700;padding:3px 8px;border-radius:100px;}
+
+/* ── Pricing ── */
+.pricing{padding:100px 40px;background:#0a0a0a;text-align:center;}
+.pricing-inner{max-width:900px;margin:0 auto;}
+.pricing-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:56px;text-align:left;}
+.pricing-card{background:#111;border:1px solid #1f1f1f;border-radius:24px;padding:32px;}
+.pricing-card.featured{background:linear-gradient(135deg,#0f2a0f,#0a1f0a);border-color:rgba(22,163,74,.4);position:relative;}
+.pricing-card.featured::before{content:'Most Popular';position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;font-size:11px;font-weight:700;padding:4px 14px;border-radius:100px;white-space:nowrap;}
+.pricing-plan{font-size:12px;font-weight:700;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.08em;margin-bottom:16px;}
+.pricing-card.featured .pricing-plan{color:var(--green-bright);}
+.pricing-amount{font-size:48px;font-weight:900;color:#fff;letter-spacing:-.05em;line-height:1;}
+.pricing-amount sup{font-size:22px;vertical-align:super;margin-right:2px;}
+.pricing-period{font-size:13px;color:rgba(255,255,255,.35);margin-top:4px;margin-bottom:24px;}
+.pricing-divider{border:none;border-top:1px solid #1f1f1f;margin:20px 0;}
+.pricing-card.featured .pricing-divider{border-color:rgba(22,163,74,.2);}
+.pricing-feature{font-size:14px;color:rgba(255,255,255,.55);margin-bottom:10px;display:flex;align-items:center;gap:10px;}
+.pricing-feature::before{content:'✓';color:var(--green-bright);font-weight:700;flex-shrink:0;}
+.pricing-btn{display:block;text-align:center;padding:14px;border-radius:100px;font-size:15px;font-weight:700;text-decoration:none;margin-top:28px;transition:all .2s;}
+.pricing-btn-outline{background:transparent;color:#fff;border:1px solid #333;}
+.pricing-btn-outline:hover{border-color:rgba(255,255,255,.4);}
+.pricing-btn-green{background:var(--green);color:#fff;box-shadow:0 0 30px rgba(22,163,74,.3);}
+.pricing-btn-green:hover{opacity:.9;box-shadow:0 0 50px rgba(22,163,74,.5);}
+.no-fees{display:inline-flex;align-items:center;gap:8px;background:rgba(22,163,74,.08);border:1px solid rgba(22,163,74,.2);border-radius:100px;padding:8px 18px;font-size:13px;color:var(--green-bright);font-weight:600;margin-top:32px;}
+
+/* ── CTA ── */
+.cta{padding:120px 40px;text-align:center;background:var(--black);position:relative;overflow:hidden;}
+.cta::before{content:'';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:600px;height:600px;background:radial-gradient(circle,rgba(22,163,74,.15) 0%,transparent 70%);pointer-events:none;}
+.cta-title{font-size:56px;font-weight:900;color:#fff;letter-spacing:-.05em;line-height:1.05;margin-bottom:16px;}
+.cta-title .green{background:linear-gradient(135deg,var(--green),var(--green-bright));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.cta-sub{font-size:18px;color:rgba(255,255,255,.45);margin-bottom:40px;}
+.cta-note{font-size:13px;color:rgba(255,255,255,.25);margin-top:16px;}
+
+/* ── Footer ── */
+footer{background:#080808;border-top:1px solid #141414;padding:32px 40px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;}
+.footer-text{font-size:13px;color:rgba(255,255,255,.25);}
 .footer-links{display:flex;gap:20px;}
-.footer-links a{font-size:13px;color:var(--muted);text-decoration:none;}
-@media(max-width:640px){
-  .hero-title{font-size:36px;}
-  .features-grid,.pricing-grid{grid-template-columns:1fr;}
-  nav{padding:16px 20px;}
-  .nav-links{gap:12px;}
+.footer-links a{font-size:13px;color:rgba(255,255,255,.25);text-decoration:none;}
+.footer-links a:hover{color:rgba(255,255,255,.5);}
+
+/* ── Mobile ── */
+@media(max-width:768px){
+  nav{padding:14px 20px;}
+  .nav-links a:not(.nav-cta){display:none;}
+  .hero-title,.hero-title .line2{font-size:42px;}
+  .hero-sub{font-size:16px;}
+  .vs-bar{max-width:100%;}
+  .vs-price{font-size:18px;}
+  .stats-inner{gap:12px;}
+  .stat-num{font-size:26px;}
+  .features{padding:60px 20px;}
+  .features-grid{grid-template-columns:1fr;}
+  .section-title{font-size:30px;}
+  .why{padding:60px 20px;}
+  .why-inner{grid-template-columns:1fr;gap:40px;}
+  .pricing{padding:60px 20px;}
+  .pricing-grid{grid-template-columns:1fr;}
+  .cta{padding:80px 20px;}
+  .cta-title{font-size:36px;}
+  footer{padding:24px 20px;flex-direction:column;text-align:center;}
 }
 </style>
 </head>
 <body>
+
+<!-- Nav -->
 <nav>
   <a class="nav-logo" href="/">
     <img src="/icons/icon-192.png"/>
@@ -79,89 +176,234 @@ footer{padding:40px;border-top:0.5px solid var(--border);display:flex;justify-co
   <div class="nav-links">
     <a href="#features">Features</a>
     <a href="#pricing">Pricing</a>
-    <a class="nav-cta" href="/signup">Get started free →</a>
+    <a href="/demo">Book a Demo</a>
+    <a class="nav-cta" href="/signup" id="nav-cta-btn">Get started free →</a>
   </div>
 </nav>
 
+<!-- Hero -->
 <div class="hero">
-  <div class="hero-badge">✂️ Built for barbershops & local shops</div>
-  <div class="hero-title">Your shop.<br/>On <span>autopilot.</span></div>
-  <div class="hero-sub">Online booking your clients actually use. Client tracking that remembers everything. Automated reminders that bring them back.</div>
-  <div class="hero-btns">
-    <a class="btn-primary" href="/signup">Start free →</a>
-    <a class="btn-secondary" href="/login">Sign in</a>
+  <div class="hero-eyebrow"><span></span> Built for Barbershops</div>
+  <div class="hero-title">
+    Run your shop.<br/>
+    <span class="green line2">Not your software.</span>
   </div>
-</div>
+  <div class="hero-sub">Online booking, automated reminders, client tracking, and revenue dashboards — all in one app your whole team will actually use.</div>
+  <div class="hero-btns">
+    <a class="btn-green" href="/signup">Start free today →</a>
+    <a class="btn-ghost" href="/demo">Book a demo</a>
+  </div>
 
-<div class="features" id="features">
-  <div class="features-inner">
-    <div class="features-label">Everything you need</div>
-    <div class="features-title">Built for the way you work</div>
-    <div class="features-grid">
-      <div class="feature-card"><div class="feature-icon">📅</div><div class="feature-name">Online Booking</div><div class="feature-desc">Clients book from a link. No app download, no account. Just pick a time and go.</div></div>
-      <div class="feature-card"><div class="feature-icon">👤</div><div class="feature-name">Client Profiles</div><div class="feature-desc">Every client gets a profile automatically. Visit history, notes, loyalty points, spending.</div></div>
-      <div class="feature-card"><div class="feature-icon">💬</div><div class="feature-name">Auto Reminders</div><div class="feature-desc">24hr appointment reminders sent automatically. No-shows drop. Revenue goes up.</div></div>
-      <div class="feature-card"><div class="feature-icon">📈</div><div class="feature-name">Revenue Tracking</div><div class="feature-desc">See your numbers by barber, by month, by service. Know exactly what your shop is doing.</div></div>
-      <div class="feature-card"><div class="feature-icon">🎁</div><div class="feature-name">Loyalty Program</div><div class="feature-desc">Clients earn points every visit. Automatic rewards keep them coming back.</div></div>
-      <div class="feature-card"><div class="feature-icon">💳</div><div class="feature-name">Deposit Collection</div><div class="feature-desc">Require a deposit to book. Goes directly to your account. No more no-shows.</div></div>
+  <!-- Competitor pricing comparison -->
+  <div class="vs-bar">
+    <div class="vs-item">
+      <div class="vs-name">Booksy</div>
+      <div class="vs-price">$30</div>
+      <div class="vs-label">+ 2.49% per transaction</div>
+    </div>
+    <div class="vs-item">
+      <div class="vs-name">Square</div>
+      <div class="vs-price">$69</div>
+      <div class="vs-label">+ 2.6% per transaction</div>
+    </div>
+    <div class="vs-item ours">
+      <div class="vs-name">ShopFlow</div>
+      <div class="vs-price">$20</div>
+      <div class="vs-label">Zero transaction fees</div>
+    </div>
+    <div class="vs-item">
+      <div class="vs-name">Bookedin</div>
+      <div class="vs-price">$84</div>
+      <div class="vs-label">per month</div>
     </div>
   </div>
 </div>
 
+<!-- Stats -->
+<div class="stats">
+  <div class="stats-inner">
+    <div class="stat-item">
+      <div class="stat-num"><span>0%</span></div>
+      <div class="stat-label">Transaction fees. Ever.</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num"><span>2</span> min</div>
+      <div class="stat-label">Average setup time</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num"><span>24</span>hr</div>
+      <div class="stat-label">Auto appointment reminders</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num"><span>$0</span></div>
+      <div class="stat-label">Setup fee on Starter</div>
+    </div>
+  </div>
+</div>
+
+<!-- Features -->
+<div class="features" id="features">
+  <div class="features-inner">
+    <div class="section-label">Everything you need</div>
+    <div class="section-title">Built for the chair.<br/>Not the office.</div>
+    <div class="section-sub">Everything a barber shop needs to run like a real business — without the complexity.</div>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon-wrap">📅</div>
+        <div class="feature-name">Online Booking</div>
+        <div class="feature-desc">Clients book from a link. No app download, no account needed. Works on any phone.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon-wrap">👤</div>
+        <div class="feature-name">Client Profiles</div>
+        <div class="feature-desc">Every client gets a full profile — visit history, cut notes, spending, loyalty points, no-shows.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon-wrap">💬</div>
+        <div class="feature-name">Auto SMS Reminders</div>
+        <div class="feature-desc">24-hour reminders fire automatically. Clients get a text, show up, and tip better.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon-wrap">📈</div>
+        <div class="feature-name">Revenue Dashboard</div>
+        <div class="feature-desc">See revenue by barber, by service, by month. Know exactly what your shop is doing.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon-wrap">🔁</div>
+        <div class="feature-name">Rebook Nudges</div>
+        <div class="feature-desc">Clients who go quiet get an automatic text. Set the interval. Let it run.</div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon-wrap">💳</div>
+        <div class="feature-name">Deposit Collection</div>
+        <div class="feature-desc">Require a deposit to secure the appointment. Goes straight to your Stripe account.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Why ShopFlow -->
+<div class="why">
+  <div class="why-inner">
+    <div class="why-content">
+      <div class="section-label">Why ShopFlow</div>
+      <div class="section-title" style="color:#fff;font-size:36px;">Your clients won't<br/>miss an appointment.</div>
+      <div class="why-list">
+        <div class="why-item">
+          <div class="why-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div class="why-item-text"><strong>Automated before you wake up</strong><span>Reminders, rebook nudges, and loyalty rewards run on their own — no manual work.</span></div>
+        </div>
+        <div class="why-item">
+          <div class="why-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div class="why-item-text"><strong>Works like an app, installs like a link</strong><span>Barbers add it to their home screen. Clients book from a link you text them. No downloads.</span></div>
+        </div>
+        <div class="why-item">
+          <div class="why-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div class="why-item-text"><strong>Keep every dollar you earn</strong><span>Zero transaction fees on every plan. Competitors charge 2-3% per booking. That adds up fast.</span></div>
+        </div>
+        <div class="why-item">
+          <div class="why-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
+          <div class="why-item-text"><strong>Set up in 2 minutes</strong><span>Add your barbers, connect your booking link, done. No training required.</span></div>
+        </div>
+      </div>
+    </div>
+    <!-- App mockup -->
+    <div class="why-visual">
+      <div class="mock-header">
+        <div class="mock-dot"></div>
+        <div class="mock-title">King's Cuts · Dashboard</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
+        <div class="mock-stat">
+          <div class="mock-stat-label">Revenue MTD</div>
+          <div class="mock-stat-val">$4,280</div>
+        </div>
+        <div class="mock-stat">
+          <div class="mock-stat-label">Avg Ticket</div>
+          <div class="mock-stat-val">$42</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Today's Appointments</div>
+      <div class="mock-row">
+        <div class="mock-avatar"></div>
+        <div><div class="mock-name">Jordan Rivera</div><div class="mock-time">9:00 AM · Skin Fade · Marcus</div></div>
+        <div class="mock-badge">9 AM</div>
+      </div>
+      <div class="mock-row">
+        <div class="mock-avatar" style="background:rgba(37,99,235,.2);"></div>
+        <div><div class="mock-name">Kevin James</div><div class="mock-time">10:00 AM · Haircut · Dre</div></div>
+        <div class="mock-badge">10 AM</div>
+      </div>
+      <div class="mock-row">
+        <div class="mock-avatar" style="background:rgba(217,119,6,.2);"></div>
+        <div><div class="mock-name">DeShawn Carter</div><div class="mock-time">11:30 AM · Cut + Beard · Tony</div></div>
+        <div class="mock-badge">11:30</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Pricing -->
 <div class="pricing" id="pricing">
   <div class="pricing-inner">
-    <div class="pricing-label">Pricing</div>
-    <div class="pricing-title">Simple, honest pricing</div>
+    <div class="section-label" style="color:var(--green-bright);">Pricing</div>
+    <div class="section-title" style="color:#fff;">Simple, honest pricing</div>
+    <div style="font-size:15px;color:rgba(255,255,255,.4);margin-top:8px;">No contracts. No transaction fees. Cancel anytime.</div>
     <div class="pricing-grid">
       <div class="pricing-card">
         <div class="pricing-plan">Starter</div>
-        <div class="pricing-amount">$19.99</div>
+        <div class="pricing-amount"><sup>$</sup>19.99</div>
         <div class="pricing-period">per month</div>
         <hr class="pricing-divider"/>
-        <div class="pricing-feature">✓ Online booking page</div>
-        <div class="pricing-feature">✓ Up to 2 barbers</div>
-        <div class="pricing-feature">✓ Client profiles</div>
-        <div class="pricing-feature">✓ Revenue tracking</div>
-        <div class="pricing-feature">✓ Loyalty program</div>
-        <a class="pricing-btn pricing-btn-black" href="/signup?plan=starter">Get started →</a>
+        <div class="pricing-feature">Online booking page</div>
+        <div class="pricing-feature">Up to 2 barbers</div>
+        <div class="pricing-feature">Client profiles</div>
+        <div class="pricing-feature">Revenue tracking</div>
+        <div class="pricing-feature">Loyalty program</div>
+        <a class="pricing-btn pricing-btn-outline" href="/signup?plan=starter">Get started →</a>
       </div>
       <div class="pricing-card featured">
         <div class="pricing-plan">Pro</div>
-        <div class="pricing-amount">$99</div>
+        <div class="pricing-amount"><sup>$</sup>99</div>
         <div class="pricing-period">per month</div>
         <hr class="pricing-divider"/>
-        <div class="pricing-feature">✓ Everything in Starter</div>
-        <div class="pricing-feature">✓ Unlimited barbers</div>
-        <div class="pricing-feature">✓ SMS automation</div>
-        <div class="pricing-feature">✓ Deposit collection</div>
-        <div class="pricing-feature">✓ Priority support</div>
-        <a class="pricing-btn pricing-btn-white" href="/signup?plan=pro">Get started →</a>
+        <div class="pricing-feature">Everything in Starter</div>
+        <div class="pricing-feature">Unlimited barbers</div>
+        <div class="pricing-feature">SMS automation</div>
+        <div class="pricing-feature">Deposit collection</div>
+        <div class="pricing-feature">Priority support</div>
+        <a class="pricing-btn pricing-btn-green" href="/signup?plan=pro">Get started →</a>
       </div>
       <div class="pricing-card">
         <div class="pricing-plan">Shop</div>
-        <div class="pricing-amount">$200</div>
+        <div class="pricing-amount"><sup>$</sup>200</div>
         <div class="pricing-period">per month</div>
         <hr class="pricing-divider"/>
-        <div class="pricing-feature">✓ Everything in Pro</div>
-        <div class="pricing-feature">✓ Multi-location</div>
-        <div class="pricing-feature">✓ Walk-in kiosk</div>
-        <div class="pricing-feature">✓ TV display mode</div>
-        <div class="pricing-feature">✓ White glove setup</div>
-        <a class="pricing-btn pricing-btn-black" href="/signup?plan=shop">Get started →</a>
+        <div class="pricing-feature">Everything in Pro</div>
+        <div class="pricing-feature">Multi-location</div>
+        <div class="pricing-feature">Walk-in kiosk mode</div>
+        <div class="pricing-feature">TV display mode</div>
+        <div class="pricing-feature">White glove setup</div>
+        <a class="pricing-btn pricing-btn-outline" href="/signup?plan=shop">Get started →</a>
       </div>
     </div>
+    <div class="no-fees">✓ Zero transaction fees on every plan</div>
   </div>
 </div>
 
+<!-- CTA -->
 <div class="cta">
-  <div class="cta-title">Ready to grow your shop?</div>
-  <div class="cta-sub">Set up in 2 minutes. No credit card required.</div>
-  <a class="cta-btn" href="/signup">Start free →</a>
+  <div class="cta-title">Ready to run your shop<br/><span class="green">the right way?</span></div>
+  <div class="cta-sub">Join barbershops already using ShopFlow to automate their business.</div>
+  <a class="btn-green" href="/signup" style="display:inline-block;">Start free today →</a>
+  <div class="cta-note">No credit card required · Set up in 2 minutes</div>
 </div>
 
+<!-- Footer -->
 <footer>
   <div class="footer-text">© 2026 ShopFlow LLC · Albuquerque, NM</div>
   <div class="footer-links">
+    <a href="/demo">Book a Demo</a>
     <a href="/terms.html">Terms</a>
     <a href="/privacy.html">Privacy</a>
   </div>
@@ -170,15 +412,11 @@ footer{padding:40px;border-top:0.5px solid var(--border);display:flex;justify-co
 <script>
 // Redirect logged-in users to their CRM
 const token = localStorage.getItem('sf_token');
-const slug = localStorage.getItem('sf_shopSlug');
+const slug  = localStorage.getItem('sf_shopSlug');
 if (token && slug) {
-  const goBtn = document.querySelector('.nav-cta');
-  if (goBtn) { goBtn.textContent='Go to my shop →'; goBtn.href='/shop/'+slug; }
+  const btn = document.getElementById('nav-cta-btn');
+  if (btn) { btn.textContent = 'Go to my shop →'; btn.href = '/shop/' + slug; }
 }
-// Pre-select plan from URL
-const params = new URLSearchParams(window.location.search);
-const plan = params.get('plan');
-if (plan) window.location.href = '/signup?plan='+plan;
 </script>
 </body>
 </html>
