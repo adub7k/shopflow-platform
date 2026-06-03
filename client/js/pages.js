@@ -108,7 +108,14 @@ const Dashboard = {
       let settings={shopName:'ShopFlow'};
       let barbers=[];
       try{rev=await db.revenue.get();}catch(e){console.warn('Revenue:',e.message);}
-      try{appts=await db.appointments.all({date:today()});}catch(e){console.warn('Appts:',e.message);}
+      try{
+        appts=await db.appointments.all({date:today()});
+        // Sort earliest time first
+        appts.sort((a,b)=>{
+          const parse=t=>{if(!t)return0;const[tm,ap]=t.split(' ');let[h,m]=tm.split(':').map(Number);if(ap==='PM'&&h!==12)h+=12;if(ap==='AM'&&h===12)h=0;return h*60+m;};
+          return parse(a.time)-parse(b.time);
+        });
+      }catch(e){console.warn('Appts:',e.message);}
       try{settings=await db.settings.get();}catch(e){console.warn('Settings:',e.message);}
       try{barbers=await db.barbers.all();}catch(e){console.warn('Barbers:',e.message);}
       const html = [];
@@ -133,14 +140,22 @@ const Dashboard = {
         html.push('<div class="card"><div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">No appointments today</div><div class="empty-sub">Add one from the Appointments tab</div></div></div>');
       } else {
         html.push('<div class="list-card">');
-        appts.slice(0,5).forEach(a => {
-          html.push(`<div class="list-row" onclick="${a.customerId?`ClientProfile.open('${a.customerId}')`:`App.nav('appointments')`}">
-            ${avatarEl(a.customerName,38)}
+        appts.slice(0,8).forEach(a => {
+          const isDone   = a.status === 'done';
+          const canComplete = a.status === 'confirmed' || a.status === 'in-progress';
+          html.push(`<div class="list-row" style="gap:10px;" onclick="Dashboard._openAppt('${a.id}')">
+            <div onclick="event.stopPropagation();${a.customerId?`ClientProfile.open('${a.customerId}')`:''}">
+              ${avatarEl(a.customerName,38)}
+            </div>
             <div class="list-main">
               <div class="list-name">${a.customerName}</div>
               <div class="list-sub">${a.time} · ${a.service}${a.barberName?' · '+a.barberName:''}</div>
             </div>
-            ${statusBadge(a.status)}
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+              ${canComplete?`<button onclick="event.stopPropagation();Dashboard._complete('${a.id}')" style="width:32px;height:32px;border-radius:50%;background:var(--green);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;" title="Mark complete">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </button>`:statusBadge(a.status)}
+            </div>
           </div>`);
         });
         html.push('</div>');
@@ -176,7 +191,33 @@ const Dashboard = {
 
       el.innerHTML = html.join('');
     } catch(e) { el.innerHTML = '<div class="card"><p style="color:var(--muted)">Could not load dashboard</p></div>'; }
-  }
+  },
+
+  // Open appointment detail from dashboard (loads Appointments data then shows detail)
+  async _openAppt(apptId) {
+    try {
+      const appts = await db.appointments.all({ date: today() });
+      Appointments._data = appts;
+      const barbers  = await db.barbers.all();
+      const services = await db.services.all();
+      Appointments._barbers  = barbers;
+      Appointments._services = services;
+      Appointments.openDetail(apptId);
+    } catch(e) { toast('Could not load appointment', 'error'); }
+  },
+
+  // Quick-complete from dashboard — opens the checkout flow
+  async _complete(apptId) {
+    try {
+      const appts = await db.appointments.all({ date: today() });
+      Appointments._data = appts;
+      const barbers  = await db.barbers.all();
+      const services = await db.services.all();
+      Appointments._barbers  = barbers;
+      Appointments._services = services;
+      await Appointments.complete(apptId);
+    } catch(e) { toast('Could not complete appointment', 'error'); }
+  },
 };
 
 // ── Appointments ──────────────────────────────────────────────────────────────
