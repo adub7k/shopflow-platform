@@ -143,22 +143,20 @@ const Dashboard = {
         appts.slice(0,8).forEach(a => {
           const canComplete = a.status === 'confirmed' || a.status === 'in-progress';
           const cid = a.customerId || '';
-          html.push(`
-            <div class="list-row" style="gap:10px;cursor:pointer;" onclick="${cid?`ClientProfile.open('${cid}')`:''}" >
-              ${avatarEl(a.customerName,38)}
-              <div class="list-main">
-                <div class="list-name">${a.customerName}</div>
-                <div class="list-sub">${a.time} · ${a.service}${a.barberName?' · '+a.barberName:''}</div>
-              </div>
-              <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;" onclick="event.stopPropagation()">
-                ${canComplete
-                  ? `<button onclick="Dashboard._complete('${a.id}')" style="width:32px;height:32px;border-radius:50%;background:var(--green);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Mark complete">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                    </button>`
-                  : statusBadge(a.status)
-                }
-              </div>
-            </div>`);
+          const rowClick = cid ? 'ClientProfile.open("' + cid + '")' : '';
+          const completeBtn = '<button onclick="event.stopPropagation();Dashboard._complete(\'' + a.id + '\')" style="width:32px;height:32px;border-radius:50%;background:var(--green);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Mark complete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>';
+          html.push(
+            '<div class="list-row" style="gap:10px;cursor:pointer;" onclick="' + rowClick + '">' +
+              avatarEl(a.customerName, 38) +
+              '<div class="list-main">' +
+                '<div class="list-name">' + a.customerName + '</div>' +
+                '<div class="list-sub">' + a.time + ' · ' + a.service + (a.barberName ? ' · ' + a.barberName : '') + '</div>' +
+              '</div>' +
+              '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">' +
+                (canComplete ? completeBtn : statusBadge(a.status)) +
+              '</div>' +
+            '</div>'
+          );
         });
         html.push('</div>');
       }
