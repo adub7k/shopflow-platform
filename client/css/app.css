@@ -100,6 +100,14 @@ textarea.form-input{resize:vertical;min-height:80px;}
 .bottom-nav-item{display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 0;flex:1;cursor:pointer;color:var(--faint);font-size:10px;font-weight:500;transition:color .15s;border:none;background:none;font-family:var(--font);}
 .bottom-nav-item.active{color:var(--green);}
 .bottom-nav-icon{font-size:20px;line-height:1;}
+/* ── Global client profile overlay ── */
+#cp-overlay{position:fixed;inset:0;background:var(--bg);z-index:400;transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);display:flex;flex-direction:column;overflow:hidden;}
+#cp-overlay.open{transform:translateX(0);}
+#cp-header{display:flex;align-items:center;justify-content:space-between;padding:0 16px;height:var(--topbar-h);background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;position:sticky;top:0;z-index:1;}
+#cp-back-btn{background:none;border:none;cursor:pointer;color:var(--green);padding:6px;border-radius:8px;display:flex;align-items:center;justify-content:center;width:36px;height:36px;}
+#cp-header-name{font-size:16px;font-weight:700;color:var(--text);letter-spacing:-.02em;text-align:center;flex:1;}
+#cp-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:20px;max-width:780px;margin:0 auto;width:100%;}
+
 /* ── Messages ── */
 .msg-thread{display:flex;flex-direction:column;height:calc(100vh - var(--topbar-h) - 70px);} /* 70px = bottom nav */
 .msg-thread-header{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;}

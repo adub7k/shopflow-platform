@@ -96,6 +96,20 @@
   <button class="bottom-nav-item" data-page="settings" onclick="App.nav('settings')"><span class="bottom-nav-icon">⚙️</span>Settings</button>
 </div>
 
+<!-- Global client profile overlay -->
+<div id="cp-overlay">
+  <div id="cp-header">
+    <button id="cp-back-btn" onclick="ClientProfile.close()">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="13 16 7 10 13 4"/>
+      </svg>
+    </button>
+    <div id="cp-header-name">Client Profile</div>
+    <div style="width:36px;"></div>
+  </div>
+  <div id="cp-body"></div>
+</div>
+
 <!-- Modal -->
 <div id="modal-overlay">
   <div id="modal-box"></div>
