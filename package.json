@@ -5,23 +5,23 @@
   "private": true,
   "scripts": {
     "start": "node server/index.js",
-    "dev":   "node server/index.js",
-    "lint":  "eslint server/**/*.js"
+    "dev": "node server/index.js",
+    "lint": "eslint server/**/*.js"
   },
   "devDependencies": {
     "eslint": "^8.57.0"
   },
   "dependencies": {
-    "lowdb": "1.0.0",
+    "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "express": "^4.18.3",
     "express-rate-limit": "^7.2.0",
+    "jsonwebtoken": "^9.0.2",
+    "lowdb": "1.0.0",
     "nodemailer": "^6.9.13",
     "stripe": "^14.25.0",
-    "bcryptjs": "^2.4.3",
-    "jsonwebtoken": "^9.0.2",
-    "uuid": "^9.0.0",
-    "twilio": "^4.23.0"
+    "twilio": "^4.23.0",
+    "uuid": "^9.0.0"
   },
   "engines": {
     "node": ">=18.0.0"
