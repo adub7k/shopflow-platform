@@ -134,7 +134,7 @@ const Dashboard = {
       } else {
         html.push('<div class="list-card">');
         appts.slice(0,5).forEach(a => {
-          html.push(`<div class="list-row" onclick="App.nav('appointments')">
+          html.push(`<div class="list-row" onclick="${a.customerId?`Clients.openDetail('${a.customerId}')`:`App.nav('appointments')`}">
             ${avatarEl(a.customerName,38)}
             <div class="list-main">
               <div class="list-name">${a.customerName}</div>
@@ -165,7 +165,7 @@ const Dashboard = {
         html.push('<div class="section-header">Recent Completed</div>');
         html.push('<div class="list-card">');
         rev.recentDone.slice(0,4).forEach(a => {
-          html.push(`<div class="list-row">
+          html.push(`<div class="list-row" onclick="${a.customerId?`Clients.openDetail('${a.customerId}')`:''}" style="${a.customerId?'cursor:pointer;':''}">
             ${avatarEl(a.customerName,36)}
             <div class="list-main"><div class="list-name">${a.customerName}</div><div class="list-sub">${a.service} · ${fmtDateShort(a.date)}</div></div>
             <div style="font-weight:700;color:var(--green);">${fmtMoney(a.price)}</div>
@@ -233,7 +233,7 @@ const Appointments = {
             <div style="width:3px;min-height:44px;background:${barber?.color||'#ccc'};border-radius:2px;flex-shrink:0;"></div>
             ${avatarEl(a.customerName,38)}
             <div class="list-main">
-              <div class="list-name">${a.customerName}</div>
+              <div class="list-name" ${a.customerId?`onclick="event.stopPropagation();Clients.openDetail('${a.customerId}')" style="cursor:pointer;color:var(--text);"`:''}">${a.customerName}</div>
               <div class="list-sub">${a.time} · ${a.service}${barber?' · '+barber.name:''}</div>
             </div>
             <div class="list-right">${statusBadge(a.status)}<div style="font-size:12px;color:var(--muted);margin-top:3px;">${fmtMoney(a.price)}</div></div>
@@ -458,6 +458,7 @@ const Appointments = {
         ${a.customerPhone?`<div style="font-size:13px;color:var(--muted);margin-top:4px;">📱 ${a.customerPhone}</div>`:''}
       </div>
       <div class="modal-actions">
+        ${a.customerId?`<button class="btn btn-full" onclick="Modal.close();Clients.openDetail('${a.customerId}')">👤 View Client Profile</button>`:''}
         ${a.status==='confirmed'||a.status==='in-progress'?`<button class="btn btn-green btn-full" onclick="Appointments.complete('${a.id}')">✓ Mark Complete</button>`:''}
         ${a.status==='confirmed'?`<button class="btn btn-full" style="color:var(--orange);border-color:#fde68a;" onclick="Appointments.noShow('${a.id}')">😤 No Show</button>`:''}
         ${a.status==='confirmed'&&!a.depositPaid&&!a.depositWaived?`<button class="btn btn-full" style="color:var(--muted);" onclick="Appointments.waiveDeposit('${a.id}')">⚡ Waive Deposit</button>`:''}
