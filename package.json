@@ -5,7 +5,11 @@
   "private": true,
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node server/index.js"
+    "dev":   "node server/index.js",
+    "lint":  "eslint server/**/*.js"
+  },
+  "devDependencies": {
+    "eslint": "^8.57.0"
   },
   "dependencies": {
     "lowdb": "1.0.0",

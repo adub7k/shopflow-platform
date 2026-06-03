@@ -1,0 +1,467 @@
+// ── Appointments ──────────────────────────────────────────────────────────────
+const Appointments = {
+  _data: [], _barbers: [], _services: [],
+  _selected: today(),
+  _prefill: null, // set by Clients.bookAppointment to pre-fill form after nav
+
+  _view: 'month', // 'month' or 'week'
+
+  async render() {
+    const el = document.getElementById('page-appointments'); if(!el)return;
+    try {
+      const month = this._selected.slice(0,7);
+      [this._data, this._barbers, this._services] = await Promise.all([
+        db.appointments.all({month}), db.barbers.all(), db.services.all()
+      ]);
+      const html = [];
+
+      // View toggle + nav
+      const dt = new Date(this._selected+'T12:00:00');
+      const monthLabel = dt.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+      html.push(`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <button class="btn btn-sm" onclick="Appointments.changeMonth(-1)">&#8249;</button>
+        <div style="font-size:15px;font-weight:700;">${monthLabel}</div>
+        <button class="btn btn-sm" onclick="Appointments.changeMonth(1)">&#8250;</button>
+      </div>`);
+
+      // View toggle
+      html.push(`<div style="display:flex;gap:6px;margin-bottom:14px;">
+        <button class="btn btn-sm${this._view==='month'?' btn-primary':''}" onclick="Appointments._view='month';Appointments.render()">Month</button>
+        <button class="btn btn-sm${this._view==='week'?' btn-primary':''}" onclick="Appointments._view='week';Appointments.render()">Week</button>
+      </div>`);
+
+      if (this._view==='week') {
+        html.push(this._buildWeekView());
+      } else {
+        // Mini calendar
+        html.push(this._buildCalendar(dt));
+      }
+
+      // Add button
+      html.push(`<div class="section-header"><span>Appointments — ${fmtDateFull(this._selected)}</span><button class="btn btn-sm btn-green" onclick="Appointments.openForm(null)">+ Add</button></div>`);
+
+      // Day's appointments
+      const dayAppts = this._data.filter(a=>a.date===this._selected).sort((a,b)=>a.time.localeCompare(b.time));
+      if (!dayAppts.length) {
+        html.push('<div class="card"><div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">No appointments this day</div></div></div>');
+      } else {
+        html.push('<div class="list-card">');
+        dayAppts.forEach(a => {
+          const barber = this._barbers.find(b=>b.id===a.barberId);
+          html.push(`<div class="list-row" onclick="Appointments.openDetail('${a.id}')">
+            <div style="width:3px;min-height:44px;background:${barber?.color||'#ccc'};border-radius:2px;flex-shrink:0;"></div>
+            ${avatarEl(a.customerName,38)}
+            <div class="list-main">
+              <div class="list-name" ${a.customerId?`onclick="event.stopPropagation();ClientProfile.open('${a.customerId}')" style="cursor:pointer;color:var(--text);"`:''}">${a.customerName}</div>
+              <div class="list-sub">${a.time} · ${a.service}${barber?' · '+barber.name:''}</div>
+            </div>
+            <div class="list-right">${statusBadge(a.status)}<div style="font-size:12px;color:var(--muted);margin-top:3px;">${fmtMoney(a.price)}</div></div>
+          </div>`);
+        });
+        html.push('</div>');
+      }
+      el.innerHTML = html.join('');
+
+      // If navigated here from a client profile, open the pre-filled form
+      if (this._prefill) {
+        const p = this._prefill; this._prefill = null;
+        setTimeout(() => this.openFormPrefilled(p.customerId, p.customerName, p.customerPhone), 100);
+      }
+    } catch(e) { el.innerHTML = '<div class="card"><p style="color:var(--muted)">Could not load appointments</p></div>'; }
+  },
+
+  _buildCalendar(dt) {
+    const year=dt.getFullYear(), month=dt.getMonth();
+    const first=new Date(year,month,1).getDay();
+    const days=new Date(year,month+1,0).getDate();
+    const datesWithAppts=new Set(this._data.map(a=>a.date));
+    const todayStr=today();
+    let html='<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:16px;">';
+    html+='<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:4px;">';
+    ['S','M','T','W','T','F','S'].forEach(d=>html+=`<div style="text-align:center;font-size:10px;font-weight:700;color:var(--faint);padding:3px 0;">${d}</div>`);
+    html+='</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;">';
+    for(let i=0;i<first;i++) html+='<div></div>';
+    for(let d=1;d<=days;d++){
+      const dateStr=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const isToday=dateStr===todayStr, isSel=dateStr===this._selected, hasAppt=datesWithAppts.has(dateStr);
+      const bg=isSel?'background:#16a34a;color:#fff;':isToday?'background:var(--green-lt);color:var(--green);':'';
+      html+=`<div onclick="Appointments.selectDay('${dateStr}')" style="aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:7px;font-size:13px;cursor:pointer;${bg}position:relative;">
+        ${d}
+        ${hasAppt?`<div style="width:4px;height:4px;border-radius:50%;background:${isSel?'#fff':'var(--green)'};position:absolute;bottom:2px;"></div>`:''}
+      </div>`;
+    }
+    html+='</div></div>';
+    return html;
+  },
+
+  selectDay(date) { this._selected=date; this.render(); },
+
+  _buildWeekView() {
+    // Get start of week (Sunday) for selected date
+    const dt = new Date(this._selected+'T12:00:00');
+    const dow = dt.getDay();
+    const weekStart = new Date(dt); weekStart.setDate(dt.getDate()-dow);
+    const days = [];
+    for (let i=0;i<7;i++) {
+      const d = new Date(weekStart); d.setDate(weekStart.getDate()+i);
+      days.push(d.toISOString().split('T')[0]);
+    }
+    const todayStr = today();
+    let html = '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px;">';
+    // Week header
+    html += '<div style="display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--border);">';
+    days.forEach(date => {
+      const d = new Date(date+'T12:00:00');
+      const isToday = date===todayStr;
+      const isSel = date===this._selected;
+      const dayAppts = this._data.filter(a=>a.date===date);
+      html += `<div onclick="Appointments.selectDay('${date}')" style="padding:8px 4px;text-align:center;cursor:pointer;background:${isSel?'var(--green)':isToday?'var(--green-lt)':'var(--surface)'};border-right:1px solid var(--border);">
+        <div style="font-size:10px;font-weight:600;color:${isSel?'rgba(255,255,255,.8)':isToday?'var(--green)':'var(--faint)'};">${d.toLocaleDateString('en-US',{weekday:'short'})}</div>
+        <div style="font-size:15px;font-weight:800;color:${isSel?'#fff':isToday?'var(--green)':'var(--text)'};">${d.getDate()}</div>
+        ${dayAppts.length?`<div style="width:6px;height:6px;border-radius:50%;background:${isSel?'rgba(255,255,255,.7)':'var(--green)'};margin:2px auto 0;"></div>`:''}
+      </div>`;
+    });
+    html += '</div>';
+    // Selected day appointments
+    const selAppts = this._data.filter(a=>a.date===this._selected).sort((a,b)=>a.time.localeCompare(b.time));
+    if (!selAppts.length) {
+      html += '<div style="text-align:center;padding:24px;color:var(--faint);font-size:13px;">No appointments this day</div>';
+    } else {
+      selAppts.forEach(a=>{
+        const barber = this._barbers.find(b=>b.id===a.barberId);
+        html += `<div onclick="Appointments.openDetail('${a.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s;" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+          <div style="width:3px;height:36px;background:${barber?.color||'#ccc'};border-radius:2px;flex-shrink:0;"></div>
+          <div style="width:52px;font-size:11px;color:var(--muted);font-weight:600;flex-shrink:0;">${a.time}</div>
+          ${avatarEl(a.customerName,32)}
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.customerName}</div>
+            <div style="font-size:11px;color:var(--muted);">${a.service}${barber?' · '+barber.name:''}</div>
+          </div>
+          ${statusBadge(a.status)}
+        </div>`;
+      });
+    }
+    html += '</div>';
+    return html;
+  },
+
+  changeMonth(delta) {
+    const dt=new Date(this._selected+'T12:00:00');
+    dt.setMonth(dt.getMonth()+delta);
+    this._selected=dt.toISOString().split('T')[0];
+    this.render();
+  },
+
+  openForm(id) {
+    const a = id ? this._data.find(x=>x.id===id) : null;
+    const barberOpts = this._barbers.map(b=>`<option value="${b.id}|${b.name}"${a?.barberId===b.id?' selected':''}>${b.name}</option>`).join('');
+    const svcOpts = this._services.map(s=>`<option value="${s.id}|${s.name}|${s.price}"${a?.serviceId===s.id?' selected':''}>${s.name} — ${fmtMoney(s.price)}</option>`).join('');
+    Modal.show(`
+      <div class="modal-title">${a?'Edit Appointment':'New Appointment'}</div>
+      <div class="form-group"><label class="form-label">Client *</label>
+        <div class="autocomplete-wrap"><input class="form-input" id="fa-name" value="${a?.customerName||''}" placeholder="Search or type name..." /><div class="autocomplete-list" id="fa-list"></div></div>
+        <input type="hidden" id="fa-cid" value="${a?.customerId||''}" />
+        <input type="hidden" id="fa-phone" value="${a?.customerPhone||''}" />
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Service</label>
+          <select class="form-input" id="fa-svc" onchange="Appointments._svcChange()">${svcOpts}</select>
+        </div>
+        <div class="form-group"><label class="form-label">Price</label>
+          <input class="form-input" id="fa-price" type="number" value="${a?.price||35}" />
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">Barber</label>
+        <select class="form-input" id="fa-barber"><option value="|">Any barber</option>${barberOpts}</select>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="fa-date" type="date" value="${a?.date||this._selected}" /></div>
+        <div class="form-group"><label class="form-label">Time</label><input class="form-input" id="fa-time" type="time" value="${a?.time?this._to24(a.time):'10:00'}" /></div>
+      </div>
+      <div class="form-group"><label class="form-label">Notes</label><input class="form-input" id="fa-notes" value="${a?.notes||''}" placeholder="Optional notes..." /></div>
+      <div class="modal-actions">
+        ${a?`<button class="btn btn-green btn-full" onclick="Appointments.complete('${a.id}')">✓ Mark Complete</button>`:''}
+        ${a?`<button class="btn btn-danger btn-full" onclick="Appointments.delete('${a.id}')">Delete</button>`:''}
+        <button id="fa-btn" class="btn btn-primary btn-full" onclick="Appointments.save('${a?.id||''}')">Save</button>
+        <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
+      </div>`);
+    setTimeout(()=>{
+      makeAutocomplete('fa-name','fa-list',(id,name,phone)=>{document.getElementById('fa-name').value=name;document.getElementById('fa-cid').value=id;document.getElementById('fa-phone').value=phone||'';});
+    },150);
+  },
+
+  openFormPrefilled(customerId, customerName, customerPhone) {
+    // Ensure barbers/services are loaded then open a new appointment form pre-filled with client
+    const load = (this._barbers.length && this._services.length)
+      ? Promise.resolve()
+      : Promise.all([db.barbers.all(), db.services.all()]).then(([b,s])=>{ this._barbers=b; this._services=s; });
+    load.then(() => {
+      this.openForm(null);
+      // After form renders, fill in the client fields
+      setTimeout(() => {
+        const nameEl  = document.getElementById('fa-name');
+        const cidEl   = document.getElementById('fa-cid');
+        const phoneEl = document.getElementById('fa-phone');
+        if (nameEl)  nameEl.value  = customerName;
+        if (cidEl)   cidEl.value   = customerId;
+        if (phoneEl) phoneEl.value = customerPhone;
+      }, 80);
+    });
+  },
+
+  _svcChange() {
+    const val=document.getElementById('fa-svc')?.value||'';
+    const [,, price]=val.split('|');
+    if(price){const pi=document.getElementById('fa-price');if(pi)pi.value=price;}
+  },
+
+  _to24(t12) {
+    if(!t12)return'10:00';
+    const [time,ampm]=t12.split(' ');
+    let [h,m]=time.split(':');
+    h=parseInt(h);
+    if(ampm==='PM'&&h!==12)h+=12;
+    if(ampm==='AM'&&h===12)h=0;
+    return `${String(h).padStart(2,'0')}:${m}`;
+  },
+
+  _to12(t24) {
+    if(!t24)return'10:00 AM';
+    const [h,m]=t24.split(':').map(Number);
+    const ampm=h>=12?'PM':'AM';
+    const h12=h%12||12;
+    return `${h12}:${String(m).padStart(2,'0')} ${ampm}`;
+  },
+
+  async save(id) {
+    const name=document.getElementById('fa-name')?.value.trim();
+    if(!name){toast('Please enter a client name','warning');return;}
+    const svcVal=document.getElementById('fa-svc')?.value||'';
+    const[svcId,svcName]=svcVal.split('|');
+    const barberVal=document.getElementById('fa-barber')?.value||'';
+    const[barberId,barberName]=barberVal.split('|');
+    const timeVal=document.getElementById('fa-time')?.value||'10:00';
+    const btn=document.getElementById('fa-btn'); disableBtn(btn);
+    try {
+      await db.appointments.save({
+        id:id||genId('a'),
+        customerId:document.getElementById('fa-cid')?.value||null,
+        customerName:name,
+        customerPhone:document.getElementById('fa-phone')?.value||'',
+        barberId:barberId||null, barberName:barberName||null,
+        serviceId:svcId||null, service:svcName||'Haircut',
+        price:parseFloat(document.getElementById('fa-price')?.value)||35,
+        date:document.getElementById('fa-date')?.value||today(),
+        time:this._to12(timeVal),
+        duration:45,
+        status:id?(this._data.find(x=>x.id===id)?.status||'confirmed'):'confirmed',
+        notes:document.getElementById('fa-notes')?.value.trim()||'',
+        source:'crm',
+      });
+      Modal.close(); toast(id?'Updated ✓':'Appointment added ✓');
+      await this.render(); Dashboard.render();
+    }catch(e){toast('Could not save','error');enableBtn(btn);}
+  },
+
+  openDetail(id) {
+    const a=this._data.find(x=>x.id===id); if(!a)return;
+    const barber=this._barbers.find(b=>b.id===a.barberId);
+    Modal.show(`
+      <div class="modal-title">📅 Appointment</div>
+      <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:16px;">
+        <div style="font-size:16px;font-weight:700;">${a.customerName}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px;">${a.service} · ${fmtDateFull(a.date)} at ${a.time}</div>
+        ${barber?`<div style="font-size:13px;color:var(--muted);">with ${barber.name}</div>`:''}
+        <div style="margin-top:8px;">${statusBadge(a.status)} <span style="font-weight:700;color:var(--green);margin-left:8px;">${fmtMoney(a.price)}</span></div>
+        ${a.notes?`<div style="font-size:13px;color:var(--muted);margin-top:8px;">${a.notes}</div>`:''}
+        ${a.customerPhone?`<div style="font-size:13px;color:var(--muted);margin-top:4px;">📱 ${a.customerPhone}</div>`:''}
+      </div>
+      <div class="modal-actions">
+        ${a.customerId?`<button class="btn btn-full" onclick="Modal.close();ClientProfile.open('${a.customerId}')">👤 View Client Profile</button>`:''}
+        ${a.status==='confirmed'||a.status==='in-progress'?`<button class="btn btn-green btn-full" onclick="Appointments.complete('${a.id}')">✓ Mark Complete</button>`:''}
+        ${a.status==='confirmed'?`<button class="btn btn-full" style="color:var(--orange);border-color:#fde68a;" onclick="Appointments.noShow('${a.id}')">😤 No Show</button>`:''}
+        ${a.status==='confirmed'&&!a.depositPaid&&!a.depositWaived?`<button class="btn btn-full" style="color:var(--muted);" onclick="Appointments.waiveDeposit('${a.id}')">⚡ Waive Deposit</button>`:''}
+        <button class="btn btn-full" onclick="Appointments.openForm('${a.id}')">Edit</button>
+        <button class="btn btn-danger btn-full" onclick="Appointments.delete('${a.id}')">Delete</button>
+        <button class="btn btn-full" onclick="Modal.close()">Close</button>
+      </div>`);
+  },
+
+  // Stores amount/tip/url/sessionId between the two checkout modal steps
+  _co: { id:null, price:0, tip:0, url:'', sessionId:'', phone:'', name:'' },
+
+  async complete(id) {
+    const a = this._data.find(x=>x.id===id); if(!a) return;
+    this._co = { id, price: Number(a.price||35), tip:0, url:'', sessionId:'', phone: a.customerPhone||'', name: a.customerName||'' };
+    let stripeConnected = false;
+    try { const st = await db.stripe.status(); stripeConnected = st.connected; } catch(e) {}
+
+    Modal.show(`
+      <div class="modal-title">💈 Checkout</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">${a.customerName} · ${a.service}</div>
+      <div class="form-group">
+        <label class="form-label">Amount</label>
+        <div style="position:relative;">
+          <div style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:18px;font-weight:700;color:var(--green);">$</div>
+          <input class="form-input" id="cc-price" type="number" value="${a.price||35}" style="font-size:22px;font-weight:700;padding-left:28px;" oninput="Appointments._updateTotal()" />
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+          ${[25,30,35,40,45,50,60].map(p=>`<button class="btn btn-sm" onclick="document.getElementById('cc-price').value=${p};Appointments._updateTotal()">${fmtMoney(p)}</button>`).join('')}
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tip</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          ${[0,2,5,10].map(t=>`<button class="btn btn-sm" id="tip-${t}" onclick="Appointments._setTip(${t})" style="${t===0?'background:var(--text);color:#fff;border-color:var(--text);':''}">${t===0?'No tip':'$'+t}</button>`).join('')}
+          <button class="btn btn-sm" onclick="Appointments._setTip('custom')">Custom</button>
+        </div>
+        <input type="hidden" id="cc-tip" value="0" />
+        <input class="form-input" id="cc-tip-custom" type="number" placeholder="Custom tip amount" style="display:none;margin-top:8px;" oninput="document.getElementById('cc-tip').value=this.value||0;Appointments._updateTotal()" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Cut Notes <span style="font-weight:400;color:var(--faint);">(optional)</span></label>
+        <textarea class="form-input" id="cc-notes" rows="2" placeholder="e.g. 2 on sides, scissors on top, blended fade, no product…"></textarea>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:13px;font-weight:600;color:var(--muted);">Total</span>
+        <span id="cc-total" style="font-size:22px;font-weight:800;color:var(--green);">${fmtMoney(a.price||35)}</span>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-full" style="background:var(--text);color:#fff;" onclick="Appointments._checkoutCash()">💵 Cash</button>
+        ${stripeConnected
+          ? `<button class="btn btn-full btn-green" onclick="Appointments._checkoutCard()">💳 Send Card Link</button>`
+          : `<button class="btn btn-full" style="opacity:.5;cursor:default;" disabled>💳 Card (connect Stripe in Settings)</button>`
+        }
+        <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
+      </div>`);
+  },
+
+  _setTip(val) {
+    document.querySelectorAll('[id^="tip-"]').forEach(b=>{ b.style.background=''; b.style.color=''; b.style.borderColor=''; });
+    if (val === 'custom') {
+      document.getElementById('cc-tip-custom').style.display = 'block';
+    } else {
+      document.getElementById('cc-tip-custom').style.display = 'none';
+      document.getElementById('cc-tip').value = val;
+      const btn = document.getElementById('tip-'+val);
+      if (btn) { btn.style.background='var(--text)'; btn.style.color='#fff'; btn.style.borderColor='var(--text)'; }
+      Appointments._updateTotal();
+    }
+  },
+
+  _updateTotal() {
+    const price = parseFloat(document.getElementById('cc-price')?.value)||0;
+    const tip   = parseFloat(document.getElementById('cc-tip')?.value)||0;
+    Appointments._co.price = price;
+    Appointments._co.tip   = tip;
+    const el = document.getElementById('cc-total');
+    if (el) el.textContent = '$'+(price+tip).toFixed(2).replace(/\.00$/,'');
+  },
+
+  async _checkoutCash() {
+    const { id, price, tip } = Appointments._co;
+    const cutNotes = document.getElementById('cc-notes')?.value.trim() || '';
+    try {
+      await db.checkout.cash({ appointmentId: id, amount: price, tip, cutNotes });
+      Modal.close(); toast('💵 Cash payment logged ✓');
+      await Appointments.render(); Dashboard.render();
+    } catch(e) { toast('Error logging payment','error'); }
+  },
+
+  async _checkoutCard() {
+    Appointments._updateTotal(); // capture latest values before switching modal
+    Appointments._co.cutNotes = document.getElementById('cc-notes')?.value.trim() || '';
+    const { id, price, tip, phone, name } = Appointments._co;
+    const total = price + tip;
+    Modal.show(`
+      <div class="modal-title">💳 Card Payment</div>
+      <div style="font-size:22px;font-weight:800;color:var(--green);text-align:center;margin-bottom:4px;">${fmtMoney(total)}</div>
+      <div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:20px;">for ${name}</div>
+      <div id="card-status" style="text-align:center;padding:16px 0;">
+        <div style="font-size:13px;color:var(--muted);">Generating payment link...</div>
+      </div>
+      <div style="margin-top:12px;">
+        <button class="btn btn-full" onclick="Appointments._checkoutCash()">Switch to Cash Instead</button>
+      </div>`);
+    try {
+      const r = await db.checkout.session({ appointmentId: id, amount: price, tip });
+      const statusEl = document.getElementById('card-status');
+      if (!statusEl) return; // modal was closed
+      if (!r || !r.ok) { toast(r?.error||'Could not create payment link — check Stripe settings','error'); return; }
+
+      // Store URL safely — never embed in onclick strings
+      Appointments._co.url       = r.url;
+      Appointments._co.sessionId = r.sessionId;
+
+      const hasPhone = phone && phone.replace(/\D/g,'').length >= 10;
+      statusEl.innerHTML = `
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Share this link with the client to collect payment:</div>
+        <div style="display:flex;gap:6px;margin-bottom:12px;">
+          <input class="form-input" id="pay-link-input" readonly style="font-size:11px;flex:1;" onclick="this.select()" />
+          <button class="btn btn-sm" onclick="navigator.clipboard.writeText(Appointments._co.url);toast('Link copied ✓')">Copy</button>
+        </div>
+        ${hasPhone ? `<button class="btn btn-green btn-full" id="send-link-btn" onclick="Appointments._textPayLink()">📱 Text to ${phone}</button>` : ''}
+        <div style="margin-top:10px;">
+          <button class="btn btn-full" id="verify-btn" onclick="Appointments._verifyPayment(this)">✓ Check Payment</button>
+        </div>`;
+      // Set URL value via JS to avoid HTML encoding issues
+      const linkInput = document.getElementById('pay-link-input');
+      if (linkInput) linkInput.value = r.url;
+    } catch(e) { toast('Could not create payment link — check Stripe settings','error'); }
+  },
+
+  async _textPayLink() {
+    const { phone, name, url } = Appointments._co;
+    const btn = document.getElementById('send-link-btn'); if(btn){btn.disabled=true;btn.textContent='Sending...';}
+    const firstName = name.split(' ')[0];
+    const msg = `Hi ${firstName}! Here's your payment link for today's visit: ${url}`;
+    try {
+      await db.sms.send({ to: phone, body: msg, customerName: name });
+      if(btn){btn.textContent='✓ Sent!';btn.style.background='var(--green)';}
+      toast('Payment link sent via text ✓');
+    } catch(e) { toast('Could not send text','error'); if(btn){btn.disabled=false;btn.textContent='📱 Text to '+phone;} }
+  },
+
+  async _verifyPayment(btn) {
+    const { sessionId, id } = Appointments._co;
+    const origText = btn.textContent;
+    btn.disabled = true; btn.textContent = 'Checking...';
+    try {
+      const r = await db.checkout.verify(sessionId, id);
+      if (r.paid) {
+        Modal.close(); toast('💳 Card payment confirmed ✓');
+        await Appointments.render(); Dashboard.render();
+      } else {
+        btn.disabled = false; btn.textContent = origText;
+        toast('Payment not received yet — try again in a moment','warning');
+      }
+    } catch(e) { btn.disabled=false; btn.textContent=origText; toast('Could not verify','error'); }
+  },
+
+  async noShow(id) {
+    const a = this._data.find(x=>x.id===id);
+    if (!confirm((a?.customerName||'Client')+' did not show up. Mark as no-show?')) return;
+    try {
+      await db.appointments.noshow(id);
+      Modal.close();
+      toast('Marked as no-show');
+      await this.render();
+      Dashboard.render();
+    } catch(e) { toast('Error marking no-show','error'); }
+  },
+
+  async waiveDeposit(id) {
+    const a = this._data.find(x=>x.id===id);
+    if (!confirm('Waive the deposit for '+(a?.customerName||'this client')+'? They will not need to pay before arriving.')) return;
+    try {
+      await apiFetch('/appointments/'+id+'/waive-deposit',{method:'POST'});
+      Modal.close(); toast('Deposit waived ✓'); await this.render();
+    } catch(e) { toast('Error','error'); }
+  },
+
+  async delete(id) {
+    if(!confirm('Delete this appointment?'))return;
+    await db.appointments.delete(id);
+    Modal.close(); this.render(); toast('Deleted');
+  },
+};

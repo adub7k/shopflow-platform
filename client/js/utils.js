@@ -11,6 +11,8 @@ const statusBadge = (s) => { const m={confirmed:'badge-green',done:'badge-blue',
 const disableBtn = (btn) => { if(btn){btn.disabled=true;btn._txt=btn.innerHTML;btn.innerHTML='<span style="opacity:.5">Saving...</span>';} };
 const enableBtn  = (btn) => { if(btn){btn.disabled=false;btn.innerHTML=btn._txt||btn.innerHTML;} };
 
+const esc = (s) => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
 let _toastTimer;
 function toast(msg, type='') {
   const el=document.getElementById('toast'); if(!el)return;
