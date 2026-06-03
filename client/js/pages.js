@@ -143,10 +143,8 @@ const Dashboard = {
         appts.slice(0,8).forEach(a => {
           const isDone   = a.status === 'done';
           const canComplete = a.status === 'confirmed' || a.status === 'in-progress';
-          html.push(`<div class="list-row" style="gap:10px;" onclick="Dashboard._openAppt('${a.id}')">
-            <div onclick="event.stopPropagation();${a.customerId?`ClientProfile.open('${a.customerId}')`:''}">
-              ${avatarEl(a.customerName,38)}
-            </div>
+          html.push(`<div class="list-row" style="gap:10px;" onclick="${a.customerId?`ClientProfile.open('${a.customerId}')`:''}" ${a.customerId?'style="cursor:pointer;"':''}>
+            <div>${avatarEl(a.customerName,38)}</div>
             <div class="list-main">
               <div class="list-name">${a.customerName}</div>
               <div class="list-sub">${a.time} · ${a.service}${a.barberName?' · '+a.barberName:''}</div>
