@@ -1573,13 +1573,22 @@ const Messages = {
 
     Messages.updateBadge(this._threads);
 
+    const composeBtn = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);">Messages</div>
+        <button onclick="Messages.openCompose()" style="background:none;border:none;cursor:pointer;color:var(--green);padding:4px;" title="New message">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+          </svg>
+        </button>
+      </div>`;
+
     if (!this._threads.length) {
-      el.innerHTML = `
-        <div class="section-header">Messages</div>
+      el.innerHTML = composeBtn + `
         <div class="card"><div class="empty-state">
           <div class="empty-icon">💬</div>
           <div class="empty-text">No conversations yet</div>
-          <div style="font-size:12px;color:var(--faint);margin-top:6px;">SMS threads with clients will appear here</div>
+          <div style="font-size:12px;color:var(--faint);margin-top:6px;">Tap the pencil to start a new message</div>
         </div></div>`;
       return;
     }
@@ -1604,9 +1613,7 @@ const Messages = {
       </div>`;
     }).join('');
 
-    el.innerHTML = `
-      <div class="section-header">Messages</div>
-      <div class="list-card">${rows}</div>`;
+    el.innerHTML = composeBtn + `<div class="list-card">${rows}</div>`;
   },
 
   async openThread(customerId, customerName, customerPhone) {
@@ -1691,6 +1698,28 @@ const Messages = {
   closeThread() {
     this._currentThread = null;
     this.render();
+  },
+
+  openCompose() {
+    Modal.show(`
+      <div class="modal-title">New Message</div>
+      <div class="form-group">
+        <label class="form-label">Search client</label>
+        <div class="autocomplete-wrap">
+          <input class="form-input" id="compose-search" placeholder="Name or phone number…" autocomplete="off"/>
+          <div class="autocomplete-list" id="compose-list"></div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
+      </div>`);
+    setTimeout(() => {
+      makeAutocomplete('compose-search', 'compose-list', (id, name, phone) => {
+        Modal.close();
+        Messages.openThread(id, name, phone);
+      });
+      document.getElementById('compose-search')?.focus();
+    }, 100);
   },
 
   updateBadge(threads) {
