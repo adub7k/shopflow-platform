@@ -165,10 +165,10 @@ const Dashboard = {
         html.push('<div class="section-header">🎉 Loyalty Rewards Ready</div>');
         html.push('<div class="card" style="background:var(--green-lt);border-color:var(--green-md);">');
         rev.loyaltyAlerts.slice(0,3).forEach(c => {
-          html.push(`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--green-md);">
+          html.push(`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--green-md);cursor:pointer;" onclick="ClientProfile.open('${c.id}')">
             ${avatarEl(c.name,34)}
             <div style="flex:1;font-size:14px;font-weight:600;color:var(--text);">${c.name}</div>
-            <button class="btn btn-sm btn-green" onclick="Clients.redeemReward('${c.id}','${c.name}')">Redeem</button>
+            <button class="btn btn-sm btn-green" onclick="event.stopPropagation();Clients.redeemReward('${c.id}','${c.name}')">Redeem</button>
           </div>`);
         });
         html.push('</div>');

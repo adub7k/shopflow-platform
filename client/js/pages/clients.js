@@ -89,13 +89,13 @@ const Clients = {
       html += `<div style="display:flex;flex-direction:column;gap:10px;">`;
       atRisk.sort((a,b)=>a.lastVisit.localeCompare(b.lastVisit)).forEach(c=>{
         const daysSince = Math.floor((new Date()-new Date(c.lastVisit+'T12:00:00'))/(1000*60*60*24));
-        html += `<div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface);border-radius:10px;border:1px solid var(--border);">
+        html += `<div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface);border-radius:10px;border:1px solid var(--border);cursor:pointer;" onclick="ClientProfile.open('${c.id}')">
           ${avatarEl(c.name,38)}
           <div style="flex:1;min-width:0;">
             <div style="font-size:13px;font-weight:700;color:var(--text);">${c.name}</div>
             <div style="font-size:11px;color:var(--muted);margin-top:2px;">Last in ${fmtDateShort(c.lastVisit)} · <span style="color:#dc2626;font-weight:600;">${daysSince} days ago</span></div>
           </div>
-          <button class="btn btn-sm btn-green" onclick="Clients.retentionAction('${c.id}','${c.name}','${c.phone||''}')">Reach Out</button>
+          <button class="btn btn-sm btn-green" onclick="event.stopPropagation();Clients.retentionAction('${c.id}','${c.name}','${c.phone||''}')">Reach Out</button>
         </div>`;
       });
       html += `</div>`;

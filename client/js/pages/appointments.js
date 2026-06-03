@@ -134,7 +134,7 @@ const Appointments = {
           <div style="width:52px;font-size:11px;color:var(--muted);font-weight:600;flex-shrink:0;">${a.time}</div>
           ${avatarEl(a.customerName,32)}
           <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.customerName}</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${a.customerId?'cursor:pointer;':''}" onclick="event.stopPropagation();${a.customerId?`ClientProfile.open('${a.customerId}')`:''}">${a.customerName}</div>
             <div style="font-size:11px;color:var(--muted);">${a.service}${barber?' · '+barber.name:''}</div>
           </div>
           ${statusBadge(a.status)}
@@ -269,7 +269,7 @@ const Appointments = {
     Modal.show(`
       <div class="modal-title">📅 Appointment</div>
       <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:16px;">
-        <div style="font-size:16px;font-weight:700;">${a.customerName}</div>
+        <div style="font-size:16px;font-weight:700;${a.customerId?'cursor:pointer;color:var(--green);':''}" onclick="${a.customerId?`Modal.close();ClientProfile.open('${a.customerId}')`:''}">${a.customerName}${a.customerId?' ↗':''}</div>
         <div style="font-size:13px;color:var(--muted);margin-top:4px;">${a.service} · ${fmtDateFull(a.date)} at ${a.time}</div>
         ${barber?`<div style="font-size:13px;color:var(--muted);">with ${barber.name}</div>`:''}
         <div style="margin-top:8px;">${statusBadge(a.status)} <span style="font-weight:700;color:var(--green);margin-left:8px;">${fmtMoney(a.price)}</span></div>
