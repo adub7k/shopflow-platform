@@ -1010,7 +1010,6 @@ app.post('/api/admin/seed-demo', requireAdmin, async (req, res) => {
 
     const appointments = [];
     for (let day = -30; day <= 7; day++) {
-      if (day === 0) continue;
       const isPast = day < 0;
       const count = isPast ? randInt(4,9) : randInt(2,6);
       const used = new Set();

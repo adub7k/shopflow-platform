@@ -182,7 +182,6 @@ for (let day = -30; day <= -1; day++) {
 // Future appointments: today + 7 days forward
 const UPCOMING_TIMES = ['9:00 AM','10:00 AM','10:30 AM','11:00 AM','1:00 PM','2:00 PM','3:00 PM','3:30 PM','4:00 PM'];
 for (let day = 0; day <= 7; day++) {
-  if (day === 0) continue; // skip today for simplicity (already building past)
   const apptCount = randInt(3, 7);
   const usedTimes = new Set();
 
