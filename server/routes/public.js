@@ -11,6 +11,39 @@ router.get('/api/accounts/check-slug', (req, res) => {
   res.json({ slug: s, available: !taken });
 });
 
+// ── PUBLIC: Demo slots & booking (must be BEFORE /:shopSlug routes) ───────────
+router.get('/api/public/demo/slots', (req, res) => {
+  const { date } = req.query;
+  if (!date) return res.status(400).json({ error: 'date required' });
+  const booked = master.get('demos').value()
+    .filter(d => d.date === date && d.status !== 'cancelled')
+    .map(d => d.time);
+  const slots = [];
+  for (let h = 18; h < 22; h++) {
+    for (let m = 0; m < 60; m += 15) {
+      const time = `${h === 12 ? 12 : h % 12 || 12}:${String(m).padStart(2,'0')} ${h < 12 ? 'AM' : 'PM'}`;
+      if (!booked.includes(time)) slots.push(time);
+    }
+  }
+  res.json(slots);
+});
+
+router.post('/api/public/demo/book', async (req, res) => {
+  try {
+    const { name, shopName, phone, currentTool, date, time } = req.body;
+    if (!name || !phone || !date || !time) return res.status(400).json({ ok: false, error: 'Missing required fields' });
+    const taken = master.get('demos').value().find(d => d.date === date && d.time === time && d.status !== 'cancelled');
+    if (taken) return res.status(409).json({ ok: false, error: 'That time slot was just taken. Please choose another.' });
+    const demo = { id: uuidv4(), name, shopName: shopName||'', phone, currentTool: currentTool||'', date, time, status: 'scheduled', notes: '', bookedAt: new Date().toISOString() };
+    master.get('demos').push(demo).write();
+    if (twilioClient && TWILIO_DEFAULT_FROM) {
+      const msg = `Hey ${name}! Your ShopFlow demo is confirmed for ${date} at ${time}. We'll walk you through everything — see you then! 🚀`;
+      try { await twilioClient.messages.create({ from: TWILIO_DEFAULT_FROM, to: '+1' + phone.replace(/\D/g,''), body: msg }); } catch(e) { console.error('Demo SMS error:', e.message); }
+    }
+    res.json({ ok: true, id: demo.id });
+  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
 // ── PUBLIC: Get shop info by slug (for booking page) ─────────────────────────
 router.get('/api/public/:shopSlug/info', (req, res) => {
   try {
@@ -138,40 +171,5 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
   }
 });
 
-
-// ── PUBLIC: Demo booking ──────────────────────────────────────────────────────
-router.get('/api/public/demo/slots', (req, res) => {
-  const { date } = req.query;
-  if (!date) return res.status(400).json({ error: 'date required' });
-  const booked = master.get('demos').value()
-    .filter(d => d.date === date && d.status !== 'cancelled')
-    .map(d => d.time);
-  const slots = [];
-  for (let h = 18; h < 22; h++) {
-    for (let m = 0; m < 60; m += 15) {
-      const time = `${h === 12 ? 12 : h % 12 || 12}:${String(m).padStart(2,'0')} ${h < 12 ? 'AM' : 'PM'}`;
-      if (!booked.includes(time)) slots.push(time);
-    }
-  }
-  res.json(slots);
-});
-
-router.post('/api/public/demo/book', async (req, res) => {
-  try {
-    const { name, shopName, phone, currentTool, date, time } = req.body;
-    if (!name || !phone || !date || !time) return res.status(400).json({ ok: false, error: 'Missing required fields' });
-    // Check slot not taken
-    const taken = master.get('demos').value().find(d => d.date === date && d.time === time && d.status !== 'cancelled');
-    if (taken) return res.status(409).json({ ok: false, error: 'That time slot was just taken. Please choose another.' });
-    const demo = { id: uuidv4(), name, shopName: shopName||'', phone, currentTool: currentTool||'', date, time, status: 'scheduled', notes: '', bookedAt: new Date().toISOString() };
-    master.get('demos').push(demo).write();
-    // Send confirmation SMS
-    if (twilioClient && TWILIO_DEFAULT_FROM) {
-      const msg = `Hey ${name}! Your ShopFlow demo is confirmed for ${date} at ${time}. We'll walk you through everything — see you then! 🚀`;
-      try { await twilioClient.messages.create({ from: TWILIO_DEFAULT_FROM, to: '+1' + phone.replace(/\D/g,''), body: msg }); } catch(e) { console.error('Demo SMS error:', e.message); }
-    }
-    res.json({ ok: true, id: demo.id });
-  } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
-});
 
 module.exports = router;
