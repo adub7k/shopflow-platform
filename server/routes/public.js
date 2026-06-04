@@ -160,7 +160,7 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
         }, s);
         await twilioClient.messages.create({ from: fromNum, to: '+1' + digits, body: msg });
         smsSent = true;
-      } catch(e) { console.log('SMS failed:', e.message); }
+      } catch(e) { console.error('SMS failed:', e.message); }
     }
 
     master.get('shops').find({ id: shop.id }).assign({ lastActivity: new Date().toISOString() }).write();
