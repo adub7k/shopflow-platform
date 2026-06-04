@@ -148,7 +148,7 @@ router.post('/api/admin/shops/create', requireAdmin, async (req, res) => {
 router.patch('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   const shop = master.get('shops').find({ id: req.params.shopId }).value();
   if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
-  const allowed = ['plan', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber', 'features'];
+  const allowed = ['plan', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber', 'features', 'notes'];
   const updates = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
   master.get('shops').find({ id: req.params.shopId }).assign(updates).write();
