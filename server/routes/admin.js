@@ -202,64 +202,140 @@ router.post('/api/admin/seed-demo', requireAdmin, async (req, res) => {
       { id:'s5', name:'Cut + Beard',  category:'combo', price:50, duration:60 },
       { id:'s6', name:'Shape Up',     category:'cut',   price:20, duration:20 },
     ];
+    // Each client has a realistic cadence, preferred barber, service, and tip habit
     const CLIENT_DATA = [
-      { name:'Jordan Rivera',    phone:'(505) 555-1001', email:'jordan.r@email.com', notes:'Prefers Marcus. Always asks for skin fade.', loyalty:9,  noShows:0 },
-      { name:'Marcus Webb',      phone:'(505) 555-1002', email:'mwebb@gmail.com',    notes:'Bi-weekly regular. Good tipper.',            loyalty:7,  noShows:0 },
-      { name:'DeShawn Carter',   phone:'(505) 555-1003', email:'',                   notes:'Taper fade, leave length on top.',           loyalty:5,  noShows:1 },
-      { name:'Tyler Brooks',     phone:'(505) 555-1004', email:'',                   notes:'Comes in every 3 weeks.',                   loyalty:4,  noShows:0 },
-      { name:'Isaiah Flores',    phone:'(505) 555-1005', email:'',                   notes:'Kids cut — very particular dad.',            loyalty:6,  noShows:0 },
-      { name:'Cameron Nash',     phone:'(505) 555-1006', email:'cnash@email.com',    notes:'Beard only. Every 2 weeks.',                loyalty:3,  noShows:0 },
-      { name:'Elijah Monroe',    phone:'(505) 555-1007', email:'',                   notes:'Low fade, Edgar top.',                      loyalty:8,  noShows:0 },
-      { name:'Aiden Torres',     phone:'(505) 555-1008', email:'',                   notes:'Always brings his son too.',                loyalty:2,  noShows:1 },
-      { name:'Noah Castillo',    phone:'(505) 555-1009', email:'',                   notes:"Hates clippers past a 2.",                  loyalty:5,  noShows:0 },
-      { name:'Liam Ortega',      phone:'(505) 555-1010', email:'liamo@email.com',    notes:'Curly top, tight sides.',                   loyalty:3,  noShows:0 },
-      { name:'Xavier Price',     phone:'(505) 555-1011', email:'',                   notes:'High top fade. Comes in every 10 days.',    loyalty:9,  noShows:0 },
-      { name:'Jaylen Scott',     phone:'(505) 555-1012', email:'jscott@gmail.com',   notes:'Waves — 360 brushwork requested.',          loyalty:6,  noShows:2 },
-      { name:'Malik Thompson',   phone:'(505) 555-1013', email:'',                   notes:'Hot towel shave every time.',               loyalty:4,  noShows:0 },
-      { name:'Caleb Washington', phone:'(505) 555-1014', email:'cwash@email.com',    notes:'Cut + beard combo always.',                 loyalty:7,  noShows:0 },
-      { name:'Ethan Powell',     phone:'(505) 555-1015', email:'',                   notes:'New client — referred by Jordan.',          loyalty:2,  noShows:0 },
-      { name:'Zion Hughes',      phone:'(505) 555-1016', email:'zhughes@gmail.com',  notes:'Taper, line it up.',                        loyalty:5,  noShows:0 },
-      { name:'Andre Mitchell',   phone:'(505) 555-1017', email:'',                   notes:'Prefers Dre. They go way back.',            loyalty:8,  noShows:0 },
-      { name:'Dominic Reed',     phone:'(505) 555-1018', email:'dreed@outlook.com',  notes:'Kid — comes with dad every month.',         loyalty:3,  noShows:0 },
-      { name:'Chris Lawson',     phone:'(505) 555-1019', email:'',                   notes:'Shape up only. Quick in-out.',              loyalty:1,  noShows:0 },
-      { name:'Kevin James',      phone:'(505) 555-1020', email:'kj@email.com',       notes:'Skin fade every 2 weeks.',                  loyalty:10, noShows:0 },
+      { name:'Jordan Rivera',    phone:'(505) 555-1001', email:'jordan.r@email.com', notes:'Prefers Marcus. Skin fade every time, usually adds beard lineup.',   barber:'b1', svc:'s2', interval:[13,16], tipRange:[10,20], noShows:0, startDay:58 },
+      { name:'Marcus Webb',      phone:'(505) 555-1002', email:'mwebb@gmail.com',    notes:'Bi-weekly. Cut + beard every visit. Great tipper.',                  barber:'b2', svc:'s5', interval:[12,15], tipRange:[10,20], noShows:0, startDay:55 },
+      { name:'DeShawn Carter',   phone:'(505) 555-1003', email:'',                   notes:'Taper fade, leave length on top. Comes every 2-3 weeks.',            barber:'b2', svc:'s2', interval:[16,20], tipRange:[5,15],  noShows:1, startDay:60 },
+      { name:'Tyler Brooks',     phone:'(505) 555-1004', email:'',                   notes:'Classic haircut every 3 weeks like clockwork.',                      barber:'b3', svc:'s1', interval:[19,23], tipRange:[5,10],  noShows:0, startDay:57 },
+      { name:'Isaiah Flores',    phone:'(505) 555-1005', email:'',                   notes:'Kids cut. Dad is very specific — scissor finish, no clippers high.', barber:'b3', svc:'s4', interval:[28,35], tipRange:[0,10],  noShows:0, startDay:56 },
+      { name:'Cameron Nash',     phone:'(505) 555-1006', email:'cnash@email.com',    notes:'Beard lineup only, every 2 weeks. Never gets a cut here.',            barber:'b1', svc:'s3', interval:[12,15], tipRange:[5,10],  noShows:0, startDay:54 },
+      { name:'Elijah Monroe',    phone:'(505) 555-1007', email:'',                   notes:'Low fade, Edgar top. Comes in every 10-12 days.',                    barber:'b1', svc:'s2', interval:[10,13], tipRange:[10,15], noShows:0, startDay:60 },
+      { name:'Aiden Torres',     phone:'(505) 555-1008', email:'',                   notes:'Comes with his son Dominic. Both get cuts same day.',                 barber:'b3', svc:'s1', interval:[26,32], tipRange:[5,15],  noShows:1, startDay:52 },
+      { name:'Noah Castillo',    phone:'(505) 555-1009', email:'',                   notes:'Hates clippers past a 2. Classic taper, scissor on top.',            barber:'b2', svc:'s1', interval:[20,26], tipRange:[5,10],  noShows:0, startDay:58 },
+      { name:'Liam Ortega',      phone:'(505) 555-1010', email:'liamo@email.com',    notes:'Curly top, tight sides. Monthly visit.',                             barber:'b1', svc:'s1', interval:[28,33], tipRange:[5,10],  noShows:0, startDay:55 },
+      { name:'Xavier Price',     phone:'(505) 555-1011', email:'',                   notes:'High top fade. Most frequent client — comes every 10 days.',         barber:'b2', svc:'s2', interval:[9,12],  tipRange:[10,20], noShows:0, startDay:60 },
+      { name:'Jaylen Scott',     phone:'(505) 555-1012', email:'jscott@gmail.com',   notes:'Waves — 360 brushwork after every cut. Takes extra time.',           barber:'b1', svc:'s1', interval:[14,18], tipRange:[5,15],  noShows:2, startDay:56 },
+      { name:'Malik Thompson',   phone:'(505) 555-1013', email:'',                   notes:'Cut + beard every visit. Asks for hot towel finish.',                barber:'b2', svc:'s5', interval:[13,17], tipRange:[10,15], noShows:0, startDay:59 },
+      { name:'Caleb Washington', phone:'(505) 555-1014', email:'cwash@email.com',    notes:'Cut + beard combo. Bi-weekly, very consistent.',                     barber:'b2', svc:'s5', interval:[13,16], tipRange:[10,20], noShows:0, startDay:57 },
+      { name:'Ethan Powell',     phone:'(505) 555-1015', email:'',                   notes:'Referred by Jordan Rivera. New client, still figuring out his look.',barber:'b1', svc:'s1', interval:[22,30], tipRange:[0,10],  noShows:0, startDay:45 },
+      { name:'Zion Hughes',      phone:'(505) 555-1016', email:'zhughes@gmail.com',  notes:'Taper + shape up every visit. Very clean look.',                    barber:'b1', svc:'s1', interval:[16,20], tipRange:[5,15],  noShows:0, startDay:60 },
+      { name:'Andre Mitchell',   phone:'(505) 555-1017', email:'',                   notes:'Dre only — they go way back. Skin fade.',                            barber:'b2', svc:'s2', interval:[13,16], tipRange:[10,20], noShows:0, startDay:58 },
+      { name:'Dominic Reed',     phone:'(505) 555-1018', email:'dreed@outlook.com',  notes:'Comes with his dad Aiden. Kids cut monthly.',                       barber:'b3', svc:'s4', interval:[26,32], tipRange:[0,5],   noShows:0, startDay:52 },
+      { name:'Chris Lawson',     phone:'(505) 555-1019', email:'',                   notes:'Shape up only. In and out in 20 minutes.',                          barber:'b1', svc:'s6', interval:[22,28], tipRange:[0,5],   noShows:0, startDay:50 },
+      { name:'Kevin James',      phone:'(505) 555-1020', email:'kj@email.com',       notes:'Most loyal client. Skin fade every 10-12 days without fail.',       barber:'b1', svc:'s2', interval:[10,13], tipRange:[15,20], noShows:0, startDay:60 },
     ];
-    const customers = CLIENT_DATA.map((c, i) => ({ id:'c'+(i+1).toString().padStart(3,'0'), name:c.name, phone:c.phone, email:c.email, notes:c.notes, loyaltyVisits:c.loyalty, loyaltyRewardedAt: c.loyalty>=10 ? daysAgo(15) : null, noShows:c.noShows, createdAt: daysAgo(randInt(30,120)) }));
+
+    const CUT_NOTES_BY_SVC = {
+      's1': [ // Haircut
+        'Clean taper, scissor finish on top. Client happy with the length.',
+        'Classic cut — #2 on sides, scissors on top. No product.',
+        'Medium taper, left about 2 inches on top. Client wants to grow it out a bit.',
+        'Tight taper, textured top. Used a little pomade to finish.',
+        'Low skin taper, natural top. Went shorter than usual per client request.',
+      ],
+      's2': [ // Skin Fade
+        'Skin fade, took it to a 0. Clean line up. Client was happy.',
+        'Skin fade with hard part on the left. Took down the sides tight.',
+        'Mid skin fade, left length on top for a textured look.',
+        'High skin fade, connected the beard. Sharp lines.',
+        'Skin fade, slightly higher this time per client request. Blended clean.',
+      ],
+      's3': [ // Beard Lineup
+        'Full beard lineup. Defined the cheek line, trimmed to half inch.',
+        'Beard cleaned up — neck line and cheek line. Left the length.',
+        'Tight beard lineup, took the neckline up a bit. Clean finish.',
+        'Shape up on the beard only. Client just wanted the edges cleaned.',
+      ],
+      's4': [ // Kids Cut
+        'Kids cut — scissor finish on top, short taper. Sat perfectly still.',
+        'Kids cut, went short on the sides. Dad approved.',
+        'Kids cut — left it longer on top per moms instructions. Clean taper.',
+        'First time in the chair — went easy, scissor cut. Kid did great.',
+      ],
+      's5': [ // Cut + Beard
+        'Full cut and beard. Skin fade on the sides, beard trimmed and lined up tight.',
+        'Skin fade + full beard lineup. Both looking sharp.',
+        'Cut and beard combo — taper fade, beard shaped to a point.',
+        'Fresh cut and beard trim. Client gets this every visit.',
+        'Mid fade and beard lineup. Took the beard down shorter this time.',
+      ],
+      's6': [ // Shape Up
+        'Shape up only — hairline, temples, and sideburns.',
+        'Clean shape up. Straightened the hairline, touched up the edges.',
+        'Quick shape up, client was between cuts. Cleaned everything up.',
+      ],
+    };
 
     const TIMES = ['9:00 AM','9:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM','12:00 PM','12:30 PM','1:00 PM','1:30 PM','2:00 PM','2:30 PM','3:00 PM','3:30 PM','4:00 PM','4:30 PM','5:00 PM'];
-    const CUT_NOTES = [
-      'Clean skin fade, 0 on sides, ~2 inches on top.',
-      'Low taper, disconnected — more length requested this time.',
-      'Skin fade with hard part on left. Beard lined up tight.',
-      'Kids cut — scissor on top, short taper. Sat still great.',
-      'Waves — 1.5 sides, 3 on top. Brushwork done post-cut.',
-      'Cut and full beard lineup. Trimmed to ~half inch.',
-      'High top fade — 0 to 1 skin transition, length left on top.',
-      'Shape up only — hairline and sideburns.',
-      'Classic taper, scissor finish on top. No clipper-over-comb.',
-      'Mid fade, curly top left natural. Curl cream applied.',
-      'Beard lineup only — cheek line set higher per client request.',
-      'First visit consultation — medium fade. Tighter next time.',
-    ];
+    const FUTURE_TIMES = ['9:00 AM','10:00 AM','10:30 AM','11:00 AM','1:00 PM','2:00 PM','3:00 PM','4:00 PM'];
 
+    // Build customers
+    const customers = CLIENT_DATA.map((c, i) => ({
+      id: 'c'+(i+1).toString().padStart(3,'0'),
+      name: c.name, phone: c.phone, email: c.email, notes: c.notes,
+      loyaltyVisits: 0, noShows: c.noShows,
+      createdAt: daysAgo(c.startDay + 5),
+    }));
+
+    // Generate appointments per client based on their realistic interval
     const appointments = [];
-    for (let day = -30; day <= 7; day++) {
-      const isPast = day < 0;
-      const count = isPast ? randInt(4,9) : randInt(2,6);
-      const used = new Set();
-      for (let a = 0; a < count; a++) {
-        let time, tries=0;
-        do { time = TIMES[randInt(0,TIMES.length-1)]; tries++; } while(used.has(time)&&tries<20);
-        used.add(time);
-        const cust = customers[randInt(0,customers.length-1)];
-        const barb = BARBERS[randInt(0,BARBERS.length-1)];
-        const svc  = SERVICES[randInt(0,SERVICES.length-1)];
-        const noshow = isPast && Math.random()<0.05;
-        const tip = noshow ? 0 : [0,0,0,5,5,10,10,10,15,20][randInt(0,9)];
-        appointments.push({ id:'a'+Math.random().toString(36).slice(2,10), customerId:cust.id, customerName:cust.name, customerPhone:cust.phone, barberId:barb.id, barberName:barb.name, serviceId:svc.id, service:svc.name, date: daysAgo(-day), time, duration:svc.duration, price:svc.price, tip, status: isPast?(noshow?'no-show':'done'):'confirmed', cutNotes: (!noshow&&isPast&&Math.random()<0.7)?CUT_NOTES[randInt(0,CUT_NOTES.length-1)]:'', bookedAt: new Date(Date.now()+day*864e5-2*864e5).toISOString(), source: Math.random()<0.3?'online':'walk-in' });
+    const usedSlots = {}; // track date+time slots to avoid conflicts per barber
+
+    CLIENT_DATA.forEach((cd, i) => {
+      const cust = customers[i];
+      const barb = BARBERS.find(b => b.id === cd.barber) || BARBERS[0];
+      const svc  = SERVICES.find(s => s.id === cd.svc)   || SERVICES[0];
+      const notes= CUT_NOTES_BY_SVC[cd.svc] || CUT_NOTES_BY_SVC['s1'];
+
+      // Walk forward from startDay using the client interval
+      let cursor = cd.startDay;
+      while (cursor >= -7) {
+        const isPast   = cursor > 0;
+        const isFuture = cursor < 0;
+        const date     = daysAgo(cursor);
+
+        // Skip Sundays
+        const dow = new Date(date + 'T12:00:00').getDay();
+        if (dow === 0) { cursor -= randInt(cd.interval[0], cd.interval[1]); continue; }
+
+        // Pick a time slot not already taken by this barber that day
+        const slotKey = date + '_' + barb.id;
+        if (!usedSlots[slotKey]) usedSlots[slotKey] = new Set();
+        const pool = isFuture ? FUTURE_TIMES : TIMES;
+        const available = pool.filter(t => !usedSlots[slotKey].has(t));
+        if (!available.length) { cursor -= randInt(cd.interval[0], cd.interval[1]); continue; }
+        const time = available[randInt(0, available.length-1)];
+        usedSlots[slotKey].add(time);
+
+        const noshow = isPast && cd.noShows > 0 && Math.random() < 0.08;
+        const tip    = noshow ? 0 : randInt(cd.tipRange[0], cd.tipRange[1]);
+        const status = isFuture ? 'confirmed' : noshow ? 'no-show' : 'done';
+        const cutNote = (!noshow && isPast && Math.random() < 0.8) ? notes[randInt(0, notes.length-1)] : '';
+
+        if (!noshow && status === 'done') cust.loyaltyVisits++;
+
+        appointments.push({
+          id: 'a' + Math.random().toString(36).slice(2,10),
+          customerId: cust.id, customerName: cust.name, customerPhone: cust.phone,
+          barberId: barb.id, barberName: barb.name,
+          serviceId: svc.id, service: svc.name,
+          date, time, duration: svc.duration, price: svc.price, tip,
+          status, cutNotes: cutNote,
+          bookedAt: new Date(Date.now() - cursor*864e5 - 2*864e5).toISOString(),
+          source: Math.random() < 0.35 ? 'online' : 'walk-in',
+        });
+
+        cursor -= randInt(cd.interval[0], cd.interval[1]);
       }
-    }
-    appointments.sort((a,b)=>a.date!==b.date?a.date.localeCompare(b.date):a.time.localeCompare(b.time));
+    });
+
+    // Update loyalty reward status
+    customers.forEach(c => {
+      if (c.loyaltyVisits >= 10) c.loyaltyRewardedAt = daysAgo(randInt(5,20));
+    });
+
+    appointments.sort((a,b) => a.date !== b.date ? a.date.localeCompare(b.date) : a.time.localeCompare(b.time));
 
     shopDb.set('barbers', BARBERS).write();
     shopDb.set('services', SERVICES).write();
