@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<title>ShopFlow — Sales Hub</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --black:#080808;--white:#fff;--off:#f5f5f7;--border:#e5e7eb;
+  --muted:#6b7280;--faint:#9ca3af;
+  --green:#16a34a;--green-lt:#f0fdf4;--green-md:#bbf7d0;--green-bright:#4ade80;--green-dk:#166534;
+  --red:#dc2626;--red-lt:#fef2f2;
+  --yellow:#d97706;--yellow-lt:#fffbeb;
+  --blue:#2563eb;--blue-lt:#eff6ff;
+  --purple:#7c3aed;--purple-lt:#f5f3ff;
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --radius:12px;
+}
+body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-font-smoothing:antialiased;min-height:100vh;}
+
+/* ── Topbar ── */
+.topbar{background:var(--black);padding:0 20px;height:56px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;}
+.topbar-left{display:flex;align-items:center;gap:10px;}
+.topbar-left img{width:28px;height:28px;border-radius:7px;}
+.topbar-title{font-size:15px;font-weight:800;color:#fff;letter-spacing:-.03em;}
+.topbar-name{background:var(--green);color:#fff;font-size:10px;font-weight:800;padding:4px 12px;border-radius:100px;letter-spacing:.06em;text-transform:uppercase;}
+
+/* ── Tabs ── */
+.tabs{display:flex;background:var(--white);border-bottom:1px solid var(--border);padding:0 16px;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:0;}
+.tab{padding:14px 14px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:all .15s;flex-shrink:0;}
+.tab.active{color:var(--black);border-bottom-color:var(--green);}
+
+/* ── Content ── */
+.content{padding:16px;max-width:860px;margin:0 auto;}
+.page{display:none;}
+.page.active{display:block;}
+
+/* ── Stats ── */
+.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px;}
+.stat-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:14px;}
+.stat-label{font-size:10px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
+.stat-value{font-size:26px;font-weight:900;color:var(--black);letter-spacing:-.04em;line-height:1;}
+.stat-value.green{color:var(--green);}
+.stat-sub{font-size:11px;color:var(--faint);margin-top:4px;}
+
+/* ── Pipeline ── */
+.pipeline{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:16px;overflow-x:auto;}
+.pipe-col{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;min-width:140px;}
+.pipe-header{padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);}
+.pipe-header .pipe-count{background:var(--off);border-radius:100px;padding:1px 7px;font-size:10px;font-weight:700;color:var(--muted);}
+.pipe-col.contacted .pipe-header{background:#f9fafb;}
+.pipe-col.responded .pipe-header{background:var(--yellow-lt);}
+.pipe-col.demo .pipe-header{background:var(--blue-lt);}
+.pipe-col.closed .pipe-header{background:var(--green-lt);}
+.pipe-body{padding:8px;min-height:80px;}
+.pipe-card{background:var(--off);border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer;border:1px solid transparent;transition:all .12s;}
+.pipe-card:hover{border-color:var(--border);background:var(--white);}
+.pipe-card-name{font-size:13px;font-weight:600;color:var(--black);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pipe-card-meta{font-size:11px;color:var(--faint);}
+
+/* ── Lead list ── */
+.lead-list{display:flex;flex-direction:column;gap:8px;}
+.lead-row{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:13px 14px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .15s;}
+.lead-row:hover{border-color:#aaa;}
+.lead-avatar{width:38px;height:38px;border-radius:50%;background:var(--black);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;flex-shrink:0;}
+.lead-info{flex:1;min-width:0;}
+.lead-name{font-size:14px;font-weight:700;color:var(--black);margin-bottom:2px;}
+.lead-meta{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700;flex-shrink:0;}
+.badge-gray{background:var(--off);color:var(--muted);}
+.badge-yellow{background:var(--yellow-lt);color:var(--yellow);}
+.badge-blue{background:var(--blue-lt);color:var(--blue);}
+.badge-green{background:var(--green-lt);color:var(--green-dk);}
+.badge-red{background:var(--red-lt);color:var(--red);}
+
+/* ── Section header ── */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.section-title{font-size:15px;font-weight:700;color:var(--black);letter-spacing:-.02em;}
+
+/* ── Card ── */
+.card{background:var(--white);border-radius:var(--radius);border:1px solid var(--border);padding:18px;margin-bottom:14px;}
+.card-title{font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;}
+
+/* ── Progress ── */
+.progress-wrap{background:var(--off);border-radius:100px;height:8px;overflow:hidden;margin:6px 0;}
+.progress-fill{height:100%;background:var(--green);border-radius:100px;transition:width .5s ease;}
+
+/* ── Form ── */
+.form-group{margin-bottom:13px;}
+.form-label{font-size:11px;font-weight:700;color:var(--muted);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;}
+.form-input,.form-select,.form-textarea{width:100%;padding:10px 13px;border:1px solid var(--border);border-radius:8px;font-size:14px;font-family:var(--font);background:var(--white);color:var(--black);outline:none;transition:border-color .15s;}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--green);}
+.form-textarea{resize:vertical;min-height:80px;line-height:1.5;}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+/* ── Buttons ── */
+.btn{padding:10px 18px;border:none;border-radius:8px;font-size:14px;font-weight:600;font-family:var(--font);cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px;}
+.btn-black{background:var(--black);color:#fff;} .btn-black:hover{opacity:.85;}
+.btn-green{background:var(--green);color:#fff;} .btn-green:hover{opacity:.88;}
+.btn-outline{background:transparent;border:1px solid var(--border);color:var(--muted);} .btn-outline:hover{border-color:var(--black);color:var(--black);}
+.btn-full{width:100%;justify-content:center;}
+.btn-sm{padding:6px 12px;font-size:12px;}
+
+/* ── Modal ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:none;align-items:flex-end;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--white);border-radius:20px 20px 0 0;padding:24px 20px 48px;width:100%;max-width:520px;max-height:92vh;overflow-y:auto;}
+.modal-title{font-size:18px;font-weight:800;color:var(--black);margin-bottom:20px;letter-spacing:-.03em;}
+.modal-actions{display:flex;flex-direction:column;gap:8px;margin-top:18px;}
+
+/* ── Empty ── */
+.empty{text-align:center;padding:40px 20px;color:var(--faint);}
+.empty-icon{font-size:32px;margin-bottom:8px;}
+.empty-text{font-size:14px;font-weight:600;color:var(--muted);}
+.empty-sub{font-size:12px;margin-top:3px;}
+
+/* ── Vision ── */
+.vision-hero{background:var(--black);border-radius:16px;padding:28px 20px;margin-bottom:16px;position:relative;overflow:hidden;text-align:center;}
+.vision-hero::before{content:'';position:absolute;top:-60px;left:50%;transform:translateX(-50%);width:400px;height:400px;background:radial-gradient(circle,rgba(22,163,74,.2) 0%,transparent 70%);pointer-events:none;}
+.vision-eyebrow{display:inline-flex;align-items:center;gap:6px;background:rgba(22,163,74,.12);border:1px solid rgba(22,163,74,.25);border-radius:100px;padding:5px 12px;font-size:11px;font-weight:700;color:var(--green-bright);letter-spacing:.06em;text-transform:uppercase;margin-bottom:16px;}
+.vision-title{font-size:30px;font-weight:900;color:#fff;letter-spacing:-.05em;line-height:1.05;margin-bottom:10px;}
+.vision-title .g{background:linear-gradient(135deg,var(--green),var(--green-bright));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.vision-sub{font-size:13px;color:rgba(255,255,255,.5);line-height:1.65;max-width:340px;margin:0 auto;}
+
+.milestone{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:14px;display:flex;align-items:center;gap:14px;margin-bottom:8px;transition:all .2s;}
+.milestone.reached{border-color:var(--green);background:var(--green-lt);}
+.milestone-icon{width:42px;height:42px;border-radius:50%;background:var(--off);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.milestone.reached .milestone-icon{background:var(--green);}
+.milestone-info{flex:1;min-width:0;}
+.milestone-name{font-size:14px;font-weight:700;color:var(--black);margin-bottom:2px;}
+.milestone-desc{font-size:11px;color:var(--muted);}
+.milestone-equity{text-align:right;flex-shrink:0;}
+.milestone-eq-num{font-size:20px;font-weight:900;color:var(--green);}
+.milestone-eq-label{font-size:10px;color:var(--faint);}
+.milestone.reached .milestone-eq-num{color:var(--green-dk);}
+
+.math-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);}
+.math-row:last-child{border-bottom:none;}
+.math-scenario{font-size:13px;color:var(--muted);}
+.math-result{font-size:14px;font-weight:700;color:var(--black);}
+.math-result span{color:var(--green);}
+
+/* ── Sales Bible ── */
+.bible-section{margin-bottom:20px;}
+.bible-section-title{font-size:16px;font-weight:800;color:var(--black);letter-spacing:-.03em;margin-bottom:4px;}
+.bible-section-sub{font-size:12px;color:var(--muted);margin-bottom:12px;}
+.bible-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px;}
+.bible-card-title{font-size:13px;font-weight:700;color:var(--black);margin-bottom:8px;display:flex;align-items:center;gap:8px;}
+.bible-card-body{font-size:13px;color:var(--muted);line-height:1.65;}
+.bible-card-body strong{color:var(--black);font-weight:600;}
+.bible-quote{background:var(--black);border-radius:10px;padding:14px 16px;margin-top:10px;font-size:13px;color:rgba(255,255,255,.8);line-height:1.6;font-style:italic;}
+.bible-quote strong{color:var(--green-bright);font-style:normal;}
+.objection-row{padding:12px 0;border-bottom:1px solid var(--border);}
+.objection-row:last-child{border-bottom:none;}
+.objection-q{font-size:13px;font-weight:700;color:var(--red);margin-bottom:6px;}
+.objection-a{font-size:13px;color:var(--muted);line-height:1.6;}
+.objection-a strong{color:var(--black);}
+.compare-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:8px;}
+.compare-col{border-radius:10px;padding:12px;text-align:center;}
+.compare-col.them{background:var(--red-lt);border:1px solid #fecaca;}
+.compare-col.us{background:var(--green-lt);border:1px solid var(--green-md);}
+.compare-name{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;}
+.compare-price{font-size:20px;font-weight:900;letter-spacing:-.03em;margin-bottom:4px;}
+.compare-col.them .compare-name{color:var(--red);}
+.compare-col.them .compare-price{color:var(--red);}
+.compare-col.us .compare-name{color:var(--green-dk);}
+.compare-col.us .compare-price{color:var(--green);}
+.compare-note{font-size:10px;color:var(--faint);}
+.step-list{display:flex;flex-direction:column;gap:8px;margin-top:8px;}
+.step{display:flex;gap:12px;align-items:flex-start;}
+.step-num{width:24px;height:24px;border-radius:50%;background:var(--black);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
+.step-text{font-size:13px;color:var(--muted);line-height:1.5;flex:1;}
+.step-text strong{color:var(--black);}
+
+/* ── Goals ── */
+.goals-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
+.goal-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:14px;}
+.goal-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;}
+.goal-name{font-size:13px;font-weight:700;color:var(--black);}
+.goal-deadline{font-size:11px;color:var(--faint);}
+.goal-num{font-size:22px;font-weight:900;color:var(--black);letter-spacing:-.03em;}
+.goal-num span{font-size:13px;font-weight:400;color:var(--muted);}
+.goal-pct{font-size:11px;color:var(--muted);margin-top:4px;}
+
+/* ── Follow up ── */
+.followup-row{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:13px 14px;display:flex;gap:12px;align-items:center;cursor:pointer;margin-bottom:8px;transition:border-color .15s;}
+.followup-row:hover{border-color:#aaa;}
+.fu-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.fu-dot.overdue{background:var(--red);}
+.fu-dot.today{background:var(--yellow);}
+.fu-dot.soon{background:var(--green);}
+.fu-dot.later{background:var(--faint);}
+
+/* ── Activity ── */
+.activity-row{padding:12px 0;border-bottom:1px solid var(--border);}
+.activity-row:last-child{border-bottom:none;}
+.activity-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.activity-label{font-size:13px;font-weight:600;color:var(--black);}
+.activity-count{font-size:13px;color:var(--muted);}
+.activity-btns{display:flex;gap:6px;margin-top:8px;}
+
+@media(min-width:640px){
+  .stats-grid{grid-template-columns:repeat(4,1fr);}
+  .modal-overlay{align-items:center;}
+  .modal{border-radius:16px;}
+  .vision-title{font-size:38px;}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <img src="/icons/icon-192.png"/>
+    <div class="topbar-title">ShopFlow Sales Hub</div>
+  </div>
+  <div class="topbar-name">Bryce Moen</div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="nav('leads')">🎯 Pipeline</div>
+  <div class="tab" onclick="nav('followups')">⏰ Follow Ups</div>
+  <div class="tab" onclick="nav('bible')">📖 Sales Bible</div>
+  <div class="tab" onclick="nav('vision')">🚀 Vision</div>
+  <div class="tab" onclick="nav('goals')">🏆 Goals</div>
+</div>
+
+<div class="content">
+
+<!-- ── PIPELINE ── -->
+<div id="tab-leads" class="page active">
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-label">Total Leads</div><div class="stat-value" id="stat-total">0</div><div class="stat-sub">all time</div></div>
+    <div class="stat-card"><div class="stat-label">Closed</div><div class="stat-value green" id="stat-closed">0</div><div class="stat-sub">paying shops</div></div>
+    <div class="stat-card"><div class="stat-label">In Progress</div><div class="stat-value" id="stat-progress">0</div><div class="stat-sub">active conversations</div></div>
+    <div class="stat-card"><div class="stat-label">Close Rate</div><div class="stat-value" id="stat-rate">—</div><div class="stat-sub">demos → clients</div></div>
+  </div>
+
+  <div class="section-header">
+    <div class="section-title">All Leads</div>
+    <button class="btn btn-black btn-sm" onclick="openAddLead()">+ Add Lead</button>
+  </div>
+
+  <input class="form-input" id="lead-search" placeholder="Search by name, shop, notes..." oninput="renderLeads()" style="margin-bottom:12px;"/>
+
+  <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
+    <button class="btn btn-sm" id="filter-all" onclick="setFilter('all')" style="background:var(--black);color:#fff;">All</button>
+    <button class="btn btn-sm btn-outline" id="filter-contacted" onclick="setFilter('contacted')">Contacted</button>
+    <button class="btn btn-sm btn-outline" id="filter-responded" onclick="setFilter('responded')">Responded</button>
+    <button class="btn btn-sm btn-outline" id="filter-demo" onclick="setFilter('demo')">Demo</button>
+    <button class="btn btn-sm btn-outline" id="filter-closed" onclick="setFilter('closed')">Closed</button>
+    <button class="btn btn-sm btn-outline" id="filter-not-interested" onclick="setFilter('not-interested')">Lost</button>
+  </div>
+
+  <div class="lead-list" id="lead-list"></div>
+</div>
+
+<!-- ── FOLLOW UPS ── -->
+<div id="tab-followups" class="page">
+  <div class="section-header">
+    <div class="section-title">Follow Ups</div>
+    <div style="font-size:12px;color:var(--muted);">Sorted by urgency</div>
+  </div>
+  <div id="followup-list"></div>
+</div>
+
+<!-- ── SALES BIBLE ── -->
+<div id="tab-bible" class="page">
+
+  <div class="bible-section">
+    <div class="bible-section-title">The Product</div>
+    <div class="bible-section-sub">What you're selling and why it's different</div>
+
+    <div class="bible-card">
+      <div class="bible-card-title">📱 What is ShopFlow?</div>
+      <div class="bible-card-body">
+        ShopFlow is a <strong>CRM built specifically for barbershops</strong>. Not a generic booking tool. Not an app that's also for nail salons and dog groomers. Built for barbers, by someone in the business.<br/><br/>
+        It handles: <strong>online booking, client profiles, automated SMS reminders, rebook nudges, revenue tracking, loyalty rewards, and deposit collection.</strong><br/><br/>
+        Barbers add it to their home screen. It works like a native app. No App Store download required.
+      </div>
+    </div>
+
+    <div class="bible-card">
+      <div class="bible-card-title">💰 Why barbers switch from Booksy/Square</div>
+      <div class="compare-grid">
+        <div class="compare-col them"><div class="compare-name">Booksy</div><div class="compare-price">$30+</div><div class="compare-note">+ 2.49% per booking</div></div>
+        <div class="compare-col them"><div class="compare-name">Square</div><div class="compare-price">$69+</div><div class="compare-note">+ 2.6% per transaction</div></div>
+        <div class="compare-col us"><div class="compare-name">ShopFlow</div><div class="compare-price">$20</div><div class="compare-note">Zero transaction fees</div></div>
+      </div>
+      <div class="bible-card-body" style="margin-top:12px;">
+        A shop doing $10,000/mo in bookings on Booksy pays <strong>$249 in transaction fees alone</strong> — before the monthly fee. ShopFlow charges <strong>$0 in transaction fees. Ever.</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="bible-section">
+    <div class="bible-section-title">How to Sell It</div>
+    <div class="bible-section-sub">The process that works</div>
+
+    <div class="bible-card">
+      <div class="bible-card-title">🎯 The Opening DM</div>
+      <div class="bible-card-body">Keep it short. Never pitch in the first message. Just open a conversation.</div>
+      <div class="bible-quote">
+        "Hey bro, quick question — how's <strong>[Booksy / Square / whatever]</strong> working out for you? Asking because I work with a barbershop software and trying to see what people actually need. No pitch, just curious."
+      </div>
+    </div>
+
+    <div class="bible-card">
+      <div class="bible-card-title">💬 When They Respond</div>
+      <div class="bible-card-body">Listen first. Then connect their pain to what ShopFlow fixes.</div>
+      <div class="step-list">
+        <div class="step"><div class="step-num">1</div><div class="step-text"><strong>They say fees are too high</strong> → "Yeah that's exactly why this was built. ShopFlow is $20/mo, zero transaction fees."</div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text"><strong>They say clients don't book online</strong> → "Ours works like texting them a link. No app download. They pick a time and go."</div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text"><strong>They say they use paper/texts</strong> → "How much time do you spend chasing no-shows? ShopFlow auto-texts them 24hrs before."</div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text"><strong>They're interested</strong> → "Let me show you a live demo — 15 minutes, I'll walk you through everything. What's a good time?"</div></div>
+      </div>
+    </div>
+
+    <div class="bible-card">
+      <div class="bible-card-title">🖥️ Running the Demo</div>
+      <div class="bible-card-body">Log in to the demo account and walk them through it in this order:</div>
+      <div class="step-list" style="margin-top:8px;">
+        <div class="step"><div class="step-num">1</div><div class="step-text"><strong>Dashboard</strong> — show revenue, today's appointments. Tap a client name and show the full profile popping up.</div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text"><strong>Client profile</strong> — show visit history, cut notes, spending trend, loyalty points. "All of this builds automatically."</div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text"><strong>Booking page</strong> — show /book/kings-cuts. Show how a client books. Takes 30 seconds.</div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text"><strong>Messages tab</strong> — show the SMS inbox. "When a client texts back about their appointment, you see it right here."</div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-text"><strong>Close</strong> — "Setup takes 2 minutes. First 14 days free. $19.99/mo after that, no contracts." Then stop talking.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bible-section">
+    <div class="bible-section-title">Objection Handlers</div>
+    <div class="bible-section-sub">Every objection you'll hear and exactly what to say</div>
+
+    <div class="bible-card">
+      <div class="objection-row">
+        <div class="objection-q">"I already use Booksy / Square"</div>
+        <div class="objection-a">"How much are you paying per month including transaction fees? Most shops save $50-200/mo switching to ShopFlow just on fees alone — and get a better product."</div>
+      </div>
+      <div class="objection-row">
+        <div class="objection-q">"My clients won't use an app"</div>
+        <div class="objection-a">"It's not an app — it's a link. You text it to them, they tap it, they pick a time. No download, no account. Simpler than Instagram."</div>
+      </div>
+      <div class="objection-row">
+        <div class="objection-q">"I don't have time to learn new software"</div>
+        <div class="objection-a">"Setup is 2 minutes. Add your barbers, share the booking link. That's it. Most barbers are taking bookings the same day they sign up."</div>
+      </div>
+      <div class="objection-row">
+        <div class="objection-q">"It's too expensive"</div>
+        <div class="objection-a">"It's $19.99 a month. One cut pays for a whole month. And if it brings back even one no-show client, it's already paid for itself."</div>
+      </div>
+      <div class="objection-row">
+        <div class="objection-q">"I need to think about it"</div>
+        <div class="objection-a">"Totally fair. I'll send you the demo link so you can look around on your own. First 14 days are free so there's no risk. Can I follow up Thursday?"</div>
+      </div>
+      <div class="objection-row">
+        <div class="objection-q">"What if I want to cancel?"</div>
+        <div class="objection-a">"No contract, cancel anytime. We keep it because it works, not because we locked you in."</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bible-section">
+    <div class="bible-section-title">Key Numbers to Know</div>
+    <div class="bible-section-sub">Have these ready in every conversation</div>
+    <div class="card">
+      <div style="display:flex;flex-direction:column;gap:0;">
+        <div class="math-row"><div class="math-scenario">Starter plan</div><div class="math-result"><span>$19.99/mo</span> — up to 2 barbers</div></div>
+        <div class="math-row"><div class="math-scenario">Pro plan</div><div class="math-result"><span>$99/mo</span> — unlimited barbers + SMS</div></div>
+        <div class="math-row"><div class="math-scenario">Booksy transaction fee on $10K/mo</div><div class="math-result"><span style="color:var(--red);">$249/mo in fees</span></div></div>
+        <div class="math-row"><div class="math-scenario">ShopFlow transaction fees</div><div class="math-result"><span>$0. Always.</span></div></div>
+        <div class="math-row"><div class="math-scenario">Setup time</div><div class="math-result"><span>2 minutes</span></div></div>
+        <div class="math-row"><div class="math-scenario">Free trial</div><div class="math-result"><span>14 days</span>, no credit card needed</div></div>
+        <div class="math-row"><div class="math-scenario">Demo link</div><div class="math-result"><span>shopflowio.up.railway.app/demo</span></div></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── VISION ── -->
+<div id="tab-vision" class="page">
+
+  <div class="vision-hero">
+    <div class="vision-eyebrow">🚀 Your opportunity</div>
+    <div class="vision-title">This is bigger than<br/>a <span class="g">sales job.</span></div>
+    <div class="vision-sub">You're not selling software. You're building equity in a company that's being built to sell. Every shop you close is a stake in something real.</div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-title">The Big Picture — Your Upside</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+      <div style="background:var(--black);border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:11px;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Goal Exit</div>
+        <div style="font-size:28px;font-weight:900;color:#fff;letter-spacing:-.04em;">$1M+</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.4);margin-top:3px;">target valuation</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#0a1f0a,#0f2a0f);border:1px solid rgba(22,163,74,.3);border-radius:10px;padding:14px;text-align:center;">
+        <div style="font-size:11px;color:var(--green-bright);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-weight:700;">Your Equity</div>
+        <div style="font-size:28px;font-weight:900;background:linear-gradient(135deg,var(--green),var(--green-bright));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-.04em;">Uncapped</div>
+        <div style="font-size:11px;color:rgba(22,163,74,.6);margin-top:3px;">grows with performance</div>
+      </div>
+    </div>
+    <div style="font-size:13px;color:var(--muted);line-height:1.6;padding:12px;background:var(--off);border-radius:8px;">
+      There's no ceiling here. The more shops you close, the more equity you earn, and the more that equity is worth when we exit. You're not capped at 30% — you're earning into a growing company with no artificial limit.
+    </div>
+  </div>
+
+  <div class="section-header">
+    <div class="section-title">Equity Milestones</div>
+    <div style="font-size:12px;color:var(--muted);" id="clients-closed-label">0 shops closed</div>
+  </div>
+
+  <div class="milestone" id="ms-0">
+    <div class="milestone-icon">✍️</div>
+    <div class="milestone-info">
+      <div class="milestone-name">Day One — You're In</div>
+      <div class="milestone-desc">Agreement signed. Equity starts here.</div>
+    </div>
+    <div class="milestone-equity"><div class="milestone-eq-num">15%</div><div class="milestone-eq-label">equity</div></div>
+  </div>
+
+  <div class="milestone" id="ms-10">
+    <div class="milestone-icon">🔥</div>
+    <div class="milestone-info">
+      <div class="milestone-name">10 Paying Shops</div>
+      <div class="milestone-desc">Proof you can sell this. Now we scale.</div>
+      <div class="progress-wrap"><div class="progress-fill" id="prog-10" style="width:0%"></div></div>
+      <div style="font-size:11px;color:var(--muted);"><span id="prog-10-label">0 / 10</span></div>
+    </div>
+    <div class="milestone-equity"><div class="milestone-eq-num">20%</div><div class="milestone-eq-label">equity</div></div>
+  </div>
+
+  <div class="milestone" id="ms-25">
+    <div class="milestone-icon">💪</div>
+    <div class="milestone-info">
+      <div class="milestone-name">25 Paying Shops</div>
+      <div class="milestone-desc">Real momentum. $500K+ in ARR pipeline.</div>
+      <div class="progress-wrap"><div class="progress-fill" id="prog-25" style="width:0%"></div></div>
+      <div style="font-size:11px;color:var(--muted);"><span id="prog-25-label">0 / 25</span></div>
+    </div>
+    <div class="milestone-equity"><div class="milestone-eq-num">25%</div><div class="milestone-eq-label">equity</div></div>
+  </div>
+
+  <div class="milestone" id="ms-50">
+    <div class="milestone-icon">🏆</div>
+    <div class="milestone-info">
+      <div class="milestone-name">50 Shops or $10K MRR</div>
+      <div class="milestone-desc">Exit-ready. We start talking to buyers.</div>
+      <div class="progress-wrap"><div class="progress-fill" id="prog-50" style="width:0%"></div></div>
+      <div style="font-size:11px;color:var(--muted);"><span id="prog-50-label">0 / 50</span></div>
+    </div>
+    <div class="milestone-equity"><div class="milestone-eq-num">30%+</div><div class="milestone-eq-label">equity</div></div>
+  </div>
+
+  <div class="card" style="margin-top:14px;">
+    <div class="card-title">What Your Equity Is Actually Worth</div>
+    <div class="math-row"><div class="math-scenario">ShopFlow sells for $500K</div><div class="math-result">30% = <span>$150,000</span> in your pocket</div></div>
+    <div class="math-row"><div class="math-scenario">ShopFlow sells for $1M</div><div class="math-result">30% = <span>$300,000</span> in your pocket</div></div>
+    <div class="math-row"><div class="math-scenario">ShopFlow sells for $2M</div><div class="math-result">30% = <span>$600,000</span> in your pocket</div></div>
+    <div class="math-row"><div class="math-scenario">ShopFlow sells for $3M</div><div class="math-result">30% = <span>$900,000</span> in your pocket</div></div>
+    <div class="math-row"><div class="math-scenario">ShopFlow sells for $5M</div><div class="math-result">30% = <span style="color:var(--green);font-size:16px;">$1,500,000</span> in your pocket</div></div>
+    <div style="background:var(--black);border-radius:10px;padding:16px;margin-top:14px;text-align:center;">
+      <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:6px;">SaaS businesses sell at 3-5x ARR. 50 shops at $99/mo avg = $59,400 ARR = <span style="color:var(--green-bright);">$178K–$297K valuation at that milestone alone.</span></div>
+      <div style="font-size:15px;font-weight:800;color:#fff;">Close 50 shops. Change your life. 🤙</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── GOALS ── -->
+<div id="tab-goals" class="page">
+
+  <div class="section-header">
+    <div class="section-title">Personal Goals</div>
+    <button class="btn btn-black btn-sm" onclick="openAddGoal()">+ Add Goal</button>
+  </div>
+  <div class="goals-grid" id="goals-list"></div>
+
+  <div class="card">
+    <div class="card-title">Weekly Activity</div>
+    <div class="activity-row">
+      <div class="activity-top">
+        <div class="activity-label">DMs Sent</div>
+        <div class="activity-count"><span id="dms-sent">0</span> / <input id="dms-target" type="number" value="50" min="1" style="width:36px;border:none;font-size:13px;font-family:var(--font);color:var(--muted);text-align:right;background:transparent;" onchange="saveActivity()"/></div>
+      </div>
+      <div class="progress-wrap"><div class="progress-fill" id="dms-prog" style="width:0%"></div></div>
+      <div class="activity-btns">
+        <button class="btn btn-sm btn-outline" onclick="adj('dms',-1)">−</button>
+        <button class="btn btn-sm btn-black" onclick="adj('dms',1)">+ 1 DM</button>
+        <button class="btn btn-sm btn-outline" onclick="adj('dms',5)">+ 5</button>
+      </div>
+    </div>
+    <div class="activity-row">
+      <div class="activity-top">
+        <div class="activity-label">Walk-ins</div>
+        <div class="activity-count"><span id="walkins-sent">0</span> / <input id="walkins-target" type="number" value="5" min="1" style="width:36px;border:none;font-size:13px;font-family:var(--font);color:var(--muted);text-align:right;background:transparent;" onchange="saveActivity()"/></div>
+      </div>
+      <div class="progress-wrap"><div class="progress-fill" id="walkins-prog" style="width:0%"></div></div>
+      <div class="activity-btns">
+        <button class="btn btn-sm btn-outline" onclick="adj('walkins',-1)">−</button>
+        <button class="btn btn-sm btn-black" onclick="adj('walkins',1)">+ 1 Walk-in</button>
+      </div>
+    </div>
+    <div class="activity-row">
+      <div class="activity-top">
+        <div class="activity-label">Demos Run</div>
+        <div class="activity-count"><span id="demos-sent">0</span> / <input id="demos-target" type="number" value="5" min="1" style="width:36px;border:none;font-size:13px;font-family:var(--font);color:var(--muted);text-align:right;background:transparent;" onchange="saveActivity()"/></div>
+      </div>
+      <div class="progress-wrap"><div class="progress-fill" id="demos-prog" style="width:0%"></div></div>
+      <div class="activity-btns">
+        <button class="btn btn-sm btn-outline" onclick="adj('demos',-1)">−</button>
+        <button class="btn btn-sm btn-black" onclick="adj('demos',1)">+ 1 Demo</button>
+      </div>
+    </div>
+    <button class="btn btn-outline btn-full" onclick="resetWeek()" style="margin-top:12px;font-size:12px;color:var(--faint);">Reset week</button>
+  </div>
+</div>
+
+</div><!-- /content -->
+
+<!-- ── ADD LEAD MODAL ── -->
+<div class="modal-overlay" id="add-lead-modal" onclick="if(event.target===this)closeModal('add-lead-modal')">
+  <div class="modal">
+    <div class="modal-title" id="add-lead-title">New Lead</div>
+    <div class="form-group"><label class="form-label">Name & Shop *</label><input class="form-input" id="l-name" placeholder="Marcus — King's Cuts Albuquerque"/></div>
+    <div class="form-group"><label class="form-label">Phone / Instagram</label><input class="form-input" id="l-contact" placeholder="@kingscuts or (505) 555-0100"/></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Contact method</label>
+        <select class="form-select" id="l-method">
+          <option>Instagram DM</option><option>Walk-in</option><option>Phone/Text</option><option>Referral</option><option>Email</option><option>Other</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Currently using</label>
+        <select class="form-select" id="l-tool">
+          <option>Nothing / texts</option><option>Booksy</option><option>Square</option><option>Vagaro</option><option>StyleSeat</option><option>Hey Goldie</option><option>The Cut</option><option>Other</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Status</label>
+        <select class="form-select" id="l-status">
+          <option value="contacted">Contacted</option>
+          <option value="responded">Responded</option>
+          <option value="demo">Demo Scheduled</option>
+          <option value="closed">Closed ✓</option>
+          <option value="not-interested">Not Interested</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Plan interest</label>
+        <select class="form-select" id="l-plan">
+          <option>Starter — $19.99</option><option>Pro — $99</option><option>Shop — $200</option><option>Unknown</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label">Follow up date</label><input class="form-input" id="l-followup" type="date"/></div>
+    <div class="form-group"><label class="form-label">Notes</label><textarea class="form-textarea" id="l-notes" placeholder="Pain points, objections, what they said, next steps..."></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-green btn-full" onclick="saveLead()">Save Lead</button>
+      <button class="btn btn-outline btn-full" onclick="closeModal('add-lead-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── LEAD DETAIL MODAL ── -->
+<div class="modal-overlay" id="lead-detail-modal" onclick="if(event.target===this)closeModal('lead-detail-modal')">
+  <div class="modal" id="lead-detail-content"></div>
+</div>
+
+<!-- ── ADD GOAL MODAL ── -->
+<div class="modal-overlay" id="add-goal-modal" onclick="if(event.target===this)closeModal('add-goal-modal')">
+  <div class="modal">
+    <div class="modal-title">Set a Goal</div>
+    <div class="form-group"><label class="form-label">Goal *</label><input class="form-input" id="g-name" placeholder="e.g. Close 10 shops by July 1st"/></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Target</label><input class="form-input" id="g-target" type="number" placeholder="10" min="1"/></div>
+      <div class="form-group"><label class="form-label">Deadline</label><input class="form-input" id="g-deadline" type="date"/></div>
+    </div>
+    <div class="form-group"><label class="form-label">Tracking</label>
+      <select class="form-select" id="g-type">
+        <option value="clients">Clients closed</option>
+        <option value="demos">Demos run</option>
+        <option value="dms">DMs sent</option>
+        <option value="custom">Custom (manual)</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-green btn-full" onclick="saveGoal()">Save Goal</button>
+      <button class="btn btn-outline btn-full" onclick="closeModal('add-goal-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let leads    = JSON.parse(localStorage.getItem('sf_leads')    || '[]');
+let goals    = JSON.parse(localStorage.getItem('sf_goals')    || '[]');
+let activity = JSON.parse(localStorage.getItem('sf_activity') || '{"dms":0,"walkins":0,"demos":0}');
+let editingLeadId = null;
+let activeFilter  = 'all';
+
+const persist = () => {
+  localStorage.setItem('sf_leads',    JSON.stringify(leads));
+  localStorage.setItem('sf_goals',    JSON.stringify(goals));
+  localStorage.setItem('sf_activity', JSON.stringify(activity));
+};
+
+// ── Nav ───────────────────────────────────────────────────────────────────────
+function nav(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.tab[onclick="nav('${tab}')"]`).classList.add('active');
+  document.getElementById('tab-'+tab).classList.add('active');
+  if (tab === 'leads')     { renderLeads(); updateStats(); }
+  if (tab === 'followups') renderFollowups();
+  if (tab === 'vision')    renderVision();
+  if (tab === 'goals')     { renderGoals(); initActivity(); }
+}
+
+// ── Modals ────────────────────────────────────────────────────────────────────
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function openAddLead() {
+  editingLeadId = null;
+  document.getElementById('add-lead-title').textContent = 'New Lead';
+  ['l-name','l-contact','l-notes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('l-status').value = 'contacted';
+  document.getElementById('l-followup').value = '';
+  openModal('add-lead-modal');
+  setTimeout(() => document.getElementById('l-name').focus(), 200);
+}
+
+function openAddGoal() {
+  ['g-name','g-target','g-deadline'].forEach(id => document.getElementById(id).value = '');
+  openModal('add-goal-modal');
+  setTimeout(() => document.getElementById('g-name').focus(), 200);
+}
+
+// ── Leads ─────────────────────────────────────────────────────────────────────
+const BADGE = {
+  contacted:    ['Contacted',    'badge-gray'],
+  responded:    ['Responded',    'badge-yellow'],
+  demo:         ['Demo',         'badge-blue'],
+  closed:       ['Closed ✓',     'badge-green'],
+  'not-interested': ['Lost',     'badge-red'],
+};
+const badgeHtml = s => { const [l,c] = BADGE[s]||['?','badge-gray']; return `<span class="badge ${c}">${l}</span>`; };
+const inits = name => name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
+const avatarColors = ['#16a34a','#2563eb','#d97706','#7c3aed','#dc2626','#0891b2'];
+const avatarColor  = name => { let h=0; for(const c of name) h=c.charCodeAt(0)+((h<<5)-h); return avatarColors[Math.abs(h)%avatarColors.length]; };
+
+function setFilter(f) {
+  activeFilter = f;
+  document.querySelectorAll('[id^="filter-"]').forEach(b => { b.style.background=''; b.style.color=''; b.classList.add('btn-outline'); b.classList.remove('btn-black'); });
+  const btn = document.getElementById('filter-'+f);
+  if (btn) { btn.style.background = 'var(--black)'; btn.style.color = '#fff'; btn.classList.remove('btn-outline'); }
+  renderLeads();
+}
+
+function saveLead() {
+  const name = document.getElementById('l-name').value.trim();
+  if (!name) { alert('Enter a name'); return; }
+  const lead = {
+    id: editingLeadId || Date.now().toString(),
+    name,
+    contact:  document.getElementById('l-contact').value.trim(),
+    method:   document.getElementById('l-method').value,
+    tool:     document.getElementById('l-tool').value,
+    status:   document.getElementById('l-status').value,
+    followup: document.getElementById('l-followup').value,
+    plan:     document.getElementById('l-plan').value,
+    notes:    document.getElementById('l-notes').value.trim(),
+    createdAt: editingLeadId ? (leads.find(l=>l.id===editingLeadId)?.createdAt || new Date().toISOString()) : new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  leads = editingLeadId ? leads.map(l => l.id===editingLeadId ? lead : l) : [lead, ...leads];
+  persist();
+  closeModal('add-lead-modal');
+  closeModal('lead-detail-modal');
+  renderLeads(); updateStats(); renderVision();
+}
+
+function renderLeads() {
+  const q = (document.getElementById('lead-search')?.value || '').toLowerCase();
+  let filtered = leads.filter(l => {
+    const matchQ = !q || l.name.toLowerCase().includes(q) || (l.notes||'').toLowerCase().includes(q) || (l.contact||'').toLowerCase().includes(q);
+    const matchF = activeFilter === 'all' || l.status === activeFilter;
+    return matchQ && matchF;
+  });
+  const el = document.getElementById('lead-list');
+  if (!filtered.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">🎯</div><div class="empty-text">' + (q||activeFilter!=='all' ? 'No leads match' : 'No leads yet') + '</div><div class="empty-sub">Add your first lead to get started</div></div>';
+    return;
+  }
+  el.innerHTML = filtered.map(l => `
+    <div class="lead-row" onclick="openLeadDetail('${l.id}')">
+      <div class="lead-avatar" style="background:${avatarColor(l.name)}">${inits(l.name)}</div>
+      <div class="lead-info">
+        <div class="lead-name">${l.name}</div>
+        <div class="lead-meta">${l.method} · ${l.tool}${l.followup ? ' · Follow up: ' + fmt(l.followup) : ''}${l.contact ? ' · ' + l.contact : ''}</div>
+      </div>
+      ${badgeHtml(l.status)}
+    </div>`).join('');
+}
+
+function openLeadDetail(id) {
+  const l = leads.find(x => x.id===id); if (!l) return;
+  document.getElementById('lead-detail-content').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
+      <div><div class="modal-title" style="margin-bottom:4px;">${l.name}</div><div style="font-size:12px;color:var(--muted);">${l.contact||''}</div></div>
+      ${badgeHtml(l.status)}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+      <div style="background:var(--off);border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Method</div><div style="font-size:13px;font-weight:600;">${l.method}</div></div>
+      <div style="background:var(--off);border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Using Now</div><div style="font-size:13px;font-weight:600;">${l.tool}</div></div>
+      <div style="background:var(--off);border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Plan</div><div style="font-size:13px;font-weight:600;">${l.plan}</div></div>
+      <div style="background:var(--off);border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Follow Up</div><div style="font-size:13px;font-weight:600;">${l.followup ? fmt(l.followup) : 'Not set'}</div></div>
+    </div>
+    ${l.notes ? `<div style="background:var(--off);border-radius:8px;padding:12px;margin-bottom:14px;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Notes</div><div style="font-size:13px;color:var(--muted);line-height:1.65;">${l.notes}</div></div>` : ''}
+    <div style="margin-bottom:14px;">
+      <label class="form-label">Update Status</label>
+      <select class="form-select" onchange="quickStatus('${l.id}',this.value)">
+        ${Object.keys(BADGE).map(s => `<option value="${s}"${l.status===s?' selected':''}>${BADGE[s][0]}</option>`).join('')}
+      </select>
+    </div>
+    <div style="margin-bottom:14px;">
+      <label class="form-label">Quick Note</label>
+      <textarea class="form-textarea" id="quick-note" style="min-height:60px;" placeholder="Add a note...">${l.notes||''}</textarea>
+      <button class="btn btn-black btn-full" style="margin-top:8px;font-size:13px;" onclick="saveNote('${l.id}')">Save Note</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline btn-full" onclick="editLead('${l.id}')">Edit Full Lead</button>
+      <button class="btn btn-outline btn-full" style="color:var(--red);" onclick="deleteLead('${l.id}')">Delete Lead</button>
+      <button class="btn btn-outline btn-full" onclick="closeModal('lead-detail-modal')">Close</button>
+    </div>`;
+  openModal('lead-detail-modal');
+}
+
+function saveNote(id) {
+  const lead = leads.find(l => l.id===id); if (!lead) return;
+  lead.notes = document.getElementById('quick-note').value.trim();
+  lead.updatedAt = new Date().toISOString();
+  persist(); closeModal('lead-detail-modal'); renderLeads();
+}
+
+function quickStatus(id, status) {
+  const lead = leads.find(l => l.id===id); if (!lead) return;
+  lead.status = status; lead.updatedAt = new Date().toISOString();
+  persist(); renderLeads(); updateStats(); renderVision();
+}
+
+function editLead(id) {
+  const l = leads.find(x => x.id===id); if (!l) return;
+  editingLeadId = id;
+  document.getElementById('add-lead-title').textContent = 'Edit Lead';
+  document.getElementById('l-name').value    = l.name;
+  document.getElementById('l-contact').value = l.contact||'';
+  document.getElementById('l-method').value  = l.method;
+  document.getElementById('l-tool').value    = l.tool;
+  document.getElementById('l-status').value  = l.status;
+  document.getElementById('l-followup').value= l.followup||'';
+  document.getElementById('l-plan').value    = l.plan;
+  document.getElementById('l-notes').value   = l.notes||'';
+  closeModal('lead-detail-modal');
+  openModal('add-lead-modal');
+}
+
+function deleteLead(id) {
+  if (!confirm('Delete this lead?')) return;
+  leads = leads.filter(l => l.id!==id);
+  persist(); closeModal('lead-detail-modal'); renderLeads(); updateStats(); renderVision();
+}
+
+function updateStats() {
+  const total    = leads.length;
+  const closed   = leads.filter(l => l.status==='closed').length;
+  const progress = leads.filter(l => ['contacted','responded','demo'].includes(l.status)).length;
+  const demos    = leads.filter(l => ['demo','closed'].includes(l.status)).length;
+  const rate     = demos > 0 ? Math.round(closed/demos*100)+'%' : '—';
+  document.getElementById('stat-total').textContent    = total;
+  document.getElementById('stat-closed').textContent   = closed;
+  document.getElementById('stat-progress').textContent = progress;
+  document.getElementById('stat-rate').textContent     = rate;
+}
+
+// ── Follow Ups ────────────────────────────────────────────────────────────────
+function renderFollowups() {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const list = leads
+    .filter(l => l.followup && !['closed','not-interested'].includes(l.status))
+    .sort((a,b) => new Date(a.followup) - new Date(b.followup));
+  const el = document.getElementById('followup-list');
+  if (!list.length) {
+    el.innerHTML = '<div class="empty"><div class="empty-icon">⏰</div><div class="empty-text">No follow ups</div><div class="empty-sub">Set follow up dates on your leads</div></div>';
+    return;
+  }
+  el.innerHTML = list.map(l => {
+    const dt   = new Date(l.followup+'T12:00:00');
+    const diff = Math.floor((dt - today) / 86400000);
+    const label = diff < 0 ? `Overdue ${Math.abs(diff)}d` : diff===0 ? 'Today' : diff===1 ? 'Tomorrow' : `In ${diff}d`;
+    const dotCls = diff < 0 ? 'overdue' : diff===0 ? 'today' : diff<=3 ? 'soon' : 'later';
+    const labelColor = diff < 0 ? 'var(--red)' : diff===0 ? 'var(--yellow)' : 'var(--muted)';
+    return `<div class="followup-row" onclick="openLeadDetail('${l.id}')">
+      <div class="fu-dot ${dotCls}"></div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:14px;font-weight:700;color:var(--black);margin-bottom:2px;">${l.name}</div>
+        <div style="font-size:12px;color:var(--muted);">${l.method} · ${l.tool}</div>
+        ${l.notes ? `<div style="font-size:11px;color:var(--faint);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.notes}</div>` : ''}
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div style="font-size:12px;font-weight:700;color:${labelColor};">${label}</div>
+        ${badgeHtml(l.status)}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Vision ────────────────────────────────────────────────────────────────────
+function renderVision() {
+  const closed = leads.filter(l => l.status==='closed').length;
+  const lbl = document.getElementById('clients-closed-label');
+  if (lbl) lbl.textContent = closed + ' shop' + (closed!==1?'s':'') + ' closed';
+
+  [{id:'ms-0',t:0},{id:'ms-10',t:10},{id:'ms-25',t:25},{id:'ms-50',t:50}].forEach(m => {
+    const el = document.getElementById(m.id); if (!el) return;
+    el.classList.toggle('reached', closed >= m.t);
+    const icon = el.querySelector('.milestone-icon');
+    if (icon) icon.textContent = closed >= m.t ? '✅' : m.t===0?'✍️':m.t===10?'🔥':m.t===25?'💪':'🏆';
+  });
+
+  const set = (id, val, total) => {
+    const fill = document.getElementById(id);
+    const lbl  = document.getElementById(id+'-label');
+    if (fill) fill.style.width = Math.min(100, Math.round(val/total*100)) + '%';
+    if (lbl)  lbl.textContent = Math.min(val,total) + ' / ' + total;
+  };
+  set('prog-10', closed, 10);
+  set('prog-25', closed, 25);
+  set('prog-50', closed, 50);
+}
+
+// ── Goals ─────────────────────────────────────────────────────────────────────
+function saveGoal() {
+  const name   = document.getElementById('g-name').value.trim();
+  const target = parseInt(document.getElementById('g-target').value) || 0;
+  if (!name || !target) { alert('Fill in all fields'); return; }
+  goals.push({ id: Date.now().toString(), name, target, current:0, deadline: document.getElementById('g-deadline').value, type: document.getElementById('g-type').value, createdAt: new Date().toISOString() });
+  persist(); closeModal('add-goal-modal'); renderGoals();
+}
+
+function renderGoals() {
+  const closed = leads.filter(l => l.status==='closed').length;
+  const demos  = leads.filter(l => ['demo','closed'].includes(l.status)).length;
+  const el = document.getElementById('goals-list');
+  if (!goals.length) {
+    el.innerHTML = '<div style="grid-column:1/-1;" class="empty"><div class="empty-icon">🏆</div><div class="empty-text">No goals yet</div><div class="empty-sub">Set a goal to track your progress</div></div>';
+    return;
+  }
+  el.innerHTML = goals.map(g => {
+    const current = g.type==='clients' ? closed : g.type==='demos' ? demos : (g.current||0);
+    const pct = Math.min(100, Math.round(current/g.target*100));
+    const dl  = g.deadline ? new Date(g.deadline+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'No deadline';
+    return `<div class="goal-card">
+      <div class="goal-top">
+        <div><div class="goal-name">${g.name}</div><div class="goal-deadline">${dl}</div></div>
+        <button onclick="delGoal('${g.id}')" style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--faint);">×</button>
+      </div>
+      <div class="goal-num">${current}<span> / ${g.target}</span></div>
+      <div class="progress-wrap"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <div class="goal-pct">${pct}% complete ${g.type==='custom'?`<button class="btn btn-sm btn-outline" style="margin-left:6px;padding:2px 8px;font-size:11px;" onclick="incGoal('${g.id}')">+1</button>`:''}</div>
+    </div>`;
+  }).join('');
+}
+
+function delGoal(id) { goals = goals.filter(g => g.id!==id); persist(); renderGoals(); }
+function incGoal(id) { const g = goals.find(x=>x.id===id); if(g){ g.current=Math.min(g.target,(g.current||0)+1); persist(); renderGoals(); } }
+
+// ── Activity ──────────────────────────────────────────────────────────────────
+function saveActivity() { localStorage.setItem('sf_activity', JSON.stringify(activity)); }
+
+function adj(type, delta) {
+  activity[type] = Math.max(0, (activity[type]||0) + delta);
+  saveActivity();
+  const target = parseInt(document.getElementById(type+'-target').value) || 1;
+  const pct = Math.min(100, Math.round(activity[type]/target*100));
+  document.getElementById(type+'-sent').textContent = activity[type];
+  document.getElementById(type+'-prog').style.width = pct + '%';
+}
+
+function resetWeek() {
+  if (!confirm('Reset all weekly activity counters?')) return;
+  activity = { dms:0, walkins:0, demos:0 }; saveActivity();
+  ['dms','walkins','demos'].forEach(t => { document.getElementById(t+'-sent').textContent=0; document.getElementById(t+'-prog').style.width='0%'; });
+}
+
+function initActivity() {
+  ['dms','walkins','demos'].forEach(t => {
+    const target = parseInt(document.getElementById(t+'-target').value) || 1;
+    const pct = Math.min(100, Math.round((activity[t]||0)/target*100));
+    document.getElementById(t+'-sent').textContent = activity[t]||0;
+    document.getElementById(t+'-prog').style.width = pct + '%';
+  });
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function fmt(dateStr) {
+  if (!dateStr) return '—';
+  return new Date(dateStr+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+renderLeads(); updateStats(); renderVision();
+</script>
+</body>
+</html>
