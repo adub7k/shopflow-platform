@@ -40,7 +40,18 @@ const SHOPS_DIR = path.join(MASTER_DIR, 'shops');
 if (!fs.existsSync(SHOPS_DIR)) fs.mkdirSync(SHOPS_DIR, { recursive: true });
 
 const master = low(new FileSync(path.join(MASTER_DIR, 'master.json')));
-master.defaults({ shops: [], accounts: [], usedSessions: [], platformSettings: { requirePayment: true }, demos: [] }).write();
+master.defaults({
+  shops: [], accounts: [], usedSessions: [], platformSettings: { requirePayment: true }, demos: [],
+  sales: {
+    pinHash: null,                 // set on first init (default PIN 1234)
+    repName: 'Bryce Moen',
+    leads: [],
+    goals: [],
+    activity: { dms: 0, walkins: 0, demos: 0, weekStart: null },
+    settings: { weeklyTargets: { dms: 50, walkins: 5, demos: 5 } },
+    history: [],                   // weekly activity snapshots on reset
+  },
+}).write();
 
 // ── Per-shop DB ───────────────────────────────────────────────────────────────
 function getShopDb(shopId) {

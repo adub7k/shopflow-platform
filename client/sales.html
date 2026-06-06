@@ -42,22 +42,30 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
 .stat-label{font-size:10px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
 .stat-value{font-size:26px;font-weight:900;color:var(--black);letter-spacing:-.04em;line-height:1;}
 .stat-value.green{color:var(--green);}
+.stat-value.blue{color:var(--blue);}
 .stat-sub{font-size:11px;color:var(--faint);margin-top:4px;}
 
-/* ── Pipeline ── */
-.pipeline{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:16px;overflow-x:auto;}
-.pipe-col{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;min-width:140px;}
+/* ── Segmented control ── */
+.segmented{display:inline-flex;background:var(--off);border:1px solid var(--border);border-radius:9px;padding:3px;gap:3px;}
+.seg-btn{padding:6px 14px;font-size:12px;font-weight:600;color:var(--muted);border:none;background:transparent;border-radius:6px;cursor:pointer;font-family:var(--font);}
+.seg-btn.active{background:var(--white);color:var(--black);box-shadow:0 1px 2px rgba(0,0,0,.08);}
+
+/* ── Pipeline board ── */
+.board{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.pipe-col{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;min-width:150px;display:flex;flex-direction:column;}
 .pipe-header{padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);}
 .pipe-header .pipe-count{background:var(--off);border-radius:100px;padding:1px 7px;font-size:10px;font-weight:700;color:var(--muted);}
 .pipe-col.contacted .pipe-header{background:#f9fafb;}
-.pipe-col.responded .pipe-header{background:var(--yellow-lt);}
-.pipe-col.demo .pipe-header{background:var(--blue-lt);}
-.pipe-col.closed .pipe-header{background:var(--green-lt);}
-.pipe-body{padding:8px;min-height:80px;}
-.pipe-card{background:var(--off);border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer;border:1px solid transparent;transition:all .12s;}
+.pipe-col.responded .pipe-header{background:var(--yellow-lt);color:var(--yellow);}
+.pipe-col.demo .pipe-header{background:var(--blue-lt);color:var(--blue);}
+.pipe-col.closed .pipe-header{background:var(--green-lt);color:var(--green-dk);}
+.pipe-body{padding:8px;min-height:60px;flex:1;}
+.pipe-val{padding:7px 12px;font-size:11px;font-weight:700;color:var(--muted);border-top:1px solid var(--border);background:#fafafa;}
+.pipe-card{background:var(--off);border-radius:8px;padding:9px 10px;margin-bottom:6px;cursor:pointer;border:1px solid transparent;transition:all .12s;}
 .pipe-card:hover{border-color:var(--border);background:var(--white);}
 .pipe-card-name{font-size:13px;font-weight:600;color:var(--black);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.pipe-card-meta{font-size:11px;color:var(--faint);}
+.pipe-card-meta{font-size:11px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pipe-card-tag{display:inline-block;font-size:10px;font-weight:700;color:var(--green-dk);background:var(--green-lt);border-radius:5px;padding:1px 6px;margin-top:4px;}
 
 /* ── Lead list ── */
 .lead-list{display:flex;flex-direction:column;gap:8px;}
@@ -75,7 +83,7 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
 .badge-red{background:var(--red-lt);color:var(--red);}
 
 /* ── Section header ── */
-.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px;flex-wrap:wrap;}
 .section-title{font-size:15px;font-weight:700;color:var(--black);letter-spacing:-.02em;}
 
 /* ── Card ── */
@@ -135,13 +143,21 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
 .milestone-eq-label{font-size:10px;color:var(--faint);}
 .milestone.reached .milestone-eq-num{color:var(--green-dk);}
 
-.math-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);}
+.math-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border);gap:10px;}
 .math-row:last-child{border-bottom:none;}
 .math-scenario{font-size:13px;color:var(--muted);}
-.math-result{font-size:14px;font-weight:700;color:var(--black);}
+.math-result{font-size:14px;font-weight:700;color:var(--black);text-align:right;}
 .math-result span{color:var(--green);}
 
-/* ── Sales Bible ── */
+/* ── Agreement terms ── */
+.term-row{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+.term-row:last-child{border-bottom:none;}
+.term-icon{width:30px;height:30px;border-radius:8px;background:var(--green-lt);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.term-body{flex:1;}
+.term-name{font-size:13px;font-weight:700;color:var(--black);margin-bottom:2px;}
+.term-desc{font-size:12px;color:var(--muted);line-height:1.55;}
+
+/* ── Playbook ── */
 .bible-section{margin-bottom:20px;}
 .bible-section-title{font-size:16px;font-weight:800;color:var(--black);letter-spacing:-.03em;margin-bottom:4px;}
 .bible-section-sub{font-size:12px;color:var(--muted);margin-bottom:12px;}
@@ -172,6 +188,7 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
 .step-num{width:24px;height:24px;border-radius:50%;background:var(--black);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
 .step-text{font-size:13px;color:var(--muted);line-height:1.5;flex:1;}
 .step-text strong{color:var(--black);}
+.script-line{background:var(--off);border-left:3px solid var(--green);border-radius:0 8px 8px 0;padding:10px 12px;margin-top:8px;font-size:13px;color:var(--black);line-height:1.55;}
 
 /* ── Goals ── */
 .goals-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
@@ -183,7 +200,21 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
 .goal-num span{font-size:13px;font-weight:400;color:var(--muted);}
 .goal-pct{font-size:11px;color:var(--muted);margin-top:4px;}
 
+/* ── Funnel ── */
+.funnel-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.funnel-label{width:96px;font-size:12px;font-weight:600;color:var(--muted);flex-shrink:0;}
+.funnel-bar-wrap{flex:1;background:var(--off);border-radius:7px;height:30px;overflow:hidden;position:relative;}
+.funnel-bar{height:100%;background:linear-gradient(90deg,var(--green),var(--green-bright));border-radius:7px;display:flex;align-items:center;padding:0 10px;min-width:34px;transition:width .5s ease;}
+.funnel-bar-num{font-size:12px;font-weight:800;color:#fff;}
+.funnel-rate{font-size:11px;color:var(--faint);width:48px;text-align:right;flex-shrink:0;}
+
+/* ── Weekly history bars ── */
+.hist-wrap{display:flex;align-items:flex-end;gap:5px;height:70px;margin-top:8px;}
+.hist-bar{flex:1;background:var(--green-lt);border:1px solid var(--green-md);border-radius:4px 4px 0 0;min-height:4px;position:relative;}
+.hist-bar span{position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-size:9px;font-weight:700;color:var(--muted);}
+
 /* ── Follow up ── */
+.followup-bucket-title{font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;margin:16px 0 8px;}
 .followup-row{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);padding:13px 14px;display:flex;gap:12px;align-items:center;cursor:pointer;margin-bottom:8px;transition:border-color .15s;}
 .followup-row:hover{border-color:#aaa;}
 .fu-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
@@ -200,6 +231,30 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
 .activity-count{font-size:13px;color:var(--muted);}
 .activity-btns{display:flex;gap:6px;margin-top:8px;}
 
+/* ── Lead activity log ── */
+.log-entry{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
+.log-entry:last-child{border-bottom:none;}
+.log-dot{width:26px;height:26px;border-radius:7px;background:var(--off);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;}
+.log-body{flex:1;min-width:0;}
+.log-text{font-size:13px;color:var(--black);line-height:1.45;}
+.log-time{font-size:11px;color:var(--faint);margin-top:2px;}
+
+/* ── Lock screen ── */
+.lock{position:fixed;inset:0;background:var(--black);z-index:500;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:24px;}
+.lock-card{width:100%;max-width:320px;text-align:center;}
+.lock-logo{width:56px;height:56px;border-radius:14px;margin:0 auto 18px;}
+.lock-title{font-size:22px;font-weight:900;color:#fff;letter-spacing:-.03em;margin-bottom:6px;}
+.lock-sub{font-size:13px;color:rgba(255,255,255,.45);margin-bottom:26px;}
+.pin-dots{display:flex;justify-content:center;gap:14px;margin-bottom:8px;}
+.pin-dot{width:14px;height:14px;border-radius:50%;border:2px solid rgba(255,255,255,.3);transition:all .15s;}
+.pin-dot.filled{background:var(--green);border-color:var(--green);}
+.lock-err{font-size:13px;color:#fca5a5;height:20px;margin-bottom:14px;font-weight:600;}
+.pin-pad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;max-width:260px;margin:0 auto;}
+.pin-key{aspect-ratio:1;border-radius:50%;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.1);color:#fff;font-size:24px;font-weight:600;font-family:var(--font);cursor:pointer;transition:background .12s;display:flex;align-items:center;justify-content:center;}
+.pin-key:hover{background:rgba(255,255,255,.14);}
+.pin-key.wide{font-size:14px;font-weight:700;}
+.pin-key.blank{background:transparent;border:none;cursor:default;}
+
 @media(min-width:640px){
   .stats-grid{grid-template-columns:repeat(4,1fr);}
   .modal-overlay{align-items:center;}
@@ -210,20 +265,49 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
 </head>
 <body>
 
+<!-- ── LOCK SCREEN ── -->
+<div class="lock" id="lock">
+  <div class="lock-card">
+    <img class="lock-logo" src="/icons/icon-192.png"/>
+    <div class="lock-title">Sales Hub</div>
+    <div class="lock-sub" id="lock-sub">Enter your PIN to continue</div>
+    <div class="pin-dots" id="pin-dots"></div>
+    <div class="lock-err" id="lock-err"></div>
+    <div class="pin-pad">
+      <button class="pin-key" onclick="pinPress('1')">1</button>
+      <button class="pin-key" onclick="pinPress('2')">2</button>
+      <button class="pin-key" onclick="pinPress('3')">3</button>
+      <button class="pin-key" onclick="pinPress('4')">4</button>
+      <button class="pin-key" onclick="pinPress('5')">5</button>
+      <button class="pin-key" onclick="pinPress('6')">6</button>
+      <button class="pin-key" onclick="pinPress('7')">7</button>
+      <button class="pin-key" onclick="pinPress('8')">8</button>
+      <button class="pin-key" onclick="pinPress('9')">9</button>
+      <button class="pin-key wide" onclick="pinClear()">Clear</button>
+      <button class="pin-key" onclick="pinPress('0')">0</button>
+      <button class="pin-key wide" onclick="pinBack()">⌫</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── APP (hidden until unlocked) ── -->
+<div id="app" style="display:none;">
+
 <div class="topbar">
   <div class="topbar-left">
     <img src="/icons/icon-192.png"/>
     <div class="topbar-title">ShopFlow Sales Hub</div>
   </div>
-  <div class="topbar-name">Bryce Moen</div>
+  <div class="topbar-name" id="topbar-name">Sales Rep</div>
 </div>
 
 <div class="tabs">
   <div class="tab active" onclick="nav('leads')">🎯 Pipeline</div>
   <div class="tab" onclick="nav('followups')">⏰ Follow Ups</div>
-  <div class="tab" onclick="nav('bible')">📖 Sales Bible</div>
+  <div class="tab" onclick="nav('bible')">📖 Playbook</div>
   <div class="tab" onclick="nav('vision')">🚀 Vision</div>
   <div class="tab" onclick="nav('goals')">🏆 Goals</div>
+  <div class="tab" onclick="nav('settings')">⚙️ Settings</div>
 </div>
 
 <div class="content">
@@ -233,18 +317,24 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
   <div class="stats-grid">
     <div class="stat-card"><div class="stat-label">Total Leads</div><div class="stat-value" id="stat-total">0</div><div class="stat-sub">all time</div></div>
     <div class="stat-card"><div class="stat-label">Closed</div><div class="stat-value green" id="stat-closed">0</div><div class="stat-sub">paying shops</div></div>
-    <div class="stat-card"><div class="stat-label">In Progress</div><div class="stat-value" id="stat-progress">0</div><div class="stat-sub">active conversations</div></div>
+    <div class="stat-card"><div class="stat-label">Pipeline Value</div><div class="stat-value blue" id="stat-pipeval">$0</div><div class="stat-sub">weighted MRR</div></div>
     <div class="stat-card"><div class="stat-label">Close Rate</div><div class="stat-value" id="stat-rate">—</div><div class="stat-sub">demos → clients</div></div>
   </div>
 
   <div class="section-header">
-    <div class="section-title">All Leads</div>
-    <button class="btn btn-black btn-sm" onclick="openAddLead()">+ Add Lead</button>
+    <div class="section-title">Pipeline</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <div class="segmented">
+        <button class="seg-btn active" id="view-list" onclick="setView('list')">List</button>
+        <button class="seg-btn" id="view-board" onclick="setView('board')">Board</button>
+      </div>
+      <button class="btn btn-black btn-sm" onclick="openAddLead()">+ Add Lead</button>
+    </div>
   </div>
 
-  <input class="form-input" id="lead-search" placeholder="Search by name, shop, notes..." oninput="renderLeads()" style="margin-bottom:12px;"/>
+  <input class="form-input" id="lead-search" placeholder="Search by name, shop, city, notes..." oninput="renderLeads()" style="margin-bottom:12px;"/>
 
-  <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
+  <div id="filter-bar" style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;">
     <button class="btn btn-sm" id="filter-all" onclick="setFilter('all')" style="background:var(--black);color:#fff;">All</button>
     <button class="btn btn-sm btn-outline" id="filter-contacted" onclick="setFilter('contacted')">Contacted</button>
     <button class="btn btn-sm btn-outline" id="filter-responded" onclick="setFilter('responded')">Responded</button>
@@ -254,18 +344,19 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
   </div>
 
   <div class="lead-list" id="lead-list"></div>
+  <div class="board" id="lead-board" style="display:none;"></div>
 </div>
 
 <!-- ── FOLLOW UPS ── -->
 <div id="tab-followups" class="page">
   <div class="section-header">
     <div class="section-title">Follow Ups</div>
-    <div style="font-size:12px;color:var(--muted);">Sorted by urgency</div>
+    <div style="font-size:12px;color:var(--muted);">Grouped by urgency</div>
   </div>
   <div id="followup-list"></div>
 </div>
 
-<!-- ── SALES BIBLE ── -->
+<!-- ── PLAYBOOK ── -->
 <div id="tab-bible" class="page">
 
   <div class="bible-section">
@@ -295,6 +386,19 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
   </div>
 
   <div class="bible-section">
+    <div class="bible-section-title">The Daily Routine</div>
+    <div class="bible-section-sub">What a winning day looks like</div>
+    <div class="bible-card">
+      <div class="step-list">
+        <div class="step"><div class="step-num">1</div><div class="step-text"><strong>Morning — Source (20 min).</strong> Pull 15–20 new shops to contact. Google Maps "barber shop near [city]", Instagram location tags, #[city]barber hashtags. Add them to the Pipeline as Contacted.</div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text"><strong>Midday — Outreach (50 DMs).</strong> Send the opening DM to every new shop. Log each one. Quantity early, quality follows.</div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text"><strong>Afternoon — Work replies.</strong> Anyone who responded moves to Responded. Book demos. Update the pipeline as you go.</div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text"><strong>Evening — Follow up.</strong> Check the Follow Ups tab. Hit everyone who's due. The money is in the follow-up.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bible-section">
     <div class="bible-section-title">How to Sell It</div>
     <div class="bible-section-sub">The process that works</div>
 
@@ -304,6 +408,15 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
       <div class="bible-quote">
         "Hey bro, quick question — how's <strong>[Booksy / Square / whatever]</strong> working out for you? Asking because I work with a barbershop software and trying to see what people actually need. No pitch, just curious."
       </div>
+    </div>
+
+    <div class="bible-card">
+      <div class="bible-card-title">🔎 Discovery Questions</div>
+      <div class="bible-card-body">Once they engage, ask before you pitch. Let them tell you the pain.</div>
+      <div class="script-line">"What are you using right now to take bookings?"</div>
+      <div class="script-line">"What's that running you a month, all in with the fees?"</div>
+      <div class="script-line">"How many no-shows you dealing with in a week?"</div>
+      <div class="script-line">"If you could change one thing about how you run the chair, what'd it be?"</div>
     </div>
 
     <div class="bible-card">
@@ -327,6 +440,12 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
         <div class="step"><div class="step-num">4</div><div class="step-text"><strong>Messages tab</strong> — show the SMS inbox. "When a client texts back about their appointment, you see it right here."</div></div>
         <div class="step"><div class="step-num">5</div><div class="step-text"><strong>Close</strong> — "Setup takes 2 minutes. First 14 days free. $19.99/mo after that, no contracts." Then stop talking.</div></div>
       </div>
+    </div>
+
+    <div class="bible-card">
+      <div class="bible-card-title">🤝 The Ask for Referrals</div>
+      <div class="bible-card-body">Every closed shop knows 5 other barbers. Ask the same day they sign up — that's when they're most excited.</div>
+      <div class="bible-quote">"Appreciate you bro. Real quick — you know any other barbers who'd want this? Send 'em my way, I'll take care of 'em."</div>
     </div>
   </div>
 
@@ -359,6 +478,10 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
         <div class="objection-q">"What if I want to cancel?"</div>
         <div class="objection-a">"No contract, cancel anytime. We keep it because it works, not because we locked you in."</div>
       </div>
+      <div class="objection-row">
+        <div class="objection-q">"Send me some info" (the brush-off)</div>
+        <div class="objection-a">"For sure — but honestly a 10-minute demo will show you more than any PDF. You free now or later today? I'll keep it quick."</div>
+      </div>
     </div>
   </div>
 
@@ -369,10 +492,11 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
       <div style="display:flex;flex-direction:column;gap:0;">
         <div class="math-row"><div class="math-scenario">Starter plan</div><div class="math-result"><span>$19.99/mo</span> — up to 2 barbers</div></div>
         <div class="math-row"><div class="math-scenario">Pro plan</div><div class="math-result"><span>$99/mo</span> — unlimited barbers + SMS</div></div>
-        <div class="math-row"><div class="math-scenario">Booksy transaction fee on $10K/mo</div><div class="math-result"><span style="color:var(--red);">$249/mo in fees</span></div></div>
+        <div class="math-row"><div class="math-scenario">Shop plan</div><div class="math-result"><span>$200/mo</span> — multi-location + AI assistant</div></div>
+        <div class="math-row"><div class="math-scenario">Booksy fee on $10K/mo</div><div class="math-result"><span style="color:var(--red);">$249/mo in fees</span></div></div>
         <div class="math-row"><div class="math-scenario">ShopFlow transaction fees</div><div class="math-result"><span>$0. Always.</span></div></div>
         <div class="math-row"><div class="math-scenario">Setup time</div><div class="math-result"><span>2 minutes</span></div></div>
-        <div class="math-row"><div class="math-scenario">Free trial</div><div class="math-result"><span>14 days</span>, no credit card needed</div></div>
+        <div class="math-row"><div class="math-scenario">Free trial</div><div class="math-result"><span>14 days</span>, no card needed</div></div>
         <div class="math-row"><div class="math-scenario">Demo link</div><div class="math-result"><span>shopflowio.up.railway.app/demo</span></div></div>
       </div>
     </div>
@@ -456,12 +580,37 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
   </div>
 
   <div class="card" style="margin-top:14px;">
+    <div class="card-title">The Operating Agreement — In Plain English</div>
+    <div class="term-row">
+      <div class="term-icon">📝</div>
+      <div class="term-body"><div class="term-name">What you're being granted</div><div class="term-desc">A membership interest in ShopFlow LLC that <strong>vests as you hit the milestones above</strong> — starting at 15% on signing and climbing to 30%+ at exit-ready scale.</div></div>
+    </div>
+    <div class="term-row">
+      <div class="term-icon">📈</div>
+      <div class="term-body"><div class="term-name">How it vests</div><div class="term-desc">Performance-based. Equity steps up as paying shops are closed and stay active — it's tied to real, recurring revenue, not just signatures.</div></div>
+    </div>
+    <div class="term-row">
+      <div class="term-icon">💵</div>
+      <div class="term-body"><div class="term-name">How you get paid</div><div class="term-desc">Your stake pays out on a <strong>liquidity event</strong> (the company is sold). Until then it's ownership in a growing asset — see the payout table below.</div></div>
+    </div>
+    <div class="term-row">
+      <div class="term-icon">🔁</div>
+      <div class="term-body"><div class="term-name">Active = vested</div><div class="term-desc">Milestone equity is based on <strong>active</strong> paying shops. Keep clients happy and retained; churned shops roll back out of the count.</div></div>
+    </div>
+    <div class="term-row">
+      <div class="term-icon">🤝</div>
+      <div class="term-body"><div class="term-name">No cap on the upside</div><div class="term-desc">The ladder tops out at 30%+, but the "+" is real — overperform and there's room to negotiate up. We win when you win.</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--faint);margin-top:12px;line-height:1.5;">This is a plain-English summary for motivation — the signed Operating Agreement is the binding document. Ask the founder for the full PDF and review anything before you rely on it.</div>
+  </div>
+
+  <div class="card" style="margin-top:14px;">
     <div class="card-title">What Your Equity Is Actually Worth</div>
-    <div class="math-row"><div class="math-scenario">ShopFlow sells for $500K</div><div class="math-result">30% = <span>$150,000</span> in your pocket</div></div>
-    <div class="math-row"><div class="math-scenario">ShopFlow sells for $1M</div><div class="math-result">30% = <span>$300,000</span> in your pocket</div></div>
-    <div class="math-row"><div class="math-scenario">ShopFlow sells for $2M</div><div class="math-result">30% = <span>$600,000</span> in your pocket</div></div>
-    <div class="math-row"><div class="math-scenario">ShopFlow sells for $3M</div><div class="math-result">30% = <span>$900,000</span> in your pocket</div></div>
-    <div class="math-row"><div class="math-scenario">ShopFlow sells for $5M</div><div class="math-result">30% = <span style="color:var(--green);font-size:16px;">$1,500,000</span> in your pocket</div></div>
+    <div class="math-row"><div class="math-scenario">ShopFlow sells for $500K</div><div class="math-result">30% = <span>$150,000</span> to you</div></div>
+    <div class="math-row"><div class="math-scenario">ShopFlow sells for $1M</div><div class="math-result">30% = <span>$300,000</span> to you</div></div>
+    <div class="math-row"><div class="math-scenario">ShopFlow sells for $2M</div><div class="math-result">30% = <span>$600,000</span> to you</div></div>
+    <div class="math-row"><div class="math-scenario">ShopFlow sells for $3M</div><div class="math-result">30% = <span>$900,000</span> to you</div></div>
+    <div class="math-row"><div class="math-scenario">ShopFlow sells for $5M</div><div class="math-result">30% = <span style="color:var(--green);font-size:16px;">$1,500,000</span> to you</div></div>
     <div style="background:var(--black);border-radius:10px;padding:16px;margin-top:14px;text-align:center;">
       <div style="font-size:12px;color:rgba(255,255,255,.5);margin-bottom:6px;">SaaS businesses sell at 3-5x ARR. 50 shops at $99/mo avg = $59,400 ARR = <span style="color:var(--green-bright);">$178K–$297K valuation at that milestone alone.</span></div>
       <div style="font-size:15px;font-weight:800;color:#fff;">Close 50 shops. Change your life. 🤙</div>
@@ -480,11 +629,16 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
   <div class="goals-grid" id="goals-list"></div>
 
   <div class="card">
+    <div class="card-title">Conversion Funnel — All Time</div>
+    <div id="funnel"></div>
+  </div>
+
+  <div class="card">
     <div class="card-title">Weekly Activity</div>
     <div class="activity-row">
       <div class="activity-top">
         <div class="activity-label">DMs Sent</div>
-        <div class="activity-count"><span id="dms-sent">0</span> / <input id="dms-target" type="number" value="50" min="1" style="width:36px;border:none;font-size:13px;font-family:var(--font);color:var(--muted);text-align:right;background:transparent;" onchange="saveActivity()"/></div>
+        <div class="activity-count"><span id="dms-sent">0</span> / <span id="dms-target-label">50</span></div>
       </div>
       <div class="progress-wrap"><div class="progress-fill" id="dms-prog" style="width:0%"></div></div>
       <div class="activity-btns">
@@ -496,7 +650,7 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
     <div class="activity-row">
       <div class="activity-top">
         <div class="activity-label">Walk-ins</div>
-        <div class="activity-count"><span id="walkins-sent">0</span> / <input id="walkins-target" type="number" value="5" min="1" style="width:36px;border:none;font-size:13px;font-family:var(--font);color:var(--muted);text-align:right;background:transparent;" onchange="saveActivity()"/></div>
+        <div class="activity-count"><span id="walkins-sent">0</span> / <span id="walkins-target-label">5</span></div>
       </div>
       <div class="progress-wrap"><div class="progress-fill" id="walkins-prog" style="width:0%"></div></div>
       <div class="activity-btns">
@@ -507,7 +661,7 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
     <div class="activity-row">
       <div class="activity-top">
         <div class="activity-label">Demos Run</div>
-        <div class="activity-count"><span id="demos-sent">0</span> / <input id="demos-target" type="number" value="5" min="1" style="width:36px;border:none;font-size:13px;font-family:var(--font);color:var(--muted);text-align:right;background:transparent;" onchange="saveActivity()"/></div>
+        <div class="activity-count"><span id="demos-sent">0</span> / <span id="demos-target-label">5</span></div>
       </div>
       <div class="progress-wrap"><div class="progress-fill" id="demos-prog" style="width:0%"></div></div>
       <div class="activity-btns">
@@ -515,8 +669,53 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
         <button class="btn btn-sm btn-black" onclick="adj('demos',1)">+ 1 Demo</button>
       </div>
     </div>
-    <button class="btn btn-outline btn-full" onclick="resetWeek()" style="margin-top:12px;font-size:12px;color:var(--faint);">Reset week</button>
+    <button class="btn btn-outline btn-full" onclick="resetWeek()" style="margin-top:12px;font-size:12px;color:var(--faint);">End week &amp; reset</button>
+    <div style="font-size:11px;color:var(--faint);text-align:center;margin-top:6px;">Set your weekly targets in Settings ⚙️</div>
   </div>
+
+  <div class="card" id="hist-card" style="display:none;">
+    <div class="card-title">Last Weeks — Demos Closed Activity</div>
+    <div class="hist-wrap" id="hist-wrap"></div>
+  </div>
+</div>
+
+<!-- ── SETTINGS ── -->
+<div id="tab-settings" class="page">
+
+  <div class="card">
+    <div class="card-title">Profile</div>
+    <div class="form-group"><label class="form-label">Rep name</label><input class="form-input" id="set-name" placeholder="Your name"/></div>
+    <button class="btn btn-black btn-full" onclick="saveProfile()">Save Name</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Weekly Targets</div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">DMs / wk</label><input class="form-input" id="set-t-dms" type="number" min="1" value="50"/></div>
+      <div class="form-group"><label class="form-label">Walk-ins / wk</label><input class="form-input" id="set-t-walkins" type="number" min="1" value="5"/></div>
+    </div>
+    <div class="form-group"><label class="form-label">Demos / wk</label><input class="form-input" id="set-t-demos" type="number" min="1" value="5"/></div>
+    <button class="btn btn-black btn-full" onclick="saveTargets()">Save Targets</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Change PIN</div>
+    <div class="form-group"><label class="form-label">Current PIN</label><input class="form-input" id="set-pin-cur" type="password" inputmode="numeric" placeholder="••••"/></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">New PIN (4–8 digits)</label><input class="form-input" id="set-pin-new" type="password" inputmode="numeric" placeholder="••••"/></div>
+      <div class="form-group"><label class="form-label">Confirm</label><input class="form-input" id="set-pin-conf" type="password" inputmode="numeric" placeholder="••••"/></div>
+    </div>
+    <button class="btn btn-green btn-full" onclick="changePin()">Update PIN</button>
+    <div id="pin-msg" style="font-size:12px;text-align:center;margin-top:8px;height:16px;"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Data</div>
+    <button class="btn btn-outline btn-full" onclick="exportData()" style="margin-bottom:8px;">⬇ Export my pipeline (JSON)</button>
+    <button class="btn btn-outline btn-full" onclick="logout()" style="color:var(--red);">Log out</button>
+  </div>
+
+  <div style="font-size:11px;color:var(--faint);text-align:center;padding:8px 0 30px;">ShopFlow Sales Hub · data synced to the server</div>
 </div>
 
 </div><!-- /content -->
@@ -525,8 +724,11 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
 <div class="modal-overlay" id="add-lead-modal" onclick="if(event.target===this)closeModal('add-lead-modal')">
   <div class="modal">
     <div class="modal-title" id="add-lead-title">New Lead</div>
-    <div class="form-group"><label class="form-label">Name & Shop *</label><input class="form-input" id="l-name" placeholder="Marcus — King's Cuts Albuquerque"/></div>
-    <div class="form-group"><label class="form-label">Phone / Instagram</label><input class="form-input" id="l-contact" placeholder="@kingscuts or (505) 555-0100"/></div>
+    <div class="form-group"><label class="form-label">Name &amp; Shop *</label><input class="form-input" id="l-name" placeholder="Marcus — King's Cuts"/></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Phone / Instagram</label><input class="form-input" id="l-contact" placeholder="@kingscuts or (505) 555-0100"/></div>
+      <div class="form-group"><label class="form-label">City</label><input class="form-input" id="l-city" placeholder="Albuquerque"/></div>
+    </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Contact method</label>
         <select class="form-select" id="l-method">
@@ -582,7 +784,7 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
       <select class="form-select" id="g-type">
         <option value="clients">Clients closed</option>
         <option value="demos">Demos run</option>
-        <option value="dms">DMs sent</option>
+        <option value="dms">DMs sent (this week)</option>
         <option value="custom">Custom (manual)</option>
       </select>
     </div>
@@ -595,17 +797,80 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
 
 <script>
 // ── State ─────────────────────────────────────────────────────────────────────
-let leads    = JSON.parse(localStorage.getItem('sf_leads')    || '[]');
-let goals    = JSON.parse(localStorage.getItem('sf_goals')    || '[]');
-let activity = JSON.parse(localStorage.getItem('sf_activity') || '{"dms":0,"walkins":0,"demos":0}');
+let STATE = { rep:{name:'Sales Rep'}, leads:[], goals:[], activity:{dms:0,walkins:0,demos:0}, settings:{weeklyTargets:{dms:50,walkins:5,demos:5}}, history:[] };
+let token = localStorage.getItem('sf_sales_token') || '';
 let editingLeadId = null;
 let activeFilter  = 'all';
+let pipeView = 'list';
 
-const persist = () => {
-  localStorage.setItem('sf_leads',    JSON.stringify(leads));
-  localStorage.setItem('sf_goals',    JSON.stringify(goals));
-  localStorage.setItem('sf_activity', JSON.stringify(activity));
-};
+const leads    = () => STATE.leads || [];
+const targets  = () => (STATE.settings && STATE.settings.weeklyTargets) || {dms:50,walkins:5,demos:5};
+const activity = () => STATE.activity || {dms:0,walkins:0,demos:0};
+
+// ── API ───────────────────────────────────────────────────────────────────────
+async function api(path, opts={}) {
+  const res = await fetch('/api/sales'+path, {
+    method: opts.method || 'GET',
+    headers: { 'Content-Type':'application/json', ...(token ? {Authorization:'Bearer '+token} : {}) },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  if (res.status === 401) { logout(); throw new Error('unauthorized'); }
+  const data = await res.json().catch(() => ({}));
+  if (data.state) STATE = data.state;
+  return data;
+}
+
+// ── PIN lock ────────────────────────────────────────────────────────────────
+let pinBuf = '';
+function renderPinDots() {
+  const n = Math.max(4, pinBuf.length);
+  document.getElementById('pin-dots').innerHTML =
+    Array.from({length:n}).map((_,i) => `<div class="pin-dot${i<pinBuf.length?' filled':''}"></div>`).join('');
+}
+function pinPress(d) {
+  if (pinBuf.length >= 8) return;
+  pinBuf += d; renderPinDots();
+  document.getElementById('lock-err').textContent = '';
+  if (pinBuf.length >= 4) attemptLogin();
+}
+function pinBack(){ pinBuf = pinBuf.slice(0,-1); renderPinDots(); }
+function pinClear(){ pinBuf = ''; renderPinDots(); }
+
+async function attemptLogin() {
+  const pin = pinBuf;
+  try {
+    const res = await fetch('/api/sales/login', {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({pin})
+    });
+    const data = await res.json();
+    if (data.ok) {
+      token = data.token; localStorage.setItem('sf_sales_token', token);
+      STATE = data.state; pinBuf = '';
+      showApp();
+    } else {
+      pinBuf = ''; renderPinDots();
+      document.getElementById('lock-err').textContent = data.error || 'Wrong PIN';
+    }
+  } catch(e) {
+    pinBuf = ''; renderPinDots();
+    document.getElementById('lock-err').textContent = 'Connection error';
+  }
+}
+
+function showApp() {
+  document.getElementById('lock').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('topbar-name').textContent = STATE.rep.name;
+  renderLeads(); updateStats(); renderVision();
+}
+
+function logout() {
+  token = ''; localStorage.removeItem('sf_sales_token');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('lock').style.display = 'flex';
+  pinBuf = ''; renderPinDots();
+  document.getElementById('lock-err').textContent = '';
+}
 
 // ── Nav ───────────────────────────────────────────────────────────────────────
 function nav(tab) {
@@ -616,7 +881,8 @@ function nav(tab) {
   if (tab === 'leads')     { renderLeads(); updateStats(); }
   if (tab === 'followups') renderFollowups();
   if (tab === 'vision')    renderVision();
-  if (tab === 'goals')     { renderGoals(); initActivity(); }
+  if (tab === 'goals')     { renderGoals(); renderFunnel(); renderActivity(); renderHistory(); }
+  if (tab === 'settings')  loadSettings();
 }
 
 // ── Modals ────────────────────────────────────────────────────────────────────
@@ -626,8 +892,11 @@ function closeModal(id) { document.getElementById(id).classList.remove('open'); 
 function openAddLead() {
   editingLeadId = null;
   document.getElementById('add-lead-title').textContent = 'New Lead';
-  ['l-name','l-contact','l-notes'].forEach(id => document.getElementById(id).value = '');
+  ['l-name','l-contact','l-city','l-notes'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('l-status').value = 'contacted';
+  document.getElementById('l-method').value = 'Instagram DM';
+  document.getElementById('l-tool').value = 'Nothing / texts';
+  document.getElementById('l-plan').value = 'Starter — $19.99';
   document.getElementById('l-followup').value = '';
   openModal('add-lead-modal');
   setTimeout(() => document.getElementById('l-name').focus(), 200);
@@ -647,10 +916,22 @@ const BADGE = {
   closed:       ['Closed ✓',     'badge-green'],
   'not-interested': ['Lost',     'badge-red'],
 };
+const STAGE_PROB = { contacted:0.1, responded:0.3, demo:0.6, closed:1, 'not-interested':0 };
 const badgeHtml = s => { const [l,c] = BADGE[s]||['?','badge-gray']; return `<span class="badge ${c}">${l}</span>`; };
 const inits = name => name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
 const avatarColors = ['#16a34a','#2563eb','#d97706','#7c3aed','#dc2626','#0891b2'];
 const avatarColor  = name => { let h=0; for(const c of name) h=c.charCodeAt(0)+((h<<5)-h); return avatarColors[Math.abs(h)%avatarColors.length]; };
+const planVal = lead => Number(lead.value) || 0;
+
+function setView(v) {
+  pipeView = v;
+  document.getElementById('view-list').classList.toggle('active', v==='list');
+  document.getElementById('view-board').classList.toggle('active', v==='board');
+  document.getElementById('lead-list').style.display  = v==='list'  ? 'flex' : 'none';
+  document.getElementById('lead-board').style.display = v==='board' ? 'grid' : 'none';
+  document.getElementById('filter-bar').style.display = v==='list' ? 'flex' : 'none';
+  renderLeads();
+}
 
 function setFilter(f) {
   activeFilter = f;
@@ -660,33 +941,31 @@ function setFilter(f) {
   renderLeads();
 }
 
-function saveLead() {
+async function saveLead() {
   const name = document.getElementById('l-name').value.trim();
   if (!name) { alert('Enter a name'); return; }
-  const lead = {
-    id: editingLeadId || Date.now().toString(),
+  const body = {
+    id: editingLeadId || undefined,
     name,
     contact:  document.getElementById('l-contact').value.trim(),
+    city:     document.getElementById('l-city').value.trim(),
     method:   document.getElementById('l-method').value,
     tool:     document.getElementById('l-tool').value,
     status:   document.getElementById('l-status').value,
     followup: document.getElementById('l-followup').value,
     plan:     document.getElementById('l-plan').value,
     notes:    document.getElementById('l-notes').value.trim(),
-    createdAt: editingLeadId ? (leads.find(l=>l.id===editingLeadId)?.createdAt || new Date().toISOString()) : new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
   };
-  leads = editingLeadId ? leads.map(l => l.id===editingLeadId ? lead : l) : [lead, ...leads];
-  persist();
-  closeModal('add-lead-modal');
-  closeModal('lead-detail-modal');
+  await api('/leads', { method:'POST', body });
+  closeModal('add-lead-modal'); closeModal('lead-detail-modal');
   renderLeads(); updateStats(); renderVision();
 }
 
 function renderLeads() {
+  if (pipeView === 'board') return renderBoard();
   const q = (document.getElementById('lead-search')?.value || '').toLowerCase();
-  let filtered = leads.filter(l => {
-    const matchQ = !q || l.name.toLowerCase().includes(q) || (l.notes||'').toLowerCase().includes(q) || (l.contact||'').toLowerCase().includes(q);
+  let filtered = leads().filter(l => {
+    const matchQ = !q || l.name.toLowerCase().includes(q) || (l.notes||'').toLowerCase().includes(q) || (l.contact||'').toLowerCase().includes(q) || (l.city||'').toLowerCase().includes(q);
     const matchF = activeFilter === 'all' || l.status === activeFilter;
     return matchQ && matchF;
   });
@@ -699,38 +978,65 @@ function renderLeads() {
     <div class="lead-row" onclick="openLeadDetail('${l.id}')">
       <div class="lead-avatar" style="background:${avatarColor(l.name)}">${inits(l.name)}</div>
       <div class="lead-info">
-        <div class="lead-name">${l.name}</div>
-        <div class="lead-meta">${l.method} · ${l.tool}${l.followup ? ' · Follow up: ' + fmt(l.followup) : ''}${l.contact ? ' · ' + l.contact : ''}</div>
+        <div class="lead-name">${esc(l.name)}</div>
+        <div class="lead-meta">${esc(l.method)} · ${esc(l.tool)}${l.city ? ' · ' + esc(l.city) : ''}${l.followup ? ' · ⏰ ' + fmt(l.followup) : ''}</div>
       </div>
       ${badgeHtml(l.status)}
     </div>`).join('');
 }
 
+function renderBoard() {
+  const cols = [['contacted','Contacted'],['responded','Responded'],['demo','Demo'],['closed','Closed']];
+  const el = document.getElementById('lead-board');
+  el.innerHTML = cols.map(([key,label]) => {
+    const items = leads().filter(l => l.status===key);
+    const val = items.reduce((s,l)=>s+planVal(l),0);
+    const cards = items.length ? items.map(l => `
+      <div class="pipe-card" onclick="openLeadDetail('${l.id}')">
+        <div class="pipe-card-name">${esc(l.name)}</div>
+        <div class="pipe-card-meta">${esc(l.tool)}${l.city?' · '+esc(l.city):''}</div>
+        ${planVal(l)?`<span class="pipe-card-tag">$${planVal(l)}/mo</span>`:''}
+      </div>`).join('') : '<div style="font-size:11px;color:var(--faint);text-align:center;padding:12px 0;">—</div>';
+    return `<div class="pipe-col ${key}">
+      <div class="pipe-header"><span>${label}</span><span class="pipe-count">${items.length}</span></div>
+      <div class="pipe-body">${cards}</div>
+      <div class="pipe-val">$${val.toLocaleString()}/mo</div>
+    </div>`;
+  }).join('');
+}
+
 function openLeadDetail(id) {
-  const l = leads.find(x => x.id===id); if (!l) return;
+  const l = leads().find(x => x.id===id); if (!l) return;
+  const log = (l.log || []);
   document.getElementById('lead-detail-content').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
-      <div><div class="modal-title" style="margin-bottom:4px;">${l.name}</div><div style="font-size:12px;color:var(--muted);">${l.contact||''}</div></div>
+      <div><div class="modal-title" style="margin-bottom:4px;">${esc(l.name)}</div><div style="font-size:12px;color:var(--muted);">${esc(l.contact||'')}${l.city?' · '+esc(l.city):''}</div></div>
       ${badgeHtml(l.status)}
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
-      <div style="background:var(--off);border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Method</div><div style="font-size:13px;font-weight:600;">${l.method}</div></div>
-      <div style="background:var(--off);border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Using Now</div><div style="font-size:13px;font-weight:600;">${l.tool}</div></div>
-      <div style="background:var(--off);border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Plan</div><div style="font-size:13px;font-weight:600;">${l.plan}</div></div>
+      <div style="background:var(--off);border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Method</div><div style="font-size:13px;font-weight:600;">${esc(l.method)}</div></div>
+      <div style="background:var(--off);border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Using Now</div><div style="font-size:13px;font-weight:600;">${esc(l.tool)}</div></div>
+      <div style="background:var(--off);border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Plan / Value</div><div style="font-size:13px;font-weight:600;">${esc(l.plan)}</div></div>
       <div style="background:var(--off);border-radius:8px;padding:10px;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px;">Follow Up</div><div style="font-size:13px;font-weight:600;">${l.followup ? fmt(l.followup) : 'Not set'}</div></div>
     </div>
-    ${l.notes ? `<div style="background:var(--off);border-radius:8px;padding:12px;margin-bottom:14px;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Notes</div><div style="font-size:13px;color:var(--muted);line-height:1.65;">${l.notes}</div></div>` : ''}
+    ${l.notes ? `<div style="background:var(--off);border-radius:8px;padding:12px;margin-bottom:14px;"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Notes</div><div style="font-size:13px;color:var(--muted);line-height:1.65;">${esc(l.notes)}</div></div>` : ''}
     <div style="margin-bottom:14px;">
-      <label class="form-label">Update Status</label>
+      <label class="form-label">Move Stage</label>
       <select class="form-select" onchange="quickStatus('${l.id}',this.value)">
         ${Object.keys(BADGE).map(s => `<option value="${s}"${l.status===s?' selected':''}>${BADGE[s][0]}</option>`).join('')}
       </select>
     </div>
-    <div style="margin-bottom:14px;">
-      <label class="form-label">Quick Note</label>
-      <textarea class="form-textarea" id="quick-note" style="min-height:60px;" placeholder="Add a note...">${l.notes||''}</textarea>
-      <button class="btn btn-black btn-full" style="margin-top:8px;font-size:13px;" onclick="saveNote('${l.id}')">Save Note</button>
+    <div style="margin-bottom:8px;">
+      <label class="form-label">Log a Touch</label>
+      <textarea class="form-textarea" id="touch-text" style="min-height:54px;" placeholder="What happened? (e.g. 'Sent opening DM', 'Booked demo for Thu')"></textarea>
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        <button class="btn btn-sm btn-black" style="flex:1;" onclick="logTouch('${l.id}','dm')">💬 DM</button>
+        <button class="btn btn-sm btn-black" style="flex:1;" onclick="logTouch('${l.id}','call')">📞 Call</button>
+        <button class="btn btn-sm btn-black" style="flex:1;" onclick="logTouch('${l.id}','note')">📝 Note</button>
+      </div>
     </div>
+    ${log.length ? `<div style="margin:14px 0;"><div class="card-title" style="margin-bottom:8px;">Activity (${log.length})</div>${log.slice(0,8).map(e=>`
+      <div class="log-entry"><div class="log-dot">${e.type==='dm'?'💬':e.type==='call'?'📞':'📝'}</div><div class="log-body"><div class="log-text">${esc(e.text||'(no note)')}</div><div class="log-time">${timeAgo(e.at)}</div></div></div>`).join('')}</div>` : ''}
     <div class="modal-actions">
       <button class="btn btn-outline btn-full" onclick="editLead('${l.id}')">Edit Full Lead</button>
       <button class="btn btn-outline btn-full" style="color:var(--red);" onclick="deleteLead('${l.id}')">Delete Lead</button>
@@ -739,25 +1045,25 @@ function openLeadDetail(id) {
   openModal('lead-detail-modal');
 }
 
-function saveNote(id) {
-  const lead = leads.find(l => l.id===id); if (!lead) return;
-  lead.notes = document.getElementById('quick-note').value.trim();
-  lead.updatedAt = new Date().toISOString();
-  persist(); closeModal('lead-detail-modal'); renderLeads();
+async function logTouch(id, type) {
+  const text = document.getElementById('touch-text').value.trim();
+  await api(`/leads/${id}/log`, { method:'POST', body:{ type, text } });
+  openLeadDetail(id); renderLeads();
 }
 
-function quickStatus(id, status) {
-  const lead = leads.find(l => l.id===id); if (!lead) return;
-  lead.status = status; lead.updatedAt = new Date().toISOString();
-  persist(); renderLeads(); updateStats(); renderVision();
+async function quickStatus(id, status) {
+  const lead = leads().find(l => l.id===id); if (!lead) return;
+  await api('/leads', { method:'POST', body: { ...lead, status } });
+  openLeadDetail(id); renderLeads(); updateStats(); renderVision();
 }
 
 function editLead(id) {
-  const l = leads.find(x => x.id===id); if (!l) return;
+  const l = leads().find(x => x.id===id); if (!l) return;
   editingLeadId = id;
   document.getElementById('add-lead-title').textContent = 'Edit Lead';
   document.getElementById('l-name').value    = l.name;
   document.getElementById('l-contact').value = l.contact||'';
+  document.getElementById('l-city').value    = l.city||'';
   document.getElementById('l-method').value  = l.method;
   document.getElementById('l-tool').value    = l.tool;
   document.getElementById('l-status').value  = l.status;
@@ -768,28 +1074,29 @@ function editLead(id) {
   openModal('add-lead-modal');
 }
 
-function deleteLead(id) {
+async function deleteLead(id) {
   if (!confirm('Delete this lead?')) return;
-  leads = leads.filter(l => l.id!==id);
-  persist(); closeModal('lead-detail-modal'); renderLeads(); updateStats(); renderVision();
+  await api(`/leads/${id}`, { method:'DELETE' });
+  closeModal('lead-detail-modal'); renderLeads(); updateStats(); renderVision();
 }
 
 function updateStats() {
-  const total    = leads.length;
-  const closed   = leads.filter(l => l.status==='closed').length;
-  const progress = leads.filter(l => ['contacted','responded','demo'].includes(l.status)).length;
-  const demos    = leads.filter(l => ['demo','closed'].includes(l.status)).length;
+  const all = leads();
+  const total    = all.length;
+  const closed   = all.filter(l => l.status==='closed').length;
+  const demos    = all.filter(l => ['demo','closed'].includes(l.status)).length;
   const rate     = demos > 0 ? Math.round(closed/demos*100)+'%' : '—';
+  const weighted = all.filter(l=>l.status!=='closed').reduce((s,l)=> s + planVal(l)*(STAGE_PROB[l.status]||0), 0);
   document.getElementById('stat-total').textContent    = total;
   document.getElementById('stat-closed').textContent   = closed;
-  document.getElementById('stat-progress').textContent = progress;
   document.getElementById('stat-rate').textContent     = rate;
+  document.getElementById('stat-pipeval').textContent  = '$' + Math.round(weighted).toLocaleString();
 }
 
 // ── Follow Ups ────────────────────────────────────────────────────────────────
 function renderFollowups() {
   const today = new Date(); today.setHours(0,0,0,0);
-  const list = leads
+  const list = leads()
     .filter(l => l.followup && !['closed','not-interested'].includes(l.status))
     .sort((a,b) => new Date(a.followup) - new Date(b.followup));
   const el = document.getElementById('followup-list');
@@ -797,30 +1104,39 @@ function renderFollowups() {
     el.innerHTML = '<div class="empty"><div class="empty-icon">⏰</div><div class="empty-text">No follow ups</div><div class="empty-sub">Set follow up dates on your leads</div></div>';
     return;
   }
-  el.innerHTML = list.map(l => {
-    const dt   = new Date(l.followup+'T12:00:00');
+  const buckets = { overdue:[], today:[], week:[], later:[] };
+  list.forEach(l => {
+    const dt = new Date(l.followup+'T12:00:00');
     const diff = Math.floor((dt - today) / 86400000);
+    if (diff < 0) buckets.overdue.push([l,diff]);
+    else if (diff === 0) buckets.today.push([l,diff]);
+    else if (diff <= 7) buckets.week.push([l,diff]);
+    else buckets.later.push([l,diff]);
+  });
+  const row = ([l,diff]) => {
     const label = diff < 0 ? `Overdue ${Math.abs(diff)}d` : diff===0 ? 'Today' : diff===1 ? 'Tomorrow' : `In ${diff}d`;
     const dotCls = diff < 0 ? 'overdue' : diff===0 ? 'today' : diff<=3 ? 'soon' : 'later';
     const labelColor = diff < 0 ? 'var(--red)' : diff===0 ? 'var(--yellow)' : 'var(--muted)';
     return `<div class="followup-row" onclick="openLeadDetail('${l.id}')">
       <div class="fu-dot ${dotCls}"></div>
       <div style="flex:1;min-width:0;">
-        <div style="font-size:14px;font-weight:700;color:var(--black);margin-bottom:2px;">${l.name}</div>
-        <div style="font-size:12px;color:var(--muted);">${l.method} · ${l.tool}</div>
-        ${l.notes ? `<div style="font-size:11px;color:var(--faint);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.notes}</div>` : ''}
+        <div style="font-size:14px;font-weight:700;color:var(--black);margin-bottom:2px;">${esc(l.name)}</div>
+        <div style="font-size:12px;color:var(--muted);">${esc(l.method)} · ${esc(l.tool)}</div>
+        ${l.notes ? `<div style="font-size:11px;color:var(--faint);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(l.notes)}</div>` : ''}
       </div>
       <div style="text-align:right;flex-shrink:0;">
         <div style="font-size:12px;font-weight:700;color:${labelColor};">${label}</div>
         ${badgeHtml(l.status)}
       </div>
     </div>`;
-  }).join('');
+  };
+  const section = (title, arr) => arr.length ? `<div class="followup-bucket-title">${title} · ${arr.length}</div>` + arr.map(row).join('') : '';
+  el.innerHTML = section('Overdue', buckets.overdue) + section('Today', buckets.today) + section('This week', buckets.week) + section('Later', buckets.later);
 }
 
 // ── Vision ────────────────────────────────────────────────────────────────────
 function renderVision() {
-  const closed = leads.filter(l => l.status==='closed').length;
+  const closed = leads().filter(l => l.status==='closed').length;
   const lbl = document.getElementById('clients-closed-label');
   if (lbl) lbl.textContent = closed + ' shop' + (closed!==1?'s':'') + ' closed';
 
@@ -843,29 +1159,31 @@ function renderVision() {
 }
 
 // ── Goals ─────────────────────────────────────────────────────────────────────
-function saveGoal() {
+async function saveGoal() {
   const name   = document.getElementById('g-name').value.trim();
   const target = parseInt(document.getElementById('g-target').value) || 0;
   if (!name || !target) { alert('Fill in all fields'); return; }
-  goals.push({ id: Date.now().toString(), name, target, current:0, deadline: document.getElementById('g-deadline').value, type: document.getElementById('g-type').value, createdAt: new Date().toISOString() });
-  persist(); closeModal('add-goal-modal'); renderGoals();
+  await api('/goals', { method:'POST', body: {
+    name, target, deadline: document.getElementById('g-deadline').value, type: document.getElementById('g-type').value,
+  }});
+  closeModal('add-goal-modal'); renderGoals();
 }
 
 function renderGoals() {
-  const closed = leads.filter(l => l.status==='closed').length;
-  const demos  = leads.filter(l => ['demo','closed'].includes(l.status)).length;
+  const closed = leads().filter(l => l.status==='closed').length;
+  const demos  = leads().filter(l => ['demo','closed'].includes(l.status)).length;
   const el = document.getElementById('goals-list');
-  if (!goals.length) {
+  if (!STATE.goals.length) {
     el.innerHTML = '<div style="grid-column:1/-1;" class="empty"><div class="empty-icon">🏆</div><div class="empty-text">No goals yet</div><div class="empty-sub">Set a goal to track your progress</div></div>';
     return;
   }
-  el.innerHTML = goals.map(g => {
-    const current = g.type==='clients' ? closed : g.type==='demos' ? demos : (g.current||0);
+  el.innerHTML = STATE.goals.map(g => {
+    const current = g.type==='clients' ? closed : g.type==='demos' ? demos : g.type==='dms' ? (activity().dms||0) : (g.current||0);
     const pct = Math.min(100, Math.round(current/g.target*100));
     const dl  = g.deadline ? new Date(g.deadline+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : 'No deadline';
     return `<div class="goal-card">
       <div class="goal-top">
-        <div><div class="goal-name">${g.name}</div><div class="goal-deadline">${dl}</div></div>
+        <div><div class="goal-name">${esc(g.name)}</div><div class="goal-deadline">${dl}</div></div>
         <button onclick="delGoal('${g.id}')" style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--faint);">×</button>
       </div>
       <div class="goal-num">${current}<span> / ${g.target}</span></div>
@@ -875,44 +1193,158 @@ function renderGoals() {
   }).join('');
 }
 
-function delGoal(id) { goals = goals.filter(g => g.id!==id); persist(); renderGoals(); }
-function incGoal(id) { const g = goals.find(x=>x.id===id); if(g){ g.current=Math.min(g.target,(g.current||0)+1); persist(); renderGoals(); } }
+async function delGoal(id) { await api(`/goals/${id}`, { method:'DELETE' }); renderGoals(); }
+async function incGoal(id) { await api(`/goals/${id}/inc`, { method:'POST', body:{delta:1} }); renderGoals(); }
+
+function renderFunnel() {
+  const all = leads();
+  const stages = [
+    ['Leads',      all.length],
+    ['Responded+', all.filter(l=>['responded','demo','closed'].includes(l.status)).length],
+    ['Demos',      all.filter(l=>['demo','closed'].includes(l.status)).length],
+    ['Closed',     all.filter(l=>l.status==='closed').length],
+  ];
+  const max = Math.max(1, stages[0][1]);
+  document.getElementById('funnel').innerHTML = stages.map((s,i) => {
+    const w = Math.round(s[1]/max*100);
+    const rate = i>0 && stages[i-1][1]>0 ? Math.round(s[1]/stages[i-1][1]*100)+'%' : '';
+    return `<div class="funnel-row">
+      <div class="funnel-label">${s[0]}</div>
+      <div class="funnel-bar-wrap"><div class="funnel-bar" style="width:${Math.max(w,6)}%"><span class="funnel-bar-num">${s[1]}</span></div></div>
+      <div class="funnel-rate">${rate}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderHistory() {
+  const h = STATE.history || [];
+  const card = document.getElementById('hist-card');
+  if (!h.length) { card.style.display='none'; return; }
+  card.style.display='block';
+  const weeks = h.slice(0,12).reverse();
+  const max = Math.max(1, ...weeks.map(w => (w.demos||0)));
+  document.getElementById('hist-wrap').innerHTML = weeks.map(w =>
+    `<div class="hist-bar" style="height:${Math.max(6, Math.round((w.demos||0)/max*100))}%"><span>${w.demos||0}</span></div>`
+  ).join('');
+}
 
 // ── Activity ──────────────────────────────────────────────────────────────────
-function saveActivity() { localStorage.setItem('sf_activity', JSON.stringify(activity)); }
-
-function adj(type, delta) {
-  activity[type] = Math.max(0, (activity[type]||0) + delta);
-  saveActivity();
-  const target = parseInt(document.getElementById(type+'-target').value) || 1;
-  const pct = Math.min(100, Math.round(activity[type]/target*100));
-  document.getElementById(type+'-sent').textContent = activity[type];
-  document.getElementById(type+'-prog').style.width = pct + '%';
-}
-
-function resetWeek() {
-  if (!confirm('Reset all weekly activity counters?')) return;
-  activity = { dms:0, walkins:0, demos:0 }; saveActivity();
-  ['dms','walkins','demos'].forEach(t => { document.getElementById(t+'-sent').textContent=0; document.getElementById(t+'-prog').style.width='0%'; });
-}
-
-function initActivity() {
-  ['dms','walkins','demos'].forEach(t => {
-    const target = parseInt(document.getElementById(t+'-target').value) || 1;
-    const pct = Math.min(100, Math.round((activity[t]||0)/target*100));
-    document.getElementById(t+'-sent').textContent = activity[t]||0;
-    document.getElementById(t+'-prog').style.width = pct + '%';
+function renderActivity() {
+  const a = activity(), t = targets();
+  ['dms','walkins','demos'].forEach(k => {
+    const val = a[k]||0, tgt = t[k]||1;
+    document.getElementById(k+'-sent').textContent = val;
+    document.getElementById(k+'-target-label').textContent = tgt;
+    document.getElementById(k+'-prog').style.width = Math.min(100, Math.round(val/tgt*100)) + '%';
   });
 }
 
+let activityTimer = null;
+function adj(type, delta) {
+  const a = activity();
+  a[type] = Math.max(0, (a[type]||0) + delta);
+  renderActivity(); renderGoals();
+  clearTimeout(activityTimer);
+  activityTimer = setTimeout(() => api('/activity', { method:'PUT', body:{ [type]: a[type] } }), 400);
+}
+
+async function resetWeek() {
+  if (!confirm('End the week? This saves a snapshot and resets your counters to 0.')) return;
+  await api('/activity/reset', { method:'POST' });
+  renderActivity(); renderHistory(); renderGoals();
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+function loadSettings() {
+  document.getElementById('set-name').value = STATE.rep.name || '';
+  const t = targets();
+  document.getElementById('set-t-dms').value = t.dms;
+  document.getElementById('set-t-walkins').value = t.walkins;
+  document.getElementById('set-t-demos').value = t.demos;
+  document.getElementById('pin-msg').textContent = '';
+}
+
+async function saveProfile() {
+  const repName = document.getElementById('set-name').value.trim();
+  if (!repName) { alert('Enter a name'); return; }
+  await api('/settings', { method:'PATCH', body:{ repName } });
+  document.getElementById('topbar-name').textContent = STATE.rep.name;
+  flash('set-name');
+}
+
+async function saveTargets() {
+  const weeklyTargets = {
+    dms:     parseInt(document.getElementById('set-t-dms').value)||50,
+    walkins: parseInt(document.getElementById('set-t-walkins').value)||5,
+    demos:   parseInt(document.getElementById('set-t-demos').value)||5,
+  };
+  await api('/settings', { method:'PATCH', body:{ weeklyTargets } });
+  flash('set-t-dms');
+}
+
+async function changePin() {
+  const cur  = document.getElementById('set-pin-cur').value.trim();
+  const next = document.getElementById('set-pin-new').value.trim();
+  const conf = document.getElementById('set-pin-conf').value.trim();
+  const msg = document.getElementById('pin-msg');
+  if (!/^\d{4,8}$/.test(next)) { msg.style.color='var(--red)'; msg.textContent='New PIN must be 4–8 digits'; return; }
+  if (next !== conf) { msg.style.color='var(--red)'; msg.textContent='PINs do not match'; return; }
+  const res = await fetch('/api/sales/pin', {
+    method:'POST', headers:{'Content-Type':'application/json', Authorization:'Bearer '+token},
+    body: JSON.stringify({ currentPin: cur, newPin: next })
+  });
+  const data = await res.json();
+  if (data.ok) {
+    msg.style.color='var(--green)'; msg.textContent='✓ PIN updated';
+    ['set-pin-cur','set-pin-new','set-pin-conf'].forEach(id=>document.getElementById(id).value='');
+  } else {
+    msg.style.color='var(--red)'; msg.textContent = data.error || 'Could not update PIN';
+  }
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify(STATE, null, 2)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'shopflow-sales-' + new Date().toISOString().slice(0,10) + '.json';
+  a.click(); URL.revokeObjectURL(url);
+}
+
+function flash(id) {
+  const el = document.getElementById(id);
+  const orig = el.style.borderColor;
+  el.style.borderColor = 'var(--green)';
+  setTimeout(() => el.style.borderColor = orig, 700);
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function fmt(dateStr) {
   if (!dateStr) return '—';
-  return new Date(dateStr+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  return new Date(dateStr+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'});
+}
+function timeAgo(iso) {
+  if (!iso) return '';
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff/60000), h = Math.floor(diff/3600000), d = Math.floor(diff/86400000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m+'m ago';
+  if (h < 24) return h+'h ago';
+  if (d < 7) return d+'d ago';
+  return new Date(iso).toLocaleDateString('en-US',{month:'short',day:'numeric'});
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-renderLeads(); updateStats(); renderVision();
+(async function init() {
+  renderPinDots();
+  if (token) {
+    try {
+      const res = await api('/state');
+      if (res.ok) { showApp(); return; }
+    } catch(e) { /* falls through to lock */ }
+  }
+  // not authenticated → lock screen already visible
+})();
 </script>
 </body>
 </html>
