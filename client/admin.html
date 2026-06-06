@@ -348,6 +348,9 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div class="sb-item" data-page="demos" onclick="nav('demos');closeAdminSidebar()">
       <span class="sb-item-icon">🚀</span>Demos
     </div>
+    <div class="sb-item" data-page="sales" onclick="nav('sales');closeAdminSidebar()">
+      <span class="sb-item-icon">🎯</span>Sales Rep
+    </div>
     <div class="sb-item" data-page="billing" onclick="nav('billing');closeAdminSidebar()">
       <span class="sb-item-icon">💰</span>Billing
     </div>
@@ -646,6 +649,105 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       </div>
     </div>
 
+    <!-- Sales Rep page -->
+    <div id="page-sales" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Sales Rep</div>
+          <div class="page-sub" id="sales-rep-sub">Manage your rep's pipeline, goals, to-dos, and dashboard</div>
+        </div>
+        <a href="/sales" target="_blank" class="btn btn-green btn-sm">↗ Open Sales Hub</a>
+      </div>
+
+      <div class="metrics-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
+        <div class="metric-card"><div class="metric-label">Total Leads</div><div class="metric-value" id="sa-leads">—</div></div>
+        <div class="metric-card"><div class="metric-label">Closed</div><div class="metric-value green" id="sa-closed">—</div><div class="metric-sub">paying shops</div></div>
+        <div class="metric-card"><div class="metric-label">In Pipeline</div><div class="metric-value" id="sa-pipeline">—</div><div class="metric-sub">active convos</div></div>
+        <div class="metric-card"><div class="metric-label">Closed MRR</div><div class="metric-value" id="sa-mrr">—</div><div class="metric-sub">from his clients</div></div>
+      </div>
+
+      <!-- Customize his dashboard -->
+      <div class="card">
+        <div class="card-header"><div><div class="card-title">Customize His Dashboard</div><div class="card-sub">Sets what he sees on his Home screen + his goal targets.</div></div></div>
+        <div style="padding:18px;">
+          <div class="form-row">
+            <label class="form-label">Rep name</label>
+            <input class="form-input" id="sa-name" placeholder="Rep name"/>
+          </div>
+          <div class="form-row">
+            <label class="form-label">📌 Focus message (banner on his Home screen)</label>
+            <textarea class="form-input" id="sa-focus" rows="2" placeholder="e.g. Push the $99 Pro plan this week — call me at 3pm to review your demos."></textarea>
+          </div>
+          <div class="form-row-2">
+            <div class="form-row"><label class="form-label">Daily targets — DMs / Walk-ins / Demos</label>
+              <div style="display:flex;gap:8px;">
+                <input class="form-input" id="sa-dt-dms" type="number" min="1" placeholder="DMs"/>
+                <input class="form-input" id="sa-dt-walkins" type="number" min="1" placeholder="Walk"/>
+                <input class="form-input" id="sa-dt-demos" type="number" min="1" placeholder="Demo"/>
+              </div>
+            </div>
+            <div class="form-row"><label class="form-label">Weekly targets — DMs / Walk-ins / Demos</label>
+              <div style="display:flex;gap:8px;">
+                <input class="form-input" id="sa-wt-dms" type="number" min="1" placeholder="DMs"/>
+                <input class="form-input" id="sa-wt-walkins" type="number" min="1" placeholder="Walk"/>
+                <input class="form-input" id="sa-wt-demos" type="number" min="1" placeholder="Demo"/>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+            <button class="btn btn-green btn-sm" onclick="saveSalesSettings()">Save Dashboard Settings</button>
+            <button class="btn btn-outline btn-sm" onclick="resetSalesPin()">Reset his PIN</button>
+            <span id="sa-settings-msg" style="font-size:12px;color:var(--muted);"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- To-Dos -->
+      <div class="card">
+        <div class="card-header"><div><div class="card-title">To-Dos for the Rep</div><div class="card-sub">These show up in his Goals tab. He checks them off.</div></div></div>
+        <div style="padding:18px;">
+          <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+            <input class="form-input" id="sa-todo-text" placeholder="e.g. Follow up with Fadez ABQ" style="flex:1;min-width:180px;"/>
+            <input class="form-input" id="sa-todo-due" type="date" style="max-width:160px;"/>
+            <button class="btn btn-black btn-sm" onclick="addSalesTodo()">+ Add</button>
+          </div>
+          <div id="sa-todos-list"></div>
+        </div>
+      </div>
+
+      <!-- Goals -->
+      <div class="card">
+        <div class="card-header"><div><div class="card-title">His Goals</div><div class="card-sub">Bigger targets shown on his Goals tab.</div></div></div>
+        <div style="padding:18px;">
+          <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+            <input class="form-input" id="sa-goal-name" placeholder="e.g. Close 10 shops by Aug 1" style="flex:1;min-width:160px;"/>
+            <input class="form-input" id="sa-goal-target" type="number" min="1" placeholder="Target" style="max-width:100px;"/>
+            <select class="form-input" id="sa-goal-type" style="max-width:150px;">
+              <option value="clients">Clients closed</option>
+              <option value="demos">Demos run</option>
+              <option value="custom">Custom</option>
+            </select>
+            <button class="btn btn-black btn-sm" onclick="addSalesGoal()">+ Add</button>
+          </div>
+          <div id="sa-goals-list"></div>
+        </div>
+      </div>
+
+      <!-- Leads -->
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">His Pipeline</div><div class="card-sub">Edit a lead's stage, open to edit details, or remove it.</div></div>
+          <button class="btn btn-outline btn-sm" onclick="openSalesLead(null)">+ Add Lead</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Name / Shop</th><th>City</th><th>Using</th><th>Stage</th><th>Plan</th><th></th></tr></thead>
+            <tbody id="sa-leads-tbody"><tr><td colspan="6"><div class="empty-state">Loading…</div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- Checklist page -->
     <div id="page-checklist" class="page">
       <div class="page-header">
@@ -816,6 +918,7 @@ function nav(page) {
   if (page === 'settings')  loadPlatformSettings();
   if (page === 'checklist') renderChecklist();
   if (page === 'demos')     loadDemos();
+  if (page === 'sales')     loadSalesAdmin();
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -1147,6 +1250,181 @@ function closeDrawer() {
   document.getElementById('drawer').classList.remove('open');
   document.getElementById('drawer-overlay').style.display = 'none';
   currentShopId = null;
+}
+
+// ── Sales Rep admin ───────────────────────────────────────────────────────────
+let salesData = { leads:[], goals:[], todos:[], settings:{}, totals:{} };
+
+async function salesApi(path, opts={}) {
+  const res = await fetch('/api/admin/sales'+path, {
+    method: opts.method||'GET',
+    headers: { 'x-admin-key': adminKey, 'Content-Type':'application/json' },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  return res.json().catch(()=>({}));
+}
+async function loadSalesAdmin() { applySalesData(await salesApi('')); }
+
+function applySalesData(d) {
+  if (!d || !d.settings) return;
+  salesData = d;
+  document.getElementById('sales-rep-sub').textContent = (d.repName||'Your rep') + " — pipeline, goals, to-dos & dashboard";
+  const t = d.totals||{};
+  document.getElementById('sa-leads').textContent    = t.leads ?? 0;
+  document.getElementById('sa-closed').textContent   = t.closed ?? 0;
+  document.getElementById('sa-pipeline').textContent = t.pipeline ?? 0;
+  document.getElementById('sa-mrr').textContent      = '$' + Math.round(t.mrrClosed||0).toLocaleString();
+  document.getElementById('sa-name').value  = d.repName||'';
+  document.getElementById('sa-focus').value = d.settings.focusNote||'';
+  const dt = d.settings.dailyTargets||{}, wt = d.settings.weeklyTargets||{};
+  document.getElementById('sa-dt-dms').value     = dt.dms||10;
+  document.getElementById('sa-dt-walkins').value = dt.walkins||1;
+  document.getElementById('sa-dt-demos').value   = dt.demos||1;
+  document.getElementById('sa-wt-dms').value     = wt.dms||50;
+  document.getElementById('sa-wt-walkins').value = wt.walkins||5;
+  document.getElementById('sa-wt-demos').value   = wt.demos||5;
+  renderSalesTodos(); renderSalesGoals(); renderSalesLeads();
+}
+
+function renderSalesTodos() {
+  const el = document.getElementById('sa-todos-list');
+  const todos = salesData.todos||[];
+  if (!todos.length) { el.innerHTML = '<div style="font-size:13px;color:var(--muted);">No to-dos yet. Add one above — it appears on his Goals tab.</div>'; return; }
+  el.innerHTML = todos.map(t => `
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">
+      <span style="font-size:15px;">${t.done?'✅':'⬜'}</span>
+      <div style="flex:1;${t.done?'text-decoration:line-through;color:var(--muted);':''}">
+        <div style="font-size:13px;font-weight:600;">${esc(t.text)}</div>
+        ${t.due?`<div style="font-size:11px;color:var(--muted);">Due ${esc(t.due)}</div>`:''}
+      </div>
+      <button class="btn btn-red btn-sm" onclick="delSalesTodo('${t.id}')">Delete</button>
+    </div>`).join('');
+}
+async function addSalesTodo() {
+  const text = document.getElementById('sa-todo-text').value.trim();
+  if (!text) { toast('Enter a to-do'); return; }
+  const d = await salesApi('/todos', { method:'POST', body:{ text, due: document.getElementById('sa-todo-due').value } });
+  document.getElementById('sa-todo-text').value=''; document.getElementById('sa-todo-due').value='';
+  applySalesData(d); toast('To-do added ✓');
+}
+async function delSalesTodo(id) { applySalesData(await salesApi('/todos/'+id, { method:'DELETE' })); }
+
+function renderSalesGoals() {
+  const el = document.getElementById('sa-goals-list');
+  const goals = salesData.goals||[];
+  if (!goals.length) { el.innerHTML = '<div style="font-size:13px;color:var(--muted);">No goals yet.</div>'; return; }
+  el.innerHTML = goals.map(g => `
+    <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">
+      <div style="flex:1;"><div style="font-size:13px;font-weight:600;">${esc(g.name)}</div>
+        <div style="font-size:11px;color:var(--muted);">Target ${g.target} · ${esc(g.type)}${g.deadline?' · by '+esc(g.deadline):''}</div></div>
+      <button class="btn btn-red btn-sm" onclick="delSalesGoal('${g.id}')">Delete</button>
+    </div>`).join('');
+}
+async function addSalesGoal() {
+  const name = document.getElementById('sa-goal-name').value.trim();
+  const target = parseInt(document.getElementById('sa-goal-target').value)||0;
+  if (!name || !target) { toast('Enter goal + target'); return; }
+  const d = await salesApi('/goals', { method:'POST', body:{ name, target, type: document.getElementById('sa-goal-type').value } });
+  document.getElementById('sa-goal-name').value=''; document.getElementById('sa-goal-target').value='';
+  applySalesData(d); toast('Goal added ✓');
+}
+async function delSalesGoal(id) { applySalesData(await salesApi('/goals/'+id, { method:'DELETE' })); }
+
+const SA_STAGES = [['contacted','Contacted'],['responded','Responded'],['demo','Demo'],['closed','Closed'],['not-interested','Lost']];
+function renderSalesLeads() {
+  const tb = document.getElementById('sa-leads-tbody');
+  const leads = salesData.leads||[];
+  if (!leads.length) { tb.innerHTML = '<tr><td colspan="6"><div class="empty-state">No leads yet.</div></td></tr>'; return; }
+  tb.innerHTML = leads.map(l => `
+    <tr>
+      <td><div style="font-weight:600;">${esc(l.name)}</div><div style="font-size:11px;color:var(--muted);">${esc(l.contact||'')}</div></td>
+      <td>${esc(l.city||'—')}</td>
+      <td>${esc(l.tool||'—')}</td>
+      <td><select class="form-input" style="padding:5px 8px;font-size:12px;min-width:120px;" onchange="setSalesLeadStage('${l.id}',this.value)">
+        ${SA_STAGES.map(([v,lbl])=>`<option value="${v}"${l.status===v?' selected':''}>${lbl}</option>`).join('')}
+      </select></td>
+      <td>${esc(l.plan||'—')}</td>
+      <td style="white-space:nowrap;text-align:right;">
+        <button class="btn btn-outline btn-sm" onclick="openSalesLead('${l.id}')">Edit</button>
+        <button class="btn btn-red btn-sm" onclick="delSalesLead('${l.id}')">🗑</button>
+      </td>
+    </tr>`).join('');
+}
+async function setSalesLeadStage(id, status) {
+  const lead = (salesData.leads||[]).find(l=>l.id===id); if(!lead) return;
+  applySalesData(await salesApi('/leads', { method:'POST', body:{ ...lead, status } }));
+}
+async function delSalesLead(id) {
+  const lead = (salesData.leads||[]).find(l=>l.id===id);
+  if (!confirm('Delete lead "'+(lead?lead.name:'')+'"?')) return;
+  applySalesData(await salesApi('/leads/'+id, { method:'DELETE' })); toast('Lead deleted');
+}
+
+function openSalesLead(id) {
+  const l = id ? (salesData.leads||[]).find(x=>x.id===id) : null;
+  const v = (k) => esc(l && l[k]!=null ? l[k] : '');
+  const opt = (arr, cur) => arr.map(o=>`<option${o===cur?' selected':''}>${o}</option>`).join('');
+  document.getElementById('drawer-overlay').style.display = 'block';
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawer-shop-name').textContent = id ? 'Edit Lead' : 'New Lead';
+  document.getElementById('drawer-body').innerHTML = `
+    <div class="drawer-section">
+      <input type="hidden" id="sl-id" value="${id||''}"/>
+      <div class="form-row"><label class="form-label">Name &amp; Shop *</label><input class="form-input" id="sl-name" value="${v('name')}"/></div>
+      <div class="form-row"><label class="form-label">Phone / Instagram</label><input class="form-input" id="sl-contact" value="${v('contact')}"/></div>
+      <div class="form-row"><label class="form-label">City</label><input class="form-input" id="sl-city" value="${v('city')}"/></div>
+      <div class="form-row"><label class="form-label">Currently using</label><select class="form-input" id="sl-tool">${opt(['Nothing / texts','Booksy','Square','Vagaro','StyleSeat','Hey Goldie','The Cut','Other'], l&&l.tool)}</select></div>
+      <div class="form-row"><label class="form-label">Stage</label><select class="form-input" id="sl-status">${SA_STAGES.map(([vv,lbl])=>`<option value="${vv}"${l&&l.status===vv?' selected':''}>${lbl}</option>`).join('')}</select></div>
+      <div class="form-row"><label class="form-label">Plan interest</label><select class="form-input" id="sl-plan">${opt(['Starter — $19.99','Pro — $99','Shop — $200','Unknown'], l&&l.plan)}</select></div>
+      <div class="form-row"><label class="form-label">Follow up date</label><input class="form-input" id="sl-followup" type="date" value="${v('followup')}"/></div>
+      <div class="form-row"><label class="form-label">Notes</label><textarea class="form-input" id="sl-notes" rows="4">${v('notes')}</textarea></div>
+      <button class="btn btn-green" style="width:100%;margin-top:6px;" onclick="saveSalesLead()">Save Lead</button>
+    </div>`;
+}
+async function saveSalesLead() {
+  const name = document.getElementById('sl-name').value.trim();
+  if (!name) { toast('Enter a name'); return; }
+  const body = {
+    id: document.getElementById('sl-id').value || undefined, name,
+    contact:  document.getElementById('sl-contact').value.trim(),
+    city:     document.getElementById('sl-city').value.trim(),
+    tool:     document.getElementById('sl-tool').value,
+    status:   document.getElementById('sl-status').value,
+    plan:     document.getElementById('sl-plan').value,
+    followup: document.getElementById('sl-followup').value,
+    notes:    document.getElementById('sl-notes').value.trim(),
+  };
+  const d = await salesApi('/leads', { method:'POST', body });
+  closeDrawer(); applySalesData(d); toast('Lead saved ✓');
+}
+
+async function saveSalesSettings() {
+  const body = {
+    repName: document.getElementById('sa-name').value.trim(),
+    focusNote: document.getElementById('sa-focus').value,
+    dailyTargets: {
+      dms:     parseInt(document.getElementById('sa-dt-dms').value)||10,
+      walkins: parseInt(document.getElementById('sa-dt-walkins').value)||1,
+      demos:   parseInt(document.getElementById('sa-dt-demos').value)||1,
+    },
+    weeklyTargets: {
+      dms:     parseInt(document.getElementById('sa-wt-dms').value)||50,
+      walkins: parseInt(document.getElementById('sa-wt-walkins').value)||5,
+      demos:   parseInt(document.getElementById('sa-wt-demos').value)||5,
+    },
+  };
+  applySalesData(await salesApi('/settings', { method:'PATCH', body }));
+  const msg = document.getElementById('sa-settings-msg');
+  msg.textContent = 'Saved ✓ — live on his screen';
+  setTimeout(()=>msg.textContent='', 2500);
+}
+
+async function resetSalesPin() {
+  const pin = prompt('Set a new login PIN for the rep (4–8 digits):');
+  if (pin === null) return;
+  if (!/^\d{4,8}$/.test(pin.trim())) { toast('PIN must be 4–8 digits'); return; }
+  const res = await salesApi('/pin/reset', { method:'POST', body:{ newPin: pin.trim() } });
+  if (res.ok) toast('PIN reset ✓'); else toast(res.error||'Failed');
 }
 
 // ── Shop CRUD ─────────────────────────────────────────────────────────────────

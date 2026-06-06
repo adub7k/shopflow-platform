@@ -5,7 +5,7 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const jwt    = require('jsonwebtoken');
-const { master, JWT_SECRET, genId } = require('../db');
+const { master, JWT_SECRET, genId, today } = require('../db');
 const { requireAdmin } = require('../middleware');
 
 const DEFAULT_PIN = '1234';
@@ -18,11 +18,22 @@ function sales() { return master.get('sales'); }
 async function ensureSales() {
   if (!master.has('sales').value()) {
     master.set('sales', {
-      pinHash: null, repName: 'Bryce Moen', leads: [], goals: [],
+      pinHash: null, repName: 'Bryce Moen', leads: [], goals: [], todos: [],
       activity: { dms: 0, walkins: 0, demos: 0, weekStart: null },
-      settings: { weeklyTargets: { dms: 50, walkins: 5, demos: 5 } }, history: [],
+      daily: { date: null, dms: 0, walkins: 0, demos: 0 },
+      settings: {
+        weeklyTargets: { dms: 50, walkins: 5, demos: 5 },
+        dailyTargets:  { dms: 10, walkins: 1, demos: 1 },
+        focusNote: '',
+      },
+      history: [],
     }).write();
   }
+  // Lazy migrations for older sales blobs.
+  if (!sales().has('todos').value()) sales().set('todos', []).write();
+  if (!sales().has('daily').value()) sales().set('daily', { date: null, dms: 0, walkins: 0, demos: 0 }).write();
+  if (!sales().get('settings.dailyTargets').value()) sales().get('settings').assign({ dailyTargets: { dms: 10, walkins: 1, demos: 1 } }).write();
+  if (sales().get('settings.focusNote').value() === undefined) sales().get('settings').assign({ focusNote: '' }).write();
   if (!sales().get('pinHash').value()) {
     const hash = await bcrypt.hash(DEFAULT_PIN, 10);
     sales().assign({ pinHash: hash }).write();
@@ -37,10 +48,39 @@ function publicState() {
     rep:      { name: s.repName },
     leads:    s.leads    || [],
     goals:    s.goals    || [],
+    todos:    s.todos    || [],
     activity: s.activity || { dms: 0, walkins: 0, demos: 0 },
-    settings: s.settings || { weeklyTargets: { dms: 50, walkins: 5, demos: 5 } },
+    daily:    todayDaily(),
+    settings: s.settings || { weeklyTargets: { dms: 50, walkins: 5, demos: 5 }, dailyTargets: { dms: 10, walkins: 1, demos: 1 }, focusNote: '' },
     history:  s.history  || [],
   };
+}
+
+// Returns today's daily counters, rolling them over if the stored date isn't today.
+function todayDaily() {
+  const d = sales().get('daily').value() || { date: null, dms: 0, walkins: 0, demos: 0 };
+  return d.date === today() ? d : { date: today(), dms: 0, walkins: 0, demos: 0 };
+}
+
+// Roll the daily counters to today (resets at midnight). Persists if it changed.
+function rollDaily() {
+  const d = sales().get('daily').value() || {};
+  if (d.date !== today()) sales().set('daily', { date: today(), dms: 0, walkins: 0, demos: 0 }).write();
+}
+
+// Roll the weekly counters when a new week starts (snapshots the finished week).
+function rollWeekly() {
+  const a = sales().get('activity').value() || {};
+  const wk = startOfWeek();
+  if (!a.weekStart) { sales().get('activity').assign({ weekStart: wk }).write(); return; }
+  if (a.weekStart < wk) {
+    if ((a.dms || 0) + (a.walkins || 0) + (a.demos || 0) > 0) {
+      sales().get('history').unshift({ weekStart: a.weekStart, weekEnd: wk, dms: a.dms || 0, walkins: a.walkins || 0, demos: a.demos || 0 }).write();
+      const hist = sales().get('history').value();
+      if (hist.length > 26) sales().set('history', hist.slice(0, 26)).write();
+    }
+    sales().get('activity').assign({ dms: 0, walkins: 0, demos: 0, weekStart: wk }).write();
+  }
 }
 
 function signToken() {
@@ -79,14 +119,29 @@ router.post('/api/sales/login', salesRoute(async (req, res) => {
 
 // ── Read full state ───────────────────────────────────────────────────────────
 router.get('/api/sales/state', requireSales, salesRoute(async (req, res) => {
+  rollDaily(); rollWeekly();
+  res.json({ ok: true, state: publicState() });
+}));
+
+// ── Track activity — one tap counts toward today AND this week ─────────────────
+router.post('/api/sales/track', requireSales, salesRoute(async (req, res) => {
+  const type = req.body.type;
+  if (!['dms', 'walkins', 'demos'].includes(type)) return res.status(400).json({ ok: false, error: 'Bad type' });
+  const delta = parseInt(req.body.delta, 10) || 0;
+  rollDaily(); rollWeekly();
+  const d = sales().get('daily').value();
+  const a = sales().get('activity').value();
+  sales().get('daily').assign({ [type]: Math.max(0, (d[type] || 0) + delta) }).write();
+  sales().get('activity').assign({ [type]: Math.max(0, (a[type] || 0) + delta) }).write();
   res.json({ ok: true, state: publicState() });
 }));
 
 // ── Leads: create / update (upsert) ───────────────────────────────────────────
-router.post('/api/sales/leads', requireSales, salesRoute(async (req, res) => {
-  const b = req.body || {};
+// Shared lead upsert — used by both the rep and the admin routes.
+// Returns { error } or { lead }.
+function buildLead(b) {
   const name = String(b.name || '').trim();
-  if (!name) return res.status(400).json({ ok: false, error: 'Name required' });
+  if (!name) return { error: 'Name required' };
   const now = new Date().toISOString();
   const leads = sales().get('leads');
   const existing = b.id ? leads.find({ id: b.id }).value() : null;
@@ -115,6 +170,12 @@ router.post('/api/sales/leads', requireSales, salesRoute(async (req, res) => {
 
   if (existing) leads.find({ id: lead.id }).assign(lead).write();
   else          leads.unshift(lead).write();
+  return { lead };
+}
+
+router.post('/api/sales/leads', requireSales, salesRoute(async (req, res) => {
+  const { error } = buildLead(req.body || {});
+  if (error) return res.status(400).json({ ok: false, error });
   res.json({ ok: true, state: publicState() });
 }));
 
@@ -136,11 +197,10 @@ router.delete('/api/sales/leads/:id', requireSales, salesRoute(async (req, res) 
 }));
 
 // ── Goals: create / update ─────────────────────────────────────────────────────
-router.post('/api/sales/goals', requireSales, salesRoute(async (req, res) => {
-  const b = req.body || {};
+function buildGoal(b) {
   const name   = String(b.name || '').trim();
   const target = parseInt(b.target, 10) || 0;
-  if (!name || !target) return res.status(400).json({ ok: false, error: 'Name and target required' });
+  if (!name || !target) return { error: 'Name and target required' };
   const goals = sales().get('goals');
   const existing = b.id ? goals.find({ id: b.id }).value() : null;
   const goal = {
@@ -153,6 +213,12 @@ router.post('/api/sales/goals', requireSales, salesRoute(async (req, res) => {
   };
   if (existing) goals.find({ id: goal.id }).assign(goal).write();
   else          goals.push(goal).write();
+  return { goal };
+}
+
+router.post('/api/sales/goals', requireSales, salesRoute(async (req, res) => {
+  const { error } = buildGoal(req.body || {});
+  if (error) return res.status(400).json({ ok: false, error });
   res.json({ ok: true, state: publicState() });
 }));
 
@@ -166,6 +232,15 @@ router.post('/api/sales/goals/:id/inc', requireSales, salesRoute(async (req, res
 
 router.delete('/api/sales/goals/:id', requireSales, salesRoute(async (req, res) => {
   sales().get('goals').remove({ id: req.params.id }).write();
+  res.json({ ok: true, state: publicState() });
+}));
+
+// ── To-Dos: rep toggles done (owner assigns them via admin) ───────────────────
+router.post('/api/sales/todos/:id/toggle', requireSales, salesRoute(async (req, res) => {
+  const todo = sales().get('todos').find({ id: req.params.id });
+  if (!todo.value()) return res.status(404).json({ ok: false, error: 'To-do not found' });
+  const done = !todo.value().done;
+  todo.assign({ done, doneAt: done ? new Date().toISOString() : null }).write();
   res.json({ ok: true, state: publicState() });
 }));
 
@@ -206,13 +281,8 @@ router.post('/api/sales/activity/reset', requireSales, salesRoute(async (req, re
 router.patch('/api/sales/settings', requireSales, salesRoute(async (req, res) => {
   const b = req.body || {};
   if (b.repName !== undefined && String(b.repName).trim()) sales().assign({ repName: String(b.repName).trim() }).write();
-  if (b.weeklyTargets) {
-    sales().get('settings').assign({ weeklyTargets: {
-      dms:     Math.max(1, parseInt(b.weeklyTargets.dms, 10)     || 50),
-      walkins: Math.max(1, parseInt(b.weeklyTargets.walkins, 10) || 5),
-      demos:   Math.max(1, parseInt(b.weeklyTargets.demos, 10)   || 5),
-    } }).write();
-  }
+  if (b.weeklyTargets) sales().get('settings').assign({ weeklyTargets: cleanTargets(b.weeklyTargets, { dms: 50, walkins: 5, demos: 5 }) }).write();
+  if (b.dailyTargets)  sales().get('settings').assign({ dailyTargets:  cleanTargets(b.dailyTargets,  { dms: 10, walkins: 1, demos: 1 }) }).write();
   res.json({ ok: true, state: publicState() });
 }));
 
@@ -228,11 +298,12 @@ router.post('/api/sales/pin', requireSales, salesRoute(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// ── Admin: view the rep's pipeline (read-only) ────────────────────────────────
-router.get('/api/admin/sales', requireAdmin, salesRoute(async (req, res) => {
+// Everything the admin Sales page needs in one shape.
+function adminSalesPayload() {
+  rollDaily(); rollWeekly();
   const s = publicState();
   const closed = s.leads.filter(l => l.status === 'closed');
-  res.json({
+  return {
     repName: s.rep.name,
     totals: {
       leads:    s.leads.length,
@@ -240,9 +311,74 @@ router.get('/api/admin/sales', requireAdmin, salesRoute(async (req, res) => {
       pipeline: s.leads.filter(l => ['contacted', 'responded', 'demo'].includes(l.status)).length,
       mrrClosed: closed.reduce((sum, l) => sum + (Number(l.value) || 0), 0),
     },
-    leads: s.leads,
+    leads:    s.leads,
+    goals:    s.goals,
+    todos:    s.todos,
     activity: s.activity,
-  });
+    daily:    s.daily,
+    settings: s.settings,
+  };
+}
+
+// ── Admin: view the rep's full data ───────────────────────────────────────────
+router.get('/api/admin/sales', requireAdmin, salesRoute(async (req, res) => {
+  res.json(adminSalesPayload());
+}));
+
+// ── Admin: assign / delete to-dos ─────────────────────────────────────────────
+router.post('/api/admin/sales/todos', requireAdmin, salesRoute(async (req, res) => {
+  const text = String(req.body.text || '').trim();
+  if (!text) return res.status(400).json({ ok: false, error: 'To-do text required' });
+  sales().get('todos').unshift({
+    id: genId('todo'), text, due: req.body.due || '',
+    done: false, doneAt: null, createdAt: new Date().toISOString(),
+  }).write();
+  res.json({ ok: true, ...adminSalesPayload() });
+}));
+router.delete('/api/admin/sales/todos/:id', requireAdmin, salesRoute(async (req, res) => {
+  sales().get('todos').remove({ id: req.params.id }).write();
+  res.json({ ok: true, ...adminSalesPayload() });
+}));
+
+// ── Admin: edit the rep's leads ───────────────────────────────────────────────
+router.post('/api/admin/sales/leads', requireAdmin, salesRoute(async (req, res) => {
+  const { error } = buildLead(req.body || {});
+  if (error) return res.status(400).json({ ok: false, error });
+  res.json({ ok: true, ...adminSalesPayload() });
+}));
+router.delete('/api/admin/sales/leads/:id', requireAdmin, salesRoute(async (req, res) => {
+  sales().get('leads').remove({ id: req.params.id }).write();
+  res.json({ ok: true, ...adminSalesPayload() });
+}));
+
+// ── Admin: edit the rep's goals ───────────────────────────────────────────────
+router.post('/api/admin/sales/goals', requireAdmin, salesRoute(async (req, res) => {
+  const { error } = buildGoal(req.body || {});
+  if (error) return res.status(400).json({ ok: false, error });
+  res.json({ ok: true, ...adminSalesPayload() });
+}));
+router.delete('/api/admin/sales/goals/:id', requireAdmin, salesRoute(async (req, res) => {
+  sales().get('goals').remove({ id: req.params.id }).write();
+  res.json({ ok: true, ...adminSalesPayload() });
+}));
+
+// ── Admin: rep settings — name, daily/weekly targets, focus note ──────────────
+router.patch('/api/admin/sales/settings', requireAdmin, salesRoute(async (req, res) => {
+  const b = req.body || {};
+  if (b.repName !== undefined && String(b.repName).trim()) sales().assign({ repName: String(b.repName).trim() }).write();
+  if (b.focusNote !== undefined) sales().get('settings').assign({ focusNote: String(b.focusNote).slice(0, 280) }).write();
+  if (b.weeklyTargets) sales().get('settings').assign({ weeklyTargets: cleanTargets(b.weeklyTargets, { dms: 50, walkins: 5, demos: 5 }) }).write();
+  if (b.dailyTargets)  sales().get('settings').assign({ dailyTargets:  cleanTargets(b.dailyTargets,  { dms: 10, walkins: 1, demos: 1 }) }).write();
+  res.json({ ok: true, ...adminSalesPayload() });
+}));
+
+// ── Admin: reset the rep's PIN (no current PIN needed) ────────────────────────
+router.post('/api/admin/sales/pin/reset', requireAdmin, salesRoute(async (req, res) => {
+  const next = String(req.body.newPin || '').trim();
+  if (!/^\d{4,8}$/.test(next)) return res.status(400).json({ ok: false, error: 'PIN must be 4–8 digits' });
+  const hash = await bcrypt.hash(next, 10);
+  sales().assign({ pinHash: hash }).write();
+  res.json({ ok: true });
 }));
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -251,6 +387,13 @@ function planValue(plan) {
   if (plan.includes('99'))  return 99;
   if (plan.includes('200')) return 200;
   return 19.99;
+}
+function cleanTargets(t, fallback) {
+  return {
+    dms:     Math.max(1, parseInt(t.dms, 10)     || fallback.dms),
+    walkins: Math.max(1, parseInt(t.walkins, 10) || fallback.walkins),
+    demos:   Math.max(1, parseInt(t.demos, 10)   || fallback.demos),
+  };
 }
 function startOfWeek() {
   const d = new Date();

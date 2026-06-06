@@ -231,6 +231,34 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
 .activity-count{font-size:13px;color:var(--muted);}
 .activity-btns{display:flex;gap:6px;margin-top:8px;}
 
+/* ── Dashboard focus banner ── */
+.focus-banner{background:linear-gradient(135deg,#0a1f0a,#10300f);border:1px solid rgba(22,163,74,.35);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;display:flex;gap:12px;align-items:flex-start;}
+.focus-banner-icon{font-size:18px;flex-shrink:0;line-height:1.3;}
+.focus-banner-body{flex:1;}
+.focus-banner-label{font-size:10px;font-weight:800;color:var(--green-bright);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px;}
+.focus-banner-text{font-size:14px;color:#fff;line-height:1.5;font-weight:500;}
+
+/* ── Goal panel rows ── */
+.goal-row{padding:14px 0;border-bottom:1px solid var(--border);}
+.goal-row:last-child{border-bottom:none;}
+.goal-row-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px;}
+.goal-row-label{font-size:14px;font-weight:700;color:var(--black);}
+.goal-row-count{font-size:13px;color:var(--muted);}
+.goal-row-count b{color:var(--black);font-size:15px;}
+.goal-row.hit .goal-row-count b{color:var(--green);}
+.goal-row-btns{display:flex;gap:6px;margin-top:9px;}
+.goal-note{font-size:12px;color:var(--faint);text-align:center;padding:6px 0 0;}
+
+/* ── To-Dos from HQ ── */
+.todo-row{display:flex;gap:11px;align-items:flex-start;padding:11px 0;border-bottom:1px solid var(--border);cursor:pointer;}
+.todo-row:last-child{border-bottom:none;}
+.todo-check{width:22px;height:22px;border-radius:7px;border:2px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;transition:all .15s;margin-top:1px;}
+.todo-row.done .todo-check{background:var(--green);border-color:var(--green);}
+.todo-body{flex:1;min-width:0;}
+.todo-text{font-size:14px;color:var(--black);line-height:1.4;}
+.todo-row.done .todo-text{color:var(--faint);text-decoration:line-through;}
+.todo-due{font-size:11px;font-weight:700;margin-top:3px;}
+
 /* ── Lead activity log ── */
 .log-entry{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);}
 .log-entry:last-child{border-bottom:none;}
@@ -302,7 +330,8 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
 </div>
 
 <div class="tabs">
-  <div class="tab active" onclick="nav('leads')">🎯 Pipeline</div>
+  <div class="tab active" onclick="nav('home')">🏠 Home</div>
+  <div class="tab" onclick="nav('leads')">🎯 Pipeline</div>
   <div class="tab" onclick="nav('followups')">⏰ Follow Ups</div>
   <div class="tab" onclick="nav('bible')">📖 Playbook</div>
   <div class="tab" onclick="nav('vision')">🚀 Vision</div>
@@ -312,8 +341,32 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
 
 <div class="content">
 
+<!-- ── HOME / DASHBOARD ── -->
+<div id="tab-home" class="page active">
+  <div id="dash-greeting" style="font-size:20px;font-weight:900;letter-spacing:-.03em;margin-bottom:2px;">Let's get it 🤙</div>
+  <div id="dash-date" style="font-size:12px;color:var(--muted);margin-bottom:14px;"></div>
+
+  <div id="focus-banner" class="focus-banner" style="display:none;"></div>
+
+  <div class="stats-grid">
+    <div class="stat-card"><div class="stat-label">Closed Shops</div><div class="stat-value green" id="snap-closed">0</div><div class="stat-sub">paying clients</div></div>
+    <div class="stat-card"><div class="stat-label">Pipeline Value</div><div class="stat-value blue" id="snap-pipeval">$0</div><div class="stat-sub">weighted MRR</div></div>
+    <div class="stat-card"><div class="stat-label">Due Today</div><div class="stat-value" id="snap-due">0</div><div class="stat-sub">follow-ups</div></div>
+    <div class="stat-card"><div class="stat-label">Open To-Dos</div><div class="stat-value" id="snap-todos">0</div><div class="stat-sub">from HQ</div></div>
+  </div>
+
+  <div class="section-header">
+    <div class="section-title">Activity Goals</div>
+    <div class="segmented">
+      <button class="seg-btn active" id="gv-daily" onclick="setGoalView('daily')">Today</button>
+      <button class="seg-btn" id="gv-weekly" onclick="setGoalView('weekly')">This Week</button>
+    </div>
+  </div>
+  <div class="card" id="goal-panel"></div>
+</div>
+
 <!-- ── PIPELINE ── -->
-<div id="tab-leads" class="page active">
+<div id="tab-leads" class="page">
   <div class="stats-grid">
     <div class="stat-card"><div class="stat-label">Total Leads</div><div class="stat-value" id="stat-total">0</div><div class="stat-sub">all time</div></div>
     <div class="stat-card"><div class="stat-label">Closed</div><div class="stat-value green" id="stat-closed">0</div><div class="stat-sub">paying shops</div></div>
@@ -622,6 +675,11 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
 <!-- ── GOALS ── -->
 <div id="tab-goals" class="page">
 
+  <div class="card" id="todos-card" style="display:none;">
+    <div class="card-title">📋 To-Dos from HQ <span id="todos-count" style="color:var(--green);"></span></div>
+    <div id="todos-list"></div>
+  </div>
+
   <div class="section-header">
     <div class="section-title">Personal Goals</div>
     <button class="btn btn-black btn-sm" onclick="openAddGoal()">+ Add Goal</button>
@@ -631,46 +689,6 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
   <div class="card">
     <div class="card-title">Conversion Funnel — All Time</div>
     <div id="funnel"></div>
-  </div>
-
-  <div class="card">
-    <div class="card-title">Weekly Activity</div>
-    <div class="activity-row">
-      <div class="activity-top">
-        <div class="activity-label">DMs Sent</div>
-        <div class="activity-count"><span id="dms-sent">0</span> / <span id="dms-target-label">50</span></div>
-      </div>
-      <div class="progress-wrap"><div class="progress-fill" id="dms-prog" style="width:0%"></div></div>
-      <div class="activity-btns">
-        <button class="btn btn-sm btn-outline" onclick="adj('dms',-1)">−</button>
-        <button class="btn btn-sm btn-black" onclick="adj('dms',1)">+ 1 DM</button>
-        <button class="btn btn-sm btn-outline" onclick="adj('dms',5)">+ 5</button>
-      </div>
-    </div>
-    <div class="activity-row">
-      <div class="activity-top">
-        <div class="activity-label">Walk-ins</div>
-        <div class="activity-count"><span id="walkins-sent">0</span> / <span id="walkins-target-label">5</span></div>
-      </div>
-      <div class="progress-wrap"><div class="progress-fill" id="walkins-prog" style="width:0%"></div></div>
-      <div class="activity-btns">
-        <button class="btn btn-sm btn-outline" onclick="adj('walkins',-1)">−</button>
-        <button class="btn btn-sm btn-black" onclick="adj('walkins',1)">+ 1 Walk-in</button>
-      </div>
-    </div>
-    <div class="activity-row">
-      <div class="activity-top">
-        <div class="activity-label">Demos Run</div>
-        <div class="activity-count"><span id="demos-sent">0</span> / <span id="demos-target-label">5</span></div>
-      </div>
-      <div class="progress-wrap"><div class="progress-fill" id="demos-prog" style="width:0%"></div></div>
-      <div class="activity-btns">
-        <button class="btn btn-sm btn-outline" onclick="adj('demos',-1)">−</button>
-        <button class="btn btn-sm btn-black" onclick="adj('demos',1)">+ 1 Demo</button>
-      </div>
-    </div>
-    <button class="btn btn-outline btn-full" onclick="resetWeek()" style="margin-top:12px;font-size:12px;color:var(--faint);">End week &amp; reset</button>
-    <div style="font-size:11px;color:var(--faint);text-align:center;margin-top:6px;">Set your weekly targets in Settings ⚙️</div>
   </div>
 
   <div class="card" id="hist-card" style="display:none;">
@@ -689,7 +707,14 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
   </div>
 
   <div class="card">
-    <div class="card-title">Weekly Targets</div>
+    <div class="card-title">Daily Targets</div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">DMs / day</label><input class="form-input" id="set-d-dms" type="number" min="1" value="10"/></div>
+      <div class="form-group"><label class="form-label">Walk-ins / day</label><input class="form-input" id="set-d-walkins" type="number" min="1" value="1"/></div>
+    </div>
+    <div class="form-group"><label class="form-label">Demos / day</label><input class="form-input" id="set-d-demos" type="number" min="1" value="1"/></div>
+    <div style="font-size:11px;color:var(--faint);margin-bottom:10px;">Your HQ can also set these for you.</div>
+    <div class="card-title" style="margin-top:4px;">Weekly Targets</div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">DMs / wk</label><input class="form-input" id="set-t-dms" type="number" min="1" value="50"/></div>
       <div class="form-group"><label class="form-label">Walk-ins / wk</label><input class="form-input" id="set-t-walkins" type="number" min="1" value="5"/></div>
@@ -802,10 +827,13 @@ let token = localStorage.getItem('sf_sales_token') || '';
 let editingLeadId = null;
 let activeFilter  = 'all';
 let pipeView = 'list';
+let goalView = 'daily';
 
-const leads    = () => STATE.leads || [];
-const targets  = () => (STATE.settings && STATE.settings.weeklyTargets) || {dms:50,walkins:5,demos:5};
-const activity = () => STATE.activity || {dms:0,walkins:0,demos:0};
+const leads        = () => STATE.leads || [];
+const targets      = () => (STATE.settings && STATE.settings.weeklyTargets) || {dms:50,walkins:5,demos:5};
+const dailyTargets = () => (STATE.settings && STATE.settings.dailyTargets) || {dms:10,walkins:1,demos:1};
+const activity     = () => STATE.activity || {dms:0,walkins:0,demos:0};
+const daily        = () => STATE.daily || {dms:0,walkins:0,demos:0};
 
 // ── API ───────────────────────────────────────────────────────────────────────
 async function api(path, opts={}) {
@@ -861,7 +889,7 @@ function showApp() {
   document.getElementById('lock').style.display = 'none';
   document.getElementById('app').style.display = 'block';
   document.getElementById('topbar-name').textContent = STATE.rep.name;
-  renderLeads(); updateStats(); renderVision();
+  renderDashboard(); renderLeads(); updateStats(); renderVision();
 }
 
 function logout() {
@@ -878,10 +906,11 @@ function nav(tab) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelector(`.tab[onclick="nav('${tab}')"]`).classList.add('active');
   document.getElementById('tab-'+tab).classList.add('active');
+  if (tab === 'home')      renderDashboard();
   if (tab === 'leads')     { renderLeads(); updateStats(); }
   if (tab === 'followups') renderFollowups();
   if (tab === 'vision')    renderVision();
-  if (tab === 'goals')     { renderGoals(); renderFunnel(); renderActivity(); renderHistory(); }
+  if (tab === 'goals')     { renderTodos(); renderGoals(); renderFunnel(); renderHistory(); }
   if (tab === 'settings')  loadSettings();
 }
 
@@ -1193,6 +1222,34 @@ function renderGoals() {
   }).join('');
 }
 
+// ── To-Dos from HQ ────────────────────────────────────────────────────────────
+function renderTodos() {
+  const todos = STATE.todos || [];
+  const card = document.getElementById('todos-card');
+  if (!todos.length) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  const open = todos.filter(t => !t.done).length;
+  document.getElementById('todos-count').textContent = open ? `· ${open} open` : '· all done ✓';
+  const today = new Date(); today.setHours(0,0,0,0);
+  // open first (by due), then completed
+  const sorted = [...todos].sort((a,b) => (a.done?1:0)-(b.done?1:0) || (a.due||'zz').localeCompare(b.due||'zz'));
+  document.getElementById('todos-list').innerHTML = sorted.map(t => {
+    let due = '';
+    if (t.due && !t.done) {
+      const dt = new Date(t.due+'T12:00:00');
+      const diff = Math.floor((dt - today)/86400000);
+      const col = diff < 0 ? 'var(--red)' : diff===0 ? 'var(--yellow)' : 'var(--muted)';
+      const lbl = diff < 0 ? `Overdue ${Math.abs(diff)}d` : diff===0 ? 'Due today' : diff===1 ? 'Due tomorrow' : 'Due '+fmt(t.due);
+      due = `<div class="todo-due" style="color:${col}">${lbl}</div>`;
+    }
+    return `<div class="todo-row${t.done?' done':''}" onclick="toggleTodo('${t.id}')">
+      <div class="todo-check">${t.done?'✓':''}</div>
+      <div class="todo-body"><div class="todo-text">${esc(t.text)}</div>${due}</div>
+    </div>`;
+  }).join('');
+}
+async function toggleTodo(id) { await api(`/todos/${id}/toggle`, { method:'POST' }); renderTodos(); }
+
 async function delGoal(id) { await api(`/goals/${id}`, { method:'DELETE' }); renderGoals(); }
 async function incGoal(id) { await api(`/goals/${id}/inc`, { method:'POST', body:{delta:1} }); renderGoals(); }
 
@@ -1228,39 +1285,84 @@ function renderHistory() {
   ).join('');
 }
 
-// ── Activity ──────────────────────────────────────────────────────────────────
-function renderActivity() {
-  const a = activity(), t = targets();
-  ['dms','walkins','demos'].forEach(k => {
-    const val = a[k]||0, tgt = t[k]||1;
-    document.getElementById(k+'-sent').textContent = val;
-    document.getElementById(k+'-target-label').textContent = tgt;
-    document.getElementById(k+'-prog').style.width = Math.min(100, Math.round(val/tgt*100)) + '%';
-  });
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+function renderDashboard() {
+  const d = new Date();
+  document.getElementById('dash-date').textContent = d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  const hr = d.getHours(); const g = hr<12 ? 'Good morning' : hr<17 ? 'Good afternoon' : 'Good evening';
+  const first = (STATE.rep.name||'').split(' ')[0] || '';
+  document.getElementById('dash-greeting').textContent = `${g}${first?', '+first:''} 🤙`;
+
+  const note = ((STATE.settings && STATE.settings.focusNote) || '').trim();
+  const fb = document.getElementById('focus-banner');
+  if (note) { fb.style.display='flex'; fb.innerHTML = `<div class="focus-banner-icon">📌</div><div class="focus-banner-body"><div class="focus-banner-label">Focus from HQ</div><div class="focus-banner-text">${esc(note)}</div></div>`; }
+  else fb.style.display='none';
+
+  const all = leads();
+  const today = new Date(); today.setHours(0,0,0,0);
+  const closed   = all.filter(l => l.status==='closed').length;
+  const weighted = all.filter(l => l.status!=='closed').reduce((s,l)=> s + planVal(l)*(STAGE_PROB[l.status]||0), 0);
+  const due      = all.filter(l => l.followup && !['closed','not-interested'].includes(l.status) && new Date(l.followup+'T00:00:00') <= today).length;
+  const openTodos = (STATE.todos||[]).filter(t => !t.done).length;
+  document.getElementById('snap-closed').textContent  = closed;
+  document.getElementById('snap-pipeval').textContent = '$' + Math.round(weighted).toLocaleString();
+  document.getElementById('snap-due').textContent     = due;
+  document.getElementById('snap-todos').textContent   = openTodos;
+
+  renderGoalPanel();
 }
 
-let activityTimer = null;
-function adj(type, delta) {
-  const a = activity();
-  a[type] = Math.max(0, (a[type]||0) + delta);
-  renderActivity(); renderGoals();
-  clearTimeout(activityTimer);
-  activityTimer = setTimeout(() => api('/activity', { method:'PUT', body:{ [type]: a[type] } }), 400);
+function setGoalView(v) {
+  goalView = v;
+  document.getElementById('gv-daily').classList.toggle('active', v==='daily');
+  document.getElementById('gv-weekly').classList.toggle('active', v==='weekly');
+  renderGoalPanel();
 }
 
-async function resetWeek() {
-  if (!confirm('End the week? This saves a snapshot and resets your counters to 0.')) return;
-  await api('/activity/reset', { method:'POST' });
-  renderActivity(); renderHistory(); renderGoals();
+function renderGoalPanel() {
+  const isDaily = goalView==='daily';
+  const counts = isDaily ? daily() : activity();
+  const tgts   = isDaily ? dailyTargets() : targets();
+  const rows = [['dms','DMs Sent'],['walkins','Walk-ins'],['demos','Demos Run']];
+  const panel = document.getElementById('goal-panel');
+  panel.innerHTML = rows.map(([k,label]) => {
+    const val = counts[k]||0, t = tgts[k]||1;
+    const pct = Math.min(100, Math.round(val/t*100));
+    const hit = val>=t;
+    return `<div class="goal-row${hit?' hit':''}">
+      <div class="goal-row-top"><div class="goal-row-label">${label}</div>
+        <div class="goal-row-count"><b>${val}</b> / ${t}${hit?' ✓':''}</div></div>
+      <div class="progress-wrap"><div class="progress-fill" style="width:${pct}%"></div></div>
+      ${isDaily ? `<div class="goal-row-btns">
+        <button class="btn btn-sm btn-outline" onclick="track('${k}',-1)">−</button>
+        <button class="btn btn-sm btn-black" onclick="track('${k}',1)">+ 1</button>
+        ${k==='dms' ? `<button class="btn btn-sm btn-outline" onclick="track('${k}',5)">+ 5</button>` : ''}
+      </div>` : ''}
+    </div>`;
+  }).join('') + (isDaily ? '' : '<div class="goal-note">Log activity on the <b>Today</b> view — it rolls up here automatically. Resets every Monday.</div>');
+}
+
+async function track(type, delta) {
+  // optimistic bump for snappy feel; server returns authoritative state
+  const dd = STATE.daily || (STATE.daily = {dms:0,walkins:0,demos:0});
+  const aa = STATE.activity || (STATE.activity = {dms:0,walkins:0,demos:0});
+  dd[type] = Math.max(0,(dd[type]||0)+delta);
+  aa[type] = Math.max(0,(aa[type]||0)+delta);
+  renderGoalPanel();
+  await api('/track', { method:'POST', body:{ type, delta } });
+  renderGoalPanel();
 }
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 function loadSettings() {
   document.getElementById('set-name').value = STATE.rep.name || '';
-  const t = targets();
+  const t = targets(), dt = dailyTargets();
   document.getElementById('set-t-dms').value = t.dms;
   document.getElementById('set-t-walkins').value = t.walkins;
   document.getElementById('set-t-demos').value = t.demos;
+  document.getElementById('set-d-dms').value = dt.dms;
+  document.getElementById('set-d-walkins').value = dt.walkins;
+  document.getElementById('set-d-demos').value = dt.demos;
   document.getElementById('pin-msg').textContent = '';
 }
 
@@ -1278,7 +1380,12 @@ async function saveTargets() {
     walkins: parseInt(document.getElementById('set-t-walkins').value)||5,
     demos:   parseInt(document.getElementById('set-t-demos').value)||5,
   };
-  await api('/settings', { method:'PATCH', body:{ weeklyTargets } });
+  const dailyTargets = {
+    dms:     parseInt(document.getElementById('set-d-dms').value)||10,
+    walkins: parseInt(document.getElementById('set-d-walkins').value)||1,
+    demos:   parseInt(document.getElementById('set-d-demos').value)||1,
+  };
+  await api('/settings', { method:'PATCH', body:{ weeklyTargets, dailyTargets } });
   flash('set-t-dms');
 }
 

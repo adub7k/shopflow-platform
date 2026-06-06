@@ -47,8 +47,14 @@ master.defaults({
     repName: 'Bryce Moen',
     leads: [],
     goals: [],
-    activity: { dms: 0, walkins: 0, demos: 0, weekStart: null },
-    settings: { weeklyTargets: { dms: 50, walkins: 5, demos: 5 } },
+    todos: [],                     // to-dos assigned by the owner from admin
+    activity: { dms: 0, walkins: 0, demos: 0, weekStart: null },  // current week totals
+    daily:    { date: null, dms: 0, walkins: 0, demos: 0 },       // today's totals (auto-reset)
+    settings: {
+      weeklyTargets: { dms: 50, walkins: 5, demos: 5 },
+      dailyTargets:  { dms: 10, walkins: 1, demos: 1 },
+      focusNote: '',               // owner-customizable banner on the rep's dashboard
+    },
     history: [],                   // weekly activity snapshots on reset
   },
 }).write();
