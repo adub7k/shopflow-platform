@@ -231,6 +231,12 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
 .activity-count{font-size:13px;color:var(--muted);}
 .activity-btns{display:flex;gap:6px;margin-top:8px;}
 
+/* ── Tappable snapshot cards ── */
+.stat-card.tap{cursor:pointer;transition:border-color .15s,transform .08s;}
+.stat-card.tap:hover{border-color:#cbd5e1;}
+.stat-card.tap:active{transform:scale(.98);}
+.tap-chev{color:var(--faint);font-weight:700;float:right;}
+
 /* ── Dashboard focus banner ── */
 .focus-banner{background:linear-gradient(135deg,#0a1f0a,#10300f);border:1px solid rgba(22,163,74,.35);border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;display:flex;gap:12px;align-items:flex-start;}
 .focus-banner-icon{font-size:18px;flex-shrink:0;line-height:1.3;}
@@ -349,14 +355,20 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
   <div id="focus-banner" class="focus-banner" style="display:none;"></div>
 
   <div class="stats-grid">
-    <div class="stat-card"><div class="stat-label">Closed Shops</div><div class="stat-value green" id="snap-closed">0</div><div class="stat-sub">paying clients</div></div>
-    <div class="stat-card"><div class="stat-label">Pipeline Value</div><div class="stat-value blue" id="snap-pipeval">$0</div><div class="stat-sub">weighted MRR</div></div>
-    <div class="stat-card"><div class="stat-label">Due Today</div><div class="stat-value" id="snap-due">0</div><div class="stat-sub">follow-ups</div></div>
-    <div class="stat-card"><div class="stat-label">Open To-Dos</div><div class="stat-value" id="snap-todos">0</div><div class="stat-sub">from HQ</div></div>
+    <div class="stat-card tap" onclick="openSnap('closed')"><div class="stat-label">Closed Shops <span class="tap-chev">›</span></div><div class="stat-value green" id="snap-closed">0</div><div class="stat-sub">paying clients</div></div>
+    <div class="stat-card tap" onclick="openSnap('pipeline')"><div class="stat-label">Pipeline Value <span class="tap-chev">›</span></div><div class="stat-value blue" id="snap-pipeval">$0</div><div class="stat-sub">weighted MRR</div></div>
+    <div class="stat-card tap" onclick="openSnap('due')"><div class="stat-label">Due Today <span class="tap-chev">›</span></div><div class="stat-value" id="snap-due">0</div><div class="stat-sub">follow-ups</div></div>
+    <div class="stat-card tap" onclick="openSnap('todos')"><div class="stat-label">Open To-Dos <span class="tap-chev">›</span></div><div class="stat-value" id="snap-todos">0</div><div class="stat-sub">from HQ</div></div>
   </div>
 
   <div class="section-header">
-    <div class="section-title">Activity Goals</div>
+    <div class="section-title">Goals</div>
+    <button class="btn btn-black btn-sm" onclick="openAddGoal()">+ Add Goal</button>
+  </div>
+  <div class="goals-grid" id="goals-list"></div>
+
+  <div class="section-header">
+    <div class="section-title">Activity Tracker</div>
     <div class="segmented">
       <button class="seg-btn active" id="gv-daily" onclick="setGoalView('daily')">Today</button>
       <button class="seg-btn" id="gv-weekly" onclick="setGoalView('weekly')">This Week</button>
@@ -680,12 +692,6 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
     <div id="todos-list"></div>
   </div>
 
-  <div class="section-header">
-    <div class="section-title">Personal Goals</div>
-    <button class="btn btn-black btn-sm" onclick="openAddGoal()">+ Add Goal</button>
-  </div>
-  <div class="goals-grid" id="goals-list"></div>
-
   <div class="card">
     <div class="card-title">Conversion Funnel — All Time</div>
     <div id="funnel"></div>
@@ -794,6 +800,11 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
 <!-- ── LEAD DETAIL MODAL ── -->
 <div class="modal-overlay" id="lead-detail-modal" onclick="if(event.target===this)closeModal('lead-detail-modal')">
   <div class="modal" id="lead-detail-content"></div>
+</div>
+
+<!-- ── SNAPSHOT DETAIL MODAL ── -->
+<div class="modal-overlay" id="snap-modal" onclick="if(event.target===this)closeModal('snap-modal')">
+  <div class="modal" id="snap-modal-content"></div>
 </div>
 
 <!-- ── ADD GOAL MODAL ── -->
@@ -910,7 +921,7 @@ function nav(tab) {
   if (tab === 'leads')     { renderLeads(); updateStats(); }
   if (tab === 'followups') renderFollowups();
   if (tab === 'vision')    renderVision();
-  if (tab === 'goals')     { renderTodos(); renderGoals(); renderFunnel(); renderHistory(); }
+  if (tab === 'goals')     { renderTodos(); renderFunnel(); renderHistory(); }
   if (tab === 'settings')  loadSettings();
 }
 
@@ -1309,7 +1320,68 @@ function renderDashboard() {
   document.getElementById('snap-due').textContent     = due;
   document.getElementById('snap-todos').textContent   = openTodos;
 
+  renderGoals();
   renderGoalPanel();
+}
+
+// Tap a snapshot card → see the leads/to-dos behind the number.
+function snapEmpty(t, s){ return `<div class="empty"><div class="empty-icon">📭</div><div class="empty-text">${t}</div><div class="empty-sub">${s}</div></div>`; }
+
+function openSnap(which) {
+  const all = leads();
+  const today = new Date(); today.setHours(0,0,0,0);
+  const row = (l, right) => `<div class="lead-row" onclick="closeModal('snap-modal');openLeadDetail('${l.id}')">
+      <div class="lead-avatar" style="background:${avatarColor(l.name)}">${inits(l.name)}</div>
+      <div class="lead-info"><div class="lead-name">${esc(l.name)}</div>
+        <div class="lead-meta">${esc(l.tool||'')}${l.city?' · '+esc(l.city):''}</div></div>
+      ${right || badgeHtml(l.status)}
+    </div>`;
+  let title = '', body = '';
+
+  if (which === 'closed') {
+    const items = all.filter(l => l.status==='closed');
+    const mrr = items.reduce((s,l)=>s+planVal(l),0);
+    title = `Closed Shops · ${items.length}`;
+    body = items.length
+      ? `<div style="font-size:13px;color:var(--muted);margin-bottom:12px;">$${mrr.toLocaleString()}/mo in closed MRR 🤙</div><div class="lead-list">${items.map(l=>row(l, `<span class="badge badge-green">$${planVal(l)}/mo</span>`)).join('')}</div>`
+      : snapEmpty('No closed shops yet', 'Close your first shop and it shows up here');
+  } else if (which === 'pipeline') {
+    const items = all.filter(l => ['contacted','responded','demo'].includes(l.status))
+                     .sort((a,b)=>(STAGE_PROB[b.status]||0)-(STAGE_PROB[a.status]||0));
+    const weighted = items.reduce((s,l)=>s+planVal(l)*(STAGE_PROB[l.status]||0),0);
+    title = 'Pipeline Value';
+    body = items.length
+      ? `<div style="font-size:13px;color:var(--muted);margin-bottom:12px;">$${Math.round(weighted).toLocaleString()} weighted · ${items.length} active lead${items.length!==1?'s':''}</div><div class="lead-list">${items.map(l=>row(l, `<div style="text-align:right;flex-shrink:0;">${badgeHtml(l.status)}<div style="font-size:11px;color:var(--faint);margin-top:3px;">$${planVal(l)}/mo</div></div>`)).join('')}</div>`
+      : snapEmpty('Pipeline is empty', 'Add some leads to build it up');
+  } else if (which === 'due') {
+    const items = all.filter(l => l.followup && !['closed','not-interested'].includes(l.status) && new Date(l.followup+'T00:00:00') <= today)
+                     .sort((a,b)=>new Date(a.followup)-new Date(b.followup));
+    title = `Follow-ups Due · ${items.length}`;
+    body = items.length
+      ? `<div class="lead-list">${items.map(l=>{
+          const diff = Math.floor((new Date(l.followup+'T12:00:00')-today)/86400000);
+          const lbl = diff<0 ? `Overdue ${Math.abs(diff)}d` : 'Today';
+          const col = diff<0 ? 'var(--red)' : 'var(--yellow)';
+          return row(l, `<div style="font-size:12px;font-weight:700;color:${col};flex-shrink:0;">${lbl}</div>`);
+        }).join('')}</div>`
+      : snapEmpty('Nothing due', 'All caught up 🤙');
+  } else if (which === 'todos') {
+    const items = (STATE.todos||[]).filter(t=>!t.done);
+    title = `Open To-Dos · ${items.length}`;
+    body = items.length
+      ? items.map(t=>`<div class="todo-row" onclick="snapToggleTodo('${t.id}')"><div class="todo-check"></div><div class="todo-body"><div class="todo-text">${esc(t.text)}</div>${t.due?`<div class="todo-due" style="color:var(--muted)">Due ${fmt(t.due)}</div>`:''}</div></div>`).join('')
+      : snapEmpty('No open to-dos', 'Nothing from HQ right now');
+  }
+
+  document.getElementById('snap-modal-content').innerHTML =
+    `<div class="modal-title">${title}</div>${body}<div class="modal-actions"><button class="btn btn-outline btn-full" onclick="closeModal('snap-modal')">Close</button></div>`;
+  openModal('snap-modal');
+}
+
+async function snapToggleTodo(id) {
+  await api(`/todos/${id}/toggle`, { method:'POST' });
+  renderDashboard();
+  openSnap('todos');
 }
 
 function setGoalView(v) {
