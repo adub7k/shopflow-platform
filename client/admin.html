@@ -378,7 +378,10 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
           <div class="page-title">Overview</div>
           <div class="page-sub" id="overview-date"></div>
         </div>
-        <button class="btn btn-outline btn-sm" onclick="refreshAll()">↻ Refresh</button>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <span id="overview-sms-status" style="font-size:12px;color:var(--muted);white-space:nowrap;"></span>
+          <button class="btn btn-outline btn-sm" onclick="refreshAll()">↻ Refresh</button>
+        </div>
       </div>
 
       <!-- Goal banner -->
@@ -804,6 +807,24 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 
       <div class="card" style="max-width:560px;">
         <div class="card-header">
+          <div><div class="card-title">SMS / Twilio</div><div class="card-sub">One shared Twilio account powers SMS for every shop.</div></div>
+        </div>
+        <div style="padding:18px;">
+          <div id="sms-status-rows" style="font-size:13px;color:var(--muted);">Checking connection…</div>
+          <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px;">
+            <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:3px;">Send a test message</div>
+            <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Sends a real SMS from the shared number to confirm everything works end-to-end.</div>
+            <div style="display:flex;gap:8px;">
+              <input class="form-input" id="sms-test-to" placeholder="(555) 000-0000" style="flex:1;"/>
+              <button class="btn btn-green" id="sms-test-btn" onclick="sendTestSms()">Send Test</button>
+            </div>
+            <div id="sms-test-result" style="margin-top:10px;font-size:12px;color:var(--muted);display:none;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="max-width:560px;">
+        <div class="card-header">
           <div><div class="card-title">Demo Data</div><div class="card-sub">Seed a realistic demo shop for testing.</div></div>
         </div>
         <div style="padding:18px;">
@@ -937,6 +958,20 @@ async function loadStats() {
     renderOverview(statsData);
     updateSidebarGoal(statsData);
   } catch(e) {}
+  loadOverviewSmsStatus();
+}
+
+async function loadOverviewSmsStatus() {
+  const el = document.getElementById('overview-sms-status');
+  if (!el) return;
+  try {
+    const res = await fetch('/api/admin/sms-status', { headers: { 'x-admin-key': adminKey } });
+    const d = await res.json();
+    const live = d.connected && d.defaultFrom;
+    el.innerHTML = live
+      ? `<span style="color:var(--green);">●</span> SMS active <span style="color:var(--muted);">· ${esc(d.defaultFrom)}</span>`
+      : `<span style="color:var(--red);">●</span> <span style="color:var(--yellow);">SMS not live</span> <a onclick="nav('settings')" style="cursor:pointer;text-decoration:underline;color:var(--muted);">set up</a>`;
+  } catch(e) { el.textContent = ''; }
 }
 
 function updateSidebarGoal(d) {
@@ -1917,6 +1952,58 @@ async function loadPlatformSettings() {
     if (toggle) toggle.checked = d.requirePayment !== false;
     updatePaymentGateStatus(d.requirePayment !== false);
   } catch(e) {}
+  loadSmsStatus();
+}
+
+async function loadSmsStatus() {
+  const el = document.getElementById('sms-status-rows');
+  if (!el) return;
+  const dot = ok => `<span style="color:${ok?'var(--green)':'var(--red)'};">●</span> `;
+  try {
+    const res = await fetch('/api/admin/sms-status', { headers: { 'x-admin-key': adminKey } });
+    const d = await res.json();
+    el.innerHTML = `
+      <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);">
+        <span>Connection</span>
+        <span>${d.connected ? dot(true)+'<strong style="color:var(--green);">Connected</strong>' : dot(false)+'<strong style="color:var(--red);">Not configured</strong>'}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);">
+        <span>Shared sending number</span>
+        <span style="font-family:monospace;color:var(--text);">${d.defaultFrom ? esc(d.defaultFrom) : '<span style="color:var(--red);">none set</span>'}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:7px 0;">
+        <span>Shops with SMS active</span>
+        <span style="color:var(--text);">${d.smsActiveShops} / ${d.totalShops}</span>
+      </div>
+      ${d.connected && d.defaultFrom ? '' : '<div style="margin-top:12px;font-size:12px;color:var(--muted);">Add <code>TWILIO_ACCOUNT_SID</code>, <code>TWILIO_AUTH_TOKEN</code>, and <code>TWILIO_FROM_NUMBER</code> in Railway → Variables, then redeploy to activate SMS for all shops.</div>'}
+    `;
+  } catch(e) { el.textContent = 'Could not load SMS status.'; }
+}
+
+async function sendTestSms() {
+  const btn = document.getElementById('sms-test-btn');
+  const out = document.getElementById('sms-test-result');
+  const to  = document.getElementById('sms-test-to').value.trim();
+  if (!to) return;
+  btn.textContent = 'Sending…'; btn.disabled = true; out.style.display = 'none';
+  try {
+    const res = await fetch('/api/admin/sms-test', {
+      method: 'POST',
+      headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to }),
+    });
+    const d = await res.json();
+    out.style.display = 'block';
+    if (d.ok) {
+      out.innerHTML = `✅ <strong style="color:var(--green);">Sent!</strong> <span style="color:var(--muted);">Twilio SID ${esc(d.sid)}</span>`;
+      toast('Test SMS sent ✓');
+    } else {
+      out.innerHTML = `❌ <span style="color:var(--red);">${esc(d.error)}</span>`;
+    }
+  } catch(e) {
+    out.style.display = 'block';
+    out.innerHTML = `❌ <span style="color:var(--red);">Request failed.</span>`;
+  } finally { btn.textContent = 'Send Test'; btn.disabled = false; }
 }
 async function saveRequirePayment(value) {
   try {

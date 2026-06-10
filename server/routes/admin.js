@@ -400,6 +400,38 @@ router.patch('/api/admin/platform-settings', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
+// ── ADMIN: SMS / Twilio status (shared account, all shops) ───────────────────
+router.get('/api/admin/sms-status', requireAdmin, (req, res) => {
+  const shops = master.get('shops').value() || [];
+  let smsActiveShops = 0;
+  shops.forEach(s => { if (twilioClient && shopFromNumber(s.id)) smsActiveShops++; });
+  res.json({
+    connected:      !!twilioClient,
+    defaultFrom:    TWILIO_DEFAULT_FROM || null,
+    totalShops:     shops.length,
+    smsActiveShops,
+  });
+});
+
+// ── ADMIN: send a test SMS through the shared Twilio account ──────────────────
+router.post('/api/admin/sms-test', requireAdmin, async (req, res) => {
+  if (!twilioClient)        return res.json({ ok: false, error: 'Twilio not connected — add TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN in Railway, then redeploy.' });
+  if (!TWILIO_DEFAULT_FROM) return res.json({ ok: false, error: 'No sending number — add TWILIO_FROM_NUMBER in Railway, then redeploy.' });
+  let digits = String(req.body.to || '').replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1);
+  if (digits.length !== 10) return res.json({ ok: false, error: 'Enter a valid 10-digit US phone number.' });
+  try {
+    const msg = await twilioClient.messages.create({
+      from: TWILIO_DEFAULT_FROM,
+      to:   '+1' + digits,
+      body: 'ShopFlow test ✅ Your SMS is live and sending correctly.',
+    });
+    res.json({ ok: true, sid: msg.sid });
+  } catch (e) {
+    res.json({ ok: false, error: e.message });
+  }
+});
+
 // ── ADMIN: demos ─────────────────────────────────────────────────────────────
 router.get('/api/admin/demos', requireAdmin, (req, res) => {
   res.json(master.get('demos').value().sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time)));
