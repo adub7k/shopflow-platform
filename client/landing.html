@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>ShopFlow — The CRM Built for Barbershops</title>
+<title>ShopFlow — The CRM Built for Barbershops, Detail Shops & Nail Studios</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -31,7 +31,7 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
 .hero::after{content:'';position:absolute;bottom:-100px;right:-100px;width:400px;height:400px;background:radial-gradient(circle,rgba(22,163,74,.08) 0%,transparent 70%);pointer-events:none;}
 
 .hero-eyebrow{display:inline-flex;align-items:center;gap:8px;background:rgba(22,163,74,.12);border:1px solid rgba(22,163,74,.25);border-radius:100px;padding:7px 16px;font-size:12px;font-weight:700;color:var(--green-bright);letter-spacing:.04em;text-transform:uppercase;margin-bottom:32px;}
-.hero-eyebrow span{width:6px;height:6px;background:var(--green-bright);border-radius:50%;display:inline-block;animation:pulse 2s infinite;}
+.hero-eyebrow .dot{width:6px;height:6px;background:var(--green-bright);border-radius:50%;display:inline-block;animation:pulse 2s infinite;}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
 
 .hero-title{font-size:72px;font-weight:900;letter-spacing:-.05em;line-height:1;margin-bottom:12px;color:#fff;}
@@ -46,6 +46,16 @@ nav{position:fixed;top:0;left:0;right:0;z-index:100;display:flex;align-items:cen
 .btn-ghost{background:rgba(255,255,255,.07);color:rgba(255,255,255,.8);padding:16px 36px;border-radius:100px;font-size:16px;font-weight:600;text-decoration:none;border:1px solid rgba(255,255,255,.12);transition:all .2s;}
 .btn-ghost:hover{background:rgba(255,255,255,.12);color:#fff;}
 
+/* ── Trade switcher ── */
+.trade-tabs{display:inline-flex;gap:4px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:100px;padding:5px;margin-bottom:28px;position:relative;z-index:2;}
+.trade-tab{appearance:none;background:transparent;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:700;color:rgba(255,255,255,.5);padding:8px 18px;border-radius:100px;transition:color .2s,background .2s;letter-spacing:-.01em;}
+.trade-tab:hover{color:rgba(255,255,255,.8);}
+.trade-tab.active{background:var(--green);color:#fff;box-shadow:0 0 20px rgba(22,163,74,.4);}
+[data-trade]{transition:opacity .25s ease;}
+@media(max-width:768px){
+  .trade-tabs{display:flex;width:100%;justify-content:center;}
+  .trade-tab{padding:8px 12px;font-size:12px;}
+}
 /* ── Competitor bar ── */
 .vs-bar{display:flex;align-items:center;justify-content:center;gap:0;border:1px solid rgba(255,255,255,.1);border-radius:16px;overflow:hidden;max-width:600px;margin:0 auto;}
 .vs-item{flex:1;padding:14px 16px;text-align:center;border-right:1px solid rgba(255,255,255,.08);}
@@ -185,12 +195,17 @@ footer{background:#080808;border-top:1px solid #141414;padding:32px 40px;display
 
 <!-- Hero -->
 <div class="hero">
-  <div class="hero-eyebrow"><span></span> Built for Barbershops</div>
-  <div class="hero-title">
-    Run your shop.<br/>
-    <span class="green line2">Not your software.</span>
+  <div class="trade-tabs" role="tablist" aria-label="Choose your trade">
+    <button class="trade-tab active" data-trade-tab="barbershop" onclick="setTrade('barbershop')">Barbershops</button>
+    <button class="trade-tab" data-trade-tab="detail" onclick="setTrade('detail')">Detailers</button>
+    <button class="trade-tab" data-trade-tab="nails" onclick="setTrade('nails')">Nail Studios</button>
   </div>
-  <div class="hero-sub">Online booking, automated reminders, client tracking, and revenue dashboards — all in one app your whole team will actually use.</div>
+  <div class="hero-eyebrow"><span class="dot"></span> <span id="t-eyebrow">Built for Barbershops</span></div>
+  <div class="hero-title">
+    <span id="t-hero-line1">Run your shop.</span><br/>
+    <span class="green line2" id="t-hero-line2">Not your software.</span>
+  </div>
+  <div class="hero-sub" id="t-hero-sub">Online booking, automated reminders, client tracking, and revenue dashboards — all in one app your whole team will actually use.</div>
   <div class="hero-btns">
     <a class="btn-green" href="/signup">Start free today →</a>
     <a class="btn-ghost" href="#pricing">See pricing</a>
@@ -211,7 +226,7 @@ footer{background:#080808;border-top:1px solid #141414;padding:32px 40px;display
     <div class="vs-item ours">
       <div class="vs-name">ShopFlow</div>
       <div class="vs-price">$20</div>
-      <div class="vs-label">built for barbers</div>
+      <div class="vs-label" id="t-vs-label">built for barbers</div>
     </div>
     <div class="vs-item">
       <div class="vs-name">Bookedin</div>
@@ -226,7 +241,7 @@ footer{background:#080808;border-top:1px solid #141414;padding:32px 40px;display
   <div class="stats-inner">
     <div class="stat-item">
       <div class="stat-num"><span>100%</span></div>
-      <div class="stat-label">Built for barbershops</div>
+      <div class="stat-label" id="t-stat-built">Built for barbershops</div>
     </div>
     <div class="stat-item">
       <div class="stat-num"><span>2</span> min</div>
@@ -247,8 +262,8 @@ footer{background:#080808;border-top:1px solid #141414;padding:32px 40px;display
 <div class="features" id="features">
   <div class="features-inner">
     <div class="section-label">Everything you need</div>
-    <div class="section-title">Built for the chair.<br/>Not the office.</div>
-    <div class="section-sub">Everything a barber shop needs to run like a real business — without the complexity.</div>
+    <div class="section-title" id="t-feat-title">Built for the chair.<br/>Not the office.</div>
+    <div class="section-sub" id="t-feat-sub">Everything a barber shop needs to run like a real business — without the complexity.</div>
     <div class="features-grid">
       <div class="feature-card">
         <div class="feature-icon-wrap">📅</div>
@@ -258,7 +273,7 @@ footer{background:#080808;border-top:1px solid #141414;padding:32px 40px;display
       <div class="feature-card">
         <div class="feature-icon-wrap">👤</div>
         <div class="feature-name">Client Profiles</div>
-        <div class="feature-desc">Every client gets a full profile — visit history, cut notes, spending, loyalty points, no-shows.</div>
+        <div class="feature-desc" id="t-client-desc">Every client gets a full profile — visit history, cut notes, spending, loyalty points, no-shows.</div>
       </div>
       <div class="feature-card">
         <div class="feature-icon-wrap">💬</div>
@@ -268,7 +283,7 @@ footer{background:#080808;border-top:1px solid #141414;padding:32px 40px;display
       <div class="feature-card">
         <div class="feature-icon-wrap">📈</div>
         <div class="feature-name">Revenue Dashboard</div>
-        <div class="feature-desc">See revenue by barber, by service, by month. Know exactly what your shop is doing.</div>
+        <div class="feature-desc" id="t-rev-desc">See revenue by barber, by service, by month. Know exactly what your shop is doing.</div>
       </div>
       <div class="feature-card">
         <div class="feature-icon-wrap">🔁</div>
@@ -297,15 +312,15 @@ footer{background:#080808;border-top:1px solid #141414;padding:32px 40px;display
         </div>
         <div class="why-item">
           <div class="why-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
-          <div class="why-item-text"><strong>Works like an app, installs like a link</strong><span>Barbers add it to their home screen. Clients book from a link you text them. No downloads.</span></div>
+          <div class="why-item-text"><strong>Works like an app, installs like a link</strong><span id="t-why-home">Barbers add it to their home screen. Clients book from a link you text them. No downloads.</span></div>
         </div>
         <div class="why-item">
           <div class="why-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
-          <div class="why-item-text"><strong>Built only for barbershops</strong><span>Not a generic booking app that's also for nail salons and dog groomers. Every feature is made for the chair.</span></div>
+          <div class="why-item-text"><strong id="t-why-focus-title">Speaks your trade's language</strong><span id="t-why-focus-desc">Barbershop, detail shop, or nail studio — the whole app relabels itself. Chairs, bays, or stations; cuts, details, or sets. Not a generic one-size-fits-all booking app.</span></div>
         </div>
         <div class="why-item">
           <div class="why-check"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
-          <div class="why-item-text"><strong>Set up in 2 minutes</strong><span>Add your barbers, connect your booking link, done. No training required.</span></div>
+          <div class="why-item-text"><strong>Set up in 2 minutes</strong><span id="t-why-setup">Add your barbers, connect your booking link, done. No training required.</span></div>
         </div>
       </div>
     </div>
@@ -313,33 +328,35 @@ footer{background:#080808;border-top:1px solid #141414;padding:32px 40px;display
     <div class="why-visual">
       <div class="mock-header">
         <div class="mock-dot"></div>
-        <div class="mock-title">King's Cuts · Dashboard</div>
+        <div class="mock-title" id="mock-title">King's Cuts · Dashboard</div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px;">
         <div class="mock-stat">
           <div class="mock-stat-label">Revenue MTD</div>
-          <div class="mock-stat-val">$4,280</div>
+          <div class="mock-stat-val" id="mock-rev">$4,280</div>
         </div>
         <div class="mock-stat">
           <div class="mock-stat-label">Avg Ticket</div>
-          <div class="mock-stat-val">$42</div>
+          <div class="mock-stat-val" id="mock-avg">$42</div>
         </div>
       </div>
       <div style="font-size:11px;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Today's Appointments</div>
-      <div class="mock-row">
-        <div class="mock-avatar"></div>
-        <div><div class="mock-name">Jordan Rivera</div><div class="mock-time">9:00 AM · Skin Fade · Marcus</div></div>
-        <div class="mock-badge">9 AM</div>
-      </div>
-      <div class="mock-row">
-        <div class="mock-avatar" style="background:rgba(37,99,235,.2);"></div>
-        <div><div class="mock-name">Kevin James</div><div class="mock-time">10:00 AM · Haircut · Dre</div></div>
-        <div class="mock-badge">10 AM</div>
-      </div>
-      <div class="mock-row">
-        <div class="mock-avatar" style="background:rgba(217,119,6,.2);"></div>
-        <div><div class="mock-name">DeShawn Carter</div><div class="mock-time">11:30 AM · Cut + Beard · Tony</div></div>
-        <div class="mock-badge">11:30</div>
+      <div id="mock-rows">
+        <div class="mock-row">
+          <div class="mock-avatar"></div>
+          <div><div class="mock-name">Jordan Rivera</div><div class="mock-time">9:00 AM · Skin Fade · Marcus</div></div>
+          <div class="mock-badge">9 AM</div>
+        </div>
+        <div class="mock-row">
+          <div class="mock-avatar" style="background:rgba(37,99,235,.2);"></div>
+          <div><div class="mock-name">Kevin James</div><div class="mock-time">10:00 AM · Haircut · Dre</div></div>
+          <div class="mock-badge">10 AM</div>
+        </div>
+        <div class="mock-row">
+          <div class="mock-avatar" style="background:rgba(217,119,6,.2);"></div>
+          <div><div class="mock-name">DeShawn Carter</div><div class="mock-time">11:30 AM · Cut + Beard · Tony</div></div>
+          <div class="mock-badge">11:30</div>
+        </div>
       </div>
     </div>
   </div>
@@ -358,7 +375,7 @@ footer{background:#080808;border-top:1px solid #141414;padding:32px 40px;display
         <div class="pricing-period">per month</div>
         <hr class="pricing-divider"/>
         <div class="pricing-feature">Online booking page</div>
-        <div class="pricing-feature">Up to 2 barbers</div>
+        <div class="pricing-feature" id="t-price-staff-2">Up to 2 barbers</div>
         <div class="pricing-feature">Client profiles</div>
         <div class="pricing-feature">Revenue tracking</div>
         <div class="pricing-feature">Loyalty program</div>
@@ -370,7 +387,7 @@ footer{background:#080808;border-top:1px solid #141414;padding:32px 40px;display
         <div class="pricing-period">per month</div>
         <hr class="pricing-divider"/>
         <div class="pricing-feature">Everything in Starter</div>
-        <div class="pricing-feature">Unlimited barbers</div>
+        <div class="pricing-feature" id="t-price-staff-unl">Unlimited barbers</div>
         <div class="pricing-feature">SMS automation</div>
         <div class="pricing-feature">Deposit collection</div>
         <div class="pricing-feature">Priority support</div>
@@ -389,14 +406,14 @@ footer{background:#080808;border-top:1px solid #141414;padding:32px 40px;display
         <a class="pricing-btn pricing-btn-outline" href="/signup?plan=shop">Get started →</a>
       </div>
     </div>
-    <div class="no-fees">✓ Built only for barbershops · No contracts</div>
+    <div class="no-fees"><span id="t-nofees">✓ Built for barbershops, detail shops & nail studios</span> · No contracts</div>
   </div>
 </div>
 
 <!-- CTA -->
 <div class="cta">
   <div class="cta-title">Ready to run your shop<br/><span class="green">the right way?</span></div>
-  <div class="cta-sub">Join barbershops already using ShopFlow to automate their business.</div>
+  <div class="cta-sub" id="t-cta-sub">Join barbershops already using ShopFlow to automate their business.</div>
   <a class="btn-green" href="/signup" style="display:inline-block;">Start free today →</a>
   <div class="cta-note">14-day free trial · Set up in 2 minutes</div>
 </div>
@@ -412,6 +429,133 @@ footer{background:#080808;border-top:1px solid #141414;padding:32px 40px;display
 </footer>
 
 <script>
+// ── Trade switcher ────────────────────────────────────────────────────────────
+// Mirrors the server-side industry profiles (server/industries.js): one landing
+// page, copy + mockup relabel per trade. Keep keys in sync with INDUSTRIES.
+const TRADES = {
+  barbershop: {
+    eyebrow: 'Built for Barbershops',
+    line1: 'Run your shop.', line2: 'Not your software.',
+    sub: 'Online booking, automated reminders, client tracking, and revenue dashboards — all in one app your whole team will actually use.',
+    vsLabel: 'built for barbers',
+    statBuilt: 'Built for barbershops',
+    featTitle: 'Built for the chair.<br/>Not the office.',
+    featSub: 'Everything a barbershop needs to run like a real business — without the complexity.',
+    clientDesc: 'Every client gets a full profile — visit history, cut notes, spending, loyalty points, no-shows.',
+    revDesc: 'See revenue by barber, by service, by month. Know exactly what your shop is doing.',
+    whyHome: 'Barbers add it to their home screen. Clients book from a link you text them. No downloads.',
+    whySetup: 'Add your barbers, connect your booking link, done. No training required.',
+    priceStaff2: 'Up to 2 barbers',
+    priceStaffUnl: 'Unlimited barbers',
+    nofees: '✓ Built for barbershops, detail shops & nail studios',
+    ctaSub: 'Join barbershops already using ShopFlow to automate their business.',
+    mock: {
+      title: "King's Cuts · Dashboard", rev: '$4,280', avg: '$42',
+      rows: [
+        { name: 'Jordan Rivera',  meta: '9:00 AM · Skin Fade · Marcus', badge: '9 AM',  av: 'rgba(22,163,74,.2)' },
+        { name: 'Kevin James',    meta: '10:00 AM · Haircut · Dre',      badge: '10 AM', av: 'rgba(37,99,235,.2)' },
+        { name: 'DeShawn Carter', meta: '11:30 AM · Cut + Beard · Tony', badge: '11:30', av: 'rgba(217,119,6,.2)' },
+      ],
+    },
+  },
+  detail: {
+    eyebrow: 'Built for Detail Shops',
+    line1: 'Run your bay.', line2: 'Not your software.',
+    sub: 'Online booking, deposits, vehicle tracking, and revenue dashboards — all in one app your whole crew will actually use.',
+    vsLabel: 'built for detailers',
+    statBuilt: 'Built for detail shops',
+    featTitle: 'Built for the bay.<br/>Not the office.',
+    featSub: 'Everything a detail shop needs to run like a real business — without the complexity.',
+    clientDesc: 'Every customer gets a full profile — vehicles, service history, notes, spending, loyalty points.',
+    revDesc: 'See revenue by technician, by service, by month. Know exactly what your shop is doing.',
+    whyHome: 'Techs add it to their home screen. Customers book from a link you text them. No downloads.',
+    whySetup: 'Add your bays and technicians, connect your booking link, done. No training required.',
+    priceStaff2: 'Up to 2 technicians',
+    priceStaffUnl: 'Unlimited technicians',
+    nofees: '✓ Built for detail shops, barbershops & nail studios',
+    ctaSub: 'Join detail shops already using ShopFlow to automate their business.',
+    mock: {
+      title: 'Mad Detailing · Dashboard', rev: '$11,640', avg: '$182',
+      rows: [
+        { name: 'Chris Tran · Tesla Model 3', meta: '9:00 AM · Ceramic Coating · Bay 1', badge: '9 AM',  av: 'rgba(22,163,74,.2)' },
+        { name: 'Mia Lopez · Ford F-150',     meta: '11:00 AM · Full Detail · Bay 2',     badge: '11 AM', av: 'rgba(37,99,235,.2)' },
+        { name: 'Andre Cole · BMW X5',        meta: '1:30 PM · Interior Detail · Bay 1',  badge: '1:30',  av: 'rgba(217,119,6,.2)' },
+      ],
+    },
+  },
+  nails: {
+    eyebrow: 'Built for Nail Studios',
+    line1: 'Run your studio.', line2: 'Not your software.',
+    sub: 'Online booking, automated reminders, client tracking, and revenue dashboards — all in one app your whole team will actually use.',
+    vsLabel: 'built for nail techs',
+    statBuilt: 'Built for nail studios',
+    featTitle: 'Built for the studio.<br/>Not the office.',
+    featSub: 'Everything a nail studio needs to run like a real business — without the complexity.',
+    clientDesc: 'Every client gets a full profile — visit history, service notes, spending, loyalty points, no-shows.',
+    revDesc: 'See revenue by nail tech, by service, by month. Know exactly what your studio is doing.',
+    whyHome: 'Nail techs add it to their home screen. Clients book from a link you text them. No downloads.',
+    whySetup: 'Add your nail techs, connect your booking link, done. No training required.',
+    priceStaff2: 'Up to 2 nail techs',
+    priceStaffUnl: 'Unlimited nail techs',
+    nofees: '✓ Built for nail studios, barbershops & detail shops',
+    ctaSub: 'Join nail studios already using ShopFlow to automate their business.',
+    mock: {
+      title: 'Polished Studio · Dashboard', rev: '$6,150', avg: '$58',
+      rows: [
+        { name: 'Sofia Reyes', meta: '9:30 AM · Full Set · Bella',     badge: '9:30',  av: 'rgba(22,163,74,.2)' },
+        { name: 'Hannah Kim',  meta: '11:00 AM · Gel Fill · Tara',     badge: '11 AM', av: 'rgba(37,99,235,.2)' },
+        { name: 'Priya Patel', meta: '2:00 PM · Mani + Pedi · Bella',  badge: '2 PM',  av: 'rgba(217,119,6,.2)' },
+      ],
+    },
+  },
+};
+
+function setText(id, val) { const el = document.getElementById(id); if (el) el.innerHTML = val; }
+
+function setTrade(key) {
+  const t = TRADES[key]; if (!t) return;
+  setText('t-eyebrow', t.eyebrow);
+  setText('t-hero-line1', t.line1);
+  setText('t-hero-line2', t.line2);
+  setText('t-hero-sub', t.sub);
+  setText('t-vs-label', t.vsLabel);
+  setText('t-stat-built', t.statBuilt);
+  setText('t-feat-title', t.featTitle);
+  setText('t-feat-sub', t.featSub);
+  setText('t-client-desc', t.clientDesc);
+  setText('t-rev-desc', t.revDesc);
+  setText('t-why-home', t.whyHome);
+  setText('t-why-setup', t.whySetup);
+  setText('t-price-staff-2', t.priceStaff2);
+  setText('t-price-staff-unl', t.priceStaffUnl);
+  setText('t-nofees', t.nofees);
+  setText('t-cta-sub', t.ctaSub);
+  // Mockup
+  setText('mock-title', t.mock.title);
+  setText('mock-rev', t.mock.rev);
+  setText('mock-avg', t.mock.avg);
+  const rowsEl = document.getElementById('mock-rows');
+  if (rowsEl) {
+    rowsEl.innerHTML = t.mock.rows.map(r => (
+      '<div class="mock-row">' +
+        '<div class="mock-avatar" style="background:' + r.av + ';"></div>' +
+        '<div><div class="mock-name">' + r.name + '</div><div class="mock-time">' + r.meta + '</div></div>' +
+        '<div class="mock-badge">' + r.badge + '</div>' +
+      '</div>'
+    )).join('');
+  }
+  // Active tab + remember choice
+  document.querySelectorAll('[data-trade-tab]').forEach(b =>
+    b.classList.toggle('active', b.dataset.tradeTab === key));
+  try { localStorage.setItem('sf_landing_trade', key); } catch(e) {}
+}
+
+// Restore last-viewed trade (defaults to barbershop)
+try {
+  const saved = localStorage.getItem('sf_landing_trade');
+  if (saved && TRADES[saved] && saved !== 'barbershop') setTrade(saved);
+} catch(e) {}
+
 // Redirect logged-in users to their CRM
 const token = localStorage.getItem('sf_token');
 const slug  = localStorage.getItem('sf_shopSlug');
