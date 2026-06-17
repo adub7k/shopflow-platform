@@ -3,6 +3,12 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb } = require('../db');
 
+// ── PUBLIC: Industry list (for the signup business-type picker) ──────────────
+router.get('/api/industries', (req, res) => {
+  const { INDUSTRIES } = require('../industries');
+  res.json(Object.entries(INDUSTRIES).map(([key, p]) => ({ key, label: p.label })));
+});
+
 // ── PUBLIC: Check slug availability ──────────────────────────────────────────
 router.get('/api/accounts/check-slug', (req, res) => {
   const { name } = req.query;
@@ -64,6 +70,10 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
       bookingMessage: s.bookingMessage || 'Book your appointment below!',
       accentColor: s.accentColor || '#16a34a',
       barbers, services, blockedDates,
+      // Industry profile bits the booking page needs to render correctly.
+      vocab: s.vocab || null,
+      customFields: s.customFields || [],
+      statuses: s.statuses || [],
       deposit: { enabled: s.deposit?.enabled && stripeConnected, amount: s.deposit?.amount || 10, message: s.deposit?.message || '' },
       stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
       stripeAccountId: stripeConnected ? s.stripe.connectAccountId : '',
@@ -103,7 +113,10 @@ router.get('/api/public/:shopSlug/availability', (req, res) => {
     working = working.filter(b => (b.schedule?.workDays || [1,2,3,4,5,6]).includes(dow));
     if (!working.length) return res.json([]);
 
-    const appts = db.get('appointments').value().filter(a => a.date === date && (a.status === 'confirmed' || a.status === 'in-progress'));
+    const settings = db.get('settings').value() || {};
+    const occupying = (settings.statuses || []).filter(s => s.occupiesSlot).map(s => s.key);
+    const occupies = occupying.length ? occupying : ['confirmed', 'in-progress'];
+    const appts = db.get('appointments').value().filter(a => a.date === date && occupies.includes(a.status));
     const allSlots = new Set();
     working.forEach(b => {
       const sched = b.schedule || { startTime:'9:00 AM', endTime:'6:00 PM', slotMinutes:30 };
@@ -122,28 +135,45 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     const shop = master.get('shops').find({ slug: req.params.shopSlug, active: true }).value();
     if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
     const db = getShopDb(shop.id);
-    const { customerName, customerPhone, customerEmail, barberId, barberName, serviceId, serviceName, servicePrice, date, time, notes, status } = req.body;
+    const { customerName, customerPhone, customerEmail, barberId, barberName, serviceId, serviceName, servicePrice, date, time, notes, status, customFields } = req.body;
     if (!customerName || !customerPhone || !date || !time) return res.status(400).json({ ok: false, error: 'Missing required fields' });
+
+    // Enforce required custom fields for this vertical (e.g. detail-shop vehicle info).
+    const s0 = db.get('settings').value() || {};
+    const cf = customFields || {};
+    const missing = (s0.customFields || []).filter(f => f.required && !String(cf[f.key] || '').trim());
+    if (missing.length) return res.status(400).json({ ok: false, error: 'Missing required fields: ' + missing.map(f => f.label).join(', ') });
 
     const { getAll, getById, upsert } = shopHelpers(db);
     const svcFromDb = serviceId ? getAll('services').find(s => s.id === serviceId) : null;
     const price = svcFromDb ? Number(svcFromDb.price) : Number(servicePrice) || 35;
     const duration = svcFromDb ? Number(svcFromDb.duration) || 45 : 45;
 
+    // Build a vehicle record from custom fields (detail shops) for the customer's history.
+    const vehicle = (cf.vehicleYear || cf.vehicleMake || cf.vehicleModel)
+      ? { year: cf.vehicleYear || '', make: cf.vehicleMake || '', model: cf.vehicleModel || '', color: cf.vehicleColor || '' }
+      : null;
+    const sameVehicle = (a, b) => a && b && a.year === b.year && a.make === b.make && a.model === b.model;
+
     // Find or create customer
     const digits = (customerPhone || '').replace(/[^0-9]/g, '');
     let custId = null;
     if (digits.length >= 10) {
       const existing = getAll('customers').find(c => (c.phone || '').replace(/[^0-9]/g, '') === digits);
-      if (existing) { custId = existing.id; }
-      else {
+      if (existing) {
+        custId = existing.id;
+        if (vehicle && !(existing.vehicles || []).some(v => sameVehicle(v, vehicle))) {
+          existing.vehicles = [...(existing.vehicles || []), vehicle];
+          upsert('customers', existing);
+        }
+      } else {
         custId = genId('c');
-        upsert('customers', { id: custId, name: customerName, phone: customerPhone, email: customerEmail || '', source: 'booking-page', notes: '', loyaltyPoints: 0, noShows: 0, preferredBarberId: barberId || null, createdAt: today() });
+        upsert('customers', { id: custId, name: customerName, phone: customerPhone, email: customerEmail || '', source: 'booking-page', notes: '', loyaltyPoints: 0, noShows: 0, preferredBarberId: barberId || null, isFleet: false, companyName: '', vehicles: vehicle ? [vehicle] : [], createdAt: today() });
       }
     }
 
     const apptId = genId('a');
-    const appt = { id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '', barberId: barberId || null, barberName: barberName || null, serviceId: serviceId || null, service: serviceName || 'Appointment', price, duration, date, time, status: status === 'pending-deposit' ? 'pending-deposit' : 'confirmed', notes: notes || '', source: 'booking-page', createdAt: new Date().toISOString() };
+    const appt = { id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '', barberId: barberId || null, barberName: barberName || null, serviceId: serviceId || null, service: serviceName || 'Appointment', price, duration, date, time, status: status === 'pending-deposit' ? 'pending-deposit' : 'confirmed', notes: notes || '', customFields: cf, source: 'booking-page', createdAt: new Date().toISOString() };
     upsert('appointments', appt);
 
     // Send confirmation SMS via platform Twilio account

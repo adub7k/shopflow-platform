@@ -3,12 +3,11 @@ const Auth = {
   getToken: () => localStorage.getItem('sf_token'),
   getShopSlug: () => localStorage.getItem('sf_shopSlug'),
   getShopName: () => localStorage.getItem('sf_shopName'),
+  getRole: () => localStorage.getItem('sf_role') || 'full',
+  getName: () => localStorage.getItem('sf_name') || '',
   isLoggedIn: () => !!localStorage.getItem('sf_token'),
   logout: () => {
-    localStorage.removeItem('sf_token');
-    localStorage.removeItem('sf_shopId');
-    localStorage.removeItem('sf_shopSlug');
-    localStorage.removeItem('sf_shopName');
+    ['sf_token','sf_shopId','sf_shopSlug','sf_shopName','sf_role','sf_name'].forEach(k => localStorage.removeItem(k));
     window.location.href = '/login';
   }
 };
@@ -44,4 +43,5 @@ const db = {
   blockedDates:  { all: () => apiFetch('/blocked-dates'), block: (date,reason) => apiFetch('/blocked-dates',{method:'POST',body:{date,reason}}), unblock: (date) => apiFetch('/blocked-dates/'+date,{method:'DELETE'}) },
   checkout:      { cash: (o) => apiFetch('/checkout/cash',{method:'POST',body:o}), session: (o) => apiFetch('/checkout/session',{method:'POST',body:o}), verify: (sid,aid) => apiFetch('/checkout/verify/'+sid+'?apptId='+aid) },
   stripe:        { status: () => apiFetch('/stripe/connect/status'), onboard: () => apiFetch('/stripe/connect/onboard',{method:'POST'}), disconnect: () => apiFetch('/stripe/connect/disconnect',{method:'POST'}) },
+  staff:         { all: () => apiFetch('/staff'), save: (u) => apiFetch('/staff',{method:'POST',body:u}), delete: (id) => apiFetch('/staff/'+id,{method:'DELETE'}) },
 };

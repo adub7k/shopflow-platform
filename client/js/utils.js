@@ -1,4 +1,16 @@
 // ── Utilities ─────────────────────────────────────────────────────────────────
+
+// Global shop profile (vocabulary, custom fields, statuses) — populated at boot
+// from db.settings.get(). Falls back to barbershop terms if a shop has none.
+const Shop = { settings:{}, vocab:{}, fields:[], statuses:[] };
+function V(key, fb){ return (Shop.vocab && Shop.vocab[key]) || fb; }
+function statusMeta(key){ return (Shop.statuses||[]).find(s=>s.key===key) || null; }
+function statusLabel(key){
+  const m = statusMeta(key);
+  if (m) return m.label;
+  return ({'pending-deposit':'deposit pending','no-show':'no show','in-progress':'in progress'})[key] || key;
+}
+
 const genId = (p='x') => p+Date.now().toString(36)+Math.random().toString(36).slice(2,4);
 const today = () => new Date().toISOString().split('T')[0];
 const fmtMoney = (n) => '$'+(Number(n)||0).toFixed(2).replace(/\.00$/,'').replace(/\B(?=(\d{3})+(?!\d))/g,',');
@@ -7,7 +19,7 @@ const fmtDateFull = (d) => { if(!d)return '—'; const dt=new Date(d+'T12:00:00'
 const initials = (name) => (name||'?').split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
 const avatarColor = (name) => { const colors=['#16a34a','#2563eb','#d97706','#7c3aed','#dc2626','#0891b2']; let h=0; for(const c of (name||'?'))h=c.charCodeAt(0)+((h<<5)-h); return colors[Math.abs(h)%colors.length]; };
 const avatarEl = (name, size=36) => `<div class="avatar" style="width:${size}px;height:${size}px;background:${avatarColor(name)};">${initials(name)}</div>`;
-const statusBadge = (s) => { const m={confirmed:'badge-green',done:'badge-blue','in-progress':'badge-yellow',cancelled:'badge-red','no-show':'badge-red',pending:'badge-gray','pending-deposit':'badge-yellow'}; const labels={'pending-deposit':'deposit pending','no-show':'no show','in-progress':'in progress'}; return `<span class="badge ${m[s]||'badge-gray'}">${labels[s]||s}</span>`; };
+const statusBadge = (s) => { const m={confirmed:'badge-green',done:'badge-blue','in-progress':'badge-yellow',cancelled:'badge-red','no-show':'badge-red',pending:'badge-gray','pending-deposit':'badge-yellow','dropped-off':'badge-yellow',curing:'badge-yellow',ready:'badge-green'}; return `<span class="badge ${m[s]||'badge-gray'}">${statusLabel(s)}</span>`; };
 const disableBtn = (btn) => { if(btn){btn.disabled=true;btn._txt=btn.innerHTML;btn.innerHTML='<span style="opacity:.5">Saving...</span>';} };
 const enableBtn  = (btn) => { if(btn){btn.disabled=false;btn.innerHTML=btn._txt||btn.innerHTML;} };
 

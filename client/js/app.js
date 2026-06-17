@@ -2,10 +2,31 @@
 function toggleSidebar(){document.body.classList.toggle('sidebar-open');}
 function closeSidebar(){document.body.classList.remove('sidebar-open');}
 
+// ── Role-based page permissions ───────────────────────────────────────────────
+// full = owner/full access · technician = appts + clients · viewonly = calendar only
+const ROLE_PAGES = {
+  full:       ['dashboard','messages','appointments','clients','revenue','automations','settings'],
+  technician: ['dashboard','messages','appointments','clients'],
+  viewonly:   ['appointments'],
+};
+function allowedPages(){ return ROLE_PAGES[Auth.getRole()] || ROLE_PAGES.full; }
+function canSee(page){ return allowedPages().includes(page); }
+function canWrite(){ return Auth.getRole() !== 'viewonly'; } // view-only = read-only calendar
+function canSeeClients(){ return canSee('clients'); }        // view-only can't open client profiles
+function applyRoleNav(){
+  const allow = allowedPages();
+  document.querySelectorAll('.nav-item,.bottom-nav-item').forEach(el=>{
+    const p = el.dataset.page;
+    if (p && !allow.includes(p)) el.style.display = 'none';
+  });
+}
+
 // ── ShopFlow Starter App ──────────────────────────────────────────────────────
 const App = {
   _page: 'dashboard',
   nav(page) {
+    // Block navigation to pages the current role can't access
+    if (!canSee(page)) { page = allowedPages()[0]; }
     this._page = page;
     // Close message thread when navigating away
     if (page !== 'messages') Messages._currentThread = null;
@@ -32,14 +53,16 @@ const App = {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   try {
-    // Load settings
+    // Load settings + industry profile (vocabulary, custom fields, statuses)
     const s = await db.settings.get();
+    Shop.settings = s; Shop.vocab = s.vocab||{}; Shop.fields = s.customFields||[]; Shop.statuses = s.statuses||[];
     const tt=document.getElementById('topbar-title'); if(tt)tt.textContent=s.shopName||'ShopFlow';
     const sn=document.getElementById('sidebar-shop-name'); if(sn&&s.shopName)sn.textContent=s.shopName;
     const ts=document.getElementById('topbar-sub');   if(ts&&s.tagline)ts.textContent=s.tagline;
 
-    // Boot dashboard
-    await Dashboard.render();
+    // Role-based navigation — hide disallowed tabs and land on the first allowed page
+    applyRoleNav();
+    await App.nav(canSee('dashboard') ? 'dashboard' : allowedPages()[0]);
 
     // Load unread badge in background
     db.conversations.all().then(threads => Messages.updateBadge(threads)).catch(()=>{});

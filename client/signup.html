@@ -52,6 +52,11 @@ h1{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margi
     <div class="slug-preview" id="slug-preview"></div>
   </div>
   <div class="field">
+    <label>Business type *</label>
+    <select id="industry"><option value="barbershop">Barbershop</option></select>
+    <div style="font-size:12px;color:var(--faint);margin-top:5px;">This sets your terminology and default services — you can fine-tune everything later.</div>
+  </div>
+  <div class="field">
     <label>Your email *</label>
     <input id="email" type="email" placeholder="you@yourshop.com" />
   </div>
@@ -108,6 +113,21 @@ const planLabels = { starter: 'Starter Plan', pro: 'Pro Plan', shop: 'Shop Plan'
   }
 })();
 
+// ── Load business types from the server (stays in sync with industries.js) ────
+(async function loadIndustries() {
+  const sel = document.getElementById('industry');
+  const fallback = '<option value="barbershop">Barbershop</option><option value="detail">Detail Shop</option><option value="nails">Nail Studio</option>';
+  try {
+    const list = await fetch('/api/industries').then(r => r.json());
+    if (Array.isArray(list) && list.length) {
+      sel.innerHTML = list.map(i => `<option value="${i.key}">${i.label}</option>`).join('');
+    } else { sel.innerHTML = fallback; }
+  } catch(e) { sel.innerHTML = fallback; }
+  // Allow the marketing site to preselect a type via ?industry=detail
+  const pre = new URLSearchParams(location.search).get('industry');
+  if (pre && [...sel.options].some(o => o.value === pre)) sel.value = pre;
+})();
+
 async function updateSlug() {
   const name = document.getElementById('shopName').value;
   if (name.length < 2) { document.getElementById('slug-preview').textContent = ''; return; }
@@ -125,6 +145,7 @@ async function signup() {
   const email    = document.getElementById('email').value.trim();
   const password = document.getElementById('password').value;
   const phone    = document.getElementById('phone').value.trim();
+  const industry  = document.getElementById('industry').value;
   const plan      = document.getElementById('plan').value;
   const sessionId = document.getElementById('sessionId').value;
   const errEl     = document.getElementById('err');
@@ -140,7 +161,7 @@ async function signup() {
   try {
     const res = await fetch('/api/accounts/signup', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ shopName, email, password, phone, plan, sessionId })
+      body: JSON.stringify({ shopName, email, password, phone, industry, plan, sessionId })
     });
     const data = await res.json();
     if (data.ok) {
@@ -148,6 +169,8 @@ async function signup() {
       localStorage.setItem('sf_shopId', data.shopId);
       localStorage.setItem('sf_shopSlug', data.shopSlug);
       localStorage.setItem('sf_shopName', data.shopName);
+      localStorage.setItem('sf_role', data.role || 'full');
+      localStorage.setItem('sf_name', data.name || '');
       window.location.href = data.crmUrl;
     } else {
       errEl.textContent = data.error || 'Signup failed. Please try again.';

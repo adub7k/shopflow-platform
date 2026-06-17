@@ -1,12 +1,12 @@
 // ── Settings ──────────────────────────────────────────────────────────────────
 const Settings = {
-  _barbers: [], _services: [],
+  _barbers: [], _services: [], _staff: [],
 
   async render() {
     const el=document.getElementById('page-settings'); if(!el)return;
     try{
-      const [s,barbers,services]=await Promise.all([db.settings.get(),db.barbers.all(),db.services.all()]);
-      this._barbers=barbers; this._services=services;
+      const [s,barbers,services,staff]=await Promise.all([db.settings.get(),db.barbers.all(),db.services.all(),db.staff.all().catch(()=>[])]);
+      this._barbers=barbers; this._services=services; this._staff=staff;
       const html=[];
 
       // Shop info
@@ -30,13 +30,27 @@ const Settings = {
       html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-benabled" ${s.bookingEnabled!==false?'checked':''} style="margin-right:6px;" /> Booking page enabled</label></div>`);
       html.push('</div>');
 
-      // Barbers
-      html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Barbers</span><button class="btn btn-sm btn-green" onclick="Settings.openBarber(null)">+ Add</button></div>');
+      // Barbers (labelled per industry vocabulary)
+      html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>'+esc(V('staffPlural','Barbers'))+'</span><button class="btn btn-sm btn-green" onclick="Settings.openBarber(null)">+ Add</button></div>');
       barbers.forEach(b=>{
         html.push(`<div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;border-left:4px solid ${b.color||'var(--green)}'};">
           <div style="width:40px;height:40px;border-radius:50%;background:${b.color||'var(--green)'}22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:${b.color||'var(--green)'};">${initials(b.name)}</div>
-          <div style="flex:1;"><div style="font-size:14px;font-weight:700;">${b.name}</div><div style="font-size:12px;color:var(--muted);">Chair ${b.chair}${b.bio?' · '+b.bio:''}</div></div>
+          <div style="flex:1;"><div style="font-size:14px;font-weight:700;">${b.name}</div><div style="font-size:12px;color:var(--muted);">${esc(V('station','Chair'))} ${b.chair}${b.bio?' · '+b.bio:''}</div></div>
           <button class="btn btn-sm" onclick="Settings.openBarber('${b.id}')">Edit</button>
+        </div>`);
+      });
+
+      // Staff & Access (multi-user roles)
+      const roleLabels={full:'Full Access',technician:V('staff','Technician'),viewonly:'View Only'};
+      const roleColors={full:'#16a34a',technician:'#2563eb',viewonly:'#6e6e73'};
+      html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Staff &amp; Access</span><button class="btn btn-sm btn-green" onclick="Settings.openStaff(null)">+ Add</button></div>');
+      html.push('<div style="font-size:12px;color:var(--muted);margin:-6px 0 10px;">Each staff member logs in with their own email and password. Full Access sees everything · '+esc(V('staff','Technician'))+' sees appointments &amp; clients (no revenue or settings) · View Only sees the calendar.</div>');
+      staff.forEach(u=>{
+        html.push(`<div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+          <div style="width:40px;height:40px;border-radius:50%;background:${roleColors[u.role]||'#6e6e73'}22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:${roleColors[u.role]||'#6e6e73'};">${initials(u.name||u.email)}</div>
+          <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;">${esc(u.name||'—')}${u.isOwner?' <span style="font-size:10px;color:var(--faint);font-weight:600;">(owner)</span>':''}</div><div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(u.email)}</div></div>
+          <span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:${roleColors[u.role]||'#6e6e73'}1a;color:${roleColors[u.role]||'#6e6e73'};white-space:nowrap;">${roleLabels[u.role]||u.role}</span>
+          <button class="btn btn-sm" onclick="Settings.openStaff('${u.id}')">Edit</button>
         </div>`);
       });
 
@@ -149,10 +163,10 @@ const Settings = {
     const startOpts=timeOpts.map(t=>`<option value="${t}"${sched.startTime===t?' selected':''}>${t}</option>`).join('');
     const endOpts=timeOpts.map(t=>`<option value="${t}"${sched.endTime===t?' selected':''}>${t}</option>`).join('');
     Modal.show(`
-      <div class="modal-title">${b?'Edit Barber':'Add Barber'}</div>
+      <div class="modal-title">${b?'Edit '+esc(V('staff','Barber')):'Add '+esc(V('staff','Barber'))}</div>
       <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fb-name" value="${b?.name||''}" placeholder="e.g. Chris" /></div>
       <div class="form-row">
-        <div class="form-group"><label class="form-label">Chair #</label><input class="form-input" id="fb-chair" type="number" value="${b?.chair||this._barbers.length+1}" min="1" /></div>
+        <div class="form-group"><label class="form-label">${esc(V('station','Chair'))} #</label><input class="form-input" id="fb-chair" type="number" value="${b?.chair||this._barbers.length+1}" min="1" /></div>
         <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="fb-phone" type="tel" value="${b?.phone||''}" /></div>
       </div>
       <div class="form-group"><label class="form-label">Bio / specialty</label><input class="form-input" id="fb-bio" value="${b?.bio||''}" placeholder="e.g. Fades and designs" /></div>
@@ -183,7 +197,7 @@ const Settings = {
       </div>
 
       <div class="modal-actions">
-        ${b?`<button class="btn btn-danger btn-full" onclick="Settings.deleteBarber('${b.id}')">Remove Barber</button>`:''}
+        ${b?`<button class="btn btn-danger btn-full" onclick="Settings.deleteBarber('${b.id}')">Remove ${esc(V('staff','Barber'))}</button>`:''}
         <button id="fb-btn" class="btn btn-primary btn-full" onclick="Settings.saveBarber('${b?.id||''}')">Save</button>
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
       </div>`);
@@ -226,13 +240,60 @@ const Settings = {
         schedule,
         joinedAt:id?(this._barbers.find(b=>b.id===id)?.joinedAt||today()):today()
       });
-      Modal.close(); toast(id?'Updated ✓':'Barber added ✓'); this.render();
+      Modal.close(); toast(id?'Updated ✓':V('staff','Barber')+' added ✓'); this.render();
     }catch(e){toast('Could not save','error');enableBtn(btn);}
   },
 
   async deleteBarber(id) {
-    if(!confirm('Remove this barber?'))return;
+    if(!confirm('Remove this '+V('staff','barber').toLowerCase()+'?'))return;
     await db.barbers.delete(id); Modal.close(); this.render(); toast('Removed');
+  },
+
+  // ── Staff & Access ──────────────────────────────────────────────────────────
+  openStaff(id) {
+    const u = id ? this._staff.find(x=>x.id===id) : null;
+    const isOwner = !!u?.isOwner;
+    const roles = [
+      ['full','Full Access — sees everything'],
+      ['technician', V('staff','Technician')+' — appointments & clients only'],
+      ['viewonly','View Only — calendar only'],
+    ];
+    Modal.show(`
+      <div class="modal-title">${u?'Edit Staff':'Add Staff'}</div>
+      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fu-name" value="${esc(u?.name||'')}" placeholder="e.g. Marcus Reyes" /></div>
+      <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="fu-email" type="email" value="${esc(u?.email||'')}" placeholder="them@email.com" /></div>
+      <div class="form-group"><label class="form-label">Password ${u?'<span style="font-weight:400;color:var(--faint);">(leave blank to keep current)</span>':'*'}</label><input class="form-input" id="fu-pass" type="password" placeholder="At least 6 characters" autocomplete="new-password" /></div>
+      ${isOwner
+        ? '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">This is the owner account — it always has Full Access.</div>'
+        : `<div class="form-group"><label class="form-label">Role</label><select class="form-input" id="fu-role">${roles.map(([v,l])=>`<option value="${v}"${u?.role===v?' selected':''}>${esc(l)}</option>`).join('')}</select></div>`}
+      <div class="modal-actions">
+        ${u&&!isOwner?`<button class="btn btn-danger btn-full" onclick="Settings.deleteStaff('${u.id}')">Remove Staff</button>`:''}
+        <button id="fu-btn" class="btn btn-primary btn-full" onclick="Settings.saveStaff('${u?.id||''}')">Save</button>
+        <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
+      </div>`);
+    setTimeout(()=>document.getElementById('fu-name')?.focus(),150);
+  },
+
+  async saveStaff(id) {
+    const name  = document.getElementById('fu-name')?.value.trim();
+    const email = document.getElementById('fu-email')?.value.trim();
+    const pass  = document.getElementById('fu-pass')?.value||'';
+    const role  = document.getElementById('fu-role')?.value||'technician';
+    if(!name){toast('Enter a name','warning');return;}
+    if(!email){toast('Enter an email','warning');return;}
+    if(!id && pass.length<6){toast('Set a password of 6+ characters','warning');return;}
+    const btn=document.getElementById('fu-btn'); disableBtn(btn);
+    try{
+      const body={name,email,role}; if(id)body.id=id; if(pass)body.password=pass;
+      await db.staff.save(body);
+      Modal.close(); toast(id?'Updated ✓':'Staff added ✓'); this.render();
+    }catch(e){toast(e.message||'Could not save','error');enableBtn(btn);}
+  },
+
+  async deleteStaff(id) {
+    if(!confirm('Remove this staff member? They will no longer be able to log in.'))return;
+    try{ await db.staff.delete(id); Modal.close(); toast('Removed'); this.render(); }
+    catch(e){ toast(e.message||'Could not remove','error'); }
   },
 
   openService(id) {

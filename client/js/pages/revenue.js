@@ -12,11 +12,11 @@ const Revenue = {
       html.push('</div>');
 
       if(data.byBarber?.length){
-        html.push('<div class="section-header">By Barber</div><div class="card">');
+        html.push('<div class="section-header">By '+esc(V('staffPlural','Barber'))+'</div><div class="card">');
         const maxRev=Math.max(...data.byBarber.map(b=>b.revenue),1);
         data.byBarber.forEach(b=>{
           const pct=Math.round((b.revenue/maxRev)*100);
-          html.push(`<div style="margin-bottom:14px;"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;"><span style="font-weight:600;">✂ ${b.name}</span><span>${fmtMoney(b.revenue)} · ${b.count} cuts</span></div><div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${b.color||'var(--green)'};"></div></div></div>`);
+          html.push(`<div style="margin-bottom:14px;"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:5px;"><span style="font-weight:600;">${esc(b.name)}</span><span>${fmtMoney(b.revenue)} · ${b.count} jobs</span></div><div class="bar-bg"><div class="bar-fill" style="width:${pct}%;background:${b.color||'var(--green)'};"></div></div></div>`);
         });
         html.push('</div>');
       }

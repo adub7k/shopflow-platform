@@ -7,7 +7,7 @@ const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, gen
 // ── PUBLIC: Account signup ────────────────────────────────────────────────────
 router.post('/api/accounts/signup', async (req, res) => {
   try {
-    const { shopName, email, password, phone, plan, sessionId } = req.body;
+    const { shopName, email, password, phone, plan, sessionId, industry } = req.body;
     if (!shopName || !email || !password) return res.status(400).json({ ok: false, error: 'Shop name, email, and password are required' });
     if (password.length < 6) return res.status(400).json({ ok: false, error: 'Password must be at least 6 characters' });
 
@@ -60,6 +60,8 @@ router.post('/api/accounts/signup', async (req, res) => {
       shopId,
       email: email.toLowerCase(),
       passwordHash,
+      name: shopName,         // owner display name (editable later)
+      role: 'full',           // owner = full access
       createdAt: new Date().toISOString(),
       plan: plan || 'starter',
       active: true,
@@ -74,6 +76,7 @@ router.post('/api/accounts/signup', async (req, res) => {
       email: email.toLowerCase(),
       phone: phone || '',
       plan: plan || 'starter',
+      industry: industry || 'barbershop',
       active: true,
       createdAt: new Date().toISOString(),
       lastActivity: new Date().toISOString(),
@@ -81,7 +84,7 @@ router.post('/api/accounts/signup', async (req, res) => {
 
     // Initialize shop database
     const shopDb = getShopDb(shopId);
-    initShopDb(shopDb, { shopName, email, phone });
+    initShopDb(shopDb, { shopName, email, phone, industry });
 
     // Mark session as consumed so it can't be reused
     if (sessionId) {
@@ -89,7 +92,7 @@ router.post('/api/accounts/signup', async (req, res) => {
     }
 
     // Generate token
-    const token = jwt.sign({ shopId, accountId, email, shopSlug: finalSlug }, JWT_SECRET, { expiresIn: '30d' });
+    const token = jwt.sign({ shopId, accountId, email, shopSlug: finalSlug, role: 'full' }, JWT_SECRET, { expiresIn: '30d' });
 
     res.json({
       ok: true,
@@ -97,6 +100,8 @@ router.post('/api/accounts/signup', async (req, res) => {
       shopId,
       shopSlug: finalSlug,
       shopName,
+      role: 'full',
+      name: shopName,
       crmUrl: '/shop/' + finalSlug,
       bookUrl: '/book/' + finalSlug,
     });
@@ -120,7 +125,8 @@ router.post('/api/accounts/login', async (req, res) => {
     if (!valid) return res.status(401).json({ ok: false, error: 'Invalid email or password' });
 
     const shop = master.get('shops').find({ id: account.shopId }).value();
-    const token = jwt.sign({ shopId: account.shopId, accountId: account.id, email, shopSlug: shop?.slug }, JWT_SECRET, { expiresIn: '30d' });
+    const role = account.role || 'full';
+    const token = jwt.sign({ shopId: account.shopId, accountId: account.id, email, shopSlug: shop?.slug, role }, JWT_SECRET, { expiresIn: '30d' });
 
     // Update last activity
     master.get('shops').find({ id: account.shopId }).assign({ lastActivity: new Date().toISOString() }).write();
@@ -131,6 +137,8 @@ router.post('/api/accounts/login', async (req, res) => {
       shopId: account.shopId,
       shopSlug: shop?.slug,
       shopName: shop?.shopName,
+      role,
+      name: account.name || '',
       crmUrl: '/shop/' + shop?.slug,
       bookUrl: '/book/' + shop?.slug,
     });

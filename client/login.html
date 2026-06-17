@@ -78,6 +78,8 @@ async function login() {
       localStorage.setItem('sf_shopId', data.shopId);
       localStorage.setItem('sf_shopSlug', data.shopSlug);
       localStorage.setItem('sf_shopName', data.shopName);
+      localStorage.setItem('sf_role', data.role || 'full');
+      localStorage.setItem('sf_name', data.name || '');
       window.location.href = data.crmUrl;
     } else {
       errEl.textContent = data.error || 'Invalid email or password.';

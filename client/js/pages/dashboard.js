@@ -1,5 +1,6 @@
 // ── Onboarding checklist ──────────────────────────────────────────────────────
 function renderOnboarding(settings, barbers) {
+  if (!canSee('settings')) return ''; // owner-only setup checklist
   if (localStorage.getItem('sf_onboarding_dismissed') === 'true') return '';
 
   const steps = [
@@ -14,9 +15,9 @@ function renderOnboarding(settings, barbers) {
     {
       key: 'addBarber',
       icon: '✂️',
-      label: 'Add your barbers',
-      desc: 'Replace the default barber with your real team',
-      done: barbers.some(b => b.name && b.name !== 'Barber 1'),
+      label: 'Add your '+V('staffPlural','barbers').toLowerCase(),
+      desc: 'Replace the default '+V('staff','barber').toLowerCase()+' with your real team',
+      done: barbers.some(b => b.name && b.name !== V('staff','Barber')+' 1'),
       action: `App.nav('settings')`,
     },
     {
@@ -106,7 +107,7 @@ const Dashboard = {
       let appts=[];
       let settings={shopName:'ShopFlow'};
       let barbers=[];
-      try{rev=await db.revenue.get();}catch(e){console.warn('Revenue:',e.message);}
+      if(canSee('revenue')){ try{rev=await db.revenue.get();}catch(e){console.warn('Revenue:',e.message);} }
       try{
         appts=await db.appointments.all({date:today()});
         // Sort earliest time first
@@ -127,11 +128,13 @@ const Dashboard = {
       const greet = hr<12?'morning':hr<17?'afternoon':'evening';
       html.push(`<div style="margin-bottom:20px;"><div style="font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.03em;">Good ${greet} 👋</div><div style="font-size:13px;color:var(--muted);margin-top:2px;">${settings.shopName||'ShopFlow'} &nbsp;·&nbsp; ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div></div>`);
 
-      // Metrics
-      html.push('<div class="metric-grid">');
-      html.push(`<div class="metric-card"><div class="metric-label">Revenue MTD</div><div class="metric-value green">${fmtMoney(rev.monthRevenue)}</div><div class="metric-sub">${rev.monthJobs} appointments</div></div>`);
-      html.push(`<div class="metric-card"><div class="metric-label">Avg Ticket</div><div class="metric-value">${fmtMoney(rev.avgTicket)}</div><div class="metric-sub">This month</div></div>`);
-      html.push('</div>');
+      // Metrics (revenue hidden for roles without revenue access)
+      if (canSee('revenue')) {
+        html.push('<div class="metric-grid">');
+        html.push(`<div class="metric-card"><div class="metric-label">Revenue MTD</div><div class="metric-value green">${fmtMoney(rev.monthRevenue)}</div><div class="metric-sub">${rev.monthJobs} appointments</div></div>`);
+        html.push(`<div class="metric-card"><div class="metric-label">Avg Ticket</div><div class="metric-value">${fmtMoney(rev.avgTicket)}</div><div class="metric-sub">This month</div></div>`);
+        html.push('</div>');
+      }
 
       // Today's appointments
       html.push('<div class="section-header"><span>Today\'s Appointments</span><button class="btn btn-sm btn-green" onclick="App.nav(\'appointments\')">View All</button></div>');

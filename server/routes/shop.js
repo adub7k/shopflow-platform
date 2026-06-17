@@ -1,30 +1,85 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
-const { requireAuth } = require('../middleware');
+const { requireAuth, requireRole } = require('../middleware');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb } = require('../db');
 
 // ── PROTECTED: Settings ───────────────────────────────────────────────────────
+// Readable by any signed-in staff (needed for vocabulary/statuses), but sensitive
+// credentials are stripped for non-owner roles, and writes are owner-only.
 router.get('/api/shop/settings', requireAuth, shopRoute(async (req, res, db) => {
-  res.json(db.get('settings').value() || {});
+  const s = JSON.parse(JSON.stringify(db.get('settings').value() || {}));
+  if ((req.role || 'full') !== 'full') {
+    if (s.twilio)    s.twilio    = { ...s.twilio, authToken: '' };
+    if (s.emailSmtp) s.emailSmtp = { ...s.emailSmtp, pass: '' };
+    delete s.pin;
+  }
+  res.json(s);
 }));
-router.post('/api/shop/settings', requireAuth, shopRoute(async (req, res, db) => {
+router.post('/api/shop/settings', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
   db.get('settings').assign(req.body).write();
   // Update shop name in master if changed
   if (req.body.shopName) master.get('shops').find({ id: req.shopId }).assign({ shopName: req.body.shopName }).write();
   res.json({ ok: true });
 }));
 
+// ── PROTECTED: Staff / users (owner only) ─────────────────────────────────────
+router.get('/api/shop/staff', requireAuth, requireRole('full'), (req, res) => {
+  const shop = master.get('shops').find({ id: req.shopId }).value();
+  const users = master.get('accounts').filter({ shopId: req.shopId }).value()
+    .map(a => ({ id: a.id, name: a.name || '', email: a.email, role: a.role || 'full', isOwner: a.id === shop.accountId, active: a.active !== false }));
+  res.json(users);
+});
+router.post('/api/shop/staff', requireAuth, requireRole('full'), async (req, res) => {
+  const { id, name, email, password, role } = req.body;
+  const shop = master.get('shops').find({ id: req.shopId }).value();
+  const validRoles = ['full', 'technician', 'viewonly'];
+  const r = validRoles.includes(role) ? role : 'technician';
+  if (id) {
+    const acct = master.get('accounts').find({ id }).value();
+    if (!acct || acct.shopId !== req.shopId) return res.status(404).json({ ok: false, error: 'Staff member not found' });
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (acct.id === shop.accountId) updates.role = 'full';       // owner stays full
+    else if (role) updates.role = r;
+    if (email && email.toLowerCase() !== acct.email) {
+      if (master.get('accounts').find({ email: email.toLowerCase() }).value()) return res.status(400).json({ ok: false, error: 'That email is already in use' });
+      updates.email = email.toLowerCase();
+    }
+    if (password) {
+      if (String(password).length < 6) return res.status(400).json({ ok: false, error: 'Password must be at least 6 characters' });
+      updates.passwordHash = await bcrypt.hash(password, 10);
+    }
+    master.get('accounts').find({ id }).assign(updates).write();
+    return res.json({ ok: true, id });
+  }
+  if (!name || !email || !password) return res.status(400).json({ ok: false, error: 'Name, email, and password are required' });
+  if (String(password).length < 6) return res.status(400).json({ ok: false, error: 'Password must be at least 6 characters' });
+  if (master.get('accounts').find({ email: email.toLowerCase() }).value()) return res.status(400).json({ ok: false, error: 'That email is already in use' });
+  const acctId = genId('u');
+  master.get('accounts').push({ id: acctId, shopId: req.shopId, email: email.toLowerCase(), passwordHash: await bcrypt.hash(password, 10), name, role: r, active: true, createdAt: new Date().toISOString() }).write();
+  res.json({ ok: true, id: acctId });
+});
+router.delete('/api/shop/staff/:id', requireAuth, requireRole('full'), (req, res) => {
+  const shop = master.get('shops').find({ id: req.shopId }).value();
+  const acct = master.get('accounts').find({ id: req.params.id }).value();
+  if (!acct || acct.shopId !== req.shopId) return res.status(404).json({ ok: false, error: 'Staff member not found' });
+  if (acct.id === shop.accountId) return res.status(400).json({ ok: false, error: 'Cannot remove the owner account' });
+  if (acct.id === req.accountId)  return res.status(400).json({ ok: false, error: 'You cannot remove yourself' });
+  master.get('accounts').remove({ id: req.params.id }).write();
+  res.json({ ok: true });
+});
+
 // ── PROTECTED: Barbers ────────────────────────────────────────────────────────
 router.get('/api/shop/barbers', requireAuth, shopRoute(async (req, res, db, h) => {
   res.json(h.getAll('barbers').filter(b => b.active !== false));
 }));
-router.post('/api/shop/barbers', requireAuth, shopRoute(async (req, res, db, h) => {
+router.post('/api/shop/barbers', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   const b = req.body; if (!b.id) b.id = genId('b'); h.upsert('barbers', b); res.json({ id: b.id });
 }));
-router.delete('/api/shop/barbers/:id', requireAuth, shopRoute(async (req, res, db, h) => {
+router.delete('/api/shop/barbers/:id', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   h.remove('barbers', req.params.id); res.json({ ok: true });
 }));
-router.post('/api/shop/barbers/:id/schedule', requireAuth, shopRoute(async (req, res, db, h) => {
+router.post('/api/shop/barbers/:id/schedule', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   const b = h.getById('barbers', req.params.id); if (!b) return res.status(404).json({ error: 'Not found' });
   b.schedule = req.body; h.upsert('barbers', b); res.json({ ok: true });
 }));
@@ -33,26 +88,26 @@ router.post('/api/shop/barbers/:id/schedule', requireAuth, shopRoute(async (req,
 router.get('/api/shop/services', requireAuth, shopRoute(async (req, res, db, h) => {
   res.json(h.getAll('services').sort((a,b) => a.category.localeCompare(b.category)));
 }));
-router.post('/api/shop/services', requireAuth, shopRoute(async (req, res, db, h) => {
+router.post('/api/shop/services', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   const s = req.body; if (!s.id) s.id = genId('s'); h.upsert('services', s); res.json({ id: s.id });
 }));
-router.delete('/api/shop/services/:id', requireAuth, shopRoute(async (req, res, db, h) => {
+router.delete('/api/shop/services/:id', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   h.remove('services', req.params.id); res.json({ ok: true });
 }));
 
 // ── PROTECTED: Customers ──────────────────────────────────────────────────────
-router.get('/api/shop/customers', requireAuth, shopRoute(async (req, res, db, h) => {
+router.get('/api/shop/customers', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const customers = h.getAll('customers');
   const appointments = h.getAll('appointments');
   const visitCount = {}, lastVisit = {};
   appointments.forEach(a => { if (a.status==='done'&&a.customerId) { visitCount[a.customerId]=(visitCount[a.customerId]||0)+1; if(!lastVisit[a.customerId]||a.date>lastVisit[a.customerId])lastVisit[a.customerId]=a.date; } });
   res.json(customers.sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(c=>({...c,totalVisits:visitCount[c.id]||0,lastVisit:lastVisit[c.id]||null})));
 }));
-router.get('/api/shop/customers/search', requireAuth, shopRoute(async (req, res, db, h) => {
+router.get('/api/shop/customers/search', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const q = (req.query.q || '').toLowerCase();
   res.json(h.getAll('customers').filter(c => c.name.toLowerCase().includes(q)||(c.phone||'').includes(q)).slice(0,10));
 }));
-router.get('/api/shop/customers/:id', requireAuth, shopRoute(async (req, res, db, h) => {
+router.get('/api/shop/customers/:id', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const c = h.getById('customers', req.params.id); if (!c) return res.status(404).json({ error: 'Not found' });
   const barbers  = h.getAll('barbers');
   const services = h.getAll('services');
@@ -71,13 +126,13 @@ router.get('/api/shop/customers/:id', requireAuth, shopRoute(async (req, res, db
   const loyaltyVisits = c.loyaltyVisits || c.loyaltyPoints || 0;
   res.json({ customer:{...c, lastVisit:lastVisitDate}, appointments:appts, totalVisits:done.length, totalRevenue:done.reduce((s,a)=>s+Number(a.price||0),0), loyaltyPoints:loyaltyVisits, rewardReady:loyaltyVisits>=(loyalty.visitsForReward||10), visitsForReward:loyalty.visitsForReward||10, daysSinceLast, rebookInterval });
 }));
-router.post('/api/shop/customers', requireAuth, shopRoute(async (req, res, db, h) => {
+router.post('/api/shop/customers', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const c = req.body; if (!c.id) c.id = genId('c'); h.upsert('customers', c); res.json({ id: c.id });
 }));
-router.delete('/api/shop/customers/:id', requireAuth, shopRoute(async (req, res, db, h) => {
+router.delete('/api/shop/customers/:id', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   h.remove('customers', req.params.id); res.json({ ok: true });
 }));
-router.post('/api/shop/customers/:id/redeem', requireAuth, shopRoute(async (req, res, db, h) => {
+router.post('/api/shop/customers/:id/redeem', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const c = h.getById('customers', req.params.id); if(c){c.loyaltyPoints=0;h.upsert('customers',c);} res.json({ ok: true });
 }));
 
@@ -104,41 +159,50 @@ router.get('/api/shop/appointments', requireAuth, shopRoute(async (req, res, db,
     };
   }));
 }));
-router.post('/api/shop/appointments', requireAuth, shopRoute(async (req, res, db, h) => {
+router.post('/api/shop/appointments', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const a = req.body; if (!a.id) a.id = genId('a');
+  // Build a vehicle record from custom fields (detail shops) for the customer's history.
+  const cf = a.customFields || {};
+  const vehicle = (cf.vehicleYear || cf.vehicleMake || cf.vehicleModel)
+    ? { year: cf.vehicleYear||'', make: cf.vehicleMake||'', model: cf.vehicleModel||'', color: cf.vehicleColor||'' }
+    : null;
+  const sameVehicle = (x,y) => x && y && x.year===y.year && x.make===y.make && x.model===y.model;
   // Ensure customer exists
   if (a.customerName) {
     const digits = (a.customerPhone||'').replace(/[^0-9]/g,'');
     let cust = a.customerId ? h.getById('customers',a.customerId) : null;
     if (!cust && digits.length>=10) cust = h.getAll('customers').find(c=>(c.phone||'').replace(/[^0-9]/g,'')===digits);
-    if (cust) { a.customerId=cust.id; }
-    else { const cid=genId('c'); h.upsert('customers',{id:cid,name:a.customerName,phone:a.customerPhone||'',email:'',source:a.source||'crm',notes:'',loyaltyPoints:0,noShows:0,preferredBarberId:a.barberId||null,createdAt:today()}); a.customerId=cid; }
+    if (cust) {
+      a.customerId=cust.id;
+      if (vehicle && !(cust.vehicles||[]).some(v=>sameVehicle(v,vehicle))) { cust.vehicles=[...(cust.vehicles||[]),vehicle]; h.upsert('customers',cust); }
+    }
+    else { const cid=genId('c'); h.upsert('customers',{id:cid,name:a.customerName,phone:a.customerPhone||'',email:'',source:a.source||'crm',notes:'',loyaltyPoints:0,noShows:0,preferredBarberId:a.barberId||null,isFleet:false,companyName:'',vehicles:vehicle?[vehicle]:[],createdAt:today()}); a.customerId=cid; }
   }
   h.upsert('appointments', a);
   res.json({ id: a.id });
 }));
-router.post('/api/shop/appointments/:id/complete', requireAuth, shopRoute(async (req, res, db, h) => {
+router.post('/api/shop/appointments/:id/complete', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const a = h.getById('appointments', req.params.id); if(!a) return res.status(404).json({ error:'Not found' });
   a.status='done'; a.price=req.body.price||a.price||0; h.upsert('appointments',a);
   if (a.customerId) { const c=h.getById('customers',a.customerId); if(c){c.loyaltyVisits=(c.loyaltyVisits||c.loyaltyPoints||0)+1;c.loyaltyPoints=c.loyaltyVisits;c.lastJobDate=a.date;h.upsert('customers',c);} }
   res.json({ ok: true });
 }));
-router.post('/api/shop/appointments/:id/noshow', requireAuth, shopRoute(async (req, res, db, h) => {
+router.post('/api/shop/appointments/:id/noshow', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const a = h.getById('appointments', req.params.id); if(!a) return res.status(404).json({ error:'Not found' });
   a.status='no-show'; a.noShowAt=new Date().toISOString(); h.upsert('appointments',a);
   if (a.customerId) { const c=h.getById('customers',a.customerId); if(c){c.noShows=(c.noShows||0)+1;h.upsert('customers',c);} }
   res.json({ ok: true });
 }));
-router.post('/api/shop/appointments/:id/waive-deposit', requireAuth, shopRoute(async (req, res, db, h) => {
+router.post('/api/shop/appointments/:id/waive-deposit', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const a = h.getById('appointments', req.params.id); if(!a) return res.status(404).json({ error:'Not found' });
   a.depositWaived=true; h.upsert('appointments',a); res.json({ ok: true });
 }));
-router.delete('/api/shop/appointments/:id', requireAuth, shopRoute(async (req, res, db, h) => {
+router.delete('/api/shop/appointments/:id', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   h.remove('appointments', req.params.id); res.json({ ok: true });
 }));
 
 // ── PROTECTED: Revenue ────────────────────────────────────────────────────────
-router.get('/api/shop/revenue', requireAuth, shopRoute(async (req, res, db, h) => {
+router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   const barbers   = h.getAll('barbers');
   const customers = h.getAll('customers');
   const services  = h.getAll('services');
@@ -207,7 +271,7 @@ router.post('/api/shop/auth/reset-pin', async (req, res) => {
 // ── PROTECTED: Conversations ──────────────────────────────────────────────────
 
 // Global inbox — one thread summary per customer, sorted by latest message
-router.get('/api/shop/conversations', requireAuth, shopRoute(async (req, res, db, h) => {
+router.get('/api/shop/conversations', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const convos    = h.getAll('conversations');
   const customers = h.getAll('customers');
   const threads   = {};
@@ -225,24 +289,24 @@ router.get('/api/shop/conversations', requireAuth, shopRoute(async (req, res, db
 }));
 
 // Per-customer thread
-router.get('/api/shop/conversations/customer/:cid', requireAuth, shopRoute(async (req, res, db, h) => {
+router.get('/api/shop/conversations/customer/:cid', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   res.json(h.getAll('conversations').filter(c=>c.customerId===req.params.cid).sort((a,b)=>new Date(a.sentAt)-new Date(b.sentAt)));
 }));
 
 // Mark all inbound messages from a customer as read
-router.post('/api/shop/conversations/read/:customerId', requireAuth, shopRoute(async (req, res, db, h) => {
+router.post('/api/shop/conversations/read/:customerId', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   h.getAll('conversations')
     .filter(c => c.customerId === req.params.customerId && c.direction === 'inbound' && !c.read)
     .forEach(c => { c.read = true; h.upsert('conversations', c); });
   res.json({ ok: true });
 }));
 
-router.post('/api/shop/conversations', requireAuth, shopRoute(async (req, res, db, h) => {
+router.post('/api/shop/conversations', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const c = req.body; if(!c.id)c.id=genId('msg'); h.upsert('conversations',c); res.json({ id:c.id });
 }));
 
 // ── PROTECTED: SMS ────────────────────────────────────────────────────────────
-router.post('/api/shop/sms/send', requireAuth, shopRoute(async (req, res, db, h) => {
+router.post('/api/shop/sms/send', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const { to, body, customerId, customerName } = req.body;
   const fromNum = shopFromNumber(req.shopId);
   if (!twilioClient || !fromNum) return res.json({ ok:false, error:'SMS not available for this shop yet. Contact ShopFlow support.' });
@@ -255,13 +319,13 @@ router.post('/api/shop/sms/send', requireAuth, shopRoute(async (req, res, db, h)
 
 // ── PROTECTED: Blocked dates ──────────────────────────────────────────────────
 router.get('/api/shop/blocked-dates', requireAuth, shopRoute(async (req, res, db, h) => res.json(h.getAll('blockedDates'))));
-router.post('/api/shop/blocked-dates', requireAuth, shopRoute(async (req, res, db, h) => {
+router.post('/api/shop/blocked-dates', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   const { date, reason } = req.body;
   if (!date) return res.status(400).json({ ok:false });
   if (!h.getAll('blockedDates').find(b=>b.date===date)) h.upsert('blockedDates',{id:genId('bd'),date,reason:reason||'',createdAt:new Date().toISOString()});
   res.json({ ok: true });
 }));
-router.delete('/api/shop/blocked-dates/:date', requireAuth, shopRoute(async (req, res, db) => {
+router.delete('/api/shop/blocked-dates/:date', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
   db.get('blockedDates').remove({ date:req.params.date }).write(); res.json({ ok: true });
 }));
 

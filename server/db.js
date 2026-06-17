@@ -4,6 +4,7 @@ const fs      = require('fs');
 const low     = require('lowdb');
 const FileSync = require('lowdb/adapters/FileSync');
 const { v4: uuidv4 } = require('uuid');
+const { resolveProfile, DEFAULT_INDUSTRY } = require('./industries');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const JWT_SECRET = process.env.JWT_SECRET || 'shopflow-dev-secret-change-in-production';
@@ -67,7 +68,10 @@ function getShopDb(shopId) {
 }
 
 function initShopDb(db, shopData) {
+  const industry = shopData.industry || DEFAULT_INDUSTRY;
+  const profile = resolveProfile(industry);
   db.defaults({
+    industry,
     settings: {
       shopName: shopData.shopName || 'My Shop',
       tagline: 'Walk-ins Welcome.',
@@ -79,26 +83,26 @@ function initShopDb(db, shopData) {
       accentColor: '#16a34a',
       pin: '1234',
       pinEnabled: true,
+      // UI vocabulary + appointment statuses + custom booking fields for this vertical.
+      vocab: profile.vocab,
+      statuses: profile.statuses,
+      customFields: profile.customFields,
+      supportsFleet: profile.supportsFleet,
       loyalty: { enabled: true, visitsForReward: 10, rewardDescription: 'One free service' },
       twilio: { accountSid: '', authToken: '', fromNumber: '' },
       googleReviewLink: '',
       emailSmtp: { host: '', port: 587, user: '', pass: '' },
-      deposit: { enabled: false, amount: 10, message: 'A deposit is required to secure your appointment.' },
+      deposit: { ...profile.deposit },
       stripe: { connectAccountId: '', onboardingComplete: false },
       remindersSent: [],
       scheduledReminders: [],
     },
     barbers: [
-      { id: 'b1', name: 'Barber 1', chair: 1, phone: '', bio: '', color: '#16a34a', active: true,
+      { id: 'b1', name: profile.vocab.staff + ' 1', chair: 1, phone: '', bio: '', color: '#16a34a', active: true,
         joinedAt: new Date().toISOString().split('T')[0],
         schedule: { workDays: [1,2,3,4,5,6], startTime: '9:00 AM', endTime: '6:00 PM', slotMinutes: 30 } },
     ],
-    services: [
-      { id: 's1', name: 'Haircut',      category: 'cut',   price: 35, duration: 45 },
-      { id: 's2', name: 'Fade',         category: 'cut',   price: 35, duration: 45 },
-      { id: 's3', name: 'Beard Lineup', category: 'beard', price: 15, duration: 20 },
-      { id: 's4', name: 'Kids Cut',     category: 'cut',   price: 25, duration: 30 },
-    ],
+    services: profile.services.map((s, i) => ({ id: 's' + (i + 1), ...s })),
     customers: [], appointments: [], conversations: [], blockedDates: [],
   }).write();
 }

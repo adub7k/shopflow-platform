@@ -1,5 +1,5 @@
 const router = require('express').Router();
-const { requireAuth } = require('../middleware');
+const { requireAuth, requireRole } = require('../middleware');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb } = require('../db');
 
 // ── Stripe helpers ────────────────────────────────────────────────────────────
@@ -26,7 +26,7 @@ router.get('/api/shop/stripe/connect/status', requireAuth, shopRoute(async (req,
 }));
 
 // ── Stripe Connect: start onboarding ─────────────────────────────────────────
-router.post('/api/shop/stripe/connect/onboard', requireAuth, shopRoute(async (req, res, db) => {
+router.post('/api/shop/stripe/connect/onboard', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
   try {
     const stripe = getStripe();
     const shop = master.get('shops').find({ id: req.shopId }).value();
@@ -69,13 +69,13 @@ router.get('/api/stripe/connect/refresh', (req, res) => {
 });
 
 // ── Stripe Connect: disconnect ────────────────────────────────────────────────
-router.post('/api/shop/stripe/connect/disconnect', requireAuth, shopRoute(async (req, res, db) => {
+router.post('/api/shop/stripe/connect/disconnect', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
   db.get('settings').assign({ stripe: { connectAccountId: '', onboardingComplete: false } }).write();
   res.json({ ok: true });
 }));
 
 // ── Checkout: cash ────────────────────────────────────────────────────────────
-router.post('/api/shop/checkout/cash', requireAuth, shopRoute(async (req, res, db, h) => {
+router.post('/api/shop/checkout/cash', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const { appointmentId, amount, tip, cutNotes } = req.body;
   const total = Number(amount||0) + Number(tip||0);
   const appt = h.getById('appointments', appointmentId);
@@ -88,7 +88,7 @@ router.post('/api/shop/checkout/cash', requireAuth, shopRoute(async (req, res, d
 }));
 
 // ── Checkout: create card payment session ─────────────────────────────────────
-router.post('/api/shop/checkout/session', requireAuth, shopRoute(async (req, res, db, h) => {
+router.post('/api/shop/checkout/session', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   try {
     const { appointmentId, amount, tip } = req.body;
     const total = Math.round((Number(amount||0) + Number(tip||0)) * 100);
@@ -112,7 +112,7 @@ router.post('/api/shop/checkout/session', requireAuth, shopRoute(async (req, res
 }));
 
 // ── Checkout: verify card payment ─────────────────────────────────────────────
-router.get('/api/shop/checkout/verify/:sessionId', requireAuth, shopRoute(async (req, res, db, h) => {
+router.get('/api/shop/checkout/verify/:sessionId', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   try {
     const stripe = getStripe();
     const session = await stripe.checkout.sessions.retrieve(req.params.sessionId);

@@ -37,8 +37,8 @@ const Appointments = {
         html.push(this._buildCalendar(dt));
       }
 
-      // Add button
-      html.push(`<div class="section-header"><span>Appointments — ${fmtDateFull(this._selected)}</span><button class="btn btn-sm btn-green" onclick="Appointments.openForm(null)">+ Add</button></div>`);
+      // Add button (hidden for view-only role)
+      html.push(`<div class="section-header"><span>Appointments — ${fmtDateFull(this._selected)}</span>${canWrite()?'<button class="btn btn-sm btn-green" onclick="Appointments.openForm(null)">+ Add</button>':''}</div>`);
 
       // Day's appointments
       const dayAppts = this._data.filter(a=>a.date===this._selected).sort((a,b)=>a.time.localeCompare(b.time));
@@ -52,7 +52,7 @@ const Appointments = {
             <div style="width:3px;min-height:44px;background:${barber?.color||'#ccc'};border-radius:2px;flex-shrink:0;"></div>
             ${avatarEl(a.customerName,38)}
             <div class="list-main">
-              <div class="list-name" ${a.customerId?`onclick="event.stopPropagation();ClientProfile.open('${a.customerId}')" style="cursor:pointer;color:var(--text);"`:''}">${a.customerName}</div>
+              <div class="list-name" ${a.customerId&&canSeeClients()?`onclick="event.stopPropagation();ClientProfile.open('${a.customerId}')" style="cursor:pointer;color:var(--text);"`:''}">${a.customerName}</div>
               <div class="list-sub">${a.time} · ${a.service}${barber?' · '+barber.name:''}</div>
             </div>
             <div class="list-right">${statusBadge(a.status)}<div style="font-size:12px;color:var(--muted);margin-top:3px;">${fmtMoney(a.price)}</div></div>
@@ -134,7 +134,7 @@ const Appointments = {
           <div style="width:52px;font-size:11px;color:var(--muted);font-weight:600;flex-shrink:0;">${a.time}</div>
           ${avatarEl(a.customerName,32)}
           <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${a.customerId?'cursor:pointer;':''}" onclick="event.stopPropagation();${a.customerId?`ClientProfile.open('${a.customerId}')`:''}">${a.customerName}</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${a.customerId&&canSeeClients()?'cursor:pointer;':''}" onclick="event.stopPropagation();${a.customerId&&canSeeClients()?`ClientProfile.open('${a.customerId}')`:''}">${a.customerName}</div>
             <div style="font-size:11px;color:var(--muted);">${a.service}${barber?' · '+barber.name:''}</div>
           </div>
           ${statusBadge(a.status)}
@@ -171,14 +171,18 @@ const Appointments = {
           <input class="form-input" id="fa-price" type="number" value="${a?.price||35}" />
         </div>
       </div>
-      <div class="form-group"><label class="form-label">Barber</label>
-        <select class="form-input" id="fa-barber"><option value="|">Any barber</option>${barberOpts}</select>
+      <div class="form-group"><label class="form-label">${esc(V('staff','Barber'))}</label>
+        <select class="form-input" id="fa-barber"><option value="|">Any ${esc(V('staff','barber').toLowerCase())}</option>${barberOpts}</select>
       </div>
+      ${this._customFieldsForm(a)}
       <div class="form-row">
         <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="fa-date" type="date" value="${a?.date||this._selected}" /></div>
         <div class="form-group"><label class="form-label">Time</label><input class="form-input" id="fa-time" type="time" value="${a?.time?this._to24(a.time):'10:00'}" /></div>
       </div>
-      <div class="form-group"><label class="form-label">Notes</label><input class="form-input" id="fa-notes" value="${a?.notes||''}" placeholder="Optional notes..." /></div>
+      ${a&&(Shop.statuses||[]).length?`<div class="form-group"><label class="form-label">Status</label>
+        <select class="form-input" id="fa-status">${Shop.statuses.map(st=>`<option value="${st.key}"${a.status===st.key?' selected':''}>${esc(st.label)}</option>`).join('')}</select>
+      </div>`:''}
+      <div class="form-group"><label class="form-label">Notes</label><input class="form-input" id="fa-notes" value="${esc(a?.notes||'')}" placeholder="Optional notes..." /></div>
       <div class="modal-actions">
         ${a?`<button class="btn btn-green btn-full" onclick="Appointments.complete('${a.id}')">✓ Mark Complete</button>`:''}
         ${a?`<button class="btn btn-danger btn-full" onclick="Appointments.delete('${a.id}')">Delete</button>`:''}
@@ -207,6 +211,43 @@ const Appointments = {
         if (phoneEl) phoneEl.value = customerPhone;
       }, 80);
     });
+  },
+
+  _customFieldsForm(a) {
+    const fields = Shop.fields || [];
+    if (!fields.length) return '';
+    const cf = (a && a.customFields) || {};
+    const inputs = fields.map(f=>`<div class="form-group"><label class="form-label">${esc(f.label)}${f.required?' *':''}</label><input class="form-input" id="fa-cf-${esc(f.key)}" value="${esc(cf[f.key]||'')}" placeholder="${esc(f.label)}" /></div>`).join('');
+    return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;">${inputs}</div>`;
+  },
+
+  _customFieldsDetail(a) {
+    const fields = Shop.fields || []; const cf = a.customFields || {};
+    const filled = fields.filter(f=>cf[f.key]);
+    if (!filled.length) return '';
+    const icon = cf.vehicleMake ? '🚗 ' : '';
+    return `<div style="font-size:13px;color:var(--muted);margin-top:6px;">${icon}${filled.map(f=>esc(cf[f.key])).join(' ')}</div>`;
+  },
+
+  _statusChanger(a) {
+    const sts = (Shop.statuses||[]).filter(s=>!s.terminal && !s.noShow);
+    // Only show for verticals with operational states beyond confirmed/in-progress
+    // (e.g. detail's dropped-off/curing/ready) — keeps the barbershop UX unchanged.
+    const hasOps = sts.some(s=>!['confirmed','in-progress'].includes(s.key));
+    if (!hasOps) return '';
+    return `<div class="form-group" style="margin-bottom:12px;"><label class="form-label">Update status</label>
+      <select class="form-input" onchange="Appointments.setStatus('${a.id}',this.value)">
+        ${sts.map(s=>`<option value="${s.key}"${a.status===s.key?' selected':''}>${esc(s.label)}</option>`).join('')}
+      </select></div>`;
+  },
+
+  async setStatus(id, key) {
+    const a = this._data.find(x=>x.id===id); if(!a) return;
+    try {
+      await db.appointments.save(Object.assign({}, a, { status:key }));
+      Modal.close(); toast('Status updated ✓');
+      await this.render(); Dashboard.render();
+    } catch(e) { toast('Could not update status','error'); }
   },
 
   _svcChange() {
@@ -241,6 +282,14 @@ const Appointments = {
     const barberVal=document.getElementById('fa-barber')?.value||'';
     const[barberId,barberName]=barberVal.split('|');
     const timeVal=document.getElementById('fa-time')?.value||'10:00';
+    // Collect + validate custom fields (e.g. vehicle info for detail shops)
+    const cf={};
+    for(const f of (Shop.fields||[])){
+      const v=document.getElementById('fa-cf-'+f.key)?.value.trim()||'';
+      if(f.required && !v){ toast('Please enter '+f.label,'warning'); return; }
+      cf[f.key]=v;
+    }
+    const statusSel=document.getElementById('fa-status')?.value;
     const btn=document.getElementById('fa-btn'); disableBtn(btn);
     try {
       await db.appointments.save({
@@ -254,8 +303,9 @@ const Appointments = {
         date:document.getElementById('fa-date')?.value||today(),
         time:this._to12(timeVal),
         duration:45,
-        status:id?(this._data.find(x=>x.id===id)?.status||'confirmed'):'confirmed',
+        status:statusSel||(id?(this._data.find(x=>x.id===id)?.status||'confirmed'):'confirmed'),
         notes:document.getElementById('fa-notes')?.value.trim()||'',
+        customFields:cf,
         source:'crm',
       });
       Modal.close(); toast(id?'Updated ✓':'Appointment added ✓');
@@ -273,16 +323,18 @@ const Appointments = {
         <div style="font-size:13px;color:var(--muted);margin-top:4px;">${a.service} · ${fmtDateFull(a.date)} at ${a.time}</div>
         ${barber?`<div style="font-size:13px;color:var(--muted);">with ${barber.name}</div>`:''}
         <div style="margin-top:8px;">${statusBadge(a.status)} <span style="font-weight:700;color:var(--green);margin-left:8px;">${fmtMoney(a.price)}</span></div>
-        ${a.notes?`<div style="font-size:13px;color:var(--muted);margin-top:8px;">${a.notes}</div>`:''}
+        ${this._customFieldsDetail(a)}
+        ${a.notes?`<div style="font-size:13px;color:var(--muted);margin-top:8px;">${esc(a.notes)}</div>`:''}
         ${a.customerPhone?`<div style="font-size:13px;color:var(--muted);margin-top:4px;">📱 ${a.customerPhone}</div>`:''}
       </div>
+      ${canWrite()?this._statusChanger(a):''}
       <div class="modal-actions">
-        ${a.customerId?`<button class="btn btn-full" onclick="Modal.close();ClientProfile.open('${a.customerId}')">👤 View Client Profile</button>`:''}
-        ${a.status==='confirmed'||a.status==='in-progress'?`<button class="btn btn-green btn-full" onclick="Appointments.complete('${a.id}')">✓ Mark Complete</button>`:''}
-        ${a.status==='confirmed'?`<button class="btn btn-full" style="color:var(--orange);border-color:#fde68a;" onclick="Appointments.noShow('${a.id}')">😤 No Show</button>`:''}
-        ${a.status==='confirmed'&&!a.depositPaid&&!a.depositWaived?`<button class="btn btn-full" style="color:var(--muted);" onclick="Appointments.waiveDeposit('${a.id}')">⚡ Waive Deposit</button>`:''}
-        <button class="btn btn-full" onclick="Appointments.openForm('${a.id}')">Edit</button>
-        <button class="btn btn-danger btn-full" onclick="Appointments.delete('${a.id}')">Delete</button>
+        ${a.customerId&&canSeeClients()?`<button class="btn btn-full" onclick="Modal.close();ClientProfile.open('${a.customerId}')">👤 View Client Profile</button>`:''}
+        ${canWrite()&&a.status!=='done'&&a.status!=='no-show'?`<button class="btn btn-green btn-full" onclick="Appointments.complete('${a.id}')">✓ Mark Complete</button>`:''}
+        ${canWrite()&&a.status!=='done'&&a.status!=='no-show'?`<button class="btn btn-full" style="color:var(--orange);border-color:#fde68a;" onclick="Appointments.noShow('${a.id}')">😤 No Show</button>`:''}
+        ${canWrite()&&a.status==='confirmed'&&!a.depositPaid&&!a.depositWaived?`<button class="btn btn-full" style="color:var(--muted);" onclick="Appointments.waiveDeposit('${a.id}')">⚡ Waive Deposit</button>`:''}
+        ${canWrite()?`<button class="btn btn-full" onclick="Appointments.openForm('${a.id}')">Edit</button>`:''}
+        ${canWrite()?`<button class="btn btn-danger btn-full" onclick="Appointments.delete('${a.id}')">Delete</button>`:''}
         <button class="btn btn-full" onclick="Modal.close()">Close</button>
       </div>`);
   },
@@ -319,8 +371,8 @@ const Appointments = {
         <input class="form-input" id="cc-tip-custom" type="number" placeholder="Custom tip amount" style="display:none;margin-top:8px;" oninput="document.getElementById('cc-tip').value=this.value||0;Appointments._updateTotal()" />
       </div>
       <div class="form-group">
-        <label class="form-label">Cut Notes <span style="font-weight:400;color:var(--faint);">(optional)</span></label>
-        <textarea class="form-input" id="cc-notes" rows="2" placeholder="e.g. 2 on sides, scissors on top, blended fade, no product…"></textarea>
+        <label class="form-label">${esc(V('notes','Cut Notes'))} <span style="font-weight:400;color:var(--faint);">(optional)</span></label>
+        <textarea class="form-input" id="cc-notes" rows="2" placeholder="${esc(V('notes','Cut Notes'))}…"></textarea>
       </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
         <span style="font-size:13px;font-weight:600;color:var(--muted);">Total</span>

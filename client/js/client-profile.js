@@ -68,6 +68,25 @@ function _buildProfileHtml(data, messages, backFn) {
   html += `<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;"><span style="color:var(--muted);">Client since</span><span style="color:var(--text);font-weight:600;">${fmtDateShort(c.createdAt)||'—'}</span></div>`;
   html += `</div>`;
 
+  // ── Fleet account ──
+  if (c.isFleet) {
+    html += `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;font-size:12px;color:#1d4ed8;margin-bottom:12px;display:flex;align-items:center;gap:6px;">🚚 <strong>Fleet account</strong>${c.companyName?' · '+esc(c.companyName):''}</div>`;
+  }
+
+  // ── Vehicles (detail shops) ──
+  if (c.vehicles && c.vehicles.length) {
+    html += `<div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;">Vehicles</div>`;
+    html += `<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px;">`;
+    c.vehicles.forEach((v,i) => {
+      const title = [v.year,v.make,v.model].filter(Boolean).map(esc).join(' ') || 'Vehicle';
+      html += `<div style="${i>0?'border-top:1px solid var(--border);':''}display:flex;align-items:center;gap:10px;padding:10px 14px;">
+        <div style="font-size:18px;">🚗</div>
+        <div style="flex:1;"><div style="font-size:13px;font-weight:600;">${title}</div>${v.color?`<div style="font-size:11px;color:var(--muted);">${esc(v.color)}</div>`:''}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
   // ── Flags ──
   if ((c.noShows||0) > 0) html += `<div style="background:#fff5f5;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;font-size:12px;color:#dc2626;margin-bottom:12px;">⚠️ ${c.noShows} no-show${c.noShows>1?'s':''} on record</div>`;
   if (data.rewardReady)   html += `<div style="background:var(--green-lt);border:1px solid #b3dfbf;border-radius:8px;padding:8px 12px;font-size:12px;color:var(--green);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">🎉 Loyalty reward ready! <button onclick="Clients.redeemReward('${c.id}','${c.name}')" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">Redeem</button></div>`;

@@ -178,6 +178,13 @@ const Clients = {
       <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="fc-phone" type="tel" value="${c?.phone||''}" placeholder="(505) 555-0100" /></div>
       <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="fc-email" type="email" value="${c?.email||''}" placeholder="optional" /></div>
       <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="fc-notes">${c?.notes||''}</textarea></div>
+      ${Shop.settings.supportsFleet?`
+      <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="fc-fleet" ${c?.isFleet?'checked':''} onchange="document.getElementById('fc-company-wrap').style.display=this.checked?'block':'none'" style="width:auto;" />
+        <label for="fc-fleet" style="margin:0;font-size:13px;cursor:pointer;">🚚 Fleet account (business with multiple vehicles)</label>
+      </div>
+      <div class="form-group" id="fc-company-wrap" style="display:${c?.isFleet?'block':'none'};"><label class="form-label">Company Name</label><input class="form-input" id="fc-company" value="${esc(c?.companyName||'')}" placeholder="e.g. Sandia Auto Group" /></div>
+      `:''}
       <div class="modal-actions">
         ${c?`<button class="btn btn-danger btn-full" onclick="Clients.delete('${c.id}')">Delete Client</button>`:''}
         <button id="fc-btn" class="btn btn-primary btn-full" onclick="Clients.save('${c?.id||''}')">Save</button>
@@ -191,7 +198,8 @@ const Clients = {
     if(!name){toast('Please enter a name','warning');return;}
     const btn=document.getElementById('fc-btn'); disableBtn(btn);
     try{
-      await db.customers.save({id:id||genId('c'),name,phone:document.getElementById('fc-phone')?.value.trim()||'',email:document.getElementById('fc-email')?.value.trim()||'',notes:document.getElementById('fc-notes')?.value.trim()||'',loyaltyPoints:id?(this._data.find(c=>c.id===id)?.loyaltyPoints||0):0,source:'manual',createdAt:id?(this._data.find(c=>c.id===id)?.createdAt||today()):today()});
+      const isFleet=!!document.getElementById('fc-fleet')?.checked;
+      await db.customers.save({id:id||genId('c'),name,phone:document.getElementById('fc-phone')?.value.trim()||'',email:document.getElementById('fc-email')?.value.trim()||'',notes:document.getElementById('fc-notes')?.value.trim()||'',isFleet,companyName:isFleet?(document.getElementById('fc-company')?.value.trim()||''):'',loyaltyPoints:id?(this._data.find(c=>c.id===id)?.loyaltyPoints||0):0,source:'manual',createdAt:id?(this._data.find(c=>c.id===id)?.createdAt||today()):today()});
       Modal.close(); toast(id?'Updated ✓':'Client added ✓');
       if (id && this._view==='profile') { await this._renderProfile(document.getElementById('page-clients')); } else { this._view='list'; this.render(); }
     }catch(e){toast('Could not save','error');enableBtn(btn);}
@@ -255,6 +263,20 @@ const Clients = {
       if ((c.noShows||0) > 0) html += `<div style="background:#fff5f5;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;font-size:12px;color:#dc2626;margin-bottom:12px;">⚠️ ${c.noShows} no-show${c.noShows>1?'s':''} on record</div>`;
       if (data.rewardReady) html += `<div style="background:var(--green-lt);border:1px solid #b3dfbf;border-radius:8px;padding:8px 12px;font-size:12px;color:var(--green);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">🎉 Reward ready! <button onclick="Clients.redeemReward('${c.id}','${c.name}')" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">Redeem</button></div>`;
       if (c.notes) html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--muted);margin-bottom:12px;">📝 ${c.notes}</div>`;
+
+      // ── Fleet account ──
+      if (c.isFleet) html += `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;font-size:12px;color:#1d4ed8;margin-bottom:12px;display:flex;align-items:center;gap:6px;">🚚 <strong>Fleet account</strong>${c.companyName?' · '+esc(c.companyName):''}</div>`;
+
+      // ── Vehicles ──
+      if (c.vehicles && c.vehicles.length) {
+        html += `<div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:8px;">VEHICLES</div>`;
+        html += `<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px;">`;
+        c.vehicles.forEach((v,i)=>{
+          const title=[v.year,v.make,v.model].filter(Boolean).map(esc).join(' ')||'Vehicle';
+          html += `<div style="${i>0?'border-top:1px solid var(--border);':''}display:flex;align-items:center;gap:10px;padding:10px 14px;"><div style="font-size:18px;">🚗</div><div style="flex:1;"><div style="font-size:13px;font-weight:600;">${title}</div>${v.color?`<div style="font-size:11px;color:var(--muted);">${esc(v.color)}</div>`:''}</div></div>`;
+        });
+        html += `</div>`;
+      }
 
       // ── Automations ──
       html += `<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px;">
