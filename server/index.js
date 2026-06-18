@@ -37,6 +37,15 @@ app.get('/login',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'login.html
 app.get('/admin',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'admin.html')));
 app.get('*',        (req, res) => res.sendFile(path.join(CLIENT_DIR, 'landing.html')));
 
+// ── Optional one-time demo seed ───────────────────────────────────────────────
+// Set SEED_DEMO=true in the environment (e.g. on Railway) to seed the generic
+// demo detail shop into the persistent volume on boot. Create-only: it won't
+// wipe an existing demo shop on every restart. Unset it once seeded.
+if (process.env.SEED_DEMO === 'true') {
+  try { require('../seed-demo-detail')({ force: false }); }
+  catch(e) { console.error('Demo seed failed:', e.message); }
+}
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => console.log(`ShopFlow Platform on port ${PORT}`));
 setTimeout(runScheduler, 30000);
