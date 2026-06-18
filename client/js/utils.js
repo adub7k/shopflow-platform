@@ -2,7 +2,7 @@
 
 // Global shop profile (vocabulary, custom fields, statuses) — populated at boot
 // from db.settings.get(). Falls back to barbershop terms if a shop has none.
-const Shop = { settings:{}, vocab:{}, fields:[], statuses:[], sizes:[], addons:[], membershipPlans:[], serviceCategories:[] };
+const Shop = { settings:{}, vocab:{}, fields:[], statuses:[], sizes:[], addons:[], membershipPlans:[], serviceCategories:[], supportsQuotes:false };
 function V(key, fb){ return (Shop.vocab && Shop.vocab[key]) || fb; }
 
 // Resolve a service's price for a given vehicle size class. Falls back to the

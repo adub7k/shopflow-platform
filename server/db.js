@@ -123,6 +123,7 @@ function initShopDb(db, shopData) {
       serviceCategories: profile.serviceCategories || ['cut','beard','combo','color','design','other'],
       staffPicker: profile.staffPicker !== false,
       supportsFleet: profile.supportsFleet,
+      supportsQuotes: profile.supportsQuotes || false,
       loyalty: { enabled: true, visitsForReward: 10, rewardDescription: 'One free service' },
       twilio: { accountSid: '', authToken: '', fromNumber: '' },
       googleReviewLink: '',

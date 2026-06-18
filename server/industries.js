@@ -84,6 +84,8 @@ const INDUSTRIES = {
     // staff step OFF (the owner can turn it back on in Settings for specialists).
     staffPicker: false,
     serviceCategories: ['wash','interior','exterior','detail','coating','tint','correction','other'],
+    // Estimates/quotes are a detail-shop workflow (ceramic, PPF, correction).
+    supportsQuotes: true,
   },
 
   nails: {
