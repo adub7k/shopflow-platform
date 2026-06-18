@@ -45,6 +45,47 @@ router.delete('/api/shop/gallery/:id', requireAuth, requireRole('full'), shopRou
   res.json({ ok: true });
 }));
 
+// ── PROTECTED: Reviews ────────────────────────────────────────────────────────
+router.get('/api/shop/reviews', requireAuth, shopRoute(async (req, res, db) => {
+  const reviews = db.get('reviews').value() || [];
+  const count = reviews.length;
+  const avg = count ? +(reviews.reduce((a,r)=>a+r.rating,0)/count).toFixed(1) : 0;
+  const dist = [0,0,0,0,0];
+  reviews.forEach(r => { if (r.rating>=1 && r.rating<=5) dist[r.rating-1]++; });
+  res.json({ reviews, stats: { count, avg, dist } });
+}));
+router.post('/api/shop/reviews/:id/feature', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
+  const reviews = db.get('reviews').value() || [];
+  const r = reviews.find(x => x.id === req.params.id);
+  if (!r) return res.status(404).json({ ok: false, error: 'Review not found' });
+  r.featured = !r.featured; db.set('reviews', reviews).write();
+  res.json({ ok: true, featured: r.featured });
+}));
+router.delete('/api/shop/reviews/:id', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
+  const reviews = db.get('reviews').value() || [];
+  db.set('reviews', reviews.filter(x => x.id !== req.params.id)).write();
+  res.json({ ok: true });
+}));
+// Text a client a link to leave a review (uses the shop's SMS line).
+router.post('/api/shop/reviews/request', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  const a = h.getById('appointments', req.body.appointmentId);
+  if (!a) return res.status(404).json({ ok: false, error: 'Appointment not found' });
+  const phone = (a.customerPhone || '').replace(/\D/g, '');
+  if (phone.length < 10) return res.status(400).json({ ok: false, error: 'No phone number on file for this client' });
+  const from = shopFromNumber(req.shopId);
+  if (!twilioClient || !from) return res.status(400).json({ ok: false, error: 'SMS is not active for this shop yet' });
+  const s = db.get('settings').value() || {};
+  const shopRow = master.get('shops').find({ id: req.shopId }).value();
+  const base = process.env.PUBLIC_BASE_URL || (req.protocol + '://' + req.get('host'));
+  const link = `${base}/review/${shopRow.slug}?a=${a.id}`;
+  const body = `Hi ${(a.customerName||'there').split(' ')[0]}! Thanks for visiting ${s.shopName||'us'}. How did we do? Leave a quick review: ${link}`;
+  try {
+    await twilioClient.messages.create({ from, to: '+1' + phone, body });
+    a.reviewRequestedAt = new Date().toISOString(); h.upsert('appointments', a);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ ok: false, error: 'Could not send the text' }); }
+}));
+
 // ── PROTECTED: Staff / users (owner only) ─────────────────────────────────────
 router.get('/api/shop/staff', requireAuth, requireRole('full'), (req, res) => {
   const shop = master.get('shops').find({ id: req.shopId }).value();

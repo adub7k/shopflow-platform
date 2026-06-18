@@ -70,6 +70,14 @@ img{max-width:100%;display:block;}
 .gallery-item:active img{transform:scale(1.04);}
 .gallery-cap{position:absolute;left:0;right:0;bottom:0;padding:18px 12px 9px;font-size:12px;font-weight:600;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.55));}
 
+/* ── Reviews ── */
+.rev-row{display:flex;gap:12px;overflow-x:auto;padding:2px 22px 6px;margin:0 -22px;scrollbar-width:none;}
+.rev-row::-webkit-scrollbar{display:none;}
+.rev-card{flex-shrink:0;width:264px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px 17px;box-shadow:var(--sh-sm);}
+.rev-stars{color:#f6b900;font-size:15px;letter-spacing:2px;}
+.rev-text{font-size:13.5px;line-height:1.5;margin:8px 0;color:var(--ink-2);}
+.rev-name{font-size:12px;font-weight:700;color:var(--muted);}
+
 /* ── Service cards ── */
 .svc-list{display:flex;flex-direction:column;gap:11px;}
 .svc{background:var(--surface);border:2px solid var(--line);border-radius:var(--r-lg);padding:16px 17px;cursor:pointer;display:flex;align-items:center;gap:15px;box-shadow:var(--sh-sm);transition:border-color .15s,box-shadow .15s,transform .08s;}
@@ -207,6 +215,12 @@ img{max-width:100%;display:block;}
       <div class="gallery-row" id="gallery-row"></div>
     </section>
 
+    <!-- Reviews (social proof) -->
+    <section class="block" id="reviews-sec" style="display:none;">
+      <div class="block-head"><span class="block-eyebrow" id="reviews-eyebrow">Reviews</span></div>
+      <div class="rev-row" id="reviews-row"></div>
+    </section>
+
     <!-- Service -->
     <section class="block">
       <div class="block-head"><span class="num num-step">1</span><h2 class="block-title">Choose a service</h2></div>
@@ -301,6 +315,7 @@ const B = {
       this._accent(info.accentColor||'#16a34a');
       this._header(info);
       this._gallery();
+      this._reviews();
       this._svcs(info.services||[]);
       this._staff(info.barbers||[]);
       this._inspoSection();
@@ -339,6 +354,17 @@ const B = {
       `<div class="gallery-item" onclick="B.lightbox('${es(g.url)}')"><img src="${es2(g.url)}" loading="lazy" alt="${es2(g.caption||'Work sample')}"/>${g.caption?`<div class="gallery-cap">${es2(g.caption)}</div>`:''}</div>`
     ).join('');
     document.getElementById('gallery-sec').style.display='';
+  },
+
+  _reviews(){
+    const fr=this.shop.featuredReviews||[]; const st=this.shop.reviewStats;
+    if(!fr.length) return;
+    const star=n=>'★★★★★'.slice(0,n)+'☆☆☆☆☆'.slice(0,5-n);
+    document.getElementById('reviews-eyebrow').textContent = st ? ('★ '+st.avg.toFixed(1)+' · '+st.count+' review'+(st.count!==1?'s':'')) : 'What clients say';
+    document.getElementById('reviews-row').innerHTML = fr.map(r=>
+      `<div class="rev-card"><div class="rev-stars">${star(r.rating)}</div>${r.comment?`<div class="rev-text">“${es2(r.comment)}”</div>`:''}<div class="rev-name">${es2(r.name||'Anonymous')}${r.service?' · '+es2(r.service):''}</div></div>`
+    ).join('');
+    document.getElementById('reviews-sec').style.display='';
   },
 
   _svcIcon(c){ return {cut:'✂️',beard:'🪒',combo:'✂️',color:'🎨',design:'💈',wash:'🚿',detail:'🚗',coating:'✨',nails:'💅',other:'💈'}[c]||'💈'; },

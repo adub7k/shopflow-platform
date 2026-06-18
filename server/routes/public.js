@@ -87,6 +87,10 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
       // Inspiration photo + work gallery
       inspo: inspoMode(s, db.get('industry').value()),
       gallery: s.gallery || [],
+      // Featured reviews (social proof) + overall rating
+      featuredReviews: (db.get('reviews').value() || []).filter(r => r.featured).slice(0, 8)
+        .map(r => ({ rating: r.rating, comment: r.comment, name: r.name, service: r.service, createdAt: r.createdAt })),
+      reviewStats: (() => { const rv = db.get('reviews').value() || []; return rv.length ? { avg: +(rv.reduce((a,r)=>a+r.rating,0)/rv.length).toFixed(1), count: rv.length } : null; })(),
     });
   } catch(e) {
     console.error('Public info error:', e.message);
@@ -107,6 +111,52 @@ router.post('/api/public/:shopSlug/upload', (req, res) => {
   } catch(e) {
     res.status(400).json({ ok: false, error: e.message || 'Upload failed' });
   }
+});
+
+// ── PUBLIC: Review page context (?a=<appointmentId> for prefill) ──────────────
+router.get('/api/public/:shopSlug/review-info', (req, res) => {
+  try {
+    const shop = master.get('shops').find({ slug: req.params.shopSlug, active: true }).value();
+    if (!shop) return res.status(404).json({ error: 'Shop not found' });
+    const db = getShopDb(shop.id);
+    const s = db.get('settings').value() || {};
+    let customerName = '', service = '', alreadyReviewed = false;
+    if (req.query.a) {
+      const appt = (db.get('appointments').value() || []).find(x => x.id === req.query.a);
+      if (appt) { customerName = appt.customerName || ''; service = appt.service || ''; alreadyReviewed = !!appt.reviewId; }
+    }
+    res.json({ shopName: s.shopName || shop.shopName, accentColor: s.accentColor || '#16a34a', vocab: s.vocab || null, customerName, service, alreadyReviewed, googleReviewLink: s.googleReviewLink || '' });
+  } catch(e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── PUBLIC: Submit a review ───────────────────────────────────────────────────
+router.post('/api/public/:shopSlug/review', (req, res) => {
+  try {
+    const shop = master.get('shops').find({ slug: req.params.shopSlug, active: true }).value();
+    if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
+    const db = getShopDb(shop.id);
+    const rating = Math.round(Number(req.body.rating));
+    if (!(rating >= 1 && rating <= 5)) return res.status(400).json({ ok: false, error: 'Please choose a star rating.' });
+    const reviews = db.get('reviews').value() || [];
+    let customerId = null, service = '', barberName = '', name = (req.body.name || '').trim();
+    const apptId = req.body.appointmentId || null;
+    if (apptId) {
+      const appt = (db.get('appointments').value() || []).find(x => x.id === apptId);
+      if (appt) {
+        if (appt.reviewId) return res.status(409).json({ ok: false, error: 'This visit has already been reviewed — thank you!' });
+        customerId = appt.customerId || null; service = appt.service || ''; barberName = appt.barberName || '';
+        if (!name) name = appt.customerName || '';
+      }
+    }
+    const review = { id: genId('rev'), rating, comment: (req.body.comment || '').slice(0, 600).trim(), name: name || 'Anonymous', customerId, appointmentId: apptId, service, barberName, featured: false, source: 'link', createdAt: new Date().toISOString() };
+    db.set('reviews', [review, ...reviews]).write();
+    if (apptId) {
+      const appts = db.get('appointments').value() || [];
+      const i = appts.findIndex(x => x.id === apptId);
+      if (i >= 0) { appts[i].reviewId = review.id; db.set('appointments', appts).write(); }
+    }
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ ok: false, error: 'Server error' }); }
 });
 
 // ── PUBLIC: Booking availability ──────────────────────────────────────────────
