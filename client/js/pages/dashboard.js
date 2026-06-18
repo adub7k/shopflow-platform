@@ -133,6 +133,9 @@ const Dashboard = {
         html.push('<div class="metric-grid">');
         html.push(`<div class="metric-card"><div class="metric-label">Revenue MTD</div><div class="metric-value green">${fmtMoney(rev.monthRevenue)}</div><div class="metric-sub">${rev.monthJobs} appointments</div></div>`);
         html.push(`<div class="metric-card"><div class="metric-label">Avg Ticket</div><div class="metric-value">${fmtMoney(rev.avgTicket)}</div><div class="metric-sub">This month</div></div>`);
+        if (rev.activeMembers) {
+          html.push(`<div class="metric-card"><div class="metric-label">Membership MRR</div><div class="metric-value">${fmtMoney(rev.mrr)}</div><div class="metric-sub">${rev.activeMembers} active member${rev.activeMembers!==1?'s':''}</div></div>`);
+        }
         html.push('</div>');
       }
 

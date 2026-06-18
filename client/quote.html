@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>Your Estimate</title>
+<style>
+:root{
+  --accent:#16a34a; --accent-2:#22c55e; --accent-ink:#fff;
+  --ink:#0f1115; --muted:#6b7280; --faint:#9aa0ab;
+  --bg:#f5f6f8; --surface:#fff; --line:#e8eaee;
+  --r-xl:22px; --r-lg:18px; --r-md:13px;
+  --sh-md:0 6px 22px rgba(15,17,21,.08); --sh-lg:0 18px 50px rgba(15,17,21,.16);
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+body{background:var(--bg);font-family:var(--font);color:var(--ink);-webkit-font-smoothing:antialiased;min-height:100vh;}
+.shell{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;}
+#loading{position:fixed;inset:0;background:var(--surface);display:flex;align-items:center;justify-content:center;z-index:50;}
+.spinner{width:32px;height:32px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.hero{background:linear-gradient(150deg,var(--accent),var(--accent-2));color:var(--accent-ink);padding:42px 24px 34px;text-align:center;border-radius:0 0 var(--r-xl) var(--r-xl);}
+.hero-av{width:60px;height:60px;border-radius:17px;background:var(--surface);color:var(--accent);font-size:23px;font-weight:900;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;box-shadow:var(--sh-lg);}
+.hero h1{font-size:23px;font-weight:900;letter-spacing:-.04em;}
+.hero p{font-size:14px;opacity:.92;margin-top:5px;}
+.body{padding:24px 20px 36px;flex:1;}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-md);overflow:hidden;margin-bottom:16px;}
+.card-head{padding:15px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;}
+.qnum{font-size:13px;font-weight:800;color:var(--muted);font-family:ui-monospace,Menlo,monospace;}
+.badge{font-size:11px;font-weight:800;padding:4px 10px;border-radius:100px;text-transform:uppercase;letter-spacing:.04em;}
+.b-sent{background:#eef2ff;color:#4338ca;} .b-approved{background:#ecfdf5;color:#047857;} .b-declined{background:#fef2f2;color:#dc2626;} .b-scheduled{background:#eff6ff;color:#1d4ed8;}
+.veh{padding:12px 18px;font-size:13px;color:var(--muted);border-bottom:1px solid var(--line);}
+.li{display:flex;justify-content:space-between;align-items:center;padding:13px 18px;border-bottom:1px solid var(--line);font-size:15px;}
+.li-name{font-weight:600;} .li-price{font-weight:700;}
+.total{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;font-size:18px;font-weight:900;}
+.total .amt{color:var(--accent);}
+.note{padding:13px 18px;font-size:13px;color:var(--muted);background:#fafbfc;line-height:1.5;}
+.dep{margin:0 0 16px;padding:13px 16px;background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r-md);font-size:13px;color:#92400e;font-weight:600;text-align:center;}
+.btn{width:100%;border:none;border-radius:100px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:var(--accent-ink);font-family:var(--font);font-size:17px;font-weight:800;padding:17px;cursor:pointer;box-shadow:var(--sh-md);transition:opacity .15s,transform .08s;margin-bottom:10px;}
+.btn:active{transform:scale(.98);} .btn:disabled{background:var(--line);color:var(--faint);box-shadow:none;cursor:not-allowed;}
+.btn-ghost{background:none;color:var(--muted);box-shadow:none;font-weight:700;font-size:15px;padding:12px;}
+.err{background:#fef2f2;border:1.5px solid #fecaca;border-radius:var(--r-md);padding:12px 16px;font-size:13px;color:#dc2626;margin-bottom:14px;display:none;font-weight:600;}
+.center{padding:64px 28px;text-align:center;display:none;flex:1;flex-direction:column;justify-content:center;}
+.center .ic{font-size:70px;margin-bottom:16px;animation:pop .45s cubic-bezier(.18,.89,.32,1.28);}
+@keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+.center h2{font-size:25px;font-weight:900;letter-spacing:-.04em;margin-bottom:8px;}
+.center p{font-size:15px;color:var(--muted);line-height:1.6;}
+</style>
+</head>
+<body>
+<div id="loading"><div class="spinner"></div></div>
+<div class="shell">
+  <div id="view" style="display:none;flex-direction:column;flex:1;">
+    <div class="hero">
+      <div class="hero-av" id="av"></div>
+      <h1 id="title">Your estimate</h1>
+      <p id="subtitle"></p>
+    </div>
+    <div class="body">
+      <div class="err" id="err"></div>
+      <div class="card">
+        <div class="card-head"><span class="qnum" id="qnum"></span><span class="badge" id="qbadge"></span></div>
+        <div class="veh" id="veh" style="display:none;"></div>
+        <div id="lines"></div>
+        <div class="total"><span>Total</span><span class="amt" id="total"></span></div>
+        <div class="note" id="note" style="display:none;"></div>
+      </div>
+      <div class="dep" id="dep" style="display:none;"></div>
+      <div id="actions"></div>
+    </div>
+  </div>
+  <div id="approved" class="center">
+    <div class="ic">🎉</div><h2>Estimate approved!</h2>
+    <p id="approved-sub">Thanks! We'll be in touch to schedule your appointment.</p>
+  </div>
+  <div id="declined" class="center">
+    <div class="ic">👍</div><h2>No problem</h2>
+    <p>You've declined this estimate. If you change your mind, just reach out to the shop.</p>
+  </div>
+  <div id="gone" class="center">
+    <div class="ic">🔍</div><h2>Estimate not found</h2>
+    <p>This link may be expired or incorrect. Please contact the shop.</p>
+  </div>
+</div>
+<script>
+const es=(s)=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function lighten(hex,amt){ const n=parseInt(hex.slice(1),16); const r=Math.min(255,(n>>16&255)+Math.round(255*amt)),g=Math.min(255,(n>>8&255)+Math.round(255*amt)),b=Math.min(255,(n&255)+Math.round(255*amt)); return '#'+(1<<24|r<<16|g<<8|b).toString(16).slice(1); }
+const Q = {
+  slug:'', id:'', info:null,
+  async init(){
+    const parts=location.pathname.replace(/^\/quote\/?/,'').split('/');
+    this.slug=(parts[0]||'').split('?')[0]; this.id=(parts[1]||'').split('?')[0];
+    if(!this.slug||!this.id) return this.show('gone');
+    try{
+      const info=await fetch('/api/public/'+this.slug+'/quote/'+this.id).then(r=>r.json());
+      if(info.error||!info.quote) return this.show('gone');
+      this.info=info; this._accent(info.accentColor||'#16a34a');
+      document.getElementById('av').textContent=(info.shopName||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+      document.getElementById('subtitle').textContent=info.shopName||'';
+      document.title='Estimate — '+(info.shopName||'');
+      this._render(info.quote);
+      this.show('view'); document.getElementById('view').style.display='flex';
+    }catch(e){ this.show('gone'); }
+    finally{ document.getElementById('loading').style.display='none'; }
+  },
+  _accent(hex){ const r=document.documentElement.style; r.setProperty('--accent',hex); r.setProperty('--accent-2',lighten(hex,.14)); },
+  show(id){ ['view','approved','declined','gone'].forEach(x=>{const e=document.getElementById(x);if(e)e.style.display='none';}); const el=document.getElementById(id); if(el)el.style.display='flex'; },
+  err(m){ const e=document.getElementById('err'); if(!e)return; e.textContent=m||''; e.style.display=m?'block':'none'; },
+  _render(q){
+    document.getElementById('qnum').textContent=q.number||'Estimate';
+    const badge=document.getElementById('qbadge');
+    const map={sent:'b-sent',approved:'b-approved',declined:'b-declined',scheduled:'b-scheduled'};
+    badge.className='badge '+(map[q.status]||'b-sent');
+    badge.textContent=q.status==='sent'?'Pending':q.status;
+    const v=q.vehicle; if(v&&(v.year||v.make||v.model)){ const el=document.getElementById('veh'); el.style.display=''; el.textContent='🚗 '+[v.year,v.make,v.model,v.color].filter(Boolean).join(' '); }
+    document.getElementById('lines').innerHTML=(q.lineItems||[]).map(l=>`<div class="li"><span class="li-name">${es(l.name)}</span><span class="li-price">$${l.price}</span></div>`).join('');
+    document.getElementById('total').textContent='$'+q.total;
+    if(q.notes){ const n=document.getElementById('note'); n.style.display=''; n.textContent=q.notes; }
+    if(q.depositRequired && !q.depositPaid){ const d=document.getElementById('dep'); d.style.display=''; d.textContent='💳 A $'+q.depositAmount+' deposit is required to approve this estimate.'; }
+    if(q.depositPaid){ const d=document.getElementById('dep'); d.style.display=''; d.style.background='#ecfdf5'; d.style.borderColor='#a7f3d0'; d.style.color='#047857'; d.textContent='✓ Deposit paid'; }
+    const act=document.getElementById('actions');
+    if(q.status==='sent'){
+      act.innerHTML=`<button class="btn" id="approve-btn" onclick="Q.approve()">${q.depositRequired&&!q.depositPaid?('Approve & pay $'+q.depositAmount+' deposit'):'Approve estimate'}</button>
+        <button class="btn-ghost" onclick="Q.decline()">Decline</button>`;
+    } else if(q.status==='approved'||q.status==='scheduled'){
+      act.innerHTML=`<div style="text-align:center;color:var(--muted);font-size:14px;padding:6px 0;">✓ You approved this estimate.${q.status==='scheduled'?' It is scheduled.':' The shop will reach out to schedule.'}</div>`;
+    } else if(q.status==='declined'){
+      act.innerHTML=`<div style="text-align:center;color:var(--muted);font-size:14px;padding:6px 0;">This estimate was declined.</div>`;
+    }
+  },
+  async approve(){
+    const btn=document.getElementById('approve-btn'); if(btn){btn.disabled=true;btn.textContent='Approving…';}
+    this.err('');
+    try{
+      const r=await fetch('/api/public/'+this.slug+'/quote/'+this.id+'/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(r=>r.json());
+      if(!r.ok){ this.err(r.error||'Could not approve. Please try again.'); if(btn){btn.disabled=false;btn.textContent='Approve estimate';} return; }
+      if(r.depositRequired){
+        const d=await fetch('/api/public/'+this.slug+'/quote-deposit-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({quoteId:this.id})}).then(r=>r.json());
+        if(d.ok&&d.url){ window.location.href=d.url; return; }
+        this.err(d.error||'Could not start the deposit payment.'); if(btn){btn.disabled=false;btn.textContent='Approve estimate';} return;
+      }
+      this.show('approved');
+    }catch(e){ this.err('Something went wrong. Please try again.'); if(btn){btn.disabled=false;btn.textContent='Approve estimate';} }
+  },
+  async decline(){
+    if(!confirm('Decline this estimate?')) return;
+    try{ await fetch('/api/public/'+this.slug+'/quote/'+this.id+'/decline',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); this.show('declined'); }
+    catch(e){ this.err('Something went wrong. Please try again.'); }
+  },
+};
+Q.init();
+</script>
+</body>
+</html>

@@ -162,6 +162,7 @@ const Appointments = {
         <div class="autocomplete-wrap"><input class="form-input" id="fa-name" value="${a?.customerName||''}" placeholder="Search or type name..." /><div class="autocomplete-list" id="fa-list"></div></div>
         <input type="hidden" id="fa-cid" value="${a?.customerId||''}" />
         <input type="hidden" id="fa-phone" value="${a?.customerPhone||''}" />
+        <input type="hidden" id="fa-quote-id" value="" />
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Service</label>
@@ -171,6 +172,14 @@ const Appointments = {
           <input class="form-input" id="fa-price" type="number" value="${a?.price||35}" />
         </div>
       </div>
+      ${(Shop.sizes||[]).length?`<div class="form-group"><label class="form-label">Vehicle size</label>
+        <select class="form-input" id="fa-size" onchange="Appointments._recalcPrice()">${Shop.sizes.map(sz=>`<option value="${esc(sz.key)}"${a?.vehicleSize===sz.key?' selected':''}>${esc(sz.label)}</option>`).join('')}</select>
+      </div>`:''}
+      ${(Shop.addons||[]).length?`<div class="form-group"><label class="form-label">Add-ons</label>
+        <div style="display:flex;flex-direction:column;gap:2px;">${Shop.addons.map(ad=>{const ck=(a?.addons||[]).some(x=>x.id===ad.id);return `<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:4px 0;">
+          <input type="checkbox" class="fa-addon" value="${esc(ad.id)}" data-name="${esc(ad.name)}" data-price="${ad.price}" ${ck?'checked':''} onchange="Appointments._recalcPrice()" />
+          <span style="flex:1;">${esc(ad.name)}</span><span style="color:var(--muted);">+${fmtMoney(ad.price)}</span></label>`;}).join('')}</div>
+      </div>`:''}
       <div class="form-group"><label class="form-label">${esc(V('staff','Barber'))}</label>
         <select class="form-input" id="fa-barber"><option value="|">Any ${esc(V('staff','barber').toLowerCase())}</option>${barberOpts}</select>
       </div>
@@ -191,17 +200,20 @@ const Appointments = {
       </div>`);
     setTimeout(()=>{
       makeAutocomplete('fa-name','fa-list',(id,name,phone)=>{document.getElementById('fa-name').value=name;document.getElementById('fa-cid').value=id;document.getElementById('fa-phone').value=phone||'';});
+      // For a new appointment, sync price to the preselected service + size.
+      if(!a) Appointments._recalcPrice();
     },150);
   },
 
-  openFormPrefilled(customerId, customerName, customerPhone) {
+  openFormPrefilled(customerId, customerName, customerPhone, extras) {
     // Ensure barbers/services are loaded then open a new appointment form pre-filled with client
     const load = (this._barbers.length && this._services.length)
       ? Promise.resolve()
       : Promise.all([db.barbers.all(), db.services.all()]).then(([b,s])=>{ this._barbers=b; this._services=s; });
     load.then(() => {
       this.openForm(null);
-      // After form renders, fill in the client fields
+      // After form renders, fill in the client fields (+ optional extras from a quote).
+      // Delay must exceed openForm's own 150ms auto-recalc so an extras.price wins.
       setTimeout(() => {
         const nameEl  = document.getElementById('fa-name');
         const cidEl   = document.getElementById('fa-cid');
@@ -209,7 +221,13 @@ const Appointments = {
         if (nameEl)  nameEl.value  = customerName;
         if (cidEl)   cidEl.value   = customerId;
         if (phoneEl) phoneEl.value = customerPhone;
-      }, 80);
+        if (extras) {
+          if (extras.price != null) { const p=document.getElementById('fa-price'); if(p)p.value=extras.price; }
+          if (extras.notes) { const n=document.getElementById('fa-notes'); if(n)n.value=extras.notes; }
+          if (extras.vehicle) (Shop.fields||[]).forEach(f=>{ const prop=f.key.replace(/^vehicle/,'').toLowerCase(); const v=extras.vehicle[prop]; if(v!=null){ const el=document.getElementById('fa-cf-'+f.key); if(el)el.value=v; } });
+          if (extras.quoteId) { const qe=document.getElementById('fa-quote-id'); if(qe)qe.value=extras.quoteId; }
+        }
+      }, 220);
     });
   },
 
@@ -227,6 +245,59 @@ const Appointments = {
     if (!filled.length) return '';
     const icon = cf.vehicleMake ? '🚗 ' : '';
     return `<div style="font-size:13px;color:var(--muted);margin-top:6px;">${icon}${filled.map(f=>esc(cf[f.key])).join(' ')}</div>`;
+  },
+
+  // Before/after photo documentation. Shown for verticals that capture vehicle
+  // info (detail shops) or whenever photos already exist — barbershops never see it.
+  _jobPhotos(a) {
+    const isDetailish = (Shop.fields||[]).some(f=>f.key && f.key.indexOf('vehicle')===0);
+    const before = a.beforePhotos||[], after = a.afterPhotos||[];
+    if (!isDetailish && !before.length && !after.length) return '';
+    const w = canWrite();
+    const tiles = (photos, phase) => {
+      const thumbs = photos.map(p=>`<div style="position:relative;flex-shrink:0;">
+        <img src="${esc(p.url)}" onclick="window.open('${esc(p.url)}','_blank')" style="width:72px;height:72px;object-fit:cover;border-radius:8px;cursor:zoom-in;display:block;" />
+        ${w?`<button onclick="Appointments._deletePhoto('${a.id}','${p.id}')" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:1px solid var(--surface);background:#dc2626;color:#fff;font-size:13px;line-height:1;cursor:pointer;padding:0;">×</button>`:''}
+      </div>`).join('');
+      const add = w?`<button onclick="Appointments._pickPhoto('${a.id}','${phase}')" style="width:72px;height:72px;border-radius:8px;border:1px dashed var(--border);background:var(--surface);color:var(--muted);font-size:11px;cursor:pointer;flex-shrink:0;">＋ Add</button>`:'';
+      const empty = (!photos.length && !w)?'<span style="font-size:12px;color:var(--faint);">None</span>':'';
+      return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">${thumbs}${add}${empty}</div>`;
+    };
+    return `<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;">📷 BEFORE</div>
+      ${tiles(before,'before')}
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-top:12px;">✨ AFTER</div>
+      ${tiles(after,'after')}
+    </div>`;
+  },
+
+  _pickPhoto(id, phase) {
+    const input = document.createElement('input');
+    input.type = 'file'; input.accept = 'image/*';
+    input.onchange = async () => {
+      const file = input.files && input.files[0]; if (!file) return;
+      try {
+        toast('Uploading photo…');
+        const dataUrl = await downscaleImage(file, 1280, 0.82);
+        const r = await db.appointments.addPhoto(id, phase, dataUrl);
+        const a = this._data.find(x=>x.id===id);
+        if (a && r && r.item) { const key = phase==='after'?'afterPhotos':'beforePhotos'; a[key] = [...(a[key]||[]), r.item]; }
+        toast('Photo added ✓');
+        this.openDetail(id);
+      } catch(e) { toast(e.message||'Upload failed','error'); }
+    };
+    input.click();
+  },
+
+  async _deletePhoto(id, photoId) {
+    if (!confirm('Delete this photo?')) return;
+    try {
+      await db.appointments.deletePhoto(id, photoId);
+      const a = this._data.find(x=>x.id===id);
+      if (a) ['beforePhotos','afterPhotos'].forEach(k=>{ if(a[k]) a[k]=a[k].filter(p=>p.id!==photoId); });
+      toast('Photo deleted');
+      this.openDetail(id);
+    } catch(e) { toast('Could not delete','error'); }
   },
 
   _statusChanger(a) {
@@ -250,10 +321,17 @@ const Appointments = {
     } catch(e) { toast('Could not update status','error'); }
   },
 
-  _svcChange() {
-    const val=document.getElementById('fa-svc')?.value||'';
-    const [,, price]=val.split('|');
-    if(price){const pi=document.getElementById('fa-price');if(pi)pi.value=price;}
+  _svcChange() { this._recalcPrice(); },
+
+  // Set the price field to the total: the selected service (size-adjusted for
+  // detail shops) plus any checked add-ons. Falls back to the flat price.
+  _recalcPrice() {
+    const svcId=(document.getElementById('fa-svc')?.value||'').split('|')[0];
+    const svc=this._services.find(s=>s.id===svcId); if(!svc)return;
+    const sizeKey=document.getElementById('fa-size')?.value||'';
+    let total=servicePrice(svc,sizeKey);
+    document.querySelectorAll('.fa-addon:checked').forEach(cb=>{ total+=Number(cb.dataset.price)||0; });
+    const pi=document.getElementById('fa-price'); if(pi)pi.value=total;
   },
 
   _to24(t12) {
@@ -290,10 +368,12 @@ const Appointments = {
       cf[f.key]=v;
     }
     const statusSel=document.getElementById('fa-status')?.value;
+    const quoteId=document.getElementById('fa-quote-id')?.value||'';
+    const apptId=id||genId('a');
     const btn=document.getElementById('fa-btn'); disableBtn(btn);
     try {
       await db.appointments.save({
-        id:id||genId('a'),
+        id:apptId,
         customerId:document.getElementById('fa-cid')?.value||null,
         customerName:name,
         customerPhone:document.getElementById('fa-phone')?.value||'',
@@ -306,8 +386,13 @@ const Appointments = {
         status:statusSel||(id?(this._data.find(x=>x.id===id)?.status||'confirmed'):'confirmed'),
         notes:document.getElementById('fa-notes')?.value.trim()||'',
         customFields:cf,
+        vehicleSize:document.getElementById('fa-size')?.value||null,
+        addons:[...document.querySelectorAll('.fa-addon:checked')].map(cb=>({id:cb.value,name:cb.dataset.name,price:Number(cb.dataset.price)||0})),
         source:'crm',
       });
+      // If this appointment was created from a quote, mark that quote scheduled
+      // now that it's actually saved (not before).
+      if (quoteId) { try { await db.quotes.save({ id:quoteId, status:'scheduled', appointmentId:apptId }); } catch(e) {} }
       Modal.close(); toast(id?'Updated ✓':'Appointment added ✓');
       await this.render(); Dashboard.render();
     }catch(e){toast('Could not save','error');enableBtn(btn);}
@@ -322,7 +407,8 @@ const Appointments = {
         <div style="font-size:16px;font-weight:700;${a.customerId?'cursor:pointer;color:var(--green);':''}" onclick="${a.customerId?`Modal.close();ClientProfile.open('${a.customerId}')`:''}">${a.customerName}${a.customerId?' ↗':''}</div>
         <div style="font-size:13px;color:var(--muted);margin-top:4px;">${a.service} · ${fmtDateFull(a.date)} at ${a.time}</div>
         ${barber?`<div style="font-size:13px;color:var(--muted);">with ${barber.name}</div>`:''}
-        <div style="margin-top:8px;">${statusBadge(a.status)} <span style="font-weight:700;color:var(--green);margin-left:8px;">${fmtMoney(a.price)}</span></div>
+        <div style="margin-top:8px;">${statusBadge(a.status)} <span style="font-weight:700;color:var(--green);margin-left:8px;">${fmtMoney(a.price)}</span>${a.vehicleSize?`<span style="font-size:12px;color:var(--muted);margin-left:8px;">${esc((Shop.sizes.find(z=>z.key===a.vehicleSize)||{}).label||a.vehicleSize)}</span>`:''}</div>
+        ${(a.addons&&a.addons.length)?`<div style="font-size:12px;color:var(--muted);margin-top:6px;">＋ ${a.addons.map(x=>esc(x.name)+' ('+fmtMoney(x.price)+')').join(' · ')}</div>`:''}
         ${this._customFieldsDetail(a)}
         ${a.notes?`<div style="font-size:13px;color:var(--muted);margin-top:8px;">${esc(a.notes)}</div>`:''}
         ${a.customerPhone?`<div style="font-size:13px;color:var(--muted);margin-top:4px;">📱 ${a.customerPhone}</div>`:''}
@@ -330,6 +416,7 @@ const Appointments = {
           <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:6px;">📸 INSPO PHOTO</div>
           <img src="${esc(a.inspoPhoto)}" onclick="window.open('${esc(a.inspoPhoto)}','_blank')" style="width:100%;max-height:300px;object-fit:cover;border-radius:10px;cursor:zoom-in;" />
         </div>`:''}
+        ${this._jobPhotos(a)}
       </div>
       ${canWrite()?this._statusChanger(a):''}
       <div class="modal-actions">
