@@ -10,6 +10,23 @@ function inspoMode(settings, industry) {
   return settings.inspoPhoto || resolveProfile(industry).inspoDefault || 'off';
 }
 
+// ── Slot helpers (shared by availability + the booking double-book guard) ─────
+function parseClock(t){ const [tm,ap]=t.split(' '); let [h,m]=tm.split(':').map(Number); if(ap==='PM'&&h!==12)h+=12; if(ap==='AM'&&h===12)h=0; return h*60+m; }
+function fmtClock(mins){ const h=Math.floor(mins/60),m=mins%60,ap=h>=12?'PM':'AM',h12=h%12||12; return `${h12}:${String(m).padStart(2,'0')} ${ap}`; }
+// The exact times a staff member offers on a working day (explicit list or range).
+function barberSlotList(b){
+  const s = b.schedule || { startTime:'9:00 AM', endTime:'6:00 PM', slotMinutes:30 };
+  if (Array.isArray(s.allowedTimes) && s.allowedTimes.length) return s.allowedTimes;
+  const out = [];
+  for (let t = parseClock(s.startTime||'9:00 AM'); t < parseClock(s.endTime||'6:00 PM'); t += (s.slotMinutes||30)) out.push(fmtClock(t));
+  return out;
+}
+// Statuses that hold a slot (so a pending-deposit booking doesn't block others).
+function occupyingStatusKeys(settings){
+  const occ = (settings.statuses||[]).filter(s=>s.occupiesSlot).map(s=>s.key);
+  return occ.length ? occ : ['confirmed','in-progress'];
+}
+
 // ── PUBLIC: Industry list (for the signup business-type picker) ──────────────
 router.get('/api/industries', (req, res) => {
   const { INDUSTRIES } = require('../industries');
@@ -228,6 +245,36 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     const inspo = String(inspoPhoto || '');
     if (inspoMode(s0, db.get('industry').value()) === 'required' && !inspo)
       return res.status(400).json({ ok: false, error: 'An inspiration photo is required to book.' });
+
+    // ── Double-booking guard ──────────────────────────────────────────────────
+    // The client only sees available slots, but never trust it: re-validate the
+    // slot here so two people can't grab the same time (and crafted requests
+    // can't book a closed/blocked/past slot). Mirrors the availability logic.
+    if ((db.get('blockedDates').value() || []).some(b => b.date === date))
+      return res.status(409).json({ ok: false, error: 'That date is no longer available for booking.' });
+    const todayMidnight = new Date(); todayMidnight.setHours(0,0,0,0);
+    if (new Date(date + 'T12:00:00') < todayMidnight)
+      return res.status(400).json({ ok: false, error: 'That date has already passed.' });
+    {
+      const dow = new Date(date + 'T12:00:00').getDay();
+      const occ = occupyingStatusKeys(s0);
+      const dayAppts = (db.get('appointments').value() || []).filter(a => a.date === date && occ.includes(a.status));
+      const workingBarbers = (db.get('barbers').value() || []).filter(b =>
+        b.active !== false &&
+        (b.schedule?.workDays || [1,2,3,4,5,6]).includes(dow) &&
+        barberSlotList(b).includes(time));
+      if (barberId) {
+        const b = workingBarbers.find(x => x.id === barberId);
+        if (!b) return res.status(409).json({ ok: false, error: 'That time is no longer available. Please pick another.' });
+        if (dayAppts.some(a => a.barberId === barberId && a.time === time))
+          return res.status(409).json({ ok: false, error: 'Sorry, that time was just booked. Please pick another.' });
+      } else {
+        // "Any" staff — make sure the shop still has an open chair at that time.
+        const takenAtTime = dayAppts.filter(a => a.time === time).length;
+        if (!workingBarbers.length || takenAtTime >= workingBarbers.length)
+          return res.status(409).json({ ok: false, error: 'Sorry, that time was just booked. Please pick another.' });
+      }
+    }
 
     const { getAll, getById, upsert } = shopHelpers(db);
     const svcFromDb = serviceId ? getAll('services').find(s => s.id === serviceId) : null;
