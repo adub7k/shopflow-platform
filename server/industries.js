@@ -30,6 +30,7 @@ const INDUSTRIES = {
     customFields: [],
     supportsFleet: false,
     deposit: { enabled: false, amount: 10, message: 'A deposit is required to secure your appointment.' },
+    inspoDefault: 'off',
   },
 
   detail: {
@@ -67,6 +68,7 @@ const INDUSTRIES = {
     ],
     supportsFleet: true,
     deposit: { enabled: true, amount: 50, message: 'A $50 deposit is required to book your appointment.' },
+    inspoDefault: 'off',
   },
 
   nails: {
@@ -90,6 +92,8 @@ const INDUSTRIES = {
     customFields: [],
     supportsFleet: false,
     deposit: { enabled: true, amount: 25, message: 'A deposit is required to secure your appointment.' },
+    // Nail clients send a reference photo so the tech knows the look up front.
+    inspoDefault: 'required',
   },
 };
 

@@ -4,7 +4,7 @@ const cors      = require('cors');
 const rateLimit = require('express-rate-limit');
 const path      = require('path');
 
-const { CLIENT_DIR } = require('./db');
+const { CLIENT_DIR, UPLOADS_DIR } = require('./db');
 const { runScheduler } = require('./scheduler');
 
 const app  = express();
@@ -14,6 +14,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '5mb' }));
 app.use(express.static(CLIENT_DIR));
+app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '30d' }));
 app.use('/api', rateLimit({ windowMs: 60000, max: 500 }));
 
 // ── API Routes ────────────────────────────────────────────────────────────────
