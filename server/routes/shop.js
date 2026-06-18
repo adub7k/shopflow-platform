@@ -12,6 +12,10 @@ router.get('/api/shop/settings', requireAuth, shopRoute(async (req, res, db) => 
   // Surface resolved inspo mode + gallery so the settings UI shows the real state.
   if (s.inspoPhoto === undefined) s.inspoPhoto = resolveProfile(db.get('industry').value()).inspoDefault || 'off';
   if (!Array.isArray(s.gallery)) s.gallery = [];
+  // Backfill vehicle size classes for shops seeded before per-size pricing existed.
+  if (!Array.isArray(s.vehicleSizes)) s.vehicleSizes = resolveProfile(db.get('industry').value()).vehicleSizes || [];
+  if (!Array.isArray(s.addons)) s.addons = [];
+  if (!Array.isArray(s.membershipPlans)) s.membershipPlans = [];
   if ((req.role || 'full') !== 'full') {
     if (s.twilio)    s.twilio    = { ...s.twilio, authToken: '' };
     if (s.emailSmtp) s.emailSmtp = { ...s.emailSmtp, pass: '' };
@@ -200,6 +204,38 @@ router.post('/api/shop/customers/:id/redeem', requireAuth, requireRole('full','t
   const c = h.getById('customers', req.params.id); if(c){c.loyaltyPoints=0;h.upsert('customers',c);} res.json({ ok: true });
 }));
 
+// ── Memberships — recurring wash-club / maintenance plans ─────────────────────
+// Plans live in settings.membershipPlans; a customer's membership is stored on
+// the customer record. Stripe-backed memberships keep a subscription id so status
+// can be refreshed on demand (no webhooks). Manual memberships are tracked locally.
+router.post('/api/shop/customers/:id/membership', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  const c = h.getById('customers', req.params.id); if (!c) return res.status(404).json({ ok:false, error:'Customer not found' });
+  const plan = ((db.get('settings').value()||{}).membershipPlans||[]).find(p=>p.id===req.body.planId);
+  if (!plan) return res.status(400).json({ ok:false, error:'Plan not found' });
+  c.membership = { planId:plan.id, planName:plan.name, price:Number(plan.price)||0, interval:plan.interval||'month', status:'active', source:'manual', startedAt:new Date().toISOString() };
+  h.upsert('customers', c);
+  res.json({ ok:true, membership:c.membership });
+}));
+router.post('/api/shop/customers/:id/membership/cancel', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  const c = h.getById('customers', req.params.id); if (!c || !c.membership) return res.status(404).json({ ok:false, error:'No membership on file' });
+  if (c.membership.stripeSubscriptionId && stripe) { try { await stripe.subscriptions.cancel(c.membership.stripeSubscriptionId); } catch(e) {} }
+  c.membership.status = 'canceled'; c.membership.canceledAt = new Date().toISOString();
+  h.upsert('customers', c);
+  res.json({ ok:true });
+}));
+router.post('/api/shop/customers/:id/membership/refresh', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  const c = h.getById('customers', req.params.id); if (!c || !c.membership) return res.status(404).json({ ok:false, error:'No membership' });
+  if (c.membership.stripeSubscriptionId && stripe) {
+    try {
+      const sub = await stripe.subscriptions.retrieve(c.membership.stripeSubscriptionId);
+      c.membership.status = (sub.status==='active'||sub.status==='trialing') ? 'active' : (sub.status==='past_due' ? 'past_due' : 'canceled');
+      if (sub.current_period_end) c.membership.currentPeriodEnd = new Date(sub.current_period_end*1000).toISOString();
+      h.upsert('customers', c);
+    } catch(e) {}
+  }
+  res.json({ ok:true, membership:c.membership });
+}));
+
 // ── PROTECTED: Appointments ───────────────────────────────────────────────────
 router.get('/api/shop/appointments', requireAuth, shopRoute(async (req, res, db, h) => {
   const { date, month } = req.query;
@@ -265,6 +301,90 @@ router.delete('/api/shop/appointments/:id', requireAuth, requireRole('full','tec
   h.remove('appointments', req.params.id); res.json({ ok: true });
 }));
 
+// Before/after job photos — detail shops document vehicle condition at drop-off
+// and the finished result (proof of work, marketing, damage/liability record).
+// Images live on disk via saveImageDataUrl; the appointment stores [{id,url,createdAt}].
+router.post('/api/shop/appointments/:id/photos', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  const a = h.getById('appointments', req.params.id); if (!a) return res.status(404).json({ ok:false, error:'Not found' });
+  const phase = req.body.phase === 'after' ? 'after' : 'before';
+  const key = phase === 'after' ? 'afterPhotos' : 'beforePhotos';
+  try {
+    const url = saveImageDataUrl(req.shopId, 'job-' + phase, req.body.image);
+    const item = { id: genId('ph'), url, createdAt: new Date().toISOString() };
+    a[key] = [...(a[key] || []), item];
+    h.upsert('appointments', a);
+    res.json({ ok:true, phase, item });
+  } catch(e) { res.status(400).json({ ok:false, error: e.message || 'Upload failed' }); }
+}));
+router.delete('/api/shop/appointments/:id/photos/:photoId', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  const a = h.getById('appointments', req.params.id); if (!a) return res.status(404).json({ ok:false, error:'Not found' });
+  ['beforePhotos','afterPhotos'].forEach(key => {
+    const arr = a[key] || [];
+    const item = arr.find(p => p.id === req.params.photoId);
+    if (item) { deleteUpload(item.url); a[key] = arr.filter(p => p.id !== req.params.photoId); }
+  });
+  h.upsert('appointments', a);
+  res.json({ ok:true });
+}));
+
+// ── PROTECTED: Quotes / estimates ─────────────────────────────────────────────
+// High-ticket detail work (ceramic, PPF, correction) gets quoted before booking.
+// A quote is sent to the customer, who approves it (optionally paying a deposit)
+// on a public page; the shop then schedules it into an appointment.
+function ensureQuotes(db) { if (!Array.isArray(db.get('quotes').value())) db.set('quotes', []).write(); }
+
+router.get('/api/shop/quotes', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  ensureQuotes(db);
+  res.json(h.getAll('quotes').sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt)));
+}));
+router.get('/api/shop/quotes/:id', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  ensureQuotes(db);
+  const q = h.getById('quotes', req.params.id); if (!q) return res.status(404).json({ error:'Not found' });
+  res.json(q);
+}));
+router.post('/api/shop/quotes', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  ensureQuotes(db);
+  const q = req.body;
+  // Only (re)compute line items + total when the caller actually sends them —
+  // otherwise a partial update (e.g. status change) would wipe the items via merge.
+  if (Array.isArray(q.lineItems)) {
+    q.lineItems = q.lineItems.map(l=>({ name:String(l.name||'').slice(0,80), price:Number(l.price)||0 }));
+    q.total = q.lineItems.reduce((t,l)=>t+l.price, 0);
+  }
+  if (!q.id) {
+    q.id = genId('q');
+    const next = ((db.get('settings').value()||{}).quoteCounter || 1000) + 1;
+    db.get('settings').assign({ quoteCounter: next }).write();
+    q.number = 'Q-' + next;
+    q.status = 'sent';
+    q.createdAt = new Date().toISOString();
+  }
+  h.upsert('quotes', q);
+  res.json({ id: q.id, number: q.number });
+}));
+router.delete('/api/shop/quotes/:id', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  ensureQuotes(db); h.remove('quotes', req.params.id); res.json({ ok:true });
+}));
+// Text the customer a link to view + approve the quote.
+router.post('/api/shop/quotes/:id/send', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  ensureQuotes(db);
+  const q = h.getById('quotes', req.params.id); if (!q) return res.status(404).json({ ok:false, error:'Quote not found' });
+  const phone = (q.customerPhone||'').replace(/\D/g,'');
+  if (phone.length < 10) return res.status(400).json({ ok:false, error:'No phone number on file for this customer' });
+  const from = shopFromNumber(req.shopId);
+  if (!twilioClient || !from) return res.status(400).json({ ok:false, error:'SMS is not active for this shop yet' });
+  const s = db.get('settings').value() || {};
+  const shopRow = master.get('shops').find({ id: req.shopId }).value();
+  const base = process.env.PUBLIC_BASE_URL || (req.protocol + '://' + req.get('host'));
+  const link = `${base}/quote/${shopRow.slug}/${q.id}`;
+  const body = `Hi ${(q.customerName||'there').split(' ')[0]}! Here's your estimate from ${s.shopName||'us'} (${q.number}) — $${q.total}. View & approve: ${link}`;
+  try {
+    await twilioClient.messages.create({ from, to:'+1'+phone, body });
+    q.sentAt = new Date().toISOString(); h.upsert('quotes', q);
+    res.json({ ok:true });
+  } catch(e) { res.status(500).json({ ok:false, error:'Could not send the text' }); }
+}));
+
 // ── PROTECTED: Revenue ────────────────────────────────────────────────────────
 router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   const barbers   = h.getAll('barbers');
@@ -293,7 +413,10 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
   const byMonth = {};
   done.forEach(a=>{const m=(a.date||'').slice(0,7);if(!byMonth[m])byMonth[m]=0;byMonth[m]+=Number(a.price||0);});
   const loyalty = (db.get('settings').value()||{}).loyalty||{enabled:true,visitsForReward:10};
+  const activeMembers = customers.filter(c=>c.membership && c.membership.status==='active');
+  const mrr = Math.round(activeMembers.reduce((t,c)=>t + (c.membership.interval==='year' ? (Number(c.membership.price)||0)/12 : (Number(c.membership.price)||0)), 0));
   res.json({
+    mrr, activeMembers: activeMembers.length,
     totalRevenue: done.reduce((s,a)=>s+Number(a.price||0),0),
     monthRevenue: thisMonth.reduce((s,a)=>s+Number(a.price||0),0),
     monthJobs: thisMonth.length,

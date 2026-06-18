@@ -6,7 +6,7 @@ const Settings = {
     const el=document.getElementById('page-settings'); if(!el)return;
     try{
       const [s,barbers,services,staff]=await Promise.all([db.settings.get(),db.barbers.all(),db.services.all(),db.staff.all().catch(()=>[])]);
-      this._barbers=barbers; this._services=services; this._staff=staff;
+      this._barbers=barbers; this._services=services; this._staff=staff; this._addons=s.addons||[]; this._plans=s.membershipPlans||[];
       const html=[];
 
       // Shop info
@@ -86,9 +86,36 @@ const Settings = {
       html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Services</span><button class="btn btn-sm btn-green" onclick="Settings.openService(null)">+ Add</button></div>');
       html.push('<div class="list-card">');
       services.forEach(s=>{
-        html.push(`<div class="list-row"><div class="list-main"><div class="list-name">${s.name}</div><div class="list-sub">${s.category} · ${s.duration} min</div></div><div style="font-weight:700;color:var(--green);margin-right:8px;">${fmtMoney(s.price)}</div><button class="btn btn-sm" onclick="Settings.openService('${s.id}')">Edit</button></div>`);
+        const bySize = s.sizePricing && Object.keys(s.sizePricing).length;
+        html.push(`<div class="list-row"><div class="list-main"><div class="list-name">${s.name}</div><div class="list-sub">${s.category} · ${s.duration} min${bySize?' · by size':''}</div></div><div style="font-weight:700;color:var(--green);margin-right:8px;">${bySize?'from ':''}${fmtMoney(s.price)}</div><button class="btn btn-sm" onclick="Settings.openService('${s.id}')">Edit</button></div>`);
       });
       html.push('</div>');
+
+      // Add-ons (à-la-carte upsells tacked onto any job)
+      html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Add-ons</span><button class="btn btn-sm btn-green" onclick="Settings.openAddon(null)">+ Add</button></div>');
+      const addons = s.addons || [];
+      if (!addons.length) {
+        html.push('<div class="card"><div style="font-size:13px;color:var(--faint);text-align:center;padding:12px 0;">No add-ons yet — extras like Pet Hair, Odor Removal, or Engine Bay that staff and customers can tack onto a job.</div></div>');
+      } else {
+        html.push('<div class="list-card">');
+        addons.forEach(ad=>{
+          html.push(`<div class="list-row"><div class="list-main"><div class="list-name">${esc(ad.name)}</div></div><div style="font-weight:700;color:var(--green);margin-right:8px;">+${fmtMoney(ad.price)}</div><button class="btn btn-sm" onclick="Settings.openAddon('${ad.id}')">Edit</button></div>`);
+        });
+        html.push('</div>');
+      }
+
+      // Membership plans (recurring wash-club / maintenance)
+      html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Membership Plans</span><button class="btn btn-sm btn-green" onclick="Settings.openPlan(null)">+ Add</button></div>');
+      const plans = s.membershipPlans || [];
+      if (!plans.length) {
+        html.push('<div class="card"><div style="font-size:13px;color:var(--faint);text-align:center;padding:12px 0;">No plans yet — recurring plans like a monthly wash club or quarterly maintenance detail. Enroll customers from their profile.</div></div>');
+      } else {
+        html.push('<div class="list-card">');
+        plans.forEach(p=>{
+          html.push(`<div class="list-row"><div class="list-main"><div class="list-name">${esc(p.name)}</div><div class="list-sub">${esc(p.perks||'')}</div></div><div style="font-weight:700;color:var(--green);margin-right:8px;">${fmtMoney(p.price)}/${p.interval==='year'?'yr':'mo'}</div><button class="btn btn-sm" onclick="Settings.openPlan('${p.id}')">Edit</button></div>`);
+        });
+        html.push('</div>');
+      }
 
       // Loyalty
       html.push('<div class="section-header">Loyalty Program</div><div class="card">');
@@ -380,6 +407,15 @@ const Settings = {
         <div class="form-group"><label class="form-label">Price</label><input class="form-input" id="fs-price" type="number" value="${s?.price||35}" /></div>
         <div class="form-group"><label class="form-label">Duration (min)</label><input class="form-input" id="fs-dur" type="number" value="${s?.duration||45}" /></div>
       </div>
+      ${(Shop.sizes||[]).length?`<div class="form-group" style="border:1px solid var(--border);border-radius:10px;padding:12px;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;margin:0;">
+          <input type="checkbox" id="fs-size-on" ${s?.sizePricing?'checked':''} onchange="Settings._toggleSizePricing()" /> Price by vehicle size
+        </label>
+        <div style="font-size:11px;color:var(--faint);margin-top:4px;">Charge more for larger vehicles. Leave a box blank to use the base price above.</div>
+        <div id="fs-size-rows" style="margin-top:10px;grid-template-columns:1fr 1fr;gap:8px;display:${s?.sizePricing?'grid':'none'};">
+          ${Shop.sizes.map(sz=>`<div class="form-group" style="margin:0;"><label class="form-label">${esc(sz.label)}</label><input class="form-input" id="fs-size-${esc(sz.key)}" type="number" value="${s&&s.sizePricing&&s.sizePricing[sz.key]!=null?s.sizePricing[sz.key]:''}" placeholder="$" /></div>`).join('')}
+        </div>
+      </div>`:''}
       <div class="form-group"><label class="form-label">Category</label>
         <select class="form-input" id="fs-cat">
           ${['cut','beard','combo','color','design','other'].map(c=>`<option value="${c}"${s?.category===c?' selected':''}>${c}</option>`).join('')}
@@ -393,12 +429,99 @@ const Settings = {
     setTimeout(()=>document.getElementById('fs-name')?.focus(),150);
   },
 
+  _toggleSizePricing(){
+    const on=document.getElementById('fs-size-on')?.checked;
+    const rows=document.getElementById('fs-size-rows'); if(rows)rows.style.display=on?'grid':'none';
+  },
+
+  openAddon(id){
+    const ad=id?(this._addons||[]).find(x=>x.id===id):null;
+    Modal.show(`
+      <div class="modal-title">${ad?'Edit Add-on':'Add Add-on'}</div>
+      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fad-name" value="${esc(ad?.name||'')}" placeholder="e.g. Pet Hair Removal" /></div>
+      <div class="form-group"><label class="form-label">Price</label><input class="form-input" id="fad-price" type="number" value="${ad?(ad.price):25}" /></div>
+      <div class="modal-actions">
+        ${ad?`<button class="btn btn-danger btn-full" onclick="Settings.deleteAddon('${ad.id}')">Delete</button>`:''}
+        <button id="fad-btn" class="btn btn-primary btn-full" onclick="Settings.saveAddon('${ad?.id||''}')">Save</button>
+        <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
+      </div>`);
+    setTimeout(()=>document.getElementById('fad-name')?.focus(),150);
+  },
+
+  async saveAddon(id){
+    const name=document.getElementById('fad-name')?.value.trim();
+    if(!name){toast('Enter a name','warning');return;}
+    const price=parseFloat(document.getElementById('fad-price')?.value)||0;
+    const btn=document.getElementById('fad-btn'); disableBtn(btn);
+    const list=[...(this._addons||[])];
+    if(id){ const i=list.findIndex(a=>a.id===id); if(i>=0) list[i]={...list[i],name,price}; }
+    else list.push({id:genId('ad'),name,price});
+    try{ await db.settings.save({addons:list}); this._addons=list; Shop.addons=list; Modal.close(); toast(id?'Updated ✓':'Add-on added ✓'); this.render(); }
+    catch(e){ toast('Could not save','error'); enableBtn(btn); }
+  },
+
+  async deleteAddon(id){
+    if(!confirm('Delete this add-on?'))return;
+    const list=(this._addons||[]).filter(a=>a.id!==id);
+    try{ await db.settings.save({addons:list}); this._addons=list; Shop.addons=list; Modal.close(); this.render(); toast('Deleted'); }
+    catch(e){ toast('Could not delete','error'); }
+  },
+
+  openPlan(id){
+    const p=id?(this._plans||[]).find(x=>x.id===id):null;
+    Modal.show(`
+      <div class="modal-title">${p?'Edit Plan':'Add Membership Plan'}</div>
+      <div class="form-group"><label class="form-label">Plan name *</label><input class="form-input" id="fp-name" value="${esc(p?.name||'')}" placeholder="e.g. Monthly Wash Club" /></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Price</label><input class="form-input" id="fp-price" type="number" value="${p?(p.price):49}" /></div>
+        <div class="form-group"><label class="form-label">Billing</label><select class="form-input" id="fp-interval"><option value="month"${(!p||p.interval==='month')?' selected':''}>Monthly</option><option value="year"${p&&p.interval==='year'?' selected':''}>Yearly</option></select></div>
+      </div>
+      <div class="form-group"><label class="form-label">Perks <span style="font-weight:400;color:var(--faint);">(shown to staff)</span></label><input class="form-input" id="fp-perks" value="${esc(p?.perks||'')}" placeholder="e.g. 2 washes/mo + 10% off details" /></div>
+      <div class="modal-actions">
+        ${p?`<button class="btn btn-danger btn-full" onclick="Settings.deletePlan('${p.id}')">Delete</button>`:''}
+        <button id="fp-btn" class="btn btn-primary btn-full" onclick="Settings.savePlan('${p?.id||''}')">Save</button>
+        <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
+      </div>`);
+    setTimeout(()=>document.getElementById('fp-name')?.focus(),150);
+  },
+
+  async savePlan(id){
+    const name=document.getElementById('fp-name')?.value.trim();
+    if(!name){toast('Enter a plan name','warning');return;}
+    const price=parseFloat(document.getElementById('fp-price')?.value)||0;
+    const interval=document.getElementById('fp-interval')?.value||'month';
+    const perks=document.getElementById('fp-perks')?.value.trim()||'';
+    const btn=document.getElementById('fp-btn'); disableBtn(btn);
+    const list=[...(this._plans||[])];
+    if(id){ const i=list.findIndex(p=>p.id===id); if(i>=0) list[i]={...list[i],name,price,interval,perks}; }
+    else list.push({id:genId('plan'),name,price,interval,perks});
+    try{ await db.settings.save({membershipPlans:list}); this._plans=list; Shop.membershipPlans=list; Modal.close(); toast(id?'Updated ✓':'Plan added ✓'); this.render(); }
+    catch(e){ toast('Could not save','error'); enableBtn(btn); }
+  },
+
+  async deletePlan(id){
+    if(!confirm('Delete this plan?'))return;
+    const list=(this._plans||[]).filter(p=>p.id!==id);
+    try{ await db.settings.save({membershipPlans:list}); this._plans=list; Shop.membershipPlans=list; Modal.close(); this.render(); toast('Deleted'); }
+    catch(e){ toast('Could not delete','error'); }
+  },
+
   async saveService(id) {
     const name=document.getElementById('fs-name')?.value.trim();
     if(!name){toast('Enter a name','warning');return;}
     const btn=document.getElementById('fs-btn'); disableBtn(btn);
+    // Optional per-vehicle-size pricing (detail shops). When on, the base price
+    // mirrors the first size tier so revenue/fallback math stays sensible.
+    const sizeOn=document.getElementById('fs-size-on')?.checked;
+    let sizePricing=null;
+    if(sizeOn){
+      sizePricing={};
+      (Shop.sizes||[]).forEach(sz=>{const v=parseFloat(document.getElementById('fs-size-'+sz.key)?.value);if(!isNaN(v))sizePricing[sz.key]=v;});
+    }
+    const firstKey=(Shop.sizes||[])[0]?.key;
+    const basePrice=(sizeOn&&firstKey&&sizePricing[firstKey]!=null)?sizePricing[firstKey]:(parseFloat(document.getElementById('fs-price')?.value)||35);
     try{
-      await db.services.save({id:id||genId('s'),name,price:parseFloat(document.getElementById('fs-price')?.value)||35,duration:parseInt(document.getElementById('fs-dur')?.value)||45,category:document.getElementById('fs-cat')?.value||'cut'});
+      await db.services.save({id:id||genId('s'),name,price:basePrice,duration:parseInt(document.getElementById('fs-dur')?.value)||45,category:document.getElementById('fs-cat')?.value||'cut',sizePricing:sizeOn?sizePricing:null});
       Modal.close(); toast(id?'Updated ✓':'Service added ✓'); this.render();
     }catch(e){toast('Could not save','error');enableBtn(btn);}
   },

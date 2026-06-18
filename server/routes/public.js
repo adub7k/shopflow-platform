@@ -97,6 +97,8 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
       // Industry profile bits the booking page needs to render correctly.
       vocab: s.vocab || null,
       customFields: s.customFields || [],
+      vehicleSizes: (s.vehicleSizes && s.vehicleSizes.length) ? s.vehicleSizes : (resolveProfile(db.get('industry').value()).vehicleSizes || []),
+      addons: s.addons || [],
       statuses: s.statuses || [],
       deposit: { enabled: s.deposit?.enabled && stripeConnected, amount: s.deposit?.amount || 10, message: s.deposit?.message || '' },
       stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
@@ -128,6 +130,58 @@ router.post('/api/public/:shopSlug/upload', (req, res) => {
   } catch(e) {
     res.status(400).json({ ok: false, error: e.message || 'Upload failed' });
   }
+});
+
+// ── PUBLIC: Quote view + approve / decline ────────────────────────────────────
+function publicShopFromSlug(reqSlug) {
+  const shop = master.get('shops').find({ slug: reqSlug, active: true }).value();
+  if (!shop) return null;
+  return { shop, db: getShopDb(shop.id) };
+}
+router.get('/api/public/:shopSlug/quote/:quoteId', (req, res) => {
+  try {
+    const ctx = publicShopFromSlug(req.params.shopSlug);
+    if (!ctx) return res.status(404).json({ error: 'Shop not found' });
+    const h = shopHelpers(ctx.db);
+    const q = h.getById('quotes', req.params.quoteId);
+    if (!q) return res.status(404).json({ error: 'Quote not found' });
+    const s = ctx.db.get('settings').value() || {};
+    res.json({
+      shopName: s.shopName || ctx.shop.shopName,
+      accentColor: s.accentColor || '#16a34a',
+      stripeConnected: !!(s.stripe && s.stripe.connectAccountId && s.stripe.onboardingComplete),
+      quote: {
+        id: q.id, number: q.number, status: q.status,
+        customerName: q.customerName || '',
+        vehicle: q.vehicle || null, vehicleSize: q.vehicleSize || null,
+        lineItems: q.lineItems || [], total: q.total || 0, notes: q.notes || '',
+        depositRequired: !!q.depositRequired, depositAmount: q.depositAmount || 0, depositPaid: !!q.depositPaid,
+      },
+    });
+  } catch(e) { res.status(500).json({ error: 'Server error' }); }
+});
+router.post('/api/public/:shopSlug/quote/:quoteId/approve', (req, res) => {
+  try {
+    const ctx = publicShopFromSlug(req.params.shopSlug);
+    if (!ctx) return res.status(404).json({ ok: false, error: 'Shop not found' });
+    const h = shopHelpers(ctx.db);
+    const q = h.getById('quotes', req.params.quoteId);
+    if (!q) return res.status(404).json({ ok: false, error: 'Quote not found' });
+    if (q.status === 'declined') return res.status(400).json({ ok: false, error: 'This estimate was already declined.' });
+    if (q.status !== 'approved' && q.status !== 'scheduled') { q.status = 'approved'; q.approvedAt = new Date().toISOString(); h.upsert('quotes', q); }
+    res.json({ ok: true, depositRequired: !!q.depositRequired && !q.depositPaid, depositAmount: q.depositAmount || 0 });
+  } catch(e) { res.status(500).json({ ok: false, error: 'Server error' }); }
+});
+router.post('/api/public/:shopSlug/quote/:quoteId/decline', (req, res) => {
+  try {
+    const ctx = publicShopFromSlug(req.params.shopSlug);
+    if (!ctx) return res.status(404).json({ ok: false, error: 'Shop not found' });
+    const h = shopHelpers(ctx.db);
+    const q = h.getById('quotes', req.params.quoteId);
+    if (!q) return res.status(404).json({ ok: false, error: 'Quote not found' });
+    if (q.status !== 'scheduled') { q.status = 'declined'; q.declinedAt = new Date().toISOString(); h.upsert('quotes', q); }
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ ok: false, error: 'Server error' }); }
 });
 
 // ── PUBLIC: Review page context (?a=<appointmentId> for prefill) ──────────────
@@ -232,7 +286,7 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     const shop = master.get('shops').find({ slug: req.params.shopSlug, active: true }).value();
     if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
     const db = getShopDb(shop.id);
-    const { customerName, customerPhone, customerEmail, barberId, barberName, serviceId, serviceName, servicePrice, date, time, notes, status, customFields, inspoPhoto } = req.body;
+    const { customerName, customerPhone, customerEmail, barberId, barberName, serviceId, serviceName, servicePrice, date, time, notes, status, customFields, inspoPhoto, vehicleSize } = req.body;
     if (!customerName || !customerPhone || !date || !time) return res.status(400).json({ ok: false, error: 'Missing required fields' });
 
     // Enforce required custom fields for this vertical (e.g. detail-shop vehicle info).
@@ -278,7 +332,15 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
 
     const { getAll, getById, upsert } = shopHelpers(db);
     const svcFromDb = serviceId ? getAll('services').find(s => s.id === serviceId) : null;
-    const price = svcFromDb ? Number(svcFromDb.price) : Number(servicePrice) || 35;
+    // Price is always resolved server-side (never trust the client's amount).
+    // For detail shops the per-size table wins when the customer picked a size,
+    // and any chosen add-ons are re-priced from the shop's own add-on list.
+    const sizePrice = (svc, key) => (svc && svc.sizePricing && key && svc.sizePricing[key] != null && svc.sizePricing[key] !== '') ? Number(svc.sizePricing[key]) : Number(svc && svc.price) || 0;
+    const selAddonIds = Array.isArray(req.body.addons) ? req.body.addons : [];
+    const chosenAddons = (s0.addons || []).filter(a => selAddonIds.includes(a.id)).map(a => ({ id: a.id, name: a.name, price: Number(a.price) || 0 }));
+    const addonsTotal = chosenAddons.reduce((t, a) => t + a.price, 0);
+    const basePrice = svcFromDb ? sizePrice(svcFromDb, vehicleSize) : Number(servicePrice) || 35;
+    const price = basePrice + addonsTotal;
     const duration = svcFromDb ? Number(svcFromDb.duration) || 45 : 45;
 
     // Build a vehicle record from custom fields (detail shops) for the customer's history.
@@ -305,7 +367,7 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     }
 
     const apptId = genId('a');
-    const appt = { id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '', barberId: barberId || null, barberName: barberName || null, serviceId: serviceId || null, service: serviceName || 'Appointment', price, duration, date, time, status: status === 'pending-deposit' ? 'pending-deposit' : 'confirmed', notes: notes || '', customFields: cf, inspoPhoto: inspo, source: 'booking-page', createdAt: new Date().toISOString() };
+    const appt = { id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '', barberId: barberId || null, barberName: barberName || null, serviceId: serviceId || null, service: serviceName || 'Appointment', price, duration, date, time, status: status === 'pending-deposit' ? 'pending-deposit' : 'confirmed', notes: notes || '', customFields: cf, vehicleSize: vehicleSize || null, addons: chosenAddons, inspoPhoto: inspo, source: 'booking-page', createdAt: new Date().toISOString() };
     upsert('appointments', appt);
 
     // Send confirmation SMS via platform Twilio account

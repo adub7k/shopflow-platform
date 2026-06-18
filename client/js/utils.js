@@ -2,8 +2,16 @@
 
 // Global shop profile (vocabulary, custom fields, statuses) — populated at boot
 // from db.settings.get(). Falls back to barbershop terms if a shop has none.
-const Shop = { settings:{}, vocab:{}, fields:[], statuses:[] };
+const Shop = { settings:{}, vocab:{}, fields:[], statuses:[], sizes:[], addons:[], membershipPlans:[] };
 function V(key, fb){ return (Shop.vocab && Shop.vocab[key]) || fb; }
+
+// Resolve a service's price for a given vehicle size class. Falls back to the
+// flat price when the service has no per-size table or the size isn't set.
+function servicePrice(svc, sizeKey){
+  if (svc && svc.sizePricing && sizeKey && svc.sizePricing[sizeKey] != null && svc.sizePricing[sizeKey] !== '')
+    return Number(svc.sizePricing[sizeKey]);
+  return Number(svc && svc.price) || 0;
+}
 function statusMeta(key){ return (Shop.statuses||[]).find(s=>s.key===key) || null; }
 function statusLabel(key){
   const m = statusMeta(key);
@@ -24,6 +32,22 @@ const disableBtn = (btn) => { if(btn){btn.disabled=true;btn._txt=btn.innerHTML;b
 const enableBtn  = (btn) => { if(btn){btn.disabled=false;btn.innerHTML=btn._txt||btn.innerHTML;} };
 
 const esc = (s) => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+// Read an image File and return a downscaled JPEG data URL (keeps phone photos
+// well under the server's 5MB upload limit). Used by gallery + job photos.
+function downscaleImage(file, maxDim=1280, quality=0.82) {
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>{ const img=new Image(); img.onload=()=>{
+      const w=img.width,h=img.height; const sc=Math.min(1,maxDim/Math.max(w,h));
+      const cw=Math.max(1,Math.round(w*sc)),ch=Math.max(1,Math.round(h*sc));
+      const c=document.createElement('canvas'); c.width=cw; c.height=ch;
+      c.getContext('2d').drawImage(img,0,0,cw,ch);
+      resolve(c.toDataURL('image/jpeg',quality));
+    }; img.onerror=()=>reject(new Error('Invalid image')); img.src=reader.result; };
+    reader.onerror=()=>reject(new Error('Could not read file')); reader.readAsDataURL(file);
+  });
+}
 
 let _toastTimer;
 function toast(msg, type='') {

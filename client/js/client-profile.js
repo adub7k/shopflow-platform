@@ -29,6 +29,38 @@ const ClientProfile = {
     if (overlay) overlay.classList.remove('open');
     document.body.style.overflow = '';
   },
+
+  enrollPrompt(custId) {
+    const plans = Shop.membershipPlans || [];
+    if (!plans.length) { toast('Add a membership plan in Settings first', 'warning'); return; }
+    const stripeOn = !!(Shop.settings && Shop.settings.stripe && Shop.settings.stripe.onboardingComplete);
+    Modal.show(`
+      <div class="modal-title">⭐ Enroll in a plan</div>
+      ${plans.map(p=>`<div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;">
+        <div><div style="font-size:14px;font-weight:700;">${esc(p.name)}</div><div style="font-size:12px;color:var(--muted);">${fmtMoney(p.price)}/${p.interval==='year'?'yr':'mo'}${p.perks?' · '+esc(p.perks):''}</div></div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          ${stripeOn?`<button class="btn btn-sm btn-primary" style="flex:1;" onclick="ClientProfile.enrollStripe('${custId}','${p.id}')">💳 Card subscription</button>`:''}
+          <button class="btn btn-sm" style="flex:1;" onclick="ClientProfile.enrollManual('${custId}','${p.id}')">Mark as member</button>
+        </div>
+      </div>`).join('')}
+      <div class="modal-actions"><button class="btn btn-full" onclick="Modal.close()">Cancel</button></div>`);
+  },
+  async enrollManual(custId, planId) {
+    try { await db.customers.enroll(custId, planId); Modal.close(); toast('Enrolled ✓'); this.open(custId); }
+    catch(e) { toast('Could not enroll', 'error'); }
+  },
+  async enrollStripe(custId, planId) {
+    try {
+      const r = await db.customers.membershipCheckout(custId, planId);
+      if (r && r.ok && r.url) { window.open(r.url, '_blank'); Modal.close(); toast('Subscription checkout opened'); }
+      else { toast((r && r.error) || 'Could not start subscription', 'error'); }
+    } catch(e) { toast(e.message || 'Could not start subscription', 'error'); }
+  },
+  async cancelMembership(custId) {
+    if (!confirm('Cancel this membership?')) return;
+    try { await db.customers.cancelMembership(custId); toast('Membership canceled'); this.open(custId); }
+    catch(e) { toast('Could not cancel', 'error'); }
+  },
 };
 
 // ── Shared profile HTML builder ───────────────────────────────────────────────
@@ -67,6 +99,21 @@ function _buildProfileHtml(data, messages, backFn) {
   if (c.email) html += `<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;border-bottom:.5px solid var(--border);"><span style="color:var(--muted);">Email</span><span style="color:var(--text);font-weight:600;">${c.email}</span></div>`;
   html += `<div style="display:flex;justify-content:space-between;padding:6px 0;font-size:13px;"><span style="color:var(--muted);">Client since</span><span style="color:var(--text);font-weight:600;">${fmtDateShort(c.createdAt)||'—'}</span></div>`;
   html += `</div>`;
+
+  // ── Membership ──
+  const m = c.membership;
+  const plans = Shop.membershipPlans || [];
+  if (m && (m.status === 'active' || m.status === 'past_due')) {
+    html += `<div style="background:linear-gradient(135deg,rgba(124,58,237,.07),rgba(124,58,237,.02));border:1px solid #ddd6fe;border-radius:12px;padding:12px 14px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div><div style="font-size:13px;font-weight:700;color:#6d28d9;">⭐ ${esc(m.planName)}</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">${fmtMoney(m.price)}/${m.interval==='year'?'yr':'mo'} · ${m.source==='stripe'?'Auto-billing':'Manual'}${m.status==='past_due'?' · <span style="color:#dc2626;">⚠ past due</span>':''}</div></div>
+      ${canWrite()?`<button onclick="ClientProfile.cancelMembership('${c.id}')" style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;flex-shrink:0;">Cancel</button>`:''}
+    </div>`;
+  } else if (plans.length && canWrite()) {
+    html += `<div style="border:1px dashed var(--border);border-radius:12px;padding:12px 14px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+      <div style="font-size:13px;color:var(--muted);">Not a member</div>
+      <button onclick="ClientProfile.enrollPrompt('${c.id}')" style="background:#7c3aed;color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;">⭐ Enroll in plan</button>
+    </div>`;
+  }
 
   // ── Fleet account ──
   if (c.isFleet) {

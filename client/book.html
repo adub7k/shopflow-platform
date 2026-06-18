@@ -224,7 +224,9 @@ img{max-width:100%;display:block;}
     <!-- Service -->
     <section class="block">
       <div class="block-head"><span class="num num-step">1</span><h2 class="block-title">Choose a service</h2></div>
+      <div id="size-sec" style="display:none;margin-bottom:12px;"></div>
       <div class="svc-list" id="svc-list"></div>
+      <div id="addon-sec" style="display:none;margin-top:14px;"></div>
     </section>
 
     <!-- Staff -->
@@ -299,7 +301,8 @@ img{max-width:100%;display:block;}
 <script>
 const B = {
   slug:'', shop:null, vocab:{}, fields:[], inspo:'off', gallery:[],
-  sel:{ svcId:null, svcName:'', svcPrice:0, svcDur:45, barberId:null, barberName:'', date:null, time:null, inspoPhoto:'' },
+  sel:{ svcId:null, svcName:'', svcPrice:0, svcDur:45, barberId:null, barberName:'', date:null, time:null, inspoPhoto:'', vehicleSize:null, addons:[] },
+  services:[], sizes:[], addons:[],
   _cal:new Date(), _cache:{},
 
   V(k,fb){ return (this.vocab && this.vocab[k]) || fb; },
@@ -312,11 +315,15 @@ const B = {
       if(!info.shopName || info.bookingEnabled===false){ return this.closed(); }
       this.shop=info; this.vocab=info.vocab||{}; this.fields=info.customFields||[];
       this.inspo=info.inspo||'off'; this.gallery=info.gallery||[];
+      this.services=info.services||[]; this.sizes=info.vehicleSizes||[]; this.addons=info.addons||[];
+      if(this.sizes.length) this.sel.vehicleSize=this.sizes[0].key;
       this._accent(info.accentColor||'#16a34a');
       this._header(info);
       this._gallery();
       this._reviews();
+      this._sizeSection();
       this._svcs(info.services||[]);
+      this._addonSection();
       this._staff(info.barbers||[]);
       this._inspoSection();
       this._customFields();
@@ -369,21 +376,71 @@ const B = {
 
   _svcIcon(c){ return {cut:'✂️',beard:'🪒',combo:'✂️',color:'🎨',design:'💈',wash:'🚿',detail:'🚗',coating:'✨',nails:'💅',other:'💈'}[c]||'💈'; },
 
+  // Price for a service given the currently selected vehicle size (detail shops).
+  _price(svc){
+    const k=this.sel.vehicleSize;
+    if(svc&&svc.sizePricing&&k&&svc.sizePricing[k]!=null&&svc.sizePricing[k]!=='') return Number(svc.sizePricing[k]);
+    return Number(svc&&svc.price)||0;
+  },
+
   _svcs(svcs){
     document.getElementById('svc-list').innerHTML = svcs.length
-      ? svcs.map(s=>`<div class="svc" id="sc-${s.id}" onclick="B.pickSvc('${s.id}','${es(s.name)}',${s.price},${s.duration||45})">
+      ? svcs.map(s=>`<div class="svc" id="sc-${s.id}" onclick="B.pickSvc('${s.id}')">
           <div class="svc-ic">${this._svcIcon(s.category)}</div>
           <div style="flex:1;min-width:0;"><div class="svc-nm">${es2(s.name)}</div><div class="svc-mt">${s.duration||45} min</div></div>
-          <div class="svc-pr">$${s.price}</div>
+          <div class="svc-pr" id="pr-${s.id}">$${this._price(s)}</div>
         </div>`).join('')
       : '<div style="padding:22px;text-align:center;color:var(--faint);">No services listed yet.</div>';
   },
 
-  pickSvc(id,name,price,dur){
+  pickSvc(id){
+    const svc=this.services.find(s=>s.id===id); if(!svc)return;
     document.querySelectorAll('.svc').forEach(c=>c.classList.remove('on'));
     document.getElementById('sc-'+id)?.classList.add('on');
-    Object.assign(this.sel,{svcId:id,svcName:name,svcPrice:price,svcDur:dur});
+    Object.assign(this.sel,{svcId:id,svcName:svc.name,svcPrice:this._price(svc),svcDur:svc.duration||45});
     this.updateCTA(); this._scrollTo('staff-sec','dt-sec');
+  },
+
+  _sizeSection(){
+    const el=document.getElementById('size-sec'); if(!el)return;
+    if(!this.sizes.length){ el.style.display='none'; return; }
+    el.style.display='';
+    el.innerHTML='<div style="font-size:13px;font-weight:700;margin-bottom:7px;">Vehicle size <span style="font-weight:400;color:var(--faint);">— sets your price</span></div>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;">'+this.sizes.map(sz=>{
+        const on=this.sel.vehicleSize===sz.key;
+        return `<button type="button" onclick="B.pickSize('${es(sz.key)}')" style="flex:1;min-width:90px;padding:10px 12px;border-radius:12px;border:1.5px solid ${on?'var(--accent)':'var(--line,#e5e5e5)'};background:${on?'var(--accent-tint)':'#fff'};color:${on?'var(--accent)':'#444'};font-size:13px;font-weight:600;cursor:pointer;">${es2(sz.label)}</button>`;
+      }).join('')+'</div>';
+  },
+
+  pickSize(key){
+    this.sel.vehicleSize=key;
+    this._sizeSection();
+    this.services.forEach(s=>{ const pr=document.getElementById('pr-'+s.id); if(pr)pr.textContent='$'+this._price(s); });
+    if(this.sel.svcId){ const svc=this.services.find(s=>s.id===this.sel.svcId); if(svc)this.sel.svcPrice=this._price(svc); }
+    this.updateCTA();
+  },
+
+  _addonsTotal(){ return (this.sel.addons||[]).reduce((t,a)=>t+Number(a.price||0),0); },
+
+  _addonSection(){
+    const el=document.getElementById('addon-sec'); if(!el)return;
+    if(!this.addons.length){ el.style.display='none'; return; }
+    el.style.display='';
+    el.innerHTML='<div style="font-size:13px;font-weight:700;margin-bottom:7px;">Add-ons <span style="font-weight:400;color:var(--faint);">— optional extras</span></div>'+
+      this.addons.map(ad=>{
+        const on=(this.sel.addons||[]).some(x=>x.id===ad.id);
+        return `<label style="display:flex;align-items:center;gap:10px;padding:11px 13px;border:1.5px solid ${on?'var(--accent)':'var(--line,#e5e5e5)'};background:${on?'var(--accent-tint)':'#fff'};border-radius:12px;margin-bottom:8px;cursor:pointer;">
+          <input type="checkbox" ${on?'checked':''} onchange="B.toggleAddon('${es(ad.id)}')" style="width:18px;height:18px;accent-color:var(--accent);" />
+          <span style="flex:1;font-size:14px;font-weight:600;">${es2(ad.name)}</span>
+          <span style="font-weight:700;color:var(--accent);">+$${ad.price}</span></label>`;
+      }).join('');
+  },
+
+  toggleAddon(id){
+    const ad=this.addons.find(a=>a.id===id); if(!ad)return;
+    const i=(this.sel.addons||[]).findIndex(x=>x.id===id);
+    if(i>=0) this.sel.addons.splice(i,1); else this.sel.addons.push({id:ad.id,name:ad.name,price:Number(ad.price)||0});
+    this._addonSection(); this.updateCTA();
   },
 
   _staff(barbs){
@@ -527,7 +584,7 @@ const B = {
     const s=this.sel, dep=this.shop.deposit, meta=document.getElementById('cta-meta'),
           price=document.getElementById('cta-price'), btn=document.getElementById('cta-btn');
     if(!s.svcId){ meta.textContent='Choose a service to start'; price.textContent=''; btn.disabled=true; btn.textContent='Book now'; return; }
-    price.textContent='$'+s.svcPrice;
+    price.textContent='$'+(s.svcPrice+this._addonsTotal());
     let ready=true, hint='';
     if(!s.date){ hint='Pick a date'; ready=false; }
     else if(!s.time){ hint='Pick a time'; ready=false; }
@@ -557,7 +614,7 @@ const B = {
     try{
       const res=await fetch('/api/public/'+this.slug+'/book',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({customerName:name,customerPhone:phone,customerEmail:document.getElementById('f-email').value.trim(),
-          barberId:s.barberId,barberName:s.barberName,serviceId:s.svcId,serviceName:s.svcName,servicePrice:s.svcPrice,
+          barberId:s.barberId,barberName:s.barberName,serviceId:s.svcId,serviceName:s.svcName,servicePrice:s.svcPrice,vehicleSize:s.vehicleSize,addons:(s.addons||[]).map(a=>a.id),
           date:s.date,time:s.time,notes:document.getElementById('f-notes').value.trim(),customFields:cf,inspoPhoto:s.inspoPhoto,
           status:dep&&dep.enabled?'pending-deposit':'confirmed'})}).then(r=>r.json());
       if(!res.ok){ this.err(res.error||'Booking failed. Please try again.'); btn.disabled=false; this.updateCTA(); return; }
@@ -584,10 +641,11 @@ const B = {
     document.getElementById('conf-sub').textContent='See you '+dateStr+' at '+s.time+'!';
     document.getElementById('conf-detail').innerHTML=`
       <div class="conf-row"><span class="k">Service</span><span class="v">${es2(s.svcName)}</span></div>
+      ${(s.addons||[]).length?`<div class="conf-row"><span class="k">Add-ons</span><span class="v">${s.addons.map(a=>es2(a.name)).join(', ')}</span></div>`:''}
       ${s.barberName?`<div class="conf-row"><span class="k">${es2(this.V('staff','Barber'))}</span><span class="v">${es2(s.barberName)}</span></div>`:''}
       <div class="conf-row"><span class="k">Date</span><span class="v">${dateStr}</span></div>
       <div class="conf-row"><span class="k">Time</span><span class="v">${es2(s.time)}</span></div>
-      <div class="conf-row"><span class="k">Price</span><span class="v" style="color:var(--accent);">$${s.svcPrice}</span></div>
+      <div class="conf-row"><span class="k">Price</span><span class="v" style="color:var(--accent);">$${s.svcPrice+this._addonsTotal()}</span></div>
       ${s.inspoPhoto?`<img class="conf-thumb" src="${es2(s.inspoPhoto)}" alt="Your inspo"/>`:''}`;
     document.getElementById('conf-sms').textContent=smsSent?('📱 Confirmation text sent to '+phone):'';
     document.getElementById('confirmed').style.display='block';

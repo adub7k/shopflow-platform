@@ -119,6 +119,7 @@ function initShopDb(db, shopData) {
       vocab: profile.vocab,
       statuses: profile.statuses,
       customFields: profile.customFields,
+      vehicleSizes: profile.vehicleSizes || [],
       supportsFleet: profile.supportsFleet,
       loyalty: { enabled: true, visitsForReward: 10, rewardDescription: 'One free service' },
       twilio: { accountSid: '', authToken: '', fromNumber: '' },
@@ -135,7 +136,7 @@ function initShopDb(db, shopData) {
         schedule: { workDays: [1,2,3,4,5,6], startTime: '9:00 AM', endTime: '6:00 PM', slotMinutes: 30 } },
     ],
     services: profile.services.map((s, i) => ({ id: 's' + (i + 1), ...s })),
-    customers: [], appointments: [], conversations: [], blockedDates: [],
+    customers: [], appointments: [], conversations: [], blockedDates: [], quotes: [],
   }).write();
 }
 

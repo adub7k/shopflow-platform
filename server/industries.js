@@ -66,6 +66,14 @@ const INDUSTRIES = {
       { key: 'vehicleModel', label: 'Model', type: 'text', required: true },
       { key: 'vehicleColor', label: 'Color', type: 'text', required: true },
     ],
+    // Vehicle size classes for per-size service pricing. A service may carry a
+    // `sizePricing` map ({sedan,suv,truck}); when present, the booked price is
+    // chosen by the vehicle's size instead of the flat `price`.
+    vehicleSizes: [
+      { key: 'sedan', label: 'Sedan / Coupe' },
+      { key: 'suv',   label: 'SUV / Crossover' },
+      { key: 'truck', label: 'Truck / XL' },
+    ],
     supportsFleet: true,
     deposit: { enabled: true, amount: 50, message: 'A $50 deposit is required to book your appointment.' },
     inspoDefault: 'off',

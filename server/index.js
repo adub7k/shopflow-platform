@@ -29,6 +29,7 @@ app.use(require('./routes/stripe'));
 app.get('/shop/*',  (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app.html')));
 app.get('/book/*',  (req, res) => res.sendFile(path.join(CLIENT_DIR, 'book.html')));
 app.get('/review/*',(req, res) => res.sendFile(path.join(CLIENT_DIR, 'review.html')));
+app.get('/quote/*', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'quote.html')));
 app.get('/demo',    (req, res) => res.sendFile(path.join(CLIENT_DIR, 'demo.html')));
 app.get('/sales',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'sales.html')));
 app.get('/signup',  (req, res) => res.sendFile(path.join(CLIENT_DIR, 'signup.html')));
