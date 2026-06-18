@@ -28,6 +28,7 @@ const Settings = {
       </div>`);
       html.push(`<div class="form-group"><label class="form-label">Booking Welcome Message</label><textarea class="form-input" id="s-bmsg" rows="2">${s.bookingMessage||'Book your appointment below!'}</textarea></div>`);
       html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-benabled" ${s.bookingEnabled!==false?'checked':''} style="margin-right:6px;" /> Booking page enabled</label></div>`);
+      html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-staffpicker" ${s.staffPicker!==false?'checked':''} style="margin-right:6px;" /> Let customers choose their ${esc(V('staff','barber').toLowerCase())} when booking</label></div>`);
       // Inspiration photo at booking
       const inspoMode = s.inspoPhoto || 'off';
       html.push(`<div class="form-group"><label class="form-label">Inspiration Photo</label>
@@ -418,7 +419,7 @@ const Settings = {
       </div>`:''}
       <div class="form-group"><label class="form-label">Category</label>
         <select class="form-input" id="fs-cat">
-          ${['cut','beard','combo','color','design','other'].map(c=>`<option value="${c}"${s?.category===c?' selected':''}>${c}</option>`).join('')}
+          ${((Shop.serviceCategories&&Shop.serviceCategories.length?Shop.serviceCategories:['cut','beard','combo','color','design','other'])).map(c=>`<option value="${c}"${s?.category===c?' selected':''}>${c}</option>`).join('')}
         </select>
       </div>
       <div class="modal-actions">
@@ -580,7 +581,7 @@ const Settings = {
   },
 
   async save() {
-    const data={shopName:document.getElementById('s-name')?.value.trim(),tagline:document.getElementById('s-tag')?.value.trim(),phone:document.getElementById('s-phone')?.value.trim(),address:document.getElementById('s-addr')?.value.trim(),email:document.getElementById('s-email')?.value.trim(),bookingMessage:document.getElementById('s-bmsg')?.value.trim(),bookingEnabled:document.getElementById('s-benabled')?.checked!==false};
+    const data={shopName:document.getElementById('s-name')?.value.trim(),tagline:document.getElementById('s-tag')?.value.trim(),phone:document.getElementById('s-phone')?.value.trim(),address:document.getElementById('s-addr')?.value.trim(),email:document.getElementById('s-email')?.value.trim(),bookingMessage:document.getElementById('s-bmsg')?.value.trim(),bookingEnabled:document.getElementById('s-benabled')?.checked!==false,staffPicker:document.getElementById('s-staffpicker')?.checked!==false};
     const lv=document.getElementById('s-lvis')?.value; if(lv)data.loyalty={visitsForReward:parseInt(lv),rewardDescription:document.getElementById('s-lrew')?.value.trim()||'One free haircut'};
     // SMS templates (empty string = use server default)
     const tc=document.getElementById('s-tpl-confirm')?.value.trim();

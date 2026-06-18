@@ -31,6 +31,9 @@ const INDUSTRIES = {
     supportsFleet: false,
     deposit: { enabled: false, amount: 10, message: 'A deposit is required to secure your appointment.' },
     inspoDefault: 'off',
+    // Barbershop clients usually pick their barber, so the booking staff step is on.
+    staffPicker: true,
+    serviceCategories: ['cut','beard','combo','color','design','other'],
   },
 
   detail: {
@@ -77,6 +80,10 @@ const INDUSTRIES = {
     supportsFleet: true,
     deposit: { enabled: true, amount: 50, message: 'A $50 deposit is required to book your appointment.' },
     inspoDefault: 'off',
+    // Detail customers rarely care which tech does the work — default the booking
+    // staff step OFF (the owner can turn it back on in Settings for specialists).
+    staffPicker: false,
+    serviceCategories: ['wash','interior','exterior','detail','coating','tint','correction','other'],
   },
 
   nails: {
@@ -102,6 +109,8 @@ const INDUSTRIES = {
     deposit: { enabled: true, amount: 25, message: 'A deposit is required to secure your appointment.' },
     // Nail clients send a reference photo so the tech knows the look up front.
     inspoDefault: 'required',
+    staffPicker: true,
+    serviceCategories: ['manicure','pedicure','gel','acrylic','dip','art','other'],
   },
 };
 

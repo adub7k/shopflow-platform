@@ -99,6 +99,7 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
       customFields: s.customFields || [],
       vehicleSizes: (s.vehicleSizes && s.vehicleSizes.length) ? s.vehicleSizes : (resolveProfile(db.get('industry').value()).vehicleSizes || []),
       addons: s.addons || [],
+      staffPicker: s.staffPicker !== undefined ? s.staffPicker : (resolveProfile(db.get('industry').value()).staffPicker !== false),
       statuses: s.statuses || [],
       deposit: { enabled: s.deposit?.enabled && stripeConnected, amount: s.deposit?.amount || 10, message: s.deposit?.message || '' },
       stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',

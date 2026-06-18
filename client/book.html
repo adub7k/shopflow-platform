@@ -374,7 +374,7 @@ const B = {
     document.getElementById('reviews-sec').style.display='';
   },
 
-  _svcIcon(c){ return {cut:'✂️',beard:'🪒',combo:'✂️',color:'🎨',design:'💈',wash:'🚿',detail:'🚗',coating:'✨',nails:'💅',other:'💈'}[c]||'💈'; },
+  _svcIcon(c){ return {cut:'✂️',beard:'🪒',combo:'✂️',color:'🎨',design:'💈',wash:'🚿',interior:'🧽',exterior:'🚿',detail:'🚗',coating:'✨',tint:'🪟',correction:'💎',nails:'💅',manicure:'💅',pedicure:'🦶',gel:'💅',acrylic:'💅',dip:'💅',art:'🎨',other:'✨'}[c]||'✨'; },
 
   // Price for a service given the currently selected vehicle size (detail shops).
   _price(svc){
@@ -445,7 +445,9 @@ const B = {
 
   _staff(barbs){
     const sec=document.getElementById('staff-sec');
-    if(!barbs.length){ sec.style.display='none'; return; }
+    // Hide the staff step entirely when the shop turns it off (e.g. detail shops),
+    // or when there's nobody to pick. Booking proceeds as "any / first available".
+    if(!barbs.length || this.shop.staffPicker===false){ sec.style.display='none'; this.sel.barberId=null; this.sel.barberName=''; return; }
     const staff=this.V('staff','Barber'), station=this.V('station','Chair');
     document.getElementById('staff-title').textContent='Choose your '+staff.toLowerCase();
     const ini=n=>n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();

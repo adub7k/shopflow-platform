@@ -16,6 +16,9 @@ router.get('/api/shop/settings', requireAuth, shopRoute(async (req, res, db) => 
   if (!Array.isArray(s.vehicleSizes)) s.vehicleSizes = resolveProfile(db.get('industry').value()).vehicleSizes || [];
   if (!Array.isArray(s.addons)) s.addons = [];
   if (!Array.isArray(s.membershipPlans)) s.membershipPlans = [];
+  const _prof = resolveProfile(db.get('industry').value());
+  if (!Array.isArray(s.serviceCategories)) s.serviceCategories = _prof.serviceCategories || ['cut','beard','combo','color','design','other'];
+  if (s.staffPicker === undefined) s.staffPicker = _prof.staffPicker !== false;
   if ((req.role || 'full') !== 'full') {
     if (s.twilio)    s.twilio    = { ...s.twilio, authToken: '' };
     if (s.emailSmtp) s.emailSmtp = { ...s.emailSmtp, pass: '' };

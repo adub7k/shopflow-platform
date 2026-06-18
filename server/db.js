@@ -120,6 +120,8 @@ function initShopDb(db, shopData) {
       statuses: profile.statuses,
       customFields: profile.customFields,
       vehicleSizes: profile.vehicleSizes || [],
+      serviceCategories: profile.serviceCategories || ['cut','beard','combo','color','design','other'],
+      staffPicker: profile.staffPicker !== false,
       supportsFleet: profile.supportsFleet,
       loyalty: { enabled: true, visitsForReward: 10, rewardDescription: 'One free service' },
       twilio: { accountSid: '', authToken: '', fromNumber: '' },
