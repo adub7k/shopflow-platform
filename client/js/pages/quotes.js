@@ -152,12 +152,13 @@ const Quotes = {
     try{ await db.quotes.save({id,status}); Modal.close(); toast('Marked '+status+' ✓'); await this.render(); }
     catch(e){ toast('Could not update','error'); }
   },
-  async schedule(id){
+  schedule(id){
     const q=this._data.find(x=>x.id===id); if(!q)return;
-    try{ await db.quotes.save({id:q.id,status:'scheduled'}); }catch(e){}
+    // Don't mark scheduled yet — the appointment form does that on save, so an
+    // abandoned form leaves the quote 'approved' rather than falsely 'scheduled'.
     Modal.close(); App.nav('appointments');
-    setTimeout(()=>Appointments.openFormPrefilled(q.customerId, q.customerName, q.customerPhone, { price:q.total, notes:'From '+(q.number||'estimate'), vehicle:q.vehicle }),150);
-    toast('Marked scheduled — pick a date & time');
+    setTimeout(()=>Appointments.openFormPrefilled(q.customerId, q.customerName, q.customerPhone, { price:q.total, notes:'From '+(q.number||'estimate'), vehicle:q.vehicle, quoteId:q.id }),150);
+    toast('Pick a date & time to schedule');
   },
   async delete(id){
     if(!confirm('Delete this estimate?'))return;

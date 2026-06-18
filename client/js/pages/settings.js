@@ -419,7 +419,7 @@ const Settings = {
       </div>`:''}
       <div class="form-group"><label class="form-label">Category</label>
         <select class="form-input" id="fs-cat">
-          ${((Shop.serviceCategories&&Shop.serviceCategories.length?Shop.serviceCategories:['cut','beard','combo','color','design','other'])).map(c=>`<option value="${c}"${s?.category===c?' selected':''}>${c}</option>`).join('')}
+          ${(()=>{ const base=(Shop.serviceCategories&&Shop.serviceCategories.length?Shop.serviceCategories:['cut','beard','combo','color','design','other']); const cats=(s?.category&&!base.includes(s.category))?[s.category,...base]:base; return cats.map(c=>`<option value="${c}"${s?.category===c?' selected':''}>${c}</option>`).join(''); })()}
         </select>
       </div>
       <div class="modal-actions">

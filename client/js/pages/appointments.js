@@ -162,6 +162,7 @@ const Appointments = {
         <div class="autocomplete-wrap"><input class="form-input" id="fa-name" value="${a?.customerName||''}" placeholder="Search or type name..." /><div class="autocomplete-list" id="fa-list"></div></div>
         <input type="hidden" id="fa-cid" value="${a?.customerId||''}" />
         <input type="hidden" id="fa-phone" value="${a?.customerPhone||''}" />
+        <input type="hidden" id="fa-quote-id" value="" />
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Service</label>
@@ -224,6 +225,7 @@ const Appointments = {
           if (extras.price != null) { const p=document.getElementById('fa-price'); if(p)p.value=extras.price; }
           if (extras.notes) { const n=document.getElementById('fa-notes'); if(n)n.value=extras.notes; }
           if (extras.vehicle) (Shop.fields||[]).forEach(f=>{ const prop=f.key.replace(/^vehicle/,'').toLowerCase(); const v=extras.vehicle[prop]; if(v!=null){ const el=document.getElementById('fa-cf-'+f.key); if(el)el.value=v; } });
+          if (extras.quoteId) { const qe=document.getElementById('fa-quote-id'); if(qe)qe.value=extras.quoteId; }
         }
       }, 220);
     });
@@ -366,10 +368,12 @@ const Appointments = {
       cf[f.key]=v;
     }
     const statusSel=document.getElementById('fa-status')?.value;
+    const quoteId=document.getElementById('fa-quote-id')?.value||'';
+    const apptId=id||genId('a');
     const btn=document.getElementById('fa-btn'); disableBtn(btn);
     try {
       await db.appointments.save({
-        id:id||genId('a'),
+        id:apptId,
         customerId:document.getElementById('fa-cid')?.value||null,
         customerName:name,
         customerPhone:document.getElementById('fa-phone')?.value||'',
@@ -386,6 +390,9 @@ const Appointments = {
         addons:[...document.querySelectorAll('.fa-addon:checked')].map(cb=>({id:cb.value,name:cb.dataset.name,price:Number(cb.dataset.price)||0})),
         source:'crm',
       });
+      // If this appointment was created from a quote, mark that quote scheduled
+      // now that it's actually saved (not before).
+      if (quoteId) { try { await db.quotes.save({ id:quoteId, status:'scheduled', appointmentId:apptId }); } catch(e) {} }
       Modal.close(); toast(id?'Updated ✓':'Appointment added ✓');
       await this.render(); Dashboard.render();
     }catch(e){toast('Could not save','error');enableBtn(btn);}
