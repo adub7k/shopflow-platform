@@ -19,7 +19,7 @@ const { v4: uuidv4 } = require('uuid');
 const { master, getShopDb, initShopDb, shopHelpers, genId, today, SHOPS_DIR } = require('./server/db');
 
 const SLUG  = 'demo-detail';
-const EMAIL = 'demo@demodetail.com';
+const EMAIL = 'demo@detail.com';
 const PASS  = 'demo1234';
 
 function seedDemoDetail({ force = true } = {}) {
@@ -133,11 +133,24 @@ function seedDemoDetail({ force = true } = {}) {
     });
   }
 
-  // Past completed work
-  appt({ cId:'c1', date: dShift(-21), time:'9:00 AM',  service:'Full Detail',     status:'done', tech: techs[0], vehicleSize:'sedan' });
-  appt({ cId:'c3', date: dShift(-14), time:'10:00 AM', service:'Full Detail',     status:'done', tech: techs[1], vehicleSize:'truck', addonIds:['ad1'] });
-  appt({ cId:'c5', date: dShift(-9),  time:'1:00 PM',  service:'Ceramic Coating', status:'done', tech: techs[0], vehicleSize:'sedan' });
-  appt({ cId:'c2', date: dShift(-4),  time:'11:00 AM', service:'Interior Detail', status:'done', tech: techs[1], addonIds:['ad2'] });
+  // ~2 months of completed jobs — builds revenue history + customer visit counts
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  const times = ['8:00 AM','9:00 AM','10:00 AM','11:00 AM','1:00 PM','2:00 PM','3:00 PM','4:00 PM'];
+  const histServices  = ['Express Wash','Express Wash','Interior Detail','Full Detail','Full Detail','Ceramic Coating'];
+  const histSizes     = [null,'sedan','sedan','suv','truck'];
+  const histAddons    = [[],[],['ad1'],['ad2'],['ad3'],['ad1','ad3']];
+  const histCustomers = ['c1','c2','c3','c4','c5','c6'];
+  for (let d = 60; d >= 1; d--) {
+    const date = dShift(-d);
+    if (new Date(date + 'T12:00:00').getDay() === 0) continue; // closed Sundays
+    const slots = [...times];
+    const count = 1 + Math.floor(Math.random() * 3);           // 1–3 jobs/day
+    for (let j = 0; j < count && slots.length; j++) {
+      appt({ cId: pick(histCustomers), date, time: slots.splice(Math.floor(Math.random()*slots.length),1)[0],
+        service: pick(histServices), status: 'done', tech: pick(techs),
+        vehicleSize: pick(histSizes), addonIds: pick(histAddons) });
+    }
+  }
 
   // Today — full operational pipeline
   appt({ cId:'c1', date: today(), time:'8:00 AM',  service:'Ceramic Coating', status:'curing',      tech: techs[0], vehicleSize:'suv', notes:'Curing until 3pm — do not move.' });
