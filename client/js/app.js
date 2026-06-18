@@ -5,7 +5,7 @@ function closeSidebar(){document.body.classList.remove('sidebar-open');}
 // ── Role-based page permissions ───────────────────────────────────────────────
 // full = owner/full access · technician = appts + clients · viewonly = calendar only
 const ROLE_PAGES = {
-  full:       ['dashboard','messages','appointments','clients','revenue','automations','settings'],
+  full:       ['dashboard','messages','appointments','clients','revenue','reviews','automations','settings'],
   technician: ['dashboard','messages','appointments','clients'],
   viewonly:   ['appointments'],
 };
@@ -34,7 +34,7 @@ const App = {
     document.querySelectorAll('.nav-item,.bottom-nav-item').forEach(b=>b.classList.remove('active'));
     const el=document.getElementById('page-'+page); if(el)el.classList.add('active');
     document.querySelectorAll('[data-page="'+page+'"]').forEach(b=>b.classList.add('active'));
-    const titles={dashboard:'Dashboard',messages:'Messages',appointments:'Appointments',clients:'Clients',revenue:'Revenue',automations:'Automations',settings:'Settings'};
+    const titles={dashboard:'Dashboard',messages:'Messages',appointments:'Appointments',clients:'Clients',revenue:'Revenue',reviews:'Reviews',automations:'Automations',settings:'Settings'};
     const tt=document.getElementById('topbar-title'); if(tt&&titles[page])tt.textContent=titles[page];
     this._render(page);
   },
@@ -44,6 +44,7 @@ const App = {
     if(page==='appointments')Appointments.render();
     if(page==='clients')     Clients.render();
     if(page==='revenue')     Revenue.render();
+    if(page==='reviews')     Reviews.render();
     if(page==='automations') Automations.render();
     if(page==='settings')    Settings.render();
   },

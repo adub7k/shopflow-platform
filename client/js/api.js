@@ -45,4 +45,5 @@ const db = {
   stripe:        { status: () => apiFetch('/stripe/connect/status'), onboard: () => apiFetch('/stripe/connect/onboard',{method:'POST'}), disconnect: () => apiFetch('/stripe/connect/disconnect',{method:'POST'}) },
   staff:         { all: () => apiFetch('/staff'), save: (u) => apiFetch('/staff',{method:'POST',body:u}), delete: (id) => apiFetch('/staff/'+id,{method:'DELETE'}) },
   gallery:       { add: (image,caption) => apiFetch('/gallery',{method:'POST',body:{image,caption}}), remove: (id) => apiFetch('/gallery/'+id,{method:'DELETE'}) },
+  reviews:       { all: () => apiFetch('/reviews'), feature: (id) => apiFetch('/reviews/'+id+'/feature',{method:'POST'}), remove: (id) => apiFetch('/reviews/'+id,{method:'DELETE'}), request: (appointmentId) => apiFetch('/reviews/request',{method:'POST',body:{appointmentId}}) },
 };
