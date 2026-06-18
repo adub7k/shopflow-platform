@@ -28,7 +28,35 @@ const Settings = {
       </div>`);
       html.push(`<div class="form-group"><label class="form-label">Booking Welcome Message</label><textarea class="form-input" id="s-bmsg" rows="2">${s.bookingMessage||'Book your appointment below!'}</textarea></div>`);
       html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-benabled" ${s.bookingEnabled!==false?'checked':''} style="margin-right:6px;" /> Booking page enabled</label></div>`);
+      // Inspiration photo at booking
+      const inspoMode = s.inspoPhoto || 'off';
+      html.push(`<div class="form-group"><label class="form-label">Inspiration Photo</label>
+        <select class="form-input" id="s-inspo">
+          <option value="off"${inspoMode==='off'?' selected':''}>Off — don't ask for a photo</option>
+          <option value="optional"${inspoMode==='optional'?' selected':''}>Optional — clients can attach one</option>
+          <option value="required"${inspoMode==='required'?' selected':''}>Required — must attach to book</option>
+        </select>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;">Let clients send a reference photo when they book, so you know the look before they arrive.</div>
+      </div>`);
       html.push('</div>');
+
+      // Work Gallery — showcased at the top of the booking page
+      const gallery = Array.isArray(s.gallery) ? s.gallery : [];
+      html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Work Gallery</span><button class="btn btn-sm btn-green" onclick="Settings.galleryPick()">+ Add Photo</button></div>');
+      html.push('<div class="card">');
+      html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:'+(gallery.length?'12px':'0')+';">Showcase your best work on your booking page. Photos appear at the top for clients to browse.</div>');
+      if (gallery.length) {
+        html.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">');
+        gallery.forEach(g=>{
+          html.push(`<div style="position:relative;aspect-ratio:1;border-radius:10px;overflow:hidden;background:var(--off);">
+            <img src="${esc(g.url)}" style="width:100%;height:100%;object-fit:cover;" />
+            <button onclick="Settings.galleryRemove('${g.id}')" title="Remove" style="position:absolute;top:5px;right:5px;width:24px;height:24px;border:none;border-radius:50%;background:rgba(0,0,0,.6);color:#fff;font-size:13px;cursor:pointer;line-height:1;">×</button>
+          </div>`);
+        });
+        html.push('</div>');
+      }
+      html.push('</div>');
+      html.push('<input type="file" id="s-gallery-file" accept="image/*" style="display:none;" onchange="Settings.galleryUpload(this)" />');
 
       // Barbers (labelled per industry vocabulary)
       html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>'+esc(V('staffPlural','Barbers'))+'</span><button class="btn btn-sm btn-green" onclick="Settings.openBarber(null)">+ Add</button></div>');
@@ -162,6 +190,9 @@ const Settings = {
     const timeOpts=['6:00 AM','6:30 AM','7:00 AM','7:30 AM','8:00 AM','8:30 AM','9:00 AM','9:30 AM','10:00 AM','10:30 AM','11:00 AM','11:30 AM','12:00 PM','12:30 PM','1:00 PM','1:30 PM','2:00 PM','2:30 PM','3:00 PM','3:30 PM','4:00 PM','4:30 PM','5:00 PM','5:30 PM','6:00 PM','6:30 PM','7:00 PM','7:30 PM','8:00 PM'];
     const startOpts=timeOpts.map(t=>`<option value="${t}"${sched.startTime===t?' selected':''}>${t}</option>`).join('');
     const endOpts=timeOpts.map(t=>`<option value="${t}"${sched.endTime===t?' selected':''}>${t}</option>`).join('');
+    const pickOpts=timeOpts.map(t=>`<option value="${t}"${t==='10:00 AM'?' selected':''}>${t}</option>`).join('');
+    const allowed=Array.isArray(sched.allowedTimes)?sched.allowedTimes:[];
+    const customOn=allowed.length>0;
     Modal.show(`
       <div class="modal-title">${b?'Edit '+esc(V('staff','Barber')):'Add '+esc(V('staff','Barber'))}</div>
       <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fb-name" value="${b?.name||''}" placeholder="e.g. Chris" /></div>
@@ -184,15 +215,33 @@ const Settings = {
           <div style="display:flex;gap:6px;flex-wrap:wrap;">${dayBtns}</div>
           <input type="hidden" id="fb-workdays" value="${JSON.stringify(sched.workDays||[1,2,3,4,5,6])}" />
         </div>
-        <div class="form-row">
-          <div class="form-group"><label class="form-label">Start Time</label><select class="form-input" id="fb-start">${startOpts}</select></div>
-          <div class="form-group"><label class="form-label">End Time</label><select class="form-input" id="fb-end">${endOpts}</select></div>
-        </div>
         <div class="form-group">
-          <label class="form-label">Slot Duration</label>
-          <select class="form-input" id="fb-slot">
-            ${[15,20,30,45,60].map(m=>`<option value="${m}"${sched.slotMinutes===m?' selected':''}>${m} minutes</option>`).join('')}
-          </select>
+          <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="fb-customtimes" ${customOn?'checked':''} onchange="Settings._toggleCustomTimes()" style="width:auto;margin:0;" />
+            Only offer specific times
+          </label>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Take bookings at set times only — e.g. 10:00 AM &amp; 2:00 PM — instead of every slot in a range.</div>
+        </div>
+        <div id="fb-range-fields" style="${customOn?'display:none;':''}">
+          <div class="form-row">
+            <div class="form-group"><label class="form-label">Start Time</label><select class="form-input" id="fb-start">${startOpts}</select></div>
+            <div class="form-group"><label class="form-label">End Time</label><select class="form-input" id="fb-end">${endOpts}</select></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Slot Duration</label>
+            <select class="form-input" id="fb-slot">
+              ${[15,20,30,45,60].map(m=>`<option value="${m}"${sched.slotMinutes===m?' selected':''}>${m} minutes</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        <div id="fb-customtimes-wrap" style="${customOn?'':'display:none;'}">
+          <label class="form-label">Available times</label>
+          <div id="fb-times-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+          <div style="display:flex;gap:8px;">
+            <select class="form-input" id="fb-time-pick" style="flex:1;">${pickOpts}</select>
+            <button type="button" class="btn" onclick="Settings._addTime()">+ Add</button>
+          </div>
+          <input type="hidden" id="fb-allowedtimes" value='${JSON.stringify(allowed)}' />
         </div>
       </div>
 
@@ -201,7 +250,27 @@ const Settings = {
         <button id="fb-btn" class="btn btn-primary btn-full" onclick="Settings.saveBarber('${b?.id||''}')">Save</button>
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
       </div>`);
-    setTimeout(()=>document.getElementById('fb-name')?.focus(),150);
+    setTimeout(()=>{document.getElementById('fb-name')?.focus();Settings._renderTimeChips();},150);
+  },
+
+  _toggleCustomTimes() {
+    const on = document.getElementById('fb-customtimes')?.checked;
+    const range = document.getElementById('fb-range-fields');
+    const custom = document.getElementById('fb-customtimes-wrap');
+    if (range) range.style.display = on ? 'none' : '';
+    if (custom) custom.style.display = on ? '' : 'none';
+  },
+  _parseTime(t){ const [tm,ap]=t.split(' ');let[h,m]=tm.split(':').map(Number);if(ap==='PM'&&h!==12)h+=12;if(ap==='AM'&&h===12)h=0;return h*60+m; },
+  _getTimes(){ try{return JSON.parse(document.getElementById('fb-allowedtimes')?.value||'[]');}catch(e){return [];} },
+  _setTimes(arr){ arr.sort((a,b)=>this._parseTime(a)-this._parseTime(b)); const el=document.getElementById('fb-allowedtimes'); if(el)el.value=JSON.stringify(arr); this._renderTimeChips(); },
+  _addTime(){ const t=document.getElementById('fb-time-pick')?.value; if(!t)return; const arr=this._getTimes(); if(!arr.includes(t))arr.push(t); this._setTimes(arr); },
+  _removeTime(t){ this._setTimes(this._getTimes().filter(x=>x!==t)); },
+  _renderTimeChips(){
+    const wrap=document.getElementById('fb-times-chips'); if(!wrap)return;
+    const arr=this._getTimes();
+    wrap.innerHTML = arr.length
+      ? arr.map(t=>`<span style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:100px;padding:5px 12px;font-size:13px;font-weight:600;color:var(--text);">${t}<span onclick="Settings._removeTime('${t}')" style="cursor:pointer;font-weight:700;opacity:.55;">✕</span></span>`).join('')
+      : '<span style="font-size:12px;color:var(--muted);">No times yet — add at least one above.</span>';
   },
 
   _toggleDay(i) {
@@ -228,6 +297,12 @@ const Settings = {
       endTime:   document.getElementById('fb-end')?.value||'6:00 PM',
       slotMinutes: parseInt(document.getElementById('fb-slot')?.value)||30,
     };
+    // Specific-times mode: offer ONLY the listed times on working days.
+    if (document.getElementById('fb-customtimes')?.checked) {
+      const times = this._getTimes();
+      if (!times.length) { toast('Add at least one time, or turn off specific times','warning'); enableBtn(btn); return; }
+      schedule.allowedTimes = times;
+    }
     try{
       await db.barbers.save({
         id:id||genId('b'),
@@ -401,8 +476,41 @@ const Settings = {
     const depAmount=parseFloat(document.getElementById('s-dep-amount')?.value)||10;
     const depMsg=document.getElementById('s-dep-msg')?.value.trim()||'A deposit is required to secure your appointment.';
     data.deposit={enabled:depEnabled,amount:depAmount,message:depMsg};
+    const inspo=document.getElementById('s-inspo')?.value; if(inspo)data.inspoPhoto=inspo;
     await db.settings.save(data);
     const title=document.getElementById('topbar-title'); if(title)title.textContent=data.shopName||'ShopFlow';
     toast('Settings saved ✓');
-  }
+  },
+
+  // ── Work gallery ────────────────────────────────────────────────────────────
+  galleryPick(){ document.getElementById('s-gallery-file')?.click(); },
+  async galleryUpload(input){
+    const file=input.files&&input.files[0]; if(!file) return;
+    input.value='';
+    try{
+      toast('Uploading photo…');
+      const dataUrl=await Settings._downscale(file,1280,.82);
+      await db.gallery.add(dataUrl,'');
+      toast('Added to gallery ✓');
+      this.render();
+    }catch(e){ toast(e.message||'Upload failed','error'); }
+  },
+  async galleryRemove(id){
+    if(!confirm('Remove this photo from your gallery?')) return;
+    try{ await db.gallery.remove(id); toast('Removed'); this.render(); }
+    catch(e){ toast('Could not remove','error'); }
+  },
+  _downscale(file,maxDim,quality){
+    return new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onload=()=>{ const img=new Image(); img.onload=()=>{
+        let w=img.width,h=img.height; const sc=Math.min(1,maxDim/Math.max(w,h));
+        const cw=Math.max(1,Math.round(w*sc)),ch=Math.max(1,Math.round(h*sc));
+        const c=document.createElement('canvas'); c.width=cw; c.height=ch;
+        c.getContext('2d').drawImage(img,0,0,cw,ch);
+        resolve(c.toDataURL('image/jpeg',quality));
+      }; img.onerror=()=>reject(new Error('Invalid image')); img.src=reader.result; };
+      reader.onerror=()=>reject(new Error('Could not read file')); reader.readAsDataURL(file);
+    });
+  },
 };

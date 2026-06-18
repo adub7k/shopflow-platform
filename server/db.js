@@ -40,6 +40,38 @@ if (!fs.existsSync(MASTER_DIR)) fs.mkdirSync(MASTER_DIR, { recursive: true });
 const SHOPS_DIR = path.join(MASTER_DIR, 'shops');
 if (!fs.existsSync(SHOPS_DIR)) fs.mkdirSync(SHOPS_DIR, { recursive: true });
 
+// Uploaded images (inspo photos, work gallery) live in their own tree — kept
+// OUT of the per-shop DB folder so static serving can never expose shopflow.json.
+const UPLOADS_DIR = path.join(MASTER_DIR, 'uploads');
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+// Decode a browser-produced data URL and write it to the shop's upload folder.
+// Returns the public path (served at /uploads/...). Throws on bad input.
+function saveImageDataUrl(shopId, prefix, dataUrl) {
+  if (typeof dataUrl !== 'string') throw new Error('No image provided');
+  const m = dataUrl.match(/^data:image\/(png|jpe?g|webp);base64,(.+)$/);
+  if (!m) throw new Error('Unsupported image format');
+  const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
+  const buf = Buffer.from(m[2], 'base64');
+  if (!buf.length) throw new Error('Empty image');
+  if (buf.length > 5 * 1024 * 1024) throw new Error('Image too large (max 5MB)');
+  const dir = path.join(UPLOADS_DIR, String(shopId));
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const file = `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2,7)}.${ext}`;
+  fs.writeFileSync(path.join(dir, file), buf);
+  return `/uploads/${shopId}/${file}`;
+}
+
+// Best-effort delete of a previously saved /uploads/<shop>/<file> path.
+function deleteUpload(url) {
+  try {
+    const m = String(url || '').match(/^\/uploads\/([^/]+)\/([^/]+)$/);
+    if (!m) return;
+    const p = path.join(UPLOADS_DIR, m[1], path.basename(m[2]));
+    if (p.startsWith(UPLOADS_DIR) && fs.existsSync(p)) fs.unlinkSync(p);
+  } catch(e) { /* ignore */ }
+}
+
 const master = low(new FileSync(path.join(MASTER_DIR, 'master.json')));
 master.defaults({
   shops: [], accounts: [], usedSessions: [], platformSettings: { requirePayment: true }, demos: [],
@@ -167,5 +199,6 @@ module.exports = {
   shopFromNumber, buildSms, SMS_DEFAULTS,
   genId, today, slug,
   JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM,
-  CLIENT_DIR, MASTER_DIR, SHOPS_DIR,
+  CLIENT_DIR, MASTER_DIR, SHOPS_DIR, UPLOADS_DIR,
+  saveImageDataUrl, deleteUpload,
 };

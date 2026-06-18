@@ -326,6 +326,10 @@ const Appointments = {
         ${this._customFieldsDetail(a)}
         ${a.notes?`<div style="font-size:13px;color:var(--muted);margin-top:8px;">${esc(a.notes)}</div>`:''}
         ${a.customerPhone?`<div style="font-size:13px;color:var(--muted);margin-top:4px;">📱 ${a.customerPhone}</div>`:''}
+        ${a.inspoPhoto?`<div style="margin-top:10px;">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:6px;">📸 INSPO PHOTO</div>
+          <img src="${esc(a.inspoPhoto)}" onclick="window.open('${esc(a.inspoPhoto)}','_blank')" style="width:100%;max-height:300px;object-fit:cover;border-radius:10px;cursor:zoom-in;" />
+        </div>`:''}
       </div>
       ${canWrite()?this._statusChanger(a):''}
       <div class="modal-actions">

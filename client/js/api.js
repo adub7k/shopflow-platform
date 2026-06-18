@@ -44,4 +44,5 @@ const db = {
   checkout:      { cash: (o) => apiFetch('/checkout/cash',{method:'POST',body:o}), session: (o) => apiFetch('/checkout/session',{method:'POST',body:o}), verify: (sid,aid) => apiFetch('/checkout/verify/'+sid+'?apptId='+aid) },
   stripe:        { status: () => apiFetch('/stripe/connect/status'), onboard: () => apiFetch('/stripe/connect/onboard',{method:'POST'}), disconnect: () => apiFetch('/stripe/connect/disconnect',{method:'POST'}) },
   staff:         { all: () => apiFetch('/staff'), save: (u) => apiFetch('/staff',{method:'POST',body:u}), delete: (id) => apiFetch('/staff/'+id,{method:'DELETE'}) },
+  gallery:       { add: (image,caption) => apiFetch('/gallery',{method:'POST',body:{image,caption}}), remove: (id) => apiFetch('/gallery/'+id,{method:'DELETE'}) },
 };

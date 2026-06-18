@@ -1,0 +1,7 @@
+# Customer-uploaded images live on the Railway volume in production — never commit them
+data/uploads/
+
+# Local tooling / OS cruft
+.claude/
+.DS_Store
+node_modules/

@@ -1,7 +1,14 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
-const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb } = require('../db');
+const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl } = require('../db');
+const { resolveProfile } = require('../industries');
+
+// Resolve a shop's inspo-photo mode: explicit per-shop setting wins, else the
+// industry default ('required' for nail studios, 'off' elsewhere).
+function inspoMode(settings, industry) {
+  return settings.inspoPhoto || resolveProfile(industry).inspoDefault || 'off';
+}
 
 // ── PUBLIC: Industry list (for the signup business-type picker) ──────────────
 router.get('/api/industries', (req, res) => {
@@ -77,10 +84,28 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
       deposit: { enabled: s.deposit?.enabled && stripeConnected, amount: s.deposit?.amount || 10, message: s.deposit?.message || '' },
       stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
       stripeAccountId: stripeConnected ? s.stripe.connectAccountId : '',
+      // Inspiration photo + work gallery
+      inspo: inspoMode(s, db.get('industry').value()),
+      gallery: s.gallery || [],
     });
   } catch(e) {
     console.error('Public info error:', e.message);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── PUBLIC: Upload an inspiration photo (from the booking page) ───────────────
+router.post('/api/public/:shopSlug/upload', (req, res) => {
+  try {
+    const shop = master.get('shops').find({ slug: req.params.shopSlug, active: true }).value();
+    if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
+    const db = getShopDb(shop.id);
+    const s = db.get('settings').value() || {};
+    if (inspoMode(s, db.get('industry').value()) === 'off') return res.status(400).json({ ok: false, error: 'Photo uploads are off for this shop' });
+    const url = saveImageDataUrl(shop.id, 'inspo', req.body.image);
+    res.json({ ok: true, url });
+  } catch(e) {
+    res.status(400).json({ ok: false, error: e.message || 'Upload failed' });
   }
 });
 
@@ -121,7 +146,12 @@ router.get('/api/public/:shopSlug/availability', (req, res) => {
     working.forEach(b => {
       const sched = b.schedule || { startTime:'9:00 AM', endTime:'6:00 PM', slotMinutes:30 };
       const booked = appts.filter(a => a.barberId === b.id).map(a => a.time);
-      generateSlots(sched.startTime, sched.endTime, sched.slotMinutes).filter(s => !booked.includes(s)).forEach(s => allSlots.add(s));
+      // If this staff member set explicit times, offer ONLY those; otherwise
+      // generate the usual start→end slots at the chosen interval.
+      const candidates = (Array.isArray(sched.allowedTimes) && sched.allowedTimes.length)
+        ? sched.allowedTimes
+        : generateSlots(sched.startTime, sched.endTime, sched.slotMinutes);
+      candidates.filter(s => !booked.includes(s)).forEach(s => allSlots.add(s));
     });
 
     const sorted = [...allSlots].sort((a,b) => { const p=t=>{const [tm,ap]=t.split(' ');let[h,m]=tm.split(':').map(Number);if(ap==='PM'&&h!==12)h+=12;if(ap==='AM'&&h===12)h=0;return h*60+m;};return p(a)-p(b); });
@@ -135,7 +165,7 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     const shop = master.get('shops').find({ slug: req.params.shopSlug, active: true }).value();
     if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
     const db = getShopDb(shop.id);
-    const { customerName, customerPhone, customerEmail, barberId, barberName, serviceId, serviceName, servicePrice, date, time, notes, status, customFields } = req.body;
+    const { customerName, customerPhone, customerEmail, barberId, barberName, serviceId, serviceName, servicePrice, date, time, notes, status, customFields, inspoPhoto } = req.body;
     if (!customerName || !customerPhone || !date || !time) return res.status(400).json({ ok: false, error: 'Missing required fields' });
 
     // Enforce required custom fields for this vertical (e.g. detail-shop vehicle info).
@@ -143,6 +173,11 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     const cf = customFields || {};
     const missing = (s0.customFields || []).filter(f => f.required && !String(cf[f.key] || '').trim());
     if (missing.length) return res.status(400).json({ ok: false, error: 'Missing required fields: ' + missing.map(f => f.label).join(', ') });
+
+    // Enforce inspiration photo when the shop requires one.
+    const inspo = String(inspoPhoto || '');
+    if (inspoMode(s0, db.get('industry').value()) === 'required' && !inspo)
+      return res.status(400).json({ ok: false, error: 'An inspiration photo is required to book.' });
 
     const { getAll, getById, upsert } = shopHelpers(db);
     const svcFromDb = serviceId ? getAll('services').find(s => s.id === serviceId) : null;
@@ -173,7 +208,7 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     }
 
     const apptId = genId('a');
-    const appt = { id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '', barberId: barberId || null, barberName: barberName || null, serviceId: serviceId || null, service: serviceName || 'Appointment', price, duration, date, time, status: status === 'pending-deposit' ? 'pending-deposit' : 'confirmed', notes: notes || '', customFields: cf, source: 'booking-page', createdAt: new Date().toISOString() };
+    const appt = { id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '', barberId: barberId || null, barberName: barberName || null, serviceId: serviceId || null, service: serviceName || 'Appointment', price, duration, date, time, status: status === 'pending-deposit' ? 'pending-deposit' : 'confirmed', notes: notes || '', customFields: cf, inspoPhoto: inspo, source: 'booking-page', createdAt: new Date().toISOString() };
     upsert('appointments', appt);
 
     // Send confirmation SMS via platform Twilio account

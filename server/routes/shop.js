@@ -1,13 +1,17 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const { requireAuth, requireRole } = require('../middleware');
-const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb } = require('../db');
+const { resolveProfile } = require('../industries');
+const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, deleteUpload } = require('../db');
 
 // ── PROTECTED: Settings ───────────────────────────────────────────────────────
 // Readable by any signed-in staff (needed for vocabulary/statuses), but sensitive
 // credentials are stripped for non-owner roles, and writes are owner-only.
 router.get('/api/shop/settings', requireAuth, shopRoute(async (req, res, db) => {
   const s = JSON.parse(JSON.stringify(db.get('settings').value() || {}));
+  // Surface resolved inspo mode + gallery so the settings UI shows the real state.
+  if (s.inspoPhoto === undefined) s.inspoPhoto = resolveProfile(db.get('industry').value()).inspoDefault || 'off';
+  if (!Array.isArray(s.gallery)) s.gallery = [];
   if ((req.role || 'full') !== 'full') {
     if (s.twilio)    s.twilio    = { ...s.twilio, authToken: '' };
     if (s.emailSmtp) s.emailSmtp = { ...s.emailSmtp, pass: '' };
@@ -19,6 +23,25 @@ router.post('/api/shop/settings', requireAuth, requireRole('full'), shopRoute(as
   db.get('settings').assign(req.body).write();
   // Update shop name in master if changed
   if (req.body.shopName) master.get('shops').find({ id: req.shopId }).assign({ shopName: req.body.shopName }).write();
+  res.json({ ok: true });
+}));
+
+// ── PROTECTED: Work gallery (owner only) ──────────────────────────────────────
+// Photos are stored on disk; settings.gallery holds [{id,url,caption,createdAt}].
+router.post('/api/shop/gallery', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
+  try {
+    const url = saveImageDataUrl(req.shopId, 'gallery', req.body.image);
+    const item = { id: genId('g'), url, caption: (req.body.caption || '').slice(0, 120), createdAt: new Date().toISOString() };
+    const gallery = db.get('settings.gallery').value() || [];
+    db.get('settings').assign({ gallery: [item, ...gallery] }).write();
+    res.json({ ok: true, item });
+  } catch(e) { res.status(400).json({ ok: false, error: e.message || 'Upload failed' }); }
+}));
+router.delete('/api/shop/gallery/:id', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
+  const gallery = db.get('settings.gallery').value() || [];
+  const item = gallery.find(g => g.id === req.params.id);
+  if (item) deleteUpload(item.url);
+  db.get('settings').assign({ gallery: gallery.filter(g => g.id !== req.params.id) }).write();
   res.json({ ok: true });
 }));
 

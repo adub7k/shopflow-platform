@@ -6,154 +6,181 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <title>Book an Appointment</title>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+/* ════════════════════════════════════════════════════════════════════════════
+   ShopFlow design tokens — the seed of the shared design language.
+   The CRM and marketing site can adopt these same variables later.
+   ──────────────────────────────────────────────────────────────────────────── */
 :root{
-  --green:#16a34a;--green-lt:#f0fdf4;--green-md:#bbf7d0;
-  --text:#1d1d1f;--muted:#6e6e73;--faint:#aeaeb2;
-  --border:#d2d2d7;--surface:#f5f5f7;--white:#fff;
-  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  --radius:14px;--shadow:0 2px 20px rgba(0,0,0,.08);
+  /* Brand accent is injected per-shop at runtime; these are fallbacks. */
+  --accent:#16a34a; --accent-2:#22c55e; --accent-ink:#ffffff;
+  --accent-tint:rgba(22,163,74,.10); --accent-glow:rgba(22,163,74,.32);
+
+  /* Neutrals */
+  --ink:#0f1115; --ink-2:#3b3f48; --muted:#6b7280; --faint:#9aa0ab;
+  --bg:#f5f6f8; --surface:#ffffff; --line:#e8eaee;
+
+  /* Radii */
+  --r-2xl:30px; --r-xl:22px; --r-lg:18px; --r-md:13px; --r-pill:999px;
+
+  /* Shadows */
+  --sh-sm:0 1px 3px rgba(15,17,21,.06);
+  --sh-md:0 6px 22px rgba(15,17,21,.08);
+  --sh-lg:0 18px 50px rgba(15,17,21,.16);
+
+  /* Type */
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 }
-html,body{height:100%;background:var(--surface);font-family:var(--font);color:var(--text);-webkit-font-smoothing:antialiased;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;}
+body{background:var(--bg);font-family:var(--font);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.45;}
+img{max-width:100%;display:block;}
 
 /* ── Loading ── */
-#loading{position:fixed;inset:0;background:var(--white);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;transition:opacity .3s;}
+#loading{position:fixed;inset:0;background:var(--surface);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200;transition:opacity .35s;}
 #loading.fade{opacity:0;pointer-events:none;}
-.loading-spinner{width:32px;height:32px;border:3px solid var(--green-md);border-top-color:var(--green);border-radius:50%;animation:spin .7s linear infinite;margin-bottom:16px;}
+.spinner{width:34px;height:34px;border:3px solid var(--accent-tint);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* ── Layout ── */
-.wrap{max-width:480px;margin:0 auto;padding:0 0 80px;}
+/* ── Shell ── */
+.shell{max-width:540px;margin:0 auto;min-height:100%;}
 
-/* ── Shop Header ── */
-.shop-header{padding:36px 20px 24px;text-align:center;}
-.shop-avatar{width:68px;height:68px;border-radius:18px;background:var(--green);color:#fff;font-size:26px;font-weight:800;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;letter-spacing:-.03em;box-shadow:0 4px 16px rgba(22,163,74,.3);}
-.shop-name{font-size:24px;font-weight:800;letter-spacing:-.04em;color:var(--text);}
-.shop-tagline{font-size:14px;color:var(--muted);margin-top:5px;line-height:1.4;}
-.shop-msg{font-size:13px;color:var(--muted);margin-top:10px;line-height:1.5;padding:0 16px;}
+/* ── Hero ── */
+.hero{background:linear-gradient(150deg,var(--accent),var(--accent-2));color:var(--accent-ink);padding:54px 24px 46px;text-align:center;position:relative;border-radius:0 0 var(--r-2xl) var(--r-2xl);overflow:hidden;}
+.hero::after{content:'';position:absolute;top:-60%;right:-30%;width:80%;height:160%;background:radial-gradient(circle,rgba(255,255,255,.18),transparent 60%);pointer-events:none;}
+.hero-avatar{width:78px;height:78px;border-radius:22px;background:var(--surface);color:var(--accent);font-size:30px;font-weight:900;letter-spacing:-.04em;display:flex;align-items:center;justify-content:center;margin:0 auto 18px;box-shadow:var(--sh-lg);position:relative;z-index:1;overflow:hidden;}
+.hero-name{font-size:30px;font-weight:900;letter-spacing:-.045em;position:relative;z-index:1;}
+.hero-tag{font-size:15px;opacity:.92;margin-top:6px;font-weight:500;position:relative;z-index:1;}
+.hero-msg{font-size:13.5px;opacity:.8;margin-top:12px;line-height:1.55;max-width:340px;margin-left:auto;margin-right:auto;position:relative;z-index:1;}
 
-/* ── Progress ── */
-.progress{display:flex;align-items:center;justify-content:center;padding:0 20px 28px;}
-.step-dot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:all .25s;}
-.step-dot.done{background:var(--green);}
-.step-dot.active{width:24px;border-radius:4px;background:var(--green);}
-.step-line{flex:1;height:1px;background:var(--border);max-width:36px;margin:0 4px;transition:background .25s;}
-.step-line.done{background:var(--green);}
+/* ── Content blocks ── */
+.content{padding:8px 0 0;}
+.block{padding:26px 22px 4px;}
+.block-head{display:flex;align-items:center;gap:11px;margin-bottom:16px;}
+.num{width:27px;height:27px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:14px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 4px 12px var(--accent-glow);}
+.block-eyebrow{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);}
+.block-title{font-size:21px;font-weight:850;letter-spacing:-.035em;}
+.block-sub{font-size:14px;color:var(--muted);margin:-8px 0 16px;}
 
-/* ── Step titles ── */
-.step-title{font-size:21px;font-weight:800;letter-spacing:-.04em;padding:0 20px;margin-bottom:14px;}
+/* ── Gallery ── */
+.gallery-sec{padding-top:24px;}
+.gallery-row{display:flex;gap:12px;overflow-x:auto;padding:2px 22px 6px;margin:0 -22px;scrollbar-width:none;}
+.gallery-row::-webkit-scrollbar{display:none;}
+.gallery-item{flex-shrink:0;width:150px;height:190px;border-radius:var(--r-lg);overflow:hidden;background:var(--line);box-shadow:var(--sh-md);cursor:pointer;position:relative;}
+.gallery-item img{width:100%;height:100%;object-fit:cover;transition:transform .3s;}
+.gallery-item:active img{transform:scale(1.04);}
+.gallery-cap{position:absolute;left:0;right:0;bottom:0;padding:18px 12px 9px;font-size:12px;font-weight:600;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.55));}
 
 /* ── Service cards ── */
-.service-grid{display:flex;flex-direction:column;gap:10px;padding:0 20px;}
-.service-card{background:var(--white);border:2px solid var(--border);border-radius:var(--radius);padding:17px;cursor:pointer;transition:border-color .15s,background .15s;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow);}
-.service-card:active{transform:scale(.98);}
-.service-card.selected{border-color:var(--green);background:var(--green-lt);}
-.service-icon{width:44px;height:44px;border-radius:11px;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0;}
-.service-card.selected .service-icon{background:var(--green-md);}
-.service-name{font-size:15px;font-weight:700;color:var(--text);}
-.service-meta{font-size:12px;color:var(--muted);margin-top:2px;}
-.service-price{margin-left:auto;font-size:18px;font-weight:800;color:var(--green);flex-shrink:0;}
+.svc-list{display:flex;flex-direction:column;gap:11px;}
+.svc{background:var(--surface);border:2px solid var(--line);border-radius:var(--r-lg);padding:16px 17px;cursor:pointer;display:flex;align-items:center;gap:15px;box-shadow:var(--sh-sm);transition:border-color .15s,box-shadow .15s,transform .08s;}
+.svc:active{transform:scale(.985);}
+.svc.on{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-tint);}
+.svc-ic{width:48px;height:48px;border-radius:14px;background:var(--accent-tint);display:flex;align-items:center;justify-content:center;font-size:23px;flex-shrink:0;}
+.svc-nm{font-size:15.5px;font-weight:750;letter-spacing:-.01em;}
+.svc-mt{font-size:12.5px;color:var(--muted);margin-top:2px;}
+.svc-pr{margin-left:auto;font-size:19px;font-weight:850;color:var(--accent);letter-spacing:-.03em;flex-shrink:0;}
 
-/* ── Barber row ── */
-.barber-row{display:flex;gap:10px;padding:0 20px 20px;overflow-x:auto;scrollbar-width:none;}
-.barber-row::-webkit-scrollbar{display:none;}
-.barber-card{flex-shrink:0;width:104px;background:var(--white);border:2px solid var(--border);border-radius:var(--radius);padding:16px 10px;cursor:pointer;transition:border-color .15s,background .15s;text-align:center;box-shadow:var(--shadow);}
-.barber-card:active{transform:scale(.97);}
-.barber-card.selected{border-color:var(--green);background:var(--green-lt);}
-.barber-avatar{width:46px;height:46px;border-radius:50%;margin:0 auto 9px;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:800;color:#fff;}
-.barber-card-name{font-size:12px;font-weight:700;color:var(--text);line-height:1.3;}
-.barber-card-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+/* ── Staff ── */
+.staff-row{display:flex;gap:11px;overflow-x:auto;padding:2px 22px 8px;margin:0 -22px;scrollbar-width:none;}
+.staff-row::-webkit-scrollbar{display:none;}
+.staff{flex-shrink:0;width:96px;background:var(--surface);border:2px solid var(--line);border-radius:var(--r-lg);padding:15px 8px;text-align:center;cursor:pointer;box-shadow:var(--sh-sm);transition:border-color .15s,box-shadow .15s,transform .08s;}
+.staff:active{transform:scale(.97);}
+.staff.on{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-tint);}
+.staff-av{width:50px;height:50px;border-radius:50%;margin:0 auto 9px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:850;color:#fff;}
+.staff-nm{font-size:12.5px;font-weight:750;line-height:1.25;}
+.staff-sub{font-size:10.5px;color:var(--muted);margin-top:2px;}
 
 /* ── Calendar ── */
-.cal-wrap{padding:0 20px;margin-bottom:20px;}
-.cal{background:var(--white);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);}
-.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
-.cal-nav-btn{width:36px;height:36px;border:none;background:var(--surface);border-radius:9px;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text);}
-.cal-month{font-size:15px;font-weight:700;}
-.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
-.cal-dh{text-align:center;font-size:11px;font-weight:700;color:var(--faint);padding:4px 0;}
-.cal-day{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:9px;font-size:13px;font-weight:500;cursor:pointer;transition:background .1s,color .1s;position:relative;}
-.cal-day:active{transform:scale(.9);}
-.cal-day.is-today{color:var(--green);font-weight:800;}
-.cal-day.is-sel{background:var(--green)!important;color:#fff!important;font-weight:800;}
-.cal-day.is-past,.cal-day.is-blocked{color:var(--faint);cursor:not-allowed;pointer-events:none;}
+.card{background:var(--surface);border-radius:var(--r-xl);box-shadow:var(--sh-md);}
+.cal{padding:18px 18px 14px;}
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+.cal-nav button{width:38px;height:38px;border:none;background:var(--bg);border-radius:12px;font-size:20px;cursor:pointer;color:var(--ink);display:flex;align-items:center;justify-content:center;transition:background .12s;}
+.cal-nav button:active{background:var(--line);}
+.cal-month{font-size:16px;font-weight:800;letter-spacing:-.02em;}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+.cal-dh{text-align:center;font-size:11px;font-weight:800;color:var(--faint);padding:4px 0;}
+.cal-day{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:12px;font-size:14px;font-weight:600;cursor:pointer;transition:background .1s,color .1s,transform .08s;}
+.cal-day:active:not(.off){transform:scale(.9);}
+.cal-day.today{color:var(--accent);font-weight:850;}
+.cal-day.on{background:var(--accent)!important;color:var(--accent-ink)!important;font-weight:850;box-shadow:0 4px 12px var(--accent-glow);}
+.cal-day.off{color:var(--faint);opacity:.4;cursor:default;pointer-events:none;}
 
-/* ── Time slots ── */
-.slots-section{padding:0 20px 16px;}
-.slots-label{font-size:11px;font-weight:700;color:var(--faint);letter-spacing:.08em;margin-bottom:10px;}
-.slots-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
-.slot{background:var(--white);border:1.5px solid var(--border);border-radius:10px;padding:11px 8px;text-align:center;font-size:14px;font-weight:600;cursor:pointer;transition:all .12s;color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,.04);}
-.slot:active{transform:scale(.94);}
-.slot.sel-slot{background:var(--green);border-color:var(--green);color:#fff;}
-.no-slots{text-align:center;padding:24px 0;color:var(--faint);font-size:14px;}
+/* ── Slots ── */
+.slots-wrap{margin-top:16px;}
+.slots-lbl{font-size:11px;font-weight:800;letter-spacing:.09em;color:var(--faint);margin-bottom:11px;}
+.slots{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;}
+.slot{background:var(--surface);border:2px solid var(--line);border-radius:13px;padding:13px 6px;text-align:center;font-size:14.5px;font-weight:750;cursor:pointer;box-shadow:var(--sh-sm);transition:all .12s;}
+.slot:active{transform:scale(.93);}
+.slot.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);box-shadow:0 6px 16px var(--accent-glow);}
+.no-slots{grid-column:1/-1;text-align:center;padding:22px 0;color:var(--faint);font-size:14px;}
+
+/* ── Inspo upload ── */
+.req-badge{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);background:var(--accent-tint);padding:3px 9px;border-radius:var(--r-pill);margin-left:8px;vertical-align:middle;}
+.inspo-drop{border:2px dashed var(--line);border-radius:var(--r-xl);background:var(--surface);min-height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;color:var(--muted);text-align:center;padding:22px;transition:border-color .15s,background .15s;position:relative;overflow:hidden;}
+.inspo-drop:active{background:var(--bg);}
+.inspo-drop.has{border-style:solid;border-color:var(--accent);padding:0;}
+.inspo-drop .ph-ic{font-size:34px;}
+.inspo-drop .ph-tx{font-size:14px;font-weight:650;}
+.inspo-drop .ph-sub{font-size:12px;color:var(--faint);}
+#inspo-preview{display:none;width:100%;max-height:340px;object-fit:cover;}
+.inspo-redo{position:absolute;top:10px;right:10px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:var(--r-pill);padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);z-index:2;}
+.inspo-busy{position:absolute;inset:0;background:rgba(255,255,255,.82);display:flex;align-items:center;justify-content:center;gap:10px;font-size:13px;font-weight:650;color:var(--ink);z-index:3;}
 
 /* ── Form ── */
-.form-wrap{padding:0 20px;}
-.field{margin-bottom:16px;}
-.field label{display:block;font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;margin-bottom:7px;}
-.field input,.field textarea{width:100%;padding:15px 16px;border:1.5px solid var(--border);border-radius:12px;font-size:16px;font-family:var(--font);background:var(--white);color:var(--text);outline:none;transition:border-color .15s;-webkit-appearance:none;}
-.field input:focus,.field textarea:focus{border-color:var(--text);}
+.field{margin-bottom:15px;}
+.field label{display:block;font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--muted);margin-bottom:8px;text-transform:uppercase;}
+.field input,.field textarea{width:100%;padding:15px 16px;border:2px solid var(--line);border-radius:var(--r-md);font-size:16px;font-family:var(--font);background:var(--surface);color:var(--ink);outline:none;transition:border-color .15s;-webkit-appearance:none;}
+.field input:focus,.field textarea:focus{border-color:var(--accent);}
 .field input::placeholder,.field textarea::placeholder{color:var(--faint);}
-.field textarea{min-height:82px;resize:none;line-height:1.5;}
-
-/* ── Summary ── */
-.summary-card{background:var(--white);border-radius:var(--radius);overflow:hidden;margin:0 20px 16px;box-shadow:var(--shadow);}
-.summary-row{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-bottom:1px solid var(--surface);}
-.summary-row:last-child{border:none;}
-.summary-label{font-size:13px;color:var(--muted);}
-.summary-val{font-size:13px;font-weight:700;text-align:right;}
-
-/* ── Deposit banner ── */
-.dep-banner{background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;padding:14px 16px;margin:0 20px 20px;display:flex;gap:12px;align-items:flex-start;}
-.dep-icon{font-size:22px;line-height:1.2;flex-shrink:0;}
-.dep-txt{font-size:13px;color:#92400e;line-height:1.5;}
-.dep-amt{font-size:15px;font-weight:800;color:#92400e;margin-top:3px;}
-
-/* ── Buttons ── */
-.cta{padding:0 20px;}
-.btn-main{width:100%;padding:17px;border:none;border-radius:14px;font-size:17px;font-weight:700;font-family:var(--font);cursor:pointer;background:var(--text);color:var(--white);transition:opacity .15s;letter-spacing:-.02em;margin-bottom:10px;}
-.btn-main:active{opacity:.82;}
-.btn-main:disabled{opacity:.32;cursor:not-allowed;}
-.btn-main.green-btn{background:var(--green);}
-.btn-back{width:100%;padding:13px;border:none;background:none;font-size:15px;font-weight:600;font-family:var(--font);color:var(--muted);cursor:pointer;}
-.btn-back:active{opacity:.6;}
-
-/* ── Confirmation ── */
-#confirmed{display:none;max-width:480px;margin:0 auto;padding:60px 20px 40px;text-align:center;}
-.conf-icon{font-size:72px;animation:pop .4s cubic-bezier(.175,.885,.32,1.275);margin-bottom:22px;}
-@keyframes pop{from{transform:scale(.4);opacity:0;}to{transform:scale(1);opacity:1;}}
-.conf-title{font-size:26px;font-weight:800;letter-spacing:-.04em;margin-bottom:8px;}
-.conf-sub{font-size:15px;color:var(--muted);line-height:1.6;margin-bottom:28px;}
-.conf-card{background:var(--white);border-radius:var(--radius);padding:20px;text-align:left;box-shadow:var(--shadow);margin-bottom:20px;}
-
-/* ── Closed ── */
-#closed{display:none;max-width:480px;margin:0 auto;padding:100px 20px;text-align:center;}
-.closed-icon{font-size:56px;margin-bottom:20px;}
-.closed-title{font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:10px;}
-.closed-sub{font-size:14px;color:var(--muted);line-height:1.7;}
+.field textarea{min-height:84px;resize:none;line-height:1.5;}
 
 /* ── Error ── */
-.err-banner{background:#fff5f5;border:1.5px solid #fecaca;border-radius:10px;padding:12px 16px;font-size:13px;color:#dc2626;margin:0 20px 16px;display:none;line-height:1.5;}
+.err{background:#fef2f2;border:1.5px solid #fecaca;border-radius:var(--r-md);padding:12px 16px;font-size:13px;color:#dc2626;margin:0 22px;display:none;line-height:1.5;font-weight:600;}
+
+/* ── Sticky CTA ── */
+#cta{position:fixed;left:0;right:0;bottom:0;z-index:90;background:rgba(255,255,255,.92);backdrop-filter:blur(14px);border-top:1px solid var(--line);box-shadow:0 -8px 30px rgba(15,17,21,.08);display:none;}
+.cta-inner{max-width:540px;margin:0 auto;padding:13px 18px calc(13px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:14px;}
+.cta-info{flex:1;min-width:0;}
+.cta-meta{font-size:12.5px;color:var(--muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.cta-price{font-size:21px;font-weight:900;letter-spacing:-.04em;color:var(--ink);}
+.cta-btn{flex-shrink:0;border:none;border-radius:var(--r-pill);background:linear-gradient(135deg,var(--accent),var(--accent-2));color:var(--accent-ink);font-family:var(--font);font-size:16px;font-weight:800;letter-spacing:-.01em;padding:16px 28px;cursor:pointer;box-shadow:0 8px 22px var(--accent-glow);transition:opacity .15s,transform .08s;}
+.cta-btn:active{transform:scale(.97);}
+.cta-btn:disabled{background:var(--line);color:var(--faint);box-shadow:none;cursor:not-allowed;}
+
+/* ── Lightbox ── */
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:300;display:none;align-items:center;justify-content:center;padding:24px;}
+#lightbox img{max-width:100%;max-height:100%;border-radius:var(--r-md);}
+
+/* ── Confirmation / closed ── */
+.center-screen{max-width:540px;margin:0 auto;padding:64px 24px 48px;text-align:center;display:none;}
+.conf-ic{font-size:74px;animation:pop .45s cubic-bezier(.18,.89,.32,1.28);margin-bottom:18px;}
+@keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+.conf-title{font-size:27px;font-weight:900;letter-spacing:-.04em;margin-bottom:8px;}
+.conf-sub{font-size:15px;color:var(--muted);line-height:1.6;margin-bottom:26px;}
+.conf-card{background:var(--surface);border-radius:var(--r-xl);padding:22px;text-align:left;box-shadow:var(--sh-md);margin-bottom:18px;}
+.conf-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:9px 0;}
+.conf-row+.conf-row{border-top:1px solid var(--bg);}
+.conf-row .k{font-size:13px;color:var(--muted);}
+.conf-row .v{font-size:13.5px;font-weight:750;text-align:right;}
+.conf-thumb{width:100%;border-radius:var(--r-md);margin-top:12px;}
+.closed-ic{font-size:60px;margin-bottom:18px;}
 </style>
 </head>
 <body>
 
 <!-- Loading -->
-<div id="loading">
-  <div class="loading-spinner"></div>
-  <div style="font-size:14px;color:var(--muted);">Loading...</div>
-</div>
+<div id="loading"><div class="spinner"></div></div>
 
 <!-- Booking closed -->
-<div id="closed">
-  <div class="closed-icon"><img src="/icons/icon-192.png" style="width:56px;height:56px;border-radius:16px;" /></div>
-  <div class="closed-title">Booking Unavailable</div>
-  <div class="closed-sub">Online booking is currently turned off for this shop.<br>Please reach out to them directly to schedule.</div>
+<div id="closed" class="center-screen">
+  <div class="closed-ic">🗓️</div>
+  <div class="conf-title">Booking Unavailable</div>
+  <div class="conf-sub">Online booking is currently turned off for this shop.<br>Please reach out to them directly to schedule.</div>
 </div>
 
 <!-- Confirmed -->
-<div id="confirmed">
-  <div class="conf-icon">🎉</div>
+<div id="confirmed" class="center-screen">
+  <div class="conf-ic">🎉</div>
   <div class="conf-title">You're booked!</div>
   <div class="conf-sub" id="conf-sub"></div>
   <div class="conf-card" id="conf-detail"></div>
@@ -161,376 +188,412 @@ html,body{height:100%;background:var(--surface);font-family:var(--font);color:va
 </div>
 
 <!-- App -->
-<div id="app" style="display:none;">
-<div class="wrap">
+<div id="app" class="shell" style="display:none;">
 
-  <!-- Header -->
-  <div class="shop-header">
-    <div class="shop-avatar" id="sh-av"><img src="/icons/icon-192.png" style="width:100%;height:100%;border-radius:inherit;object-fit:cover;" /></div>
-    <div class="shop-name" id="sh-name"></div>
-    <div class="shop-tagline" id="sh-tag"></div>
-    <div class="shop-msg" id="sh-msg"></div>
-  </div>
+  <!-- Hero -->
+  <header class="hero">
+    <div class="hero-avatar" id="sh-av"></div>
+    <h1 class="hero-name" id="sh-name"></h1>
+    <div class="hero-tag" id="sh-tag"></div>
+    <div class="hero-msg" id="sh-msg"></div>
+  </header>
 
-  <!-- Progress -->
-  <div class="progress">
-    <div class="step-dot active" id="pd-1"></div>
-    <div class="step-line" id="pl-1"></div>
-    <div class="step-dot" id="pd-2"></div>
-    <div class="step-line" id="pl-2"></div>
-    <div class="step-dot" id="pd-3"></div>
-    <div class="step-line" id="pl-3"></div>
-    <div class="step-dot" id="pd-4"></div>
-  </div>
+  <div class="content">
+    <div class="err" id="err"></div>
 
-  <!-- Error -->
-  <div class="err-banner" id="err"></div>
+    <!-- Gallery showcase -->
+    <section class="block gallery-sec" id="gallery-sec" style="display:none;">
+      <div class="block-head"><span class="block-eyebrow" id="gallery-eyebrow">Our work</span></div>
+      <div class="gallery-row" id="gallery-row"></div>
+    </section>
 
-  <!-- Step 1: Service -->
-  <div id="s1">
-    <div class="step-title">Choose a service</div>
-    <div class="service-grid" id="svc-list"></div>
-    <div style="padding:20px 20px 0;">
-      <button class="btn-main" id="s1-btn" disabled onclick="B.go(2)">Continue →</button>
-    </div>
-  </div>
+    <!-- Service -->
+    <section class="block">
+      <div class="block-head"><span class="num num-step">1</span><h2 class="block-title">Choose a service</h2></div>
+      <div class="svc-list" id="svc-list"></div>
+    </section>
 
-  <!-- Step 2: Barber + Date/Time -->
-  <div id="s2" style="display:none;">
-    <div class="step-title" id="t-staff">Choose a barber</div>
-    <div class="barber-row" id="barber-row"></div>
+    <!-- Staff -->
+    <section class="block" id="staff-sec">
+      <div class="block-head"><span class="num num-step">2</span><h2 class="block-title" id="staff-title">Choose a barber</h2></div>
+      <div class="staff-row" id="staff-row"></div>
+    </section>
 
-    <div class="step-title" style="margin-bottom:14px;">Pick a date</div>
-    <div class="cal-wrap">
-      <div class="cal">
+    <!-- Date & time -->
+    <section class="block" id="dt-sec">
+      <div class="block-head"><span class="num num-step">3</span><h2 class="block-title">Pick a date &amp; time</h2></div>
+      <div class="card cal">
         <div class="cal-nav">
-          <button class="cal-nav-btn" onclick="B.cMonth(-1)">‹</button>
+          <button onclick="B.cMonth(-1)" aria-label="Previous month">‹</button>
           <div class="cal-month" id="cal-lbl"></div>
-          <button class="cal-nav-btn" onclick="B.cMonth(1)">›</button>
+          <button onclick="B.cMonth(1)" aria-label="Next month">›</button>
         </div>
         <div class="cal-grid" id="cal-hdr"></div>
-        <div class="cal-grid" id="cal-body"></div>
+        <div class="cal-grid" id="cal-body" style="margin-top:4px;"></div>
       </div>
-    </div>
+      <div class="slots-wrap" id="slots-sec" style="display:none;">
+        <div class="slots-lbl" id="slots-lbl"></div>
+        <div class="slots" id="slots-body"></div>
+      </div>
+    </section>
 
-    <div class="slots-section" id="slots-sec" style="display:none;">
-      <div class="slots-label" id="slots-lbl"></div>
-      <div class="slots-grid" id="slots-body"></div>
-    </div>
+    <!-- Inspo photo -->
+    <section class="block" id="inspo-sec" style="display:none;">
+      <div class="block-head"><span class="num num-step">4</span><h2 class="block-title" id="inspo-title">Add an inspo photo</h2></div>
+      <p class="block-sub" id="inspo-sub">Share a reference so we nail the look you want.</p>
+      <div class="inspo-drop" id="inspo-drop" onclick="B.inspoClick()">
+        <div id="inspo-ph" style="display:flex;flex-direction:column;align-items:center;gap:7px;">
+          <div class="ph-ic">📸</div>
+          <div class="ph-tx">Tap to add a photo</div>
+          <div class="ph-sub">A screenshot or pic works great</div>
+        </div>
+        <img id="inspo-preview" alt="Inspiration preview" />
+        <button class="inspo-redo" id="inspo-redo" style="display:none;" onclick="event.stopPropagation();B.inspoClick();">Change</button>
+        <div class="inspo-busy" id="inspo-busy" style="display:none;"><div class="spinner" style="width:20px;height:20px;border-width:2px;"></div> Uploading…</div>
+      </div>
+      <input type="file" id="inspo-file" accept="image/*" style="display:none;" onchange="B.inspoPick(this)" />
+    </section>
 
-    <div style="padding:0 20px;">
-      <button class="btn-main" id="s2-btn" disabled onclick="B.go(3)">Continue →</button>
-      <button class="btn-back" onclick="B.go(1)">← Back</button>
-    </div>
-  </div>
-
-  <!-- Step 3: Details -->
-  <div id="s3" style="display:none;">
-    <div class="step-title">Your info</div>
-    <div class="form-wrap">
-      <div class="field"><label>FULL NAME *</label><input id="f-name" type="text" placeholder="e.g. Marcus Williams" autocomplete="name" /></div>
-      <div class="field"><label>PHONE NUMBER *</label><input id="f-phone" type="tel" placeholder="(505) 555-0100" autocomplete="tel" inputmode="tel" /></div>
-      <div class="field"><label>EMAIL (optional)</label><input id="f-email" type="email" placeholder="you@email.com" autocomplete="email" /></div>
+    <!-- Details -->
+    <section class="block">
+      <div class="block-head"><span class="num num-step">5</span><h2 class="block-title">Your details</h2></div>
+      <div class="field"><label>Full name</label><input id="f-name" type="text" placeholder="e.g. Jordan Rivera" autocomplete="name" /></div>
+      <div class="field"><label>Phone number</label><input id="f-phone" type="tel" placeholder="(505) 555-0100" autocomplete="tel" inputmode="tel" /></div>
+      <div class="field"><label>Email (optional)</label><input id="f-email" type="email" placeholder="you@email.com" autocomplete="email" /></div>
       <div id="custom-fields"></div>
-      <div class="field"><label id="lbl-notes">NOTES (optional)</label><textarea id="f-notes" placeholder="Anything we should know..."></textarea></div>
-      <button class="btn-main" onclick="B.go(4)">Review Booking →</button>
-      <button class="btn-back" onclick="B.go(2)">← Back</button>
-    </div>
-  </div>
+      <div class="field"><label id="lbl-notes">Notes (optional)</label><textarea id="f-notes" placeholder="Anything we should know..."></textarea></div>
+    </section>
 
-  <!-- Step 4: Review -->
-  <div id="s4" style="display:none;">
-    <div class="step-title">Review & confirm</div>
-    <div class="summary-card" id="sum-card"></div>
-    <div class="dep-banner" id="dep-banner" style="display:none;">
-      <div class="dep-icon">💳</div>
-      <div>
-        <div class="dep-txt" id="dep-msg"></div>
-        <div class="dep-amt" id="dep-amt"></div>
-      </div>
-    </div>
-    <div class="cta">
-      <button class="btn-main" id="s4-btn" onclick="B.confirm()">Confirm Appointment</button>
-      <button class="btn-back" onclick="B.go(3)">← Back</button>
-    </div>
+    <div style="height:120px;"></div>
   </div>
+</div>
 
+<!-- Sticky CTA -->
+<div id="cta">
+  <div class="cta-inner">
+    <div class="cta-info">
+      <div class="cta-meta" id="cta-meta">Choose a service to start</div>
+      <div class="cta-price" id="cta-price"></div>
+    </div>
+    <button class="cta-btn" id="cta-btn" disabled onclick="B.confirm()">Book now</button>
+  </div>
 </div>
-</div>
+
+<!-- Lightbox -->
+<div id="lightbox" onclick="this.style.display='none'"><img id="lightbox-img" alt="" /></div>
 
 <script>
 const B = {
-  slug: '',
-  shop: null,
-  vocab: {},
-  fields: [],
-  step: 1,
-  sel: { svcId:null, svcName:'', svcPrice:0, svcDur:45, barberId:null, barberName:'', date:null, time:null, name:'', phone:'', email:'', notes:'', customFields:{} },
-  _cal: new Date(),
-  _cache: {},
+  slug:'', shop:null, vocab:{}, fields:[], inspo:'off', gallery:[],
+  sel:{ svcId:null, svcName:'', svcPrice:0, svcDur:45, barberId:null, barberName:'', date:null, time:null, inspoPhoto:'' },
+  _cal:new Date(), _cache:{},
 
-  V(key, fb){ return (this.vocab && this.vocab[key]) || fb; },
+  V(k,fb){ return (this.vocab && this.vocab[k]) || fb; },
 
-  async init() {
+  async init(){
     this.slug = location.pathname.replace(/^\/book\/?/,'').split('/')[0].split('?')[0];
-    if (!this.slug) { this.closed(); return; }
-    try {
+    if(!this.slug){ return this.closed(); }
+    try{
       const info = await fetch('/api/public/'+this.slug+'/info').then(r=>r.json());
-      if (!info.shopName || info.bookingEnabled===false) { this.closed(); return; }
-      this.shop = info;
-      this.vocab = info.vocab || {};
-      this.fields = info.customFields || [];
+      if(!info.shopName || info.bookingEnabled===false){ return this.closed(); }
+      this.shop=info; this.vocab=info.vocab||{}; this.fields=info.customFields||[];
+      this.inspo=info.inspo||'off'; this.gallery=info.gallery||[];
+      this._accent(info.accentColor||'#16a34a');
       this._header(info);
-      this._applyVocab();
-      this._customFields();
+      this._gallery();
       this._svcs(info.services||[]);
+      this._staff(info.barbers||[]);
+      this._inspoSection();
+      this._customFields();
+      this._calDraw();
+      this._renumber();
+      this.updateCTA();
       document.getElementById('app').style.display='';
-      const ld = document.getElementById('loading');
-      ld.classList.add('fade'); setTimeout(()=>ld.style.display='none',320);
-    } catch(e) { this.closed(); }
+      document.getElementById('cta').style.display='';
+      const ld=document.getElementById('loading'); ld.classList.add('fade'); setTimeout(()=>ld.style.display='none',360);
+    }catch(e){ this.closed(); }
   },
 
-  _header(i) {
-    const av = document.getElementById('sh-av');
-    av.textContent = i.shopName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-    av.style.background = i.accentColor||'#16a34a';
-    av.style.boxShadow = '0 4px 16px '+hex2rgba(i.accentColor||'#16a34a',.28);
-    document.getElementById('sh-name').textContent = i.shopName;
-    document.getElementById('sh-tag').textContent  = i.tagline||'';
-    const m = (i.bookingMessage||'').replace('Book your appointment below!','');
-    document.getElementById('sh-msg').textContent  = m;
-    document.title = 'Book — '+i.shopName;
+  _accent(hex){
+    const r=document.documentElement.style;
+    r.setProperty('--accent',hex);
+    r.setProperty('--accent-2',lighten(hex,.14));
+    r.setProperty('--accent-tint',hex2rgba(hex,.10));
+    r.setProperty('--accent-glow',hex2rgba(hex,.32));
   },
 
-  _applyVocab(){
-    const staff = this.V('staff','Barber');
-    const t = document.getElementById('t-staff'); if(t) t.textContent = 'Choose a '+staff.toLowerCase();
-    const ln = document.getElementById('lbl-notes'); if(ln) ln.textContent = (this.V('notes','Notes')+' (optional)').toUpperCase();
-    const nt = document.getElementById('f-notes'); if(nt) nt.placeholder = 'Anything '+staff.toLowerCase()+'s should know...';
+  _header(i){
+    const av=document.getElementById('sh-av');
+    av.textContent=i.shopName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    document.getElementById('sh-name').textContent=i.shopName;
+    document.getElementById('sh-tag').textContent=i.tagline||'';
+    const msg=(i.bookingMessage||'').replace('Book your appointment below!','').trim();
+    const me=document.getElementById('sh-msg'); me.textContent=msg; if(!msg)me.style.display='none';
+    document.title='Book — '+i.shopName;
   },
 
-  _customFields(){
-    const wrap = document.getElementById('custom-fields');
-    if(!wrap) return;
-    wrap.innerHTML = this.fields.map(f=>`<div class="field">
-      <label>${es2(f.label.toUpperCase())}${f.required?' *':' (optional)'}</label>
-      <input id="cf-${es2(f.key)}" type="${f.type==='number'?'tel':'text'}" data-key="${es2(f.key)}" placeholder="${es2(f.label)}" />
-    </div>`).join('');
+  _gallery(){
+    if(!this.gallery.length) return;
+    document.getElementById('gallery-eyebrow').textContent = 'Our work · '+this.shop.shopName;
+    document.getElementById('gallery-row').innerHTML = this.gallery.map(g=>
+      `<div class="gallery-item" onclick="B.lightbox('${es(g.url)}')"><img src="${es2(g.url)}" loading="lazy" alt="${es2(g.caption||'Work sample')}"/>${g.caption?`<div class="gallery-cap">${es2(g.caption)}</div>`:''}</div>`
+    ).join('');
+    document.getElementById('gallery-sec').style.display='';
   },
 
   _svcIcon(c){ return {cut:'✂️',beard:'🪒',combo:'✂️',color:'🎨',design:'💈',wash:'🚿',detail:'🚗',coating:'✨',nails:'💅',other:'💈'}[c]||'💈'; },
 
-  _svcs(svcs) {
+  _svcs(svcs){
     document.getElementById('svc-list').innerHTML = svcs.length
-      ? svcs.map(s=>`<div class="service-card" id="sc-${s.id}" onclick="B.pickSvc('${s.id}','${es(s.name)}',${s.price},${s.duration||45},'${s.category||'cut'}')">
-          <div class="service-icon">${this._svcIcon(s.category)}</div>
-          <div style="flex:1;"><div class="service-name">${s.name}</div><div class="service-meta">${s.duration||45} min</div></div>
-          <div class="service-price">$${s.price}</div>
+      ? svcs.map(s=>`<div class="svc" id="sc-${s.id}" onclick="B.pickSvc('${s.id}','${es(s.name)}',${s.price},${s.duration||45})">
+          <div class="svc-ic">${this._svcIcon(s.category)}</div>
+          <div style="flex:1;min-width:0;"><div class="svc-nm">${es2(s.name)}</div><div class="svc-mt">${s.duration||45} min</div></div>
+          <div class="svc-pr">$${s.price}</div>
         </div>`).join('')
-      : '<div style="padding:24px;text-align:center;color:var(--faint);">No services listed yet.</div>';
+      : '<div style="padding:22px;text-align:center;color:var(--faint);">No services listed yet.</div>';
   },
 
-  pickSvc(id,name,price,dur) {
-    document.querySelectorAll('.service-card').forEach(c=>c.classList.remove('selected'));
-    document.getElementById('sc-'+id)?.classList.add('selected');
+  pickSvc(id,name,price,dur){
+    document.querySelectorAll('.svc').forEach(c=>c.classList.remove('on'));
+    document.getElementById('sc-'+id)?.classList.add('on');
     Object.assign(this.sel,{svcId:id,svcName:name,svcPrice:price,svcDur:dur});
-    document.getElementById('s1-btn').disabled=false;
+    this.updateCTA(); this._scrollTo('staff-sec','dt-sec');
   },
 
-  go(n) {
-    if (n===4) {
-      const name  = document.getElementById('f-name')?.value.trim();
-      const phone = document.getElementById('f-phone')?.value.trim();
-      if (!name)  { this.err('Please enter your full name.'); return; }
-      if (!phone||phone.replace(/\D/g,'').length<10) { this.err('Please enter a valid phone number.'); return; }
-      const cf={};
-      for(const f of this.fields){
-        const v=(document.getElementById('cf-'+f.key)?.value||'').trim();
-        if(f.required && !v){ this.err('Please enter '+f.label+'.'); return; }
-        cf[f.key]=v;
-      }
-      Object.assign(this.sel,{name,phone,email:document.getElementById('f-email')?.value.trim()||'',notes:document.getElementById('f-notes')?.value.trim()||'',customFields:cf});
-      this._summary();
-    }
-    this.err('');
-    document.getElementById('s'+this.step).style.display='none';
-    if (n===2 && this.step===1) { this._barbers(this.shop.barbers||[]); this._cal=new Date(); this._calDraw(); }
-    this.step=n;
-    document.getElementById('s'+n).style.display='';
-    this._prog(n);
-    window.scrollTo({top:0,behavior:'smooth'});
-  },
-
-  _prog(step) {
-    for(let i=1;i<=4;i++){
-      const d=document.getElementById('pd-'+i); if(!d)continue;
-      d.classList.remove('active','done');
-      if(i<step)d.classList.add('done'); else if(i===step)d.classList.add('active');
-    }
-    for(let i=1;i<=3;i++){const l=document.getElementById('pl-'+i);if(l)l.classList.toggle('done',i<step);}
-  },
-
-  err(msg){const e=document.getElementById('err');if(e){e.textContent=msg;e.style.display=msg?'block':'none';}},
-
-  _barbers(barbs) {
-    const ini = n=>n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-    const staff = this.V('staff','Barber'), station = this.V('station','Chair');
-    let h=`<div class="barber-card selected" id="b-any" onclick="B.pickBarber(null,'')">
-      <div class="barber-avatar" style="background:#6e6e73;font-size:20px;">★</div>
-      <div class="barber-card-name">Any ${es2(staff)}</div>
-      <div class="barber-card-sub">First available</div></div>`;
-    barbs.forEach(b=>{h+=`<div class="barber-card" id="b-${b.id}" onclick="B.pickBarber('${b.id}','${es(b.name)}')">
-      <div class="barber-avatar" style="background:${b.color||'#16a34a'}">${ini(b.name)}</div>
-      <div class="barber-card-name">${b.name}</div>
-      <div class="barber-card-sub">${b.bio||es2(station)+' '+b.chair}</div></div>`;});
-    document.getElementById('barber-row').innerHTML=h;
+  _staff(barbs){
+    const sec=document.getElementById('staff-sec');
+    if(!barbs.length){ sec.style.display='none'; return; }
+    const staff=this.V('staff','Barber'), station=this.V('station','Chair');
+    document.getElementById('staff-title').textContent='Choose your '+staff.toLowerCase();
+    const ini=n=>n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    let h=`<div class="staff on" id="st-any" onclick="B.pickStaff(null,'')">
+      <div class="staff-av" style="background:#9aa0ab;font-size:22px;">★</div>
+      <div class="staff-nm">Any ${es2(staff)}</div><div class="staff-sub">First available</div></div>`;
+    barbs.forEach(b=>{ h+=`<div class="staff" id="st-${b.id}" onclick="B.pickStaff('${b.id}','${es(b.name)}')">
+      <div class="staff-av" style="background:${es(b.color||'#16a34a')}">${ini(b.name)}</div>
+      <div class="staff-nm">${es2(b.name)}</div><div class="staff-sub">${es2(b.bio||station+' '+b.chair)}</div></div>`; });
+    document.getElementById('staff-row').innerHTML=h;
     this.sel.barberId=null; this.sel.barberName='';
   },
 
-  pickBarber(id,name){
-    document.querySelectorAll('.barber-card').forEach(c=>c.classList.remove('selected'));
-    document.getElementById(id?'b-'+id:'b-any')?.classList.add('selected');
-    this.sel.barberId=id; this.sel.barberName=name;
-    this.sel.time=null; document.getElementById('s2-btn').disabled=true;
-    if(this.sel.date){this._cache={};this._slots(this.sel.date);}
+  pickStaff(id,name){
+    document.querySelectorAll('.staff').forEach(c=>c.classList.remove('on'));
+    document.getElementById(id?'st-'+id:'st-any')?.classList.add('on');
+    this.sel.barberId=id; this.sel.barberName=name; this.sel.time=null;
+    if(this.sel.date){ this._cache={}; this._slots(this.sel.date); }
+    this.updateCTA();
   },
 
   _calDraw(){
-    const DAYS=['S','M','T','W','T','F','S'];
-    document.getElementById('cal-hdr').innerHTML=DAYS.map(d=>`<div class="cal-dh">${d}</div>`).join('');
+    document.getElementById('cal-hdr').innerHTML=['S','M','T','W','T','F','S'].map(d=>`<div class="cal-dh">${d}</div>`).join('');
     this._calBody();
   },
-
   _calBody(){
-    const y=this._cal.getFullYear(),m=this._cal.getMonth();
+    const y=this._cal.getFullYear(), m=this._cal.getMonth();
     document.getElementById('cal-lbl').textContent=this._cal.toLocaleDateString('en-US',{month:'long',year:'numeric'});
     const first=new Date(y,m,1).getDay(), days=new Date(y,m+1,0).getDate();
     const todayStr=new Date().toISOString().split('T')[0];
     const blocked=new Set(this.shop.blockedDates||[]);
     let h='';
-    for(let i=0;i<first;i++)h+='<div></div>';
+    for(let i=0;i<first;i++) h+='<div></div>';
     for(let d=1;d<=days;d++){
       const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
       const past=ds<todayStr, bl=blocked.has(ds), sel=ds===this.sel.date, tod=ds===todayStr;
       let cls='cal-day';
-      if(past||bl)cls+=' is-past'; else if(sel)cls+=' is-sel'; else if(tod)cls+=' is-today';
-      h+=`<div class="${cls}" onclick="B.pickDate('${ds}')">${d}</div>`;
+      if(past||bl) cls+=' off'; else if(sel) cls+=' on'; else if(tod) cls+=' today';
+      h+=`<div class="${cls}" ${past||bl?'':`onclick="B.pickDate('${ds}')"`}>${d}</div>`;
     }
     document.getElementById('cal-body').innerHTML=h;
   },
-
-  cMonth(d){this._cal=new Date(this._cal.getFullYear(),this._cal.getMonth()+d,1);this._calBody();},
+  cMonth(d){ this._cal=new Date(this._cal.getFullYear(),this._cal.getMonth()+d,1); this._calBody(); },
 
   async pickDate(date){
-    if(date<new Date().toISOString().split('T')[0])return;
-    this.sel.date=date; this.sel.time=null; document.getElementById('s2-btn').disabled=true;
-    this._calBody(); await this._slots(date);
+    if(date<new Date().toISOString().split('T')[0]) return;
+    this.sel.date=date; this.sel.time=null; this._calBody(); this.updateCTA();
+    await this._slots(date);
   },
 
   async _slots(date){
     const key=date+(this.sel.barberId||'any');
-    const sec=document.getElementById('slots-sec'),body=document.getElementById('slots-body'),lbl=document.getElementById('slots-lbl');
+    const sec=document.getElementById('slots-sec'), body=document.getElementById('slots-body'), lbl=document.getElementById('slots-lbl');
     sec.style.display='';
-    const dt=new Date(date+'T12:00:00');
-    lbl.textContent=dt.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'}).toUpperCase();
-    body.innerHTML='<div class="no-slots" style="font-size:13px;">Checking availability…</div>';
-    if(this._cache[key]){this._renderSlots(this._cache[key]);return;}
+    lbl.textContent=new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'}).toUpperCase();
+    body.innerHTML='<div class="no-slots">Checking availability…</div>';
+    if(this._cache[key]){ this._renderSlots(this._cache[key]); return; }
     try{
       const qs='?date='+date+(this.sel.barberId?'&barberId='+this.sel.barberId:'');
       const slots=await fetch('/api/public/'+this.slug+'/availability'+qs).then(r=>r.json());
       this._cache[key]=slots; this._renderSlots(slots);
-    }catch(e){body.innerHTML='<div class="no-slots">Could not load times. Try again.</div>';}
+    }catch(e){ body.innerHTML='<div class="no-slots">Could not load times. Try again.</div>'; }
   },
-
   _renderSlots(slots){
     const body=document.getElementById('slots-body');
-    if(!slots.length){body.innerHTML='<div class="no-slots">No availability on this day.</div>';return;}
-    body.innerHTML=slots.map(t=>`<div class="slot${t===this.sel.time?' sel-slot':''}" onclick="B.pickTime('${t}')">${t}</div>`).join('');
+    body.innerHTML = slots.length
+      ? slots.map(t=>`<div class="slot${t===this.sel.time?' on':''}" onclick="B.pickTime('${es(t)}')">${es2(t)}</div>`).join('')
+      : '<div class="no-slots">No openings this day — try another.</div>';
   },
-
   pickTime(t){
     this.sel.time=t;
-    document.querySelectorAll('.slot').forEach(s=>s.classList.toggle('sel-slot',s.textContent.trim()===t));
-    document.getElementById('s2-btn').disabled=false;
+    document.querySelectorAll('.slot').forEach(s=>s.classList.toggle('on',s.textContent.trim()===t));
+    this.updateCTA();
+    this._scrollTo(this.inspo!=='off'?'inspo-sec':null);
   },
 
-  _summary(){
-    const s=this.sel, dep=this.shop.deposit;
-    const dt=new Date(s.date+'T12:00:00');
-    const dateStr=dt.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-    document.getElementById('sum-card').innerHTML=`
-      <div class="summary-row"><div class="summary-label">Service</div><div class="summary-val">${s.svcName}</div></div>
-      <div class="summary-row"><div class="summary-label">Price</div><div class="summary-val" style="color:var(--green);font-size:17px;">$${s.svcPrice}</div></div>
-      ${s.barberName?`<div class="summary-row"><div class="summary-label">${es2(this.V('staff','Barber'))}</div><div class="summary-val">${s.barberName}</div></div>`:''}
-      <div class="summary-row"><div class="summary-label">Date</div><div class="summary-val">${dateStr}</div></div>
-      <div class="summary-row"><div class="summary-label">Time</div><div class="summary-val">${s.time}</div></div>
-      <div class="summary-row"><div class="summary-label">Name</div><div class="summary-val">${s.name}</div></div>
-      <div class="summary-row"><div class="summary-label">Phone</div><div class="summary-val">${s.phone}</div></div>
-      ${this.fields.filter(f=>s.customFields[f.key]).map(f=>`<div class="summary-row"><div class="summary-label">${es2(f.label)}</div><div class="summary-val">${es2(s.customFields[f.key])}</div></div>`).join('')}
-      ${s.notes?`<div class="summary-row"><div class="summary-label">Notes</div><div class="summary-val" style="font-weight:400;">${s.notes}</div></div>`:''}
-    `;
-    const db=document.getElementById('dep-banner'), btn=document.getElementById('s4-btn');
-    if(dep?.enabled){
-      document.getElementById('dep-msg').textContent=dep.message||'A deposit is required to secure your spot.';
-      document.getElementById('dep-amt').textContent='$'+dep.amount+' deposit due now';
-      db.style.display='flex';
-      btn.textContent='Pay $'+dep.amount+' Deposit & Book →';
-      btn.classList.add('green-btn');
-    }else{db.style.display='none';btn.textContent='Confirm Appointment';btn.classList.remove('green-btn');}
+  // ── Inspo photo ───────────────────────────────────────────────────────────
+  _inspoSection(){
+    if(this.inspo==='off') return;
+    const sec=document.getElementById('inspo-sec'); sec.style.display='';
+    const title=document.getElementById('inspo-title');
+    title.innerHTML='Add an inspo photo'+(this.inspo==='required'?'<span class="req-badge">Required</span>':'<span class="req-badge" style="color:var(--muted);background:var(--bg);">Optional</span>');
+  },
+  inspoClick(){ document.getElementById('inspo-file').click(); },
+  async inspoPick(input){
+    const file=input.files&&input.files[0]; if(!file) return;
+    const drop=document.getElementById('inspo-drop'), busy=document.getElementById('inspo-busy');
+    this.err('');
+    try{
+      const dataUrl=await downscale(file,1280,.82);
+      // instant local preview
+      const img=document.getElementById('inspo-preview');
+      img.src=dataUrl; img.style.display='block';
+      document.getElementById('inspo-ph').style.display='none';
+      drop.classList.add('has');
+      busy.style.display='flex';
+      const r=await fetch('/api/public/'+this.slug+'/upload',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:dataUrl})}).then(r=>r.json());
+      busy.style.display='none';
+      if(!r.ok){ this.err(r.error||'Photo upload failed. Try a smaller image.'); this._inspoReset(); return; }
+      this.sel.inspoPhoto=r.url;
+      document.getElementById('inspo-redo').style.display='block';
+      this.updateCTA();
+    }catch(e){ busy.style.display='none'; this.err('Could not read that image. Try another.'); this._inspoReset(); }
+    input.value='';
+  },
+  _inspoReset(){
+    this.sel.inspoPhoto='';
+    const img=document.getElementById('inspo-preview'); img.style.display='none'; img.src='';
+    document.getElementById('inspo-ph').style.display='flex';
+    document.getElementById('inspo-redo').style.display='none';
+    document.getElementById('inspo-drop').classList.remove('has');
+  },
+
+  _customFields(){
+    const wrap=document.getElementById('custom-fields');
+    wrap.innerHTML=this.fields.map(f=>`<div class="field">
+      <label>${es2(f.label)}${f.required?'':' (optional)'}</label>
+      <input id="cf-${es2(f.key)}" type="${f.type==='number'?'tel':'text'}" placeholder="${es2(f.label)}" />
+    </div>`).join('');
+    const staff=this.V('staff','Barber');
+    document.getElementById('lbl-notes').textContent=(this.V('notes','Notes')+' (optional)');
+    document.getElementById('f-notes').placeholder='Anything your '+staff.toLowerCase()+' should know...';
+  },
+
+  // Number the visible steps 1..N
+  _renumber(){
+    const order=['svc-list','staff-sec','dt-sec','inspo-sec','custom-fields'];
+    let n=0;
+    document.querySelectorAll('.num-step').forEach(el=>{
+      const sec=el.closest('.block');
+      if(sec && sec.style.display!=='none'){ n++; el.textContent=n; }
+    });
+  },
+
+  updateCTA(){
+    const s=this.sel, dep=this.shop.deposit, meta=document.getElementById('cta-meta'),
+          price=document.getElementById('cta-price'), btn=document.getElementById('cta-btn');
+    if(!s.svcId){ meta.textContent='Choose a service to start'; price.textContent=''; btn.disabled=true; btn.textContent='Book now'; return; }
+    price.textContent='$'+s.svcPrice;
+    let ready=true, hint='';
+    if(!s.date){ hint='Pick a date'; ready=false; }
+    else if(!s.time){ hint='Pick a time'; ready=false; }
+    else { hint=new Date(s.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' · '+s.time; }
+    if(ready && this.inspo==='required' && !s.inspoPhoto){ hint='Add your inspo photo'; ready=false; }
+    meta.textContent=(s.barberName?s.barberName+' · ':'')+hint;
+    btn.disabled=!ready;
+    btn.textContent = dep&&dep.enabled ? ('Pay $'+dep.amount+' & book') : 'Book now';
   },
 
   async confirm(){
-    const btn=document.getElementById('s4-btn');
-    btn.disabled=true; btn.textContent='Booking…';
     const s=this.sel, dep=this.shop.deposit;
+    const name=document.getElementById('f-name').value.trim();
+    const phone=document.getElementById('f-phone').value.trim();
+    if(!s.svcId) return this._fail('Please choose a service.','svc-list');
+    if(!s.date||!s.time) return this._fail('Please pick a date and time.','dt-sec');
+    if(this.inspo==='required' && !s.inspoPhoto) return this._fail('An inspo photo is required to book.','inspo-sec');
+    if(!name) return this._fail('Please enter your full name.','f-name',true);
+    if(phone.replace(/\D/g,'').length<10) return this._fail('Please enter a valid phone number.','f-phone',true);
+    const cf={};
+    for(const f of this.fields){
+      const v=(document.getElementById('cf-'+f.key)?.value||'').trim();
+      if(f.required && !v) return this._fail('Please enter '+f.label+'.','cf-'+f.key,true);
+      cf[f.key]=v;
+    }
+    const btn=document.getElementById('cta-btn'); btn.disabled=true; btn.textContent='Booking…';
     try{
-      const bookRes=await fetch('/api/public/'+this.slug+'/book',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({customerName:s.name,customerPhone:s.phone,customerEmail:s.email,barberId:s.barberId,barberName:s.barberName,serviceId:s.svcId,serviceName:s.svcName,servicePrice:s.svcPrice,date:s.date,time:s.time,notes:s.notes,customFields:s.customFields,status:dep?.enabled?'pending-deposit':'confirmed'})
-      }).then(r=>r.json());
-      if(!bookRes.ok){this.err(bookRes.error||'Booking failed. Please try again.');btn.disabled=false;btn.textContent='Confirm Appointment';return;}
-
-      if(dep?.enabled){
-        const depRes=await fetch('/api/public/'+this.slug+'/deposit-session',{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({appointmentId:bookRes.appointmentId,amount:dep.amount})
-        }).then(r=>r.json());
-        if(depRes.ok&&depRes.url){window.location.href=depRes.url;return;}
-        // deposit session failed — still show confirmation (appointment exists)
+      const res=await fetch('/api/public/'+this.slug+'/book',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({customerName:name,customerPhone:phone,customerEmail:document.getElementById('f-email').value.trim(),
+          barberId:s.barberId,barberName:s.barberName,serviceId:s.svcId,serviceName:s.svcName,servicePrice:s.svcPrice,
+          date:s.date,time:s.time,notes:document.getElementById('f-notes').value.trim(),customFields:cf,inspoPhoto:s.inspoPhoto,
+          status:dep&&dep.enabled?'pending-deposit':'confirmed'})}).then(r=>r.json());
+      if(!res.ok){ this.err(res.error||'Booking failed. Please try again.'); btn.disabled=false; this.updateCTA(); return; }
+      if(dep&&dep.enabled){
+        const d=await fetch('/api/public/'+this.slug+'/deposit-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({appointmentId:res.appointmentId,amount:dep.amount})}).then(r=>r.json());
+        if(d.ok&&d.url){ window.location.href=d.url; return; }
       }
-
-      this._confirmed(bookRes.smsSent);
-    }catch(e){this.err('Something went wrong. Please try again.');btn.disabled=false;btn.textContent='Confirm Appointment';}
+      this._confirmed(name,phone,res.smsSent);
+    }catch(e){ this.err('Something went wrong. Please try again.'); btn.disabled=false; this.updateCTA(); }
   },
 
-  _confirmed(smsSent){
-    document.getElementById('app').style.display='none';
+  _fail(msg,scrollId,focus){
+    this.err(msg);
+    const el=document.getElementById(scrollId);
+    if(el){ (el.closest('.block')||el).scrollIntoView({behavior:'smooth',block:'center'}); if(focus)setTimeout(()=>el.focus(),300); }
+    return false;
+  },
+
+  _confirmed(name,phone,smsSent){
     const s=this.sel;
-    const dt=new Date(s.date+'T12:00:00');
-    const dateStr=dt.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+    const dateStr=new Date(s.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+    document.getElementById('app').style.display='none';
+    document.getElementById('cta').style.display='none';
     document.getElementById('conf-sub').textContent='See you '+dateStr+' at '+s.time+'!';
     document.getElementById('conf-detail').innerHTML=`
-      <div style="display:flex;flex-direction:column;gap:12px;">
-        <div style="display:flex;justify-content:space-between;"><span style="font-size:13px;color:var(--muted);">Service</span><span style="font-size:13px;font-weight:700;">${s.svcName}</span></div>
-        ${s.barberName?`<div style="display:flex;justify-content:space-between;"><span style="font-size:13px;color:var(--muted);">${es2(this.V('staff','Barber'))}</span><span style="font-size:13px;font-weight:700;">${s.barberName}</span></div>`:''}
-        <div style="display:flex;justify-content:space-between;"><span style="font-size:13px;color:var(--muted);">Date</span><span style="font-size:13px;font-weight:700;">${dateStr}</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="font-size:13px;color:var(--muted);">Time</span><span style="font-size:13px;font-weight:700;">${s.time}</span></div>
-        <div style="display:flex;justify-content:space-between;"><span style="font-size:13px;color:var(--muted);">Shop</span><span style="font-size:13px;font-weight:700;">${this.shop.shopName}</span></div>
-      </div>`;
-    document.getElementById('conf-sms').textContent=smsSent?'📱 Confirmation text sent to '+s.phone:'';
+      <div class="conf-row"><span class="k">Service</span><span class="v">${es2(s.svcName)}</span></div>
+      ${s.barberName?`<div class="conf-row"><span class="k">${es2(this.V('staff','Barber'))}</span><span class="v">${es2(s.barberName)}</span></div>`:''}
+      <div class="conf-row"><span class="k">Date</span><span class="v">${dateStr}</span></div>
+      <div class="conf-row"><span class="k">Time</span><span class="v">${es2(s.time)}</span></div>
+      <div class="conf-row"><span class="k">Price</span><span class="v" style="color:var(--accent);">$${s.svcPrice}</span></div>
+      ${s.inspoPhoto?`<img class="conf-thumb" src="${es2(s.inspoPhoto)}" alt="Your inspo"/>`:''}`;
+    document.getElementById('conf-sms').textContent=smsSent?('📱 Confirmation text sent to '+phone):'';
     document.getElementById('confirmed').style.display='block';
     window.scrollTo({top:0,behavior:'smooth'});
   },
 
-  closed(){
-    document.getElementById('loading').style.display='none';
-    document.getElementById('closed').style.display='block';
+  lightbox(url){ document.getElementById('lightbox-img').src=url; document.getElementById('lightbox').style.display='flex'; },
+  _scrollTo(){ /* gentle nudge to the next relevant section */
+    for(const id of arguments){ if(!id) continue; const el=document.getElementById(id); if(el && el.style.display!=='none'){ setTimeout(()=>el.scrollIntoView({behavior:'smooth',block:'start'}),120); return; } }
   },
+  err(msg){ const e=document.getElementById('err'); e.textContent=msg||''; e.style.display=msg?'block':'none'; if(msg)e.scrollIntoView({behavior:'smooth',block:'center'}); },
+  closed(){ document.getElementById('loading').style.display='none'; document.getElementById('closed').style.display='block'; },
 };
 
-function es(s){return String(s||'').replace(/'/g,"\\'");}
-function es2(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function hex2rgba(hex,a){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return `rgba(${r},${g},${b},${a})`;}
+// ── helpers ───────────────────────────────────────────────────────────────────
+function es(s){ return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function es2(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function hex2rgba(hex,a){ const n=parseInt(hex.slice(1),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; }
+function lighten(hex,amt){ const n=parseInt(hex.slice(1),16); const r=Math.min(255,(n>>16&255)+Math.round(255*amt)),g=Math.min(255,(n>>8&255)+Math.round(255*amt)),b=Math.min(255,(n&255)+Math.round(255*amt)); return '#'+(1<<24|r<<16|g<<8|b).toString(16).slice(1); }
+function downscale(file,maxDim,quality){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>{ const img=new Image(); img.onload=()=>{
+      let {width:w,height:h}=img; const sc=Math.min(1,maxDim/Math.max(w,h));
+      const cw=Math.max(1,Math.round(w*sc)), ch=Math.max(1,Math.round(h*sc));
+      const c=document.createElement('canvas'); c.width=cw; c.height=ch;
+      c.getContext('2d').drawImage(img,0,0,cw,ch);
+      resolve(c.toDataURL('image/jpeg',quality));
+    }; img.onerror=reject; img.src=reader.result; };
+    reader.onerror=reject; reader.readAsDataURL(file);
+  });
+}
 
 B.init();
 </script>
