@@ -9,7 +9,12 @@ const ROLE_PAGES = {
   technician: ['dashboard','messages','appointments','clients','quotes'],
   viewonly:   ['appointments'],
 };
-function allowedPages(){ return ROLE_PAGES[Auth.getRole()] || ROLE_PAGES.full; }
+function allowedPages(){
+  let pages = ROLE_PAGES[Auth.getRole()] || ROLE_PAGES.full;
+  // Estimates is a detail-shop feature — hide it for industries that don't use it.
+  if (!Shop.supportsQuotes) pages = pages.filter(p => p !== 'quotes');
+  return pages;
+}
 function canSee(page){ return allowedPages().includes(page); }
 function canWrite(){ return Auth.getRole() !== 'viewonly'; } // view-only = read-only calendar
 function canSeeClients(){ return canSee('clients'); }        // view-only can't open client profiles
@@ -57,7 +62,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     // Load settings + industry profile (vocabulary, custom fields, statuses)
     const s = await db.settings.get();
-    Shop.settings = s; Shop.vocab = s.vocab||{}; Shop.fields = s.customFields||[]; Shop.statuses = s.statuses||[]; Shop.sizes = s.vehicleSizes||[]; Shop.addons = s.addons||[]; Shop.membershipPlans = s.membershipPlans||[]; Shop.serviceCategories = s.serviceCategories||[];
+    Shop.settings = s; Shop.vocab = s.vocab||{}; Shop.fields = s.customFields||[]; Shop.statuses = s.statuses||[]; Shop.sizes = s.vehicleSizes||[]; Shop.addons = s.addons||[]; Shop.membershipPlans = s.membershipPlans||[]; Shop.serviceCategories = s.serviceCategories||[]; Shop.supportsQuotes = !!s.supportsQuotes;
     const tt=document.getElementById('topbar-title'); if(tt)tt.textContent=s.shopName||'ShopFlow';
     const sn=document.getElementById('sidebar-shop-name'); if(sn&&s.shopName)sn.textContent=s.shopName;
     const ts=document.getElementById('topbar-sub');   if(ts&&s.tagline)ts.textContent=s.tagline;

@@ -19,6 +19,7 @@ router.get('/api/shop/settings', requireAuth, shopRoute(async (req, res, db) => 
   const _prof = resolveProfile(db.get('industry').value());
   if (!Array.isArray(s.serviceCategories)) s.serviceCategories = _prof.serviceCategories || ['cut','beard','combo','color','design','other'];
   if (s.staffPicker === undefined) s.staffPicker = _prof.staffPicker !== false;
+  if (s.supportsQuotes === undefined) s.supportsQuotes = !!_prof.supportsQuotes;
   if ((req.role || 'full') !== 'full') {
     if (s.twilio)    s.twilio    = { ...s.twilio, authToken: '' };
     if (s.emailSmtp) s.emailSmtp = { ...s.emailSmtp, pass: '' };
