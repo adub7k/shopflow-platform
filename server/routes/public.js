@@ -81,7 +81,10 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
     if (!shop) return res.status(404).json({ error: 'Shop not found' });
     const db = getShopDb(shop.id);
     const s = db.get('settings').value() || {};
-    const barbers = db.get('barbers').value().filter(b => b.active !== false);
+    // Project only what the public booking page needs — never expose staff
+    // personal phone numbers or other internal fields.
+    const barbers = (db.get('barbers').value() || []).filter(b => b.active !== false)
+      .map(b => ({ id: b.id, name: b.name, color: b.color, bio: b.bio || '', schedule: b.schedule }));
     const services = db.get('services').value();
     const blockedDates = db.get('blockedDates').value().map(b => b.date);
     const stripeConnected = !!(s.stripe?.connectAccountId && s.stripe?.onboardingComplete);
@@ -216,16 +219,15 @@ router.post('/api/public/:shopSlug/review', (req, res) => {
     const rating = Math.round(Number(req.body.rating));
     if (!(rating >= 1 && rating <= 5)) return res.status(400).json({ ok: false, error: 'Please choose a star rating.' });
     const reviews = db.get('reviews').value() || [];
-    let customerId = null, service = '', barberName = '', name = (req.body.name || '').trim();
+    let customerId = null, service = '', barberName = '', name = (req.body.name || '').trim().slice(0, 80);
+    // A review must be tied to a real, not-yet-reviewed appointment — this is the
+    // proof-of-visit that stops anonymous review-bombing / fake 5-star spam.
     const apptId = req.body.appointmentId || null;
-    if (apptId) {
-      const appt = (db.get('appointments').value() || []).find(x => x.id === apptId);
-      if (appt) {
-        if (appt.reviewId) return res.status(409).json({ ok: false, error: 'This visit has already been reviewed — thank you!' });
-        customerId = appt.customerId || null; service = appt.service || ''; barberName = appt.barberName || '';
-        if (!name) name = appt.customerName || '';
-      }
-    }
+    const appt = apptId ? (db.get('appointments').value() || []).find(x => x.id === apptId) : null;
+    if (!appt) return res.status(400).json({ ok: false, error: 'A valid appointment is required to leave a review.' });
+    if (appt.reviewId) return res.status(409).json({ ok: false, error: 'This visit has already been reviewed — thank you!' });
+    customerId = appt.customerId || null; service = appt.service || ''; barberName = appt.barberName || '';
+    if (!name) name = appt.customerName || '';
     const review = { id: genId('rev'), rating, comment: (req.body.comment || '').slice(0, 600).trim(), name: name || 'Anonymous', customerId, appointmentId: apptId, service, barberName, featured: false, source: 'link', createdAt: new Date().toISOString() };
     db.set('reviews', [review, ...reviews]).write();
     if (apptId) {

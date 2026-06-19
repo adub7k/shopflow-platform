@@ -1,5 +1,7 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
+const path = require('path');
+const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { requireAdmin } = require('../middleware');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb } = require('../db');
@@ -126,7 +128,7 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
 // ── ADMIN: create shop ────────────────────────────────────────────────────────
 router.post('/api/admin/shops/create', requireAdmin, async (req, res) => {
   try {
-    const { shopName, email, password, phone, plan } = req.body;
+    const { shopName, email, password, phone, plan, industry } = req.body;
     if (!shopName || !email || !password) return res.status(400).json({ ok: false, error: 'shopName, email, password required' });
     const existing = master.get('accounts').find({ email: email.toLowerCase() }).value();
     if (existing) return res.status(400).json({ ok: false, error: 'Email already exists' });
@@ -139,7 +141,7 @@ router.post('/api/admin/shops/create', requireAdmin, async (req, res) => {
     master.get('accounts').push({ id: accountId, shopId, email: email.toLowerCase(), passwordHash, createdAt: new Date().toISOString(), plan: plan || 'pro', active: true }).write();
     master.get('shops').push({ id: shopId, accountId, shopName, slug: finalSlug, email: email.toLowerCase(), phone: phone || '', plan: plan || 'pro', active: true, createdAt: new Date().toISOString(), lastActivity: new Date().toISOString() }).write();
     const shopDb = getShopDb(shopId);
-    initShopDb(shopDb, { shopName, email, phone });
+    initShopDb(shopDb, { shopName, email, phone, industry });
     res.json({ ok: true, shopId, shopSlug: finalSlug, shopName, crmUrl: '/shop/' + finalSlug, bookUrl: '/book/' + finalSlug });
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
