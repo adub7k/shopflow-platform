@@ -11,8 +11,15 @@ async function runScheduler() {
         const db = getShopDb(shop.id);
         const s = db.get('settings').value()||{};
 
+        // Compute dates in the shop's local timezone (default Mountain — company
+        // HQ) so "tomorrow" doesn't skew across the UTC date boundary for
+        // evening-local appointments. 'en-CA' formats as YYYY-MM-DD.
+        const TZ = s.timezone || process.env.DEFAULT_TZ || 'America/Denver';
+        const localDate = (offsetMs) => new Date(Date.now()+offsetMs).toLocaleDateString('en-CA', { timeZone: TZ });
+        const todayStr = localDate(0);
+
         // ── 24hr appointment reminders ──
-        const tomorrow = new Date(Date.now()+24*3600000).toISOString().split('T')[0];
+        const tomorrow = localDate(24*3600000);
         const appts = db.get('appointments').value().filter(a=>a.date===tomorrow&&a.status==='confirmed');
         const sentIds = s.remindersSent||[];
         const toRemind = appts.filter(a=>!sentIds.includes(a.id)&&a.customerPhone);
@@ -22,12 +29,16 @@ async function runScheduler() {
           const msg = buildSms('reminder', { name:(appt.customerName||'').split(' ')[0], shop:s.shopName, time:appt.time, barber:appt.barberName }, s);
           try { await twilioClient.messages.create({from:fromNum,to:'+1'+phone,body:msg}); sentIds.push(appt.id); } catch(e){}
         }
-        if (toRemind.length) db.get('settings').assign({ remindersSent:sentIds.slice(-500) }).write();
+        // Prune to ids of appointments still today/future. Keeps the dedup list
+        // bounded WITHOUT a flat .slice() cap that could evict an id and re-remind.
+        const liveApptIds = new Set(db.get('appointments').value().filter(a=>(a.date||'')>=todayStr).map(a=>a.id));
+        const prunedSent = sentIds.filter(id => liveApptIds.has(id));
+        if (toRemind.length || prunedSent.length !== (s.remindersSent||[]).length) db.get('settings').assign({ remindersSent: prunedSent }).write();
 
         // ── Rebook nudges (interval set per shop, default 21 days) ──
         const rebookDays = Math.min(90, Math.max(7, s.rebookInterval || 21));
         const nudgeSentIds = s.nudgesSent||[];
-        const cutoffDate = new Date(Date.now()-rebookDays*24*3600000).toISOString().split('T')[0];
+        const cutoffDate = localDate(-rebookDays*24*3600000);
         // Find each customer's most recent completed appointment
         const allAppts = db.get('appointments').value().filter(a=>a.status==='done');
         const lastVisit = {};
@@ -43,7 +54,11 @@ async function runScheduler() {
           const msg = buildSms('rebook', { name:firstName, shop:s.shopName }, s);
           try { await twilioClient.messages.create({from:fromNum,to:'+1'+phone,body:msg}); nudgeSentIds.push(nudgeKey); } catch(e){}
         }
-        db.get('settings').assign({ nudgesSent:nudgeSentIds.slice(-1000) }).write();
+        // Prune nudge keys (format "phone:YYYY-MM-DD") older than 180 days so the
+        // list stays bounded and a stale key can't be evicted and re-nudge.
+        const nudgeFloor = localDate(-180*24*3600000);
+        const prunedNudges = nudgeSentIds.filter(k => (k.split(':')[1]||'') >= nudgeFloor);
+        if (toNudge.length || prunedNudges.length !== (s.nudgesSent||[]).length) db.get('settings').assign({ nudgesSent: prunedNudges }).write();
 
       } catch(e) {}
     }

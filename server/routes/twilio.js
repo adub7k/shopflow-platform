@@ -124,15 +124,21 @@ router.post('/api/twilio/voice/complete/:shopId', verifyTwilio, async (req, res)
       else          { lead.missedCount = (lead.missedCount || 0) + 1; }
     }
 
-    // Auto-SMS on a missed call (once per call, if enabled + Twilio configured).
-    if (!answered && callTrackingOn(ctx.settings) && !call.autoSmsSent) {
+    // Auto-SMS only on a genuine ring-out (shop didn't pick up). Exclude 'failed'
+    // and 'canceled' — those are errors or the caller hanging up before we
+    // connected, and we shouldn't text someone who abandoned the call.
+    const MISSED_SMS_STATUSES = ['no-answer', 'busy'];
+    if (MISSED_SMS_STATUSES.includes(dialStatus) && callTrackingOn(ctx.settings) && !call.autoSmsSent) {
       const fromNum = shopFromNumber(ctx.shopId);
       const toNum = toE164(call.from);
       if (twilioClient && fromNum && toNum) {
+        // Mark + persist sent BEFORE awaiting the send, so a retried Twilio
+        // callback (they retry) can't fire a second text (at-most-once).
+        call.autoSmsSent = true;
+        ctx.h.upsert('calls', call);
         const body = buildSms('missedCall', { name: lead?.name, shop: ctx.shopName }, ctx.settings);
         try {
           await twilioClient.messages.create({ from: fromNum, to: toNum, body });
-          call.autoSmsSent = true;
           ctx.h.upsert('conversations', {
             id: genId('msg'), customerId: lead?.customerId || null, leadId: lead?.id || null,
             customerName: lead?.name || call.from, type: 'sms', direction: 'outbound',

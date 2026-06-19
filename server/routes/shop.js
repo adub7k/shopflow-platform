@@ -225,7 +225,12 @@ router.post('/api/shop/customers/:id/membership', requireAuth, requireRole('full
 }));
 router.post('/api/shop/customers/:id/membership/cancel', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const c = h.getById('customers', req.params.id); if (!c || !c.membership) return res.status(404).json({ ok:false, error:'No membership on file' });
-  if (c.membership.stripeSubscriptionId && stripe) { try { await stripe.subscriptions.cancel(c.membership.stripeSubscriptionId); } catch(e) {} }
+  // Only mark canceled locally if Stripe actually cancelled the subscription —
+  // otherwise the customer keeps getting billed while the UI says "canceled".
+  if (c.membership.stripeSubscriptionId && stripe) {
+    try { await stripe.subscriptions.cancel(c.membership.stripeSubscriptionId); }
+    catch(e) { return res.status(502).json({ ok:false, error:'Could not cancel the Stripe subscription — it is still active. Please try again. ('+e.message+')' }); }
+  }
   c.membership.status = 'canceled'; c.membership.canceledAt = new Date().toISOString();
   h.upsert('customers', c);
   res.json({ ok:true });
@@ -300,14 +305,33 @@ router.post('/api/shop/appointments', requireAuth, requireRole('full','technicia
 }));
 router.post('/api/shop/appointments/:id/complete', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const a = h.getById('appointments', req.params.id); if(!a) return res.status(404).json({ error:'Not found' });
+  const prev = a.status;
   a.status='done'; a.price=req.body.price||a.price||0; h.upsert('appointments',a);
-  if (a.customerId) { const c=h.getById('customers',a.customerId); if(c){c.loyaltyVisits=(c.loyaltyVisits||c.loyaltyPoints||0)+1;c.loyaltyPoints=c.loyaltyVisits;c.lastJobDate=a.date;h.upsert('customers',c);} }
+  // Award loyalty only on the transition INTO done — re-completing must not double-count.
+  if (prev !== 'done' && a.customerId) {
+    const c=h.getById('customers',a.customerId);
+    if(c){
+      c.loyaltyVisits=(c.loyaltyVisits||c.loyaltyPoints||0)+1; c.loyaltyPoints=c.loyaltyVisits; c.lastJobDate=a.date;
+      if (prev==='no-show' && (c.noShows||0)>0) c.noShows=c.noShows-1; // it wasn't a no-show after all
+      h.upsert('customers',c);
+    }
+  }
   res.json({ ok: true });
 }));
 router.post('/api/shop/appointments/:id/noshow', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const a = h.getById('appointments', req.params.id); if(!a) return res.status(404).json({ error:'Not found' });
+  const prev = a.status;
   a.status='no-show'; a.noShowAt=new Date().toISOString(); h.upsert('appointments',a);
-  if (a.customerId) { const c=h.getById('customers',a.customerId); if(c){c.noShows=(c.noShows||0)+1;h.upsert('customers',c);} }
+  // Count the no-show only on the transition INTO no-show — and reverse a loyalty
+  // visit if this appointment had previously been marked done.
+  if (prev !== 'no-show' && a.customerId) {
+    const c=h.getById('customers',a.customerId);
+    if(c){
+      c.noShows=(c.noShows||0)+1;
+      if (prev==='done' && (c.loyaltyVisits||0)>0) { c.loyaltyVisits=c.loyaltyVisits-1; c.loyaltyPoints=c.loyaltyVisits; }
+      h.upsert('customers',c);
+    }
+  }
   res.json({ ok: true });
 }));
 router.post('/api/shop/appointments/:id/waive-deposit', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
