@@ -2,7 +2,7 @@ const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const { requireAuth, requireRole } = require('../middleware');
 const { resolveProfile } = require('../industries');
-const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, deleteUpload } = require('../db');
+const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, deleteUpload } = require('../db');
 
 // ── PROTECTED: Settings ───────────────────────────────────────────────────────
 // Readable by any signed-in staff (needed for vocabulary/statuses), but sensitive
@@ -20,6 +20,9 @@ router.get('/api/shop/settings', requireAuth, shopRoute(async (req, res, db) => 
   if (!Array.isArray(s.serviceCategories)) s.serviceCategories = _prof.serviceCategories || ['cut','beard','combo','color','design','other'];
   if (s.staffPicker === undefined) s.staffPicker = _prof.staffPicker !== false;
   if (s.supportsQuotes === undefined) s.supportsQuotes = !!_prof.supportsQuotes;
+  // Call tracking: surface the resolved tracking number (read-only) + defaults.
+  s.trackingNumber = shopFromNumber(req.shopId) || '';
+  if (!s.callTracking) s.callTracking = { enabled: true };
   if ((req.role || 'full') !== 'full') {
     if (s.twilio)    s.twilio    = { ...s.twilio, authToken: '' };
     if (s.emailSmtp) s.emailSmtp = { ...s.emailSmtp, pass: '' };
@@ -505,6 +508,82 @@ router.post('/api/shop/sms/send', requireAuth, requireRole('full','technician'),
     await twilioClient.messages.create({ from:fromNum, to:'+1'+to.replace(/\D/g,''), body });
     h.upsert('conversations',{id:genId('msg'),customerId,customerName,type:'sms',direction:'outbound',body,sentAt:new Date().toISOString(),read:true});
     res.json({ ok: true });
+  } catch(e) { res.json({ ok:false, error:e.message }); }
+}));
+
+// ── PROTECTED: Leads / call tracking ──────────────────────────────────────────
+// Leads are created by the inbound-call webhooks (routes/twilio.js). Each lead
+// carries its call history; the Leads page reads this and lets staff text back,
+// rename, re-status, or convert a lead into a real client.
+
+// List leads, newest contact first, each with its call log attached.
+router.get('/api/shop/leads', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  const calls = h.getAll('calls');
+  const leads = h.getAll('leads').map(l => ({
+    ...l,
+    calls: calls.filter(c => c.leadId === l.id).sort((a,b) => new Date(b.startedAt) - new Date(a.startedAt)),
+  }));
+  leads.sort((a,b) => new Date(b.lastContactAt||0) - new Date(a.lastContactAt||0));
+  res.json(leads);
+}));
+
+// Update editable lead fields (name, status, notes).
+router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  const lead = h.getById('leads', req.params.id);
+  if (!lead) return res.status(404).json({ ok:false, error:'Lead not found' });
+  const { name, status, notes } = req.body;
+  if (name   !== undefined) lead.name = String(name).slice(0,80);
+  if (notes  !== undefined) lead.notes = String(notes).slice(0,2000);
+  if (status !== undefined && ['new','contacted','booked','closed'].includes(status)) lead.status = status;
+  h.upsert('leads', lead);
+  res.json({ ok:true, lead });
+}));
+
+router.delete('/api/shop/leads/:id', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
+  db.get('calls').remove({ leadId: req.params.id }).write();
+  h.remove('leads', req.params.id);
+  res.json({ ok:true });
+}));
+
+// Convert a lead into a client (CRM record). Idempotent: re-links if already converted.
+router.post('/api/shop/leads/:id/convert', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  const lead = h.getById('leads', req.params.id);
+  if (!lead) return res.status(404).json({ ok:false, error:'Lead not found' });
+  let cust = lead.customerId ? h.getById('customers', lead.customerId) : null;
+  if (!cust) {
+    const digits = String(lead.phone||'').replace(/\D/g,'');
+    cust = h.getAll('customers').find(c => String(c.phone||'').replace(/\D/g,'') === digits && digits);
+  }
+  if (!cust) {
+    cust = { id: genId('c'), name: lead.name || lead.phone, phone: lead.phone, email: '', source: 'call',
+             notes: lead.notes || '', loyaltyPoints: 0, noShows: 0, preferredBarberId: null,
+             isFleet: false, companyName: '', vehicles: [], createdAt: today() };
+    h.upsert('customers', cust);
+  }
+  lead.customerId = cust.id;
+  lead.status = lead.status === 'new' || lead.status === 'contacted' ? 'booked' : lead.status;
+  h.upsert('leads', lead);
+  res.json({ ok:true, customerId: cust.id });
+}));
+
+// Text a lead back manually; logs to the lead's call/SMS history + the inbox.
+router.post('/api/shop/leads/:id/sms', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  const lead = h.getById('leads', req.params.id);
+  if (!lead) return res.status(404).json({ ok:false, error:'Lead not found' });
+  const fromNum = shopFromNumber(req.shopId);
+  const toNum = toE164(lead.phone);
+  if (!twilioClient || !fromNum) return res.json({ ok:false, error:'SMS not available for this shop yet. Contact ShopFlow support.' });
+  if (!toNum) return res.json({ ok:false, error:'This lead has no textable phone number.' });
+  const body = String(req.body.body || '').slice(0,1000);
+  if (!body) return res.json({ ok:false, error:'Message is empty.' });
+  try {
+    await twilioClient.messages.create({ from: fromNum, to: toNum, body });
+    h.upsert('conversations', { id: genId('msg'), customerId: lead.customerId || null, leadId: lead.id,
+      customerName: lead.name || lead.phone, type:'sms', direction:'outbound', body, sentAt:new Date().toISOString(), read:true });
+    if (lead.status === 'new') { lead.status = 'contacted'; }
+    lead.lastContactAt = new Date().toISOString();
+    h.upsert('leads', lead);
+    res.json({ ok:true });
   } catch(e) { res.json({ ok:false, error:e.message }); }
 }));
 

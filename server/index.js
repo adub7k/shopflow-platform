@@ -13,6 +13,7 @@ const PORT = process.env.PORT || 3000;
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ extended: false })); // Twilio webhooks POST form-encoded
 app.use(express.static(CLIENT_DIR));
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '30d' }));
 app.use('/api', rateLimit({ windowMs: 60000, max: 500 }));
@@ -20,6 +21,7 @@ app.use('/api', rateLimit({ windowMs: 60000, max: 500 }));
 // ── API Routes ────────────────────────────────────────────────────────────────
 app.use(require('./routes/auth'));
 app.use(require('./routes/public'));
+app.use(require('./routes/twilio'));
 app.use(require('./routes/shop'));
 app.use(require('./routes/admin'));
 app.use(require('./routes/sales'));
