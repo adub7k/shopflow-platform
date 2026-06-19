@@ -5,7 +5,7 @@
 //
 //   node seed-demo-detail.js          → wipe + recreate the demo (reset to clean)
 //
-//   Login:  demo@demodetail.com  /  demo1234     (CRM at /shop/demo-detail)
+//   Login:  demo@detail.com  /  demo1234     (CRM at /shop/demo-detail)
 //   Booking page:  /book/demo-detail
 //
 // Also runnable on boot: the server calls this with { force:false } when the

@@ -262,7 +262,7 @@ const Clients = {
       // ── Flags ──
       if ((c.noShows||0) > 0) html += `<div style="background:#fff5f5;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;font-size:12px;color:#dc2626;margin-bottom:12px;">⚠️ ${c.noShows} no-show${c.noShows>1?'s':''} on record</div>`;
       if (data.rewardReady) html += `<div style="background:var(--green-lt);border:1px solid #b3dfbf;border-radius:8px;padding:8px 12px;font-size:12px;color:var(--green);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">🎉 Reward ready! <button onclick="Clients.redeemReward('${c.id}','${c.name}')" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">Redeem</button></div>`;
-      if (c.notes) html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--muted);margin-bottom:12px;">📝 ${c.notes}</div>`;
+      if (c.notes) html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--muted);margin-bottom:12px;">📝 ${esc(c.notes)}</div>`;
 
       // ── Fleet account ──
       if (c.isFleet) html += `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;font-size:12px;color:#1d4ed8;margin-bottom:12px;display:flex;align-items:center;gap:6px;">🚚 <strong>Fleet account</strong>${c.companyName?' · '+esc(c.companyName):''}</div>`;
@@ -367,7 +367,7 @@ const Clients = {
           const isOut = m.direction !== 'inbound';
           html += `<div style="display:flex;justify-content:${isOut?'flex-end':'flex-start'};margin-bottom:8px;">
             <div style="max-width:80%;background:${isOut?'var(--green)':'#fff'};color:${isOut?'#fff':'var(--text)'};border:1px solid ${isOut?'var(--green)':'var(--border)'};border-radius:${isOut?'12px 12px 2px 12px':'12px 12px 12px 2px'};padding:8px 12px;font-size:13px;line-height:1.4;">
-              ${m.body}
+              ${esc(m.body)}
               <div style="font-size:10px;opacity:.6;margin-top:3px;text-align:right;">${m.sentAt?new Date(m.sentAt).toLocaleDateString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):''}</div>
             </div>
           </div>`;

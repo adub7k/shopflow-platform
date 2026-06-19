@@ -169,8 +169,14 @@ router.post('/api/public/:shopSlug/quote/:quoteId/approve', (req, res) => {
     const q = h.getById('quotes', req.params.quoteId);
     if (!q) return res.status(404).json({ ok: false, error: 'Quote not found' });
     if (q.status === 'declined') return res.status(400).json({ ok: false, error: 'This estimate was already declined.' });
-    if (q.status !== 'approved' && q.status !== 'scheduled') { q.status = 'approved'; q.approvedAt = new Date().toISOString(); h.upsert('quotes', q); }
-    res.json({ ok: true, depositRequired: !!q.depositRequired && !q.depositPaid, depositAmount: q.depositAmount || 0 });
+    const depositOutstanding = !!q.depositRequired && !q.depositPaid;
+    // Only finalize approval once any required deposit is actually paid. When a
+    // deposit is still owed, leave the status as-is and signal the client to
+    // collect it — the Stripe success callback flips the quote to 'approved'.
+    if (!depositOutstanding && q.status !== 'approved' && q.status !== 'scheduled') {
+      q.status = 'approved'; q.approvedAt = new Date().toISOString(); h.upsert('quotes', q);
+    }
+    res.json({ ok: true, depositRequired: depositOutstanding, depositAmount: q.depositAmount || 0 });
   } catch(e) { res.status(500).json({ ok: false, error: 'Server error' }); }
 });
 router.post('/api/public/:shopSlug/quote/:quoteId/decline', (req, res) => {
@@ -287,7 +293,7 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     const shop = master.get('shops').find({ slug: req.params.shopSlug, active: true }).value();
     if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
     const db = getShopDb(shop.id);
-    const { customerName, customerPhone, customerEmail, barberId, barberName, serviceId, serviceName, servicePrice, date, time, notes, status, customFields, inspoPhoto, vehicleSize } = req.body;
+    const { customerName, customerPhone, customerEmail, barberId, barberName, serviceId, date, time, notes, customFields, inspoPhoto, vehicleSize } = req.body;
     if (!customerName || !customerPhone || !date || !time) return res.status(400).json({ ok: false, error: 'Missing required fields' });
 
     // Enforce required custom fields for this vertical (e.g. detail-shop vehicle info).
@@ -333,6 +339,10 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
 
     const { getAll, getById, upsert } = shopHelpers(db);
     const svcFromDb = serviceId ? getAll('services').find(s => s.id === serviceId) : null;
+    // A booking must reference a real service — the price, name, and duration are
+    // all taken from it server-side. Without this, the client could dictate the
+    // price (or book a $0 slot with no service). The booking page always sends one.
+    if (!svcFromDb) return res.status(400).json({ ok: false, error: 'Please choose a service. If you already did, refresh and try again.' });
     // Price is always resolved server-side (never trust the client's amount).
     // For detail shops the per-size table wins when the customer picked a size,
     // and any chosen add-ons are re-priced from the shop's own add-on list.
@@ -340,7 +350,7 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     const selAddonIds = Array.isArray(req.body.addons) ? req.body.addons : [];
     const chosenAddons = (s0.addons || []).filter(a => selAddonIds.includes(a.id)).map(a => ({ id: a.id, name: a.name, price: Number(a.price) || 0 }));
     const addonsTotal = chosenAddons.reduce((t, a) => t + a.price, 0);
-    const basePrice = svcFromDb ? sizePrice(svcFromDb, vehicleSize) : Number(servicePrice) || 35;
+    const basePrice = sizePrice(svcFromDb, vehicleSize);
     const price = basePrice + addonsTotal;
     const duration = svcFromDb ? Number(svcFromDb.duration) || 45 : 45;
 
@@ -348,7 +358,8 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     const vehicle = (cf.vehicleYear || cf.vehicleMake || cf.vehicleModel)
       ? { year: cf.vehicleYear || '', make: cf.vehicleMake || '', model: cf.vehicleModel || '', color: cf.vehicleColor || '' }
       : null;
-    const sameVehicle = (a, b) => a && b && a.year === b.year && a.make === b.make && a.model === b.model;
+    const _vn = s => String(s || '').trim().toLowerCase();
+    const sameVehicle = (a, b) => a && b && _vn(a.year) === _vn(b.year) && _vn(a.make) === _vn(b.make) && _vn(a.model) === _vn(b.model);
 
     // Find or create customer
     const digits = (customerPhone || '').replace(/[^0-9]/g, '');
@@ -367,8 +378,13 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
       }
     }
 
+    // Deposit status is decided server-side, never taken from the client. A shop
+    // only holds a deposit when it has enabled one AND Stripe is connected.
+    const stripeConnected = !!(s0.stripe?.connectAccountId && s0.stripe?.onboardingComplete);
+    const needsDeposit = !!(s0.deposit?.enabled && stripeConnected);
+
     const apptId = genId('a');
-    const appt = { id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '', barberId: barberId || null, barberName: barberName || null, serviceId: serviceId || null, service: serviceName || 'Appointment', price, duration, date, time, status: status === 'pending-deposit' ? 'pending-deposit' : 'confirmed', notes: notes || '', customFields: cf, vehicleSize: vehicleSize || null, addons: chosenAddons, inspoPhoto: inspo, source: 'booking-page', createdAt: new Date().toISOString() };
+    const appt = { id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '', barberId: barberId || null, barberName: barberName || null, serviceId: serviceId || null, service: svcFromDb.name, price, duration, date, time, status: needsDeposit ? 'pending-deposit' : 'confirmed', notes: notes || '', customFields: cf, vehicleSize: vehicleSize || null, addons: chosenAddons, inspoPhoto: inspo, source: 'booking-page', createdAt: new Date().toISOString() };
     upsert('appointments', appt);
 
     // Send confirmation SMS via platform Twilio account
