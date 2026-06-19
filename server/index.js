@@ -10,8 +10,23 @@ const { runScheduler } = require('./scheduler');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
+// ── Production secret guard ───────────────────────────────────────────────────
+// These have insecure in-repo defaults for local dev. In production they MUST be
+// set, or anyone could forge owner/admin tokens. Fail fast rather than run open.
+if (process.env.NODE_ENV === 'production') {
+  const missing = ['JWT_SECRET', 'ADMIN_KEY'].filter(k => !process.env[k]);
+  if (missing.length) {
+    console.error('FATAL: required secrets not set in production:', missing.join(', '));
+    process.exit(1);
+  }
+}
+
 // ── Middleware ────────────────────────────────────────────────────────────────
+app.set('trust proxy', 1); // trust exactly one proxy hop (Railway) — correct req.protocol for signature URLs without opening rate-limit IP spoofing
 app.use(cors({ origin: '*' }));
+// Stripe webhook needs the raw, unparsed body for signature verification, so it
+// must be mounted BEFORE express.json().
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), require('./routes/stripe').stripeWebhook);
 app.use(express.json({ limit: '5mb' }));
 app.use(express.urlencoded({ extended: false })); // Twilio webhooks POST form-encoded
 app.use(express.static(CLIENT_DIR));

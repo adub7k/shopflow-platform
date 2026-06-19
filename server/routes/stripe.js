@@ -10,6 +10,65 @@ function getStripe() {
 }
 const APP_URL = process.env.APP_URL || 'https://shopflowio.up.railway.app';
 
+// ── Fulfillment ───────────────────────────────────────────────────────────────
+// Shared by the browser success-redirects AND the Stripe webhook. All ids come
+// from the Stripe session's own metadata (never request query params), so a paid
+// session can't be replayed against another tenant's records. Each is idempotent.
+function fulfillBookingDeposit(shopId, apptId, session) {
+  const db = getShopDb(shopId); const h = shopHelpers(db);
+  const appt = h.getById('appointments', apptId);
+  if (appt && appt.status === 'pending-deposit') {
+    appt.status = 'confirmed'; appt.depositPaid = true;
+    appt.depositAmount = session.amount_total / 100; appt.depositSessionId = session.id;
+    h.upsert('appointments', appt);
+  }
+}
+function fulfillQuoteDeposit(shopId, quoteId, session) {
+  const db = getShopDb(shopId); const h = shopHelpers(db);
+  const q = h.getById('quotes', quoteId);
+  if (q && !q.depositPaid) {
+    q.depositPaid = true; q.depositSessionId = session.id; q.depositAmount = session.amount_total / 100;
+    if (q.status !== 'scheduled') q.status = 'approved';
+    q.approvedAt = q.approvedAt || new Date().toISOString();
+    h.upsert('quotes', q);
+  }
+}
+function fulfillMembership(shopId, custId, planId, session) {
+  const db = getShopDb(shopId); const h = shopHelpers(db);
+  const c = h.getById('customers', custId);
+  const plan = ((db.get('settings').value() || {}).membershipPlans || []).find(p => p.id === planId);
+  if (!c || !plan) return;
+  // Idempotent: the redirect and the webhook may both fire for the same session.
+  if (c.membership?.status === 'active' && c.membership?.stripeSubscriptionId === (session.subscription || '')) return;
+  c.membership = { planId: plan.id, planName: plan.name, price: Number(plan.price) || 0, interval: plan.interval || 'month', status: 'active', source: 'stripe', stripeSubscriptionId: session.subscription || '', stripeCustomerId: session.customer || '', startedAt: new Date().toISOString() };
+  h.upsert('customers', c);
+}
+
+// Stripe webhook — the authoritative payment confirmation. The browser redirect
+// is best-effort (a customer can pay then close the tab); this guarantees the DB
+// is updated. Mounted in index.js with a raw-body parser BEFORE express.json.
+// No-op until STRIPE_WEBHOOK_SECRET is set (so it can't be spoofed).
+function stripeWebhook(req, res) {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) return res.status(200).send('Stripe webhook not configured');
+  let event;
+  try {
+    event = getStripe().webhooks.constructEvent(req.body, req.headers['stripe-signature'], secret);
+  } catch (e) {
+    return res.status(400).send('Webhook signature verification failed');
+  }
+  try {
+    if (event.type === 'checkout.session.completed') {
+      const session = event.data.object;
+      const m = session.metadata || {};
+      if (m.appointmentId && m.shopId)            fulfillBookingDeposit(m.shopId, m.appointmentId, session);
+      else if (m.quoteId && m.shopId)             fulfillQuoteDeposit(m.shopId, m.quoteId, session);
+      else if (m.customerId && m.planId && m.shopId) fulfillMembership(m.shopId, m.customerId, m.planId, session);
+    }
+  } catch (e) { console.error('Stripe webhook handler error:', e.message); }
+  res.json({ received: true });
+}
+
 // ── Stripe Connect: status ────────────────────────────────────────────────────
 router.get('/api/shop/stripe/connect/status', requireAuth, shopRoute(async (req, res, db) => {
   const s = db.get('settings').value()||{};
@@ -163,19 +222,10 @@ router.post('/api/public/:shopSlug/deposit-session', async (req, res) => {
 // ── PUBLIC: Deposit success callback ─────────────────────────────────────────
 router.get('/booking-deposit-success', async (req, res) => {
   try {
-    const { session: sessionId, appt: apptId, shop: shopId } = req.query;
-    if (sessionId && apptId && shopId) {
-      const stripe = getStripe();
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
-      if (session.payment_status === 'paid') {
-        const db = getShopDb(shopId);
-        const h = shopHelpers(db);
-        const appt = h.getById('appointments', apptId);
-        if (appt && appt.status === 'pending-deposit') {
-          appt.status = 'confirmed'; appt.depositPaid = true; appt.depositAmount = session.amount_total / 100; appt.depositSessionId = sessionId;
-          h.upsert('appointments', appt);
-        }
-      }
+    const session = await getStripe().checkout.sessions.retrieve(req.query.session);
+    const m = session?.metadata || {};
+    if (session?.payment_status === 'paid' && m.shopId && m.appointmentId) {
+      fulfillBookingDeposit(m.shopId, m.appointmentId, session);
     }
   } catch(e) {}
   res.send(`<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="font-family:-apple-system,sans-serif;text-align:center;padding:60px 20px;background:#f5f5f7;"><div style="font-size:64px;margin-bottom:20px;">🎉</div><div style="font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:8px;">You're booked!</div><div style="font-size:15px;color:#6e6e73;line-height:1.6;margin-bottom:24px;">Your deposit was received and your appointment is confirmed.</div><div style="font-size:13px;color:#aeaeb2;">You can close this tab.</div></body></html>`);
@@ -211,21 +261,10 @@ router.post('/api/public/:shopSlug/quote-deposit-session', async (req, res) => {
 
 router.get('/quote-deposit-success', async (req, res) => {
   try {
-    const { session: sessionId, quote: quoteId, shop: shopId } = req.query;
-    if (sessionId && quoteId && shopId) {
-      const stripe = getStripe();
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
-      if (session.payment_status === 'paid') {
-        const db = getShopDb(shopId);
-        const h = shopHelpers(db);
-        const q = h.getById('quotes', quoteId);
-        if (q && !q.depositPaid) {
-          q.depositPaid = true; q.depositSessionId = sessionId; q.depositAmount = session.amount_total / 100;
-          if (q.status !== 'scheduled') q.status = 'approved';
-          q.approvedAt = q.approvedAt || new Date().toISOString();
-          h.upsert('quotes', q);
-        }
-      }
+    const session = await getStripe().checkout.sessions.retrieve(req.query.session);
+    const m = session?.metadata || {};
+    if (session?.payment_status === 'paid' && m.shopId && m.quoteId) {
+      fulfillQuoteDeposit(m.shopId, m.quoteId, session);
     }
   } catch(e) {}
   res.send(`<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="font-family:-apple-system,sans-serif;text-align:center;padding:60px 20px;background:#f5f5f7;"><div style="font-size:64px;margin-bottom:20px;">🎉</div><div style="font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:8px;">Estimate approved!</div><div style="font-size:15px;color:#6e6e73;line-height:1.6;margin-bottom:24px;">Your deposit was received. We'll be in touch to schedule your appointment.</div><div style="font-size:13px;color:#aeaeb2;">You can close this tab.</div></body></html>`);
@@ -257,20 +296,10 @@ router.post('/api/shop/customers/:id/membership/checkout', requireAuth, requireR
 
 router.get('/membership-success', async (req, res) => {
   try {
-    const { session: sessionId, cust: custId, plan: planId, shop: shopId } = req.query;
-    if (sessionId && custId && shopId) {
-      const stripe = getStripe();
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
-      if (session.payment_status === 'paid' || session.status === 'complete') {
-        const db = getShopDb(shopId);
-        const h = shopHelpers(db);
-        const c = h.getById('customers', custId);
-        const plan = ((db.get('settings').value()||{}).membershipPlans||[]).find(p => p.id === planId);
-        if (c && plan) {
-          c.membership = { planId: plan.id, planName: plan.name, price: Number(plan.price)||0, interval: plan.interval||'month', status: 'active', source: 'stripe', stripeSubscriptionId: session.subscription || '', stripeCustomerId: session.customer || '', startedAt: new Date().toISOString() };
-          h.upsert('customers', c);
-        }
-      }
+    const session = await getStripe().checkout.sessions.retrieve(req.query.session);
+    const m = session?.metadata || {};
+    if ((session?.payment_status === 'paid' || session?.status === 'complete') && m.shopId && m.customerId && m.planId) {
+      fulfillMembership(m.shopId, m.customerId, m.planId, session);
     }
   } catch(e) {}
   res.send(`<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="font-family:-apple-system,sans-serif;text-align:center;padding:60px 20px;background:#f5f5f7;"><div style="font-size:64px;margin-bottom:20px;">🎉</div><div style="font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:8px;">Membership active!</div><div style="font-size:15px;color:#6e6e73;line-height:1.6;margin-bottom:24px;">Your plan is set up. Thanks for joining!</div><div style="font-size:13px;color:#aeaeb2;">You can close this tab.</div></body></html>`);
@@ -280,3 +309,4 @@ router.get('/membership-success', async (req, res) => {
 router.get('/checkout-success', (req, res) => res.send(`<html><body style="font-family:sans-serif;text-align:center;padding:60px;"><div style="font-size:48px;margin-bottom:16px;">✅</div><div style="font-size:22px;font-weight:700;margin-bottom:8px;">Payment received!</div><div style="color:#6b7280;margin-bottom:24px;">You can close this tab.</div></body></html>`));
 router.get('/checkout-cancel',  (req, res) => res.send(`<html><body style="font-family:sans-serif;text-align:center;padding:60px;"><div style="font-size:48px;margin-bottom:16px;">↩️</div><div style="font-size:22px;font-weight:700;margin-bottom:8px;">Payment cancelled.</div><div style="color:#6b7280;margin-bottom:24px;">You can close this tab.</div></body></html>`));
 module.exports = router;
+module.exports.stripeWebhook = stripeWebhook;

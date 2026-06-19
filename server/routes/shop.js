@@ -268,6 +268,15 @@ router.get('/api/shop/appointments', requireAuth, shopRoute(async (req, res, db,
 }));
 router.post('/api/shop/appointments', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const a = req.body; if (!a.id) a.id = genId('a');
+  // Prevent double-booking the same staff member at the same date+time. The
+  // public booking path validates this; the in-app create previously did not,
+  // so staff (or a crafted request) could silently overbook a chair. Terminal
+  // states (done/no-show/cancelled) free the slot.
+  if (a.barberId && a.date && a.time) {
+    const TERMINAL = ['done', 'no-show', 'cancelled', 'canceled', 'declined'];
+    const clash = h.getAll('appointments').find(x => x.id !== a.id && x.barberId === a.barberId && x.date === a.date && x.time === a.time && !TERMINAL.includes(x.status));
+    if (clash) return res.status(409).json({ error: 'That time is already booked for this staff member. Pick another slot.' });
+  }
   // Build a vehicle record from custom fields (detail shops) for the customer's history.
   const cf = a.customFields || {};
   const vehicle = (cf.vehicleYear || cf.vehicleMake || cf.vehicleModel)
@@ -451,17 +460,12 @@ router.post('/api/shop/auth/change-pin', requireAuth, shopRoute(async (req, res,
   db.get('settings').assign({ pin:String(newPin) }).write();
   res.json({ ok: true });
 }));
-router.post('/api/shop/auth/reset-pin', async (req, res) => {
-  const { ownerKey, newPin, email } = req.body;
-  const key = process.env.OWNER_KEY || 'shopflow2026';
-  if (String(ownerKey)!==String(key)) return res.status(401).json({ ok:false, error:'Invalid owner key' });
-  if (!email) return res.status(400).json({ ok:false, error:'Email required' });
-  const account = master.get('accounts').find({ email: email.toLowerCase() }).value();
-  if (!account) return res.status(404).json({ ok:false, error:'Account not found' });
-  const db = getShopDb(account.shopId);
-  db.get('settings').assign({ pin:String(newPin||'1234') }).write();
+// Owner resets their own shop's CRM PIN. Requires a full-owner session — the old
+// shared-OWNER_KEY backdoor allowed anyone to reset any shop's PIN + enumerate emails.
+router.post('/api/shop/auth/reset-pin', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
+  db.get('settings').assign({ pin: String(req.body.newPin || '1234') }).write();
   res.json({ ok: true });
-});
+}));
 
 // ── PROTECTED: Conversations ──────────────────────────────────────────────────
 

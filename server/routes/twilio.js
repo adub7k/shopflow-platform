@@ -20,15 +20,19 @@ const {
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
-// Optional signature check. Opt-in (TWILIO_VALIDATE_SIGNATURE=true) because it
-// requires the public-facing URL to match exactly, which breaks behind some
-// proxies. When enabled, a bad signature gets a 403.
+// Fail closed. These webhooks are public and would otherwise let anyone forge
+// inbound calls — creating spam leads and, worse, triggering missed-call SMS
+// FROM the shop's number TO an attacker-chosen number (SMS pumping / toll fraud).
+// So whenever a Twilio auth token is configured (i.e. production), a valid Twilio
+// signature is REQUIRED. Set TWILIO_VALIDATE_SIGNATURE=false only as an escape
+// hatch when a proxy rewrites the public URL and you must use PUBLIC_URL to fix
+// it. With no token (local dev) there is nothing to validate against, so we skip.
 function verifyTwilio(req, res, next) {
-  if (process.env.TWILIO_VALIDATE_SIGNATURE !== 'true' || !process.env.TWILIO_AUTH_TOKEN) return next();
+  if (!process.env.TWILIO_AUTH_TOKEN || process.env.TWILIO_VALIDATE_SIGNATURE === 'false') return next();
   const sig = req.headers['x-twilio-signature'];
   const base = process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
   const url = base + req.originalUrl;
-  if (twilio.validateRequest(process.env.TWILIO_AUTH_TOKEN, sig, url, req.body || {})) return next();
+  if (sig && twilio.validateRequest(process.env.TWILIO_AUTH_TOKEN, sig, url, req.body || {})) return next();
   console.warn('Twilio signature validation failed for', url);
   return res.status(403).type('text/xml').send('<Response><Reject/></Response>');
 }
