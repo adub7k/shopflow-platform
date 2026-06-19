@@ -161,7 +161,7 @@ router.post('/api/shop/barbers/:id/schedule', requireAuth, requireRole('full'), 
 
 // ── PROTECTED: Services ───────────────────────────────────────────────────────
 router.get('/api/shop/services', requireAuth, shopRoute(async (req, res, db, h) => {
-  res.json(h.getAll('services').sort((a,b) => a.category.localeCompare(b.category)));
+  res.json(h.getAll('services').sort((a,b) => (a.category||'').localeCompare(b.category||'')));
 }));
 router.post('/api/shop/services', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   const s = req.body; if (!s.id) s.id = genId('s'); h.upsert('services', s); res.json({ id: s.id });
@@ -180,7 +180,7 @@ router.get('/api/shop/customers', requireAuth, requireRole('full','technician'),
 }));
 router.get('/api/shop/customers/search', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const q = (req.query.q || '').toLowerCase();
-  res.json(h.getAll('customers').filter(c => c.name.toLowerCase().includes(q)||(c.phone||'').includes(q)).slice(0,10));
+  res.json(h.getAll('customers').filter(c => (c.name||'').toLowerCase().includes(q)||(c.phone||'').includes(q)).slice(0,10));
 }));
 router.get('/api/shop/customers/:id', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const c = h.getById('customers', req.params.id); if (!c) return res.status(404).json({ error: 'Not found' });
@@ -273,7 +273,8 @@ router.post('/api/shop/appointments', requireAuth, requireRole('full','technicia
   const vehicle = (cf.vehicleYear || cf.vehicleMake || cf.vehicleModel)
     ? { year: cf.vehicleYear||'', make: cf.vehicleMake||'', model: cf.vehicleModel||'', color: cf.vehicleColor||'' }
     : null;
-  const sameVehicle = (x,y) => x && y && x.year===y.year && x.make===y.make && x.model===y.model;
+  const _vn = s => String(s||'').trim().toLowerCase();
+  const sameVehicle = (x,y) => x && y && _vn(x.year)===_vn(y.year) && _vn(x.make)===_vn(y.make) && _vn(x.model)===_vn(y.model);
   // Ensure customer exists
   if (a.customerName) {
     const digits = (a.customerPhone||'').replace(/[^0-9]/g,'');

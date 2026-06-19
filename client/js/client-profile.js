@@ -137,7 +137,7 @@ function _buildProfileHtml(data, messages, backFn) {
   // ── Flags ──
   if ((c.noShows||0) > 0) html += `<div style="background:#fff5f5;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;font-size:12px;color:#dc2626;margin-bottom:12px;">⚠️ ${c.noShows} no-show${c.noShows>1?'s':''} on record</div>`;
   if (data.rewardReady)   html += `<div style="background:var(--green-lt);border:1px solid #b3dfbf;border-radius:8px;padding:8px 12px;font-size:12px;color:var(--green);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">🎉 Loyalty reward ready! <button onclick="Clients.redeemReward('${c.id}','${c.name}')" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">Redeem</button></div>`;
-  if (c.notes)            html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--muted);margin-bottom:12px;">📝 ${c.notes}</div>`;
+  if (c.notes)            html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--muted);margin-bottom:12px;">📝 ${esc(c.notes)}</div>`;
 
   // ── Automations ──
   html += `<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px;">
