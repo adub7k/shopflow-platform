@@ -140,6 +140,7 @@ function initShopDb(db, shopData) {
     ],
     services: profile.services.map((s, i) => ({ id: 's' + (i + 1), ...s })),
     customers: [], appointments: [], conversations: [], blockedDates: [], quotes: [],
+    leads: [], calls: [],
   }).write();
 }
 
@@ -148,17 +149,30 @@ const genId = (p='x') => p + Date.now().toString(36) + Math.random().toString(36
 const today = () => new Date().toISOString().split('T')[0];
 const slug  = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,32);
 
+// Normalize a US/CA phone number to E.164 (+1XXXXXXXXXX). Returns null if it
+// doesn't look like a dialable 10/11-digit number. Twilio dialing + SMS share this.
+function toE164(num) {
+  const d = String(num || '').replace(/\D/g, '');
+  if (d.length === 10) return '+1' + d;
+  if (d.length === 11 && d[0] === '1') return '+' + d;
+  if (String(num || '').trim().startsWith('+')) return '+' + d;  // already-international
+  return null;
+}
+
 function shopHelpers(db) {
   return {
     getAll:  (col)      => db.get(col).value() || [],
-    getById: (col, id)  => db.get(col).find({id}).value(),
+    getById: (col, id)  => (db.get(col).value() ? db.get(col).find({id}).value() : undefined),
     upsert:  (col, item) => {
+      // Self-heal: shops created before a collection existed have no such key,
+      // and lowdb's .push() silently no-ops on an undefined collection.
+      if (db.get(col).value() === undefined) db.set(col, []).write();
       if (db.get(col).find({id: item.id}).value())
         db.get(col).find({id: item.id}).assign(item).write();
       else
         db.get(col).push(item).write();
     },
-    remove: (col, id) => db.get(col).remove({id}).write(),
+    remove: (col, id) => { if (db.get(col).value()) db.get(col).remove({id}).write(); },
   };
 }
 
@@ -186,6 +200,7 @@ const SMS_DEFAULTS = {
   confirmation: "Hi {name}! Your appointment at {shop} is confirmed for {date} at {time}{barber}. See you then! ✂️",
   reminder:     "Hi {name}! Reminder: your appointment at {shop} is tomorrow at {time}{barber}. See you then! ✂️",
   rebook:       "Hey {name}! It's been a few weeks — we'd love to have you back at {shop}. Book your next cut anytime 💈",
+  missedCall:   "Hi, this is {shop} — sorry we missed your call! How can we help? Reply here or book online anytime.",
 };
 
 function buildSms(type, vars, settings) {
@@ -201,7 +216,7 @@ function buildSms(type, vars, settings) {
 module.exports = {
   master, getShopDb, initShopDb, shopHelpers, shopRoute,
   shopFromNumber, buildSms, SMS_DEFAULTS,
-  genId, today, slug,
+  genId, today, slug, toE164,
   JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM,
   CLIENT_DIR, MASTER_DIR, SHOPS_DIR, UPLOADS_DIR,
   saveImageDataUrl, deleteUpload,

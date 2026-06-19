@@ -148,6 +148,19 @@ const Settings = {
       html.push(`<div style="font-size:11px;color:var(--faint);">Leave message blank to use the default shown as placeholder.</div>`);
       html.push('</div>');
 
+      // Call tracking
+      const ct = s.callTracking || { enabled: true };
+      const defMissed = "Hi, this is {shop} — sorry we missed your call! How can we help? Reply here or book online anytime.";
+      html.push('<div class="section-header">Call Tracking</div><div class="card">');
+      if (s.trackingNumber) {
+        html.push(`<div style="display:flex;align-items:center;gap:10px;background:var(--green-lt);border:1px solid var(--green-md);border-radius:10px;padding:12px;margin-bottom:14px;"><span style="font-size:18px;">📞</span><div><div style="font-size:13px;font-weight:700;color:var(--green);">Tracking number: ${s.trackingNumber}</div><div style="font-size:12px;color:var(--muted);margin-top:1px;">Calls forward to your shop phone. Inbound calls appear under Leads.</div></div></div>`);
+      } else {
+        html.push(`<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Your call-tracking number is managed by ShopFlow. Contact support to activate it for this shop.</div>`);
+      }
+      html.push(`<div class="form-group"><label class="toggle-row" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span><span class="form-label" style="display:block;">Auto-text missed callers</span><span style="font-size:12px;color:var(--muted);">Instantly send a text when a call goes unanswered.</span></span><input type="checkbox" id="s-ct-enabled" ${ct.enabled!==false?'checked':''} style="width:20px;height:20px;flex-shrink:0;" /></label></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Missed-Call Auto-Text</label><textarea class="form-input" id="s-tpl-missed" rows="2" placeholder="${defMissed}">${tpl.missedCall||''}</textarea></div>`);
+      html.push('</div>');
+
       // Google Reviews
       html.push('<div class="section-header">Google Reviews</div><div class="card">');
       html.push(`<div class="form-group"><label class="form-label">Google Review Link</label><input class="form-input" id="s-grev" value="${s.googleReviewLink||''}" placeholder="https://g.page/r/..." /></div>`);
@@ -587,7 +600,9 @@ const Settings = {
     const tc=document.getElementById('s-tpl-confirm')?.value.trim();
     const tr=document.getElementById('s-tpl-reminder')?.value.trim();
     const tk=document.getElementById('s-tpl-rebook')?.value.trim();
-    data.smsTemplates={ confirmation:tc||'', reminder:tr||'', rebook:tk||'' };
+    const tm=document.getElementById('s-tpl-missed')?.value.trim();
+    data.smsTemplates={ confirmation:tc||'', reminder:tr||'', rebook:tk||'', missedCall:tm||'' };
+    data.callTracking={ enabled: document.getElementById('s-ct-enabled')?.checked!==false };
     const rd=parseInt(document.getElementById('s-rebook-days')?.value)||21;
     data.rebookInterval=Math.min(90,Math.max(7,rd));
     const gr=document.getElementById('s-grev')?.value.trim(); if(gr)data.googleReviewLink=gr;
