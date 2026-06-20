@@ -125,6 +125,9 @@ function initShopDb(db, shopData) {
       supportsFleet: profile.supportsFleet,
       supportsQuotes: profile.supportsQuotes || false,
       loyalty: { enabled: true, visitsForReward: 10, rewardDescription: 'One free service' },
+      // Sales tax applied to the service subtotal at checkout + on estimates.
+      // Off by default; the owner enables it and sets the rate in Settings.
+      tax: { enabled: false, rate: 0, label: 'Sales Tax' },
       twilio: { accountSid: '', authToken: '', fromNumber: '' },
       googleReviewLink: '',
       emailSmtp: { host: '', port: 587, user: '', pass: '' },
@@ -195,6 +198,34 @@ function shopFromNumber(shopId) {
   return (shop && shop.twilioFromNumber) || TWILIO_DEFAULT_FROM;
 }
 
+// ── Money helpers: tax + job cost ─────────────────────────────────────────────
+// Sales tax on a service subtotal (never on tips). Returns a zeroed result when
+// the shop hasn't enabled tax, so callers can always read `.amount`. `rate` is a
+// percent (e.g. 7.5). Amounts are rounded to whole cents.
+function computeTax(settings, subtotal) {
+  const t = (settings && settings.tax) || {};
+  const rate = Number(t.rate) || 0;
+  const label = t.label || 'Sales Tax';
+  if (!t.enabled || rate <= 0) return { enabled: false, rate: 0, label, amount: 0 };
+  const amount = Math.round((Number(subtotal) || 0) * rate) / 100; // subtotal * rate/100, to cents
+  return { enabled: true, rate, label, amount };
+}
+
+// Material/product cost snapshot for an appointment — the service's cost plus any
+// add-on costs. Stored on the appointment so margin reporting survives later edits
+// to the service/add-on menu. Costs are optional; missing costs count as $0.
+function computeApptCost(db, appt) {
+  const services = db.get('services').value() || [];
+  const addons   = (db.get('settings').value() || {}).addons || [];
+  const svc = appt.serviceId ? services.find(s => s.id === appt.serviceId) : null;
+  let cost = Number(svc && svc.cost) || 0;
+  (appt.addons || []).forEach(a => {
+    const def = addons.find(x => x.id === a.id);
+    if (def) cost += Number(def.cost) || 0;
+  });
+  return Math.round(cost * 100) / 100;
+}
+
 // ── SMS helpers ───────────────────────────────────────────────────────────────
 const SMS_DEFAULTS = {
   confirmation: "Hi {name}! Your appointment at {shop} is confirmed for {date} at {time}{barber}. See you then! ✂️",
@@ -217,6 +248,7 @@ module.exports = {
   master, getShopDb, initShopDb, shopHelpers, shopRoute,
   shopFromNumber, buildSms, SMS_DEFAULTS,
   genId, today, slug, toE164,
+  computeTax, computeApptCost,
   JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM,
   CLIENT_DIR, MASTER_DIR, SHOPS_DIR, UPLOADS_DIR,
   saveImageDataUrl, deleteUpload,

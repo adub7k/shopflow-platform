@@ -247,6 +247,41 @@ const Appointments = {
     return `<div style="font-size:13px;color:var(--muted);margin-top:6px;">${icon}${filled.map(f=>esc(cf[f.key])).join(' ')}</div>`;
   },
 
+  // Intake / condition report — walkaround photos + condition notes captured at
+  // drop-off to document pre-existing damage (CYA). Detail shops only; barbershops
+  // never see it. Reuses the job-photo upload pipeline with an 'intake' phase.
+  _intakeSection(a) {
+    const isDetailish = (Shop.fields||[]).some(f=>f.key && f.key.indexOf('vehicle')===0);
+    const intake = a.intakePhotos||[];
+    if (!isDetailish && !intake.length && !a.conditionNotes) return '';
+    const w = canWrite();
+    const thumbs = intake.map(p=>`<div style="position:relative;flex-shrink:0;">
+      <img src="${esc(p.url)}" onclick="window.open('${esc(p.url)}','_blank')" style="width:72px;height:72px;object-fit:cover;border-radius:8px;cursor:zoom-in;display:block;" />
+      ${w?`<button onclick="Appointments._deletePhoto('${a.id}','${p.id}')" style="position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;border:1px solid var(--surface);background:#dc2626;color:#fff;font-size:13px;line-height:1;cursor:pointer;padding:0;">×</button>`:''}
+    </div>`).join('');
+    const add = w?`<button onclick="Appointments._pickPhoto('${a.id}','intake')" style="width:72px;height:72px;border-radius:8px;border:1px dashed var(--border);background:var(--surface);color:var(--muted);font-size:11px;cursor:pointer;flex-shrink:0;">＋ Add</button>`:'';
+    const empty = (!intake.length && !w)?'<span style="font-size:12px;color:var(--faint);">None</span>':'';
+    const notes = w
+      ? `<textarea id="cond-notes-${a.id}" class="form-input" rows="2" placeholder="Note any existing damage — scratches, dents, stains…" style="margin-top:8px;font-size:13px;">${esc(a.conditionNotes||'')}</textarea>
+         <button class="btn btn-sm" style="margin-top:6px;" onclick="Appointments._saveCondition('${a.id}')">Save condition notes</button>`
+      : (a.conditionNotes?`<div style="font-size:13px;color:var(--muted);margin-top:8px;white-space:pre-wrap;">${esc(a.conditionNotes)}</div>`:'');
+    return `<div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px;">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;">🔍 INTAKE / CONDITION <span style="font-weight:500;color:var(--faint);">at drop-off</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">${thumbs}${add}${empty}</div>
+      ${notes}
+    </div>`;
+  },
+
+  async _saveCondition(id) {
+    const el = document.getElementById('cond-notes-'+id); if(!el) return;
+    const conditionNotes = el.value.trim();
+    try {
+      await db.appointments.save({ id, conditionNotes });
+      const a = this._data.find(x=>x.id===id); if (a) a.conditionNotes = conditionNotes;
+      toast('Condition notes saved ✓');
+    } catch(e) { toast('Could not save','error'); }
+  },
+
   // Before/after photo documentation. Shown for verticals that capture vehicle
   // info (detail shops) or whenever photos already exist — barbershops never see it.
   _jobPhotos(a) {
@@ -281,7 +316,8 @@ const Appointments = {
         const dataUrl = await downscaleImage(file, 1280, 0.82);
         const r = await db.appointments.addPhoto(id, phase, dataUrl);
         const a = this._data.find(x=>x.id===id);
-        if (a && r && r.item) { const key = phase==='after'?'afterPhotos':'beforePhotos'; a[key] = [...(a[key]||[]), r.item]; }
+        const PKEY = { before:'beforePhotos', after:'afterPhotos', intake:'intakePhotos' };
+        if (a && r && r.item) { const key = PKEY[phase]||'beforePhotos'; a[key] = [...(a[key]||[]), r.item]; }
         toast('Photo added ✓');
         this.openDetail(id);
       } catch(e) { toast(e.message||'Upload failed','error'); }
@@ -294,7 +330,7 @@ const Appointments = {
     try {
       await db.appointments.deletePhoto(id, photoId);
       const a = this._data.find(x=>x.id===id);
-      if (a) ['beforePhotos','afterPhotos'].forEach(k=>{ if(a[k]) a[k]=a[k].filter(p=>p.id!==photoId); });
+      if (a) ['beforePhotos','afterPhotos','intakePhotos'].forEach(k=>{ if(a[k]) a[k]=a[k].filter(p=>p.id!==photoId); });
       toast('Photo deleted');
       this.openDetail(id);
     } catch(e) { toast('Could not delete','error'); }
@@ -416,6 +452,7 @@ const Appointments = {
           <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:6px;">📸 INSPO PHOTO</div>
           <img src="${esc(a.inspoPhoto)}" onclick="window.open('${esc(a.inspoPhoto)}','_blank')" style="width:100%;max-height:300px;object-fit:cover;border-radius:10px;cursor:zoom-in;" />
         </div>`:''}
+        ${this._intakeSection(a)}
         ${this._jobPhotos(a)}
       </div>
       ${canWrite()?this._statusChanger(a):''}
@@ -465,9 +502,12 @@ const Appointments = {
         <label class="form-label">${esc(V('notes','Cut Notes'))} <span style="font-weight:400;color:var(--faint);">(optional)</span></label>
         <textarea class="form-input" id="cc-notes" rows="2" placeholder="${esc(V('notes','Cut Notes'))}…"></textarea>
       </div>
-      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:13px;font-weight:600;color:var(--muted);">Total</span>
-        <span id="cc-total" style="font-size:22px;font-weight:800;color:var(--green);">${fmtMoney(a.price||35)}</span>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:16px;">
+        <div id="cc-tax-row" style="display:${(Shop.tax&&Shop.tax.enabled&&Number(Shop.tax.rate)>0)?'flex':'none'};justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px;"><span>${esc((Shop.tax&&Shop.tax.label)||'Sales Tax')} (${Number(Shop.tax&&Shop.tax.rate)||0}%)</span><span id="cc-tax-amt">$0</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:13px;font-weight:600;color:var(--muted);">Total</span>
+          <span id="cc-total" style="font-size:22px;font-weight:800;color:var(--green);">${fmtMoney(a.price||35)}</span>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn btn-full" style="background:var(--text);color:#fff;" onclick="Appointments._checkoutCash()">💵 Cash</button>
@@ -477,6 +517,7 @@ const Appointments = {
         }
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
       </div>`);
+    this._updateTotal(); // reflect tax in the total as soon as the modal opens
   },
 
   _setTip(val) {
@@ -492,13 +533,22 @@ const Appointments = {
     }
   },
 
+  // Sales tax on the service amount (matches the server's computeTax — tips excluded).
+  _taxAmt(amount) {
+    const t = Shop.tax || {}; const rate = Number(t.rate)||0;
+    if (!t.enabled || rate<=0) return 0;
+    return Math.round((Number(amount)||0)*rate)/100;
+  },
+
   _updateTotal() {
     const price = parseFloat(document.getElementById('cc-price')?.value)||0;
     const tip   = parseFloat(document.getElementById('cc-tip')?.value)||0;
+    const tax   = Appointments._taxAmt(price);
     Appointments._co.price = price;
     Appointments._co.tip   = tip;
+    const taxEl = document.getElementById('cc-tax-amt'); if (taxEl) taxEl.textContent = fmtMoney(tax);
     const el = document.getElementById('cc-total');
-    if (el) el.textContent = '$'+(price+tip).toFixed(2).replace(/\.00$/,'');
+    if (el) el.textContent = fmtMoney(price+tax+tip);
   },
 
   async _checkoutCash() {
@@ -515,7 +565,7 @@ const Appointments = {
     Appointments._updateTotal(); // capture latest values before switching modal
     Appointments._co.cutNotes = document.getElementById('cc-notes')?.value.trim() || '';
     const { id, price, tip, phone, name } = Appointments._co;
-    const total = price + tip;
+    const total = price + Appointments._taxAmt(price) + tip;
     Modal.show(`
       <div class="modal-title">💳 Card Payment</div>
       <div style="font-size:22px;font-weight:800;color:var(--green);text-align:center;margin-bottom:4px;">${fmtMoney(total)}</div>

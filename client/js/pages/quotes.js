@@ -85,8 +85,14 @@ const Quotes = {
     let html = this._lines.length
       ? this._lines.map((l,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;"><span>${esc(l.name)}</span><span style="display:flex;align-items:center;gap:10px;"><strong>${fmtMoney(l.price)}</strong><button class="btn btn-sm btn-danger" onclick="Quotes._removeLine(${i})">×</button></span></div>`).join('')
       : '<div style="font-size:12px;color:var(--faint);padding:6px 0;">No items yet — add a service, add-on, or custom line below.</div>';
-    const total=this._lines.reduce((t,l)=>t+Number(l.price||0),0);
-    html+=`<div style="display:flex;justify-content:space-between;padding:9px 0 2px;font-weight:800;"><span>Total</span><span style="color:var(--green);">${fmtMoney(total)}</span></div>`;
+    const subtotal=this._lines.reduce((t,l)=>t+Number(l.price||0),0);
+    const t=Shop.tax||{}; const rate=Number(t.rate)||0; const taxOn=t.enabled&&rate>0;
+    const tax=taxOn?Math.round(subtotal*rate)/100:0;
+    if(taxOn){
+      html+=`<div style="display:flex;justify-content:space-between;padding:7px 0 0;font-size:13px;color:var(--muted);"><span>Subtotal</span><span>${fmtMoney(subtotal)}</span></div>`;
+      html+=`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px;color:var(--muted);"><span>${esc(t.label||'Sales Tax')} (${rate}%)</span><span>${fmtMoney(tax)}</span></div>`;
+    }
+    html+=`<div style="display:flex;justify-content:space-between;padding:9px 0 2px;font-weight:800;"><span>Total</span><span style="color:var(--green);">${fmtMoney(subtotal+tax)}</span></div>`;
     el.innerHTML=html;
   },
   _addSvc(){ const sel=document.getElementById('fq-svc'); const s=this._services.find(x=>x.id===sel.value); if(!s)return; this._lines.push({name:s.name,price:Number(s.price)||0}); sel.value=''; this._renderLines(); },
@@ -130,6 +136,8 @@ const Quotes = {
       </div>
       <div class="list-card" style="margin-bottom:14px;">
         ${(q.lineItems||[]).map(l=>`<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:14px;">${esc(l.name)}</div></div><div style="font-weight:700;">${fmtMoney(l.price)}</div></div>`).join('')}
+        ${q.taxAmount?`<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:13px;color:var(--muted);">Subtotal</div></div><div style="color:var(--muted);">${fmtMoney(q.subtotal)}</div></div>
+        <div class="list-row"><div class="list-main"><div class="list-name" style="font-size:13px;color:var(--muted);">${esc(q.taxLabel||'Sales Tax')} (${q.taxRate}%)</div></div><div style="color:var(--muted);">${fmtMoney(q.taxAmount)}</div></div>`:''}
         <div class="list-row"><div class="list-main"><div class="list-name" style="font-weight:800;">Total</div></div><div style="font-weight:800;color:var(--green);">${fmtMoney(q.total)}</div></div>
       </div>
       ${q.notes?`<div style="font-size:13px;color:var(--muted);margin-bottom:14px;">${esc(q.notes)}</div>`:''}

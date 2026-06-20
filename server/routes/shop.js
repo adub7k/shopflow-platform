@@ -2,7 +2,7 @@ const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const { requireAuth, requireRole } = require('../middleware');
 const { resolveProfile } = require('../industries');
-const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, deleteUpload } = require('../db');
+const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, deleteUpload, computeTax, computeApptCost } = require('../db');
 
 // ── PROTECTED: Settings ───────────────────────────────────────────────────────
 // Readable by any signed-in staff (needed for vocabulary/statuses), but sensitive
@@ -16,6 +16,8 @@ router.get('/api/shop/settings', requireAuth, shopRoute(async (req, res, db) => 
   if (!Array.isArray(s.vehicleSizes)) s.vehicleSizes = resolveProfile(db.get('industry').value()).vehicleSizes || [];
   if (!Array.isArray(s.addons)) s.addons = [];
   if (!Array.isArray(s.membershipPlans)) s.membershipPlans = [];
+  // Backfill sales-tax config for shops created before tax existed.
+  if (!s.tax || typeof s.tax !== 'object') s.tax = { enabled: false, rate: 0, label: 'Sales Tax' };
   const _prof = resolveProfile(db.get('industry').value());
   if (!Array.isArray(s.serviceCategories)) s.serviceCategories = _prof.serviceCategories || ['cut','beard','combo','color','design','other'];
   if (s.staffPicker === undefined) s.staffPicker = _prof.staffPicker !== false;
@@ -300,6 +302,10 @@ router.post('/api/shop/appointments', requireAuth, requireRole('full','technicia
     }
     else { const cid=genId('c'); h.upsert('customers',{id:cid,name:a.customerName,phone:a.customerPhone||'',email:'',source:a.source||'crm',notes:'',loyaltyPoints:0,noShows:0,preferredBarberId:a.barberId||null,isFleet:false,companyName:'',vehicles:vehicle?[vehicle]:[],createdAt:today()}); a.customerId=cid; }
   }
+  // Snapshot material/product cost (service + add-ons) for margin reporting.
+  // Only when the save carries service/add-on info, so a partial status-only
+  // save (e.g. setStatus) doesn't zero out a previously-computed cost.
+  if (a.serviceId !== undefined || a.addons !== undefined) a.cost = computeApptCost(db, a);
   h.upsert('appointments', a);
   res.json({ id: a.id });
 }));
@@ -347,8 +353,10 @@ router.delete('/api/shop/appointments/:id', requireAuth, requireRole('full','tec
 // Images live on disk via saveImageDataUrl; the appointment stores [{id,url,createdAt}].
 router.post('/api/shop/appointments/:id/photos', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const a = h.getById('appointments', req.params.id); if (!a) return res.status(404).json({ ok:false, error:'Not found' });
-  const phase = req.body.phase === 'after' ? 'after' : 'before';
-  const key = phase === 'after' ? 'afterPhotos' : 'beforePhotos';
+  // 'intake' = walkaround/condition shots taken at drop-off (CYA); before/after = work proof.
+  const PHASE_KEY = { before: 'beforePhotos', after: 'afterPhotos', intake: 'intakePhotos' };
+  const phase = PHASE_KEY[req.body.phase] ? req.body.phase : 'before';
+  const key = PHASE_KEY[phase];
   try {
     const url = saveImageDataUrl(req.shopId, 'job-' + phase, req.body.image);
     const item = { id: genId('ph'), url, createdAt: new Date().toISOString() };
@@ -359,7 +367,7 @@ router.post('/api/shop/appointments/:id/photos', requireAuth, requireRole('full'
 }));
 router.delete('/api/shop/appointments/:id/photos/:photoId', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const a = h.getById('appointments', req.params.id); if (!a) return res.status(404).json({ ok:false, error:'Not found' });
-  ['beforePhotos','afterPhotos'].forEach(key => {
+  ['beforePhotos','afterPhotos','intakePhotos'].forEach(key => {
     const arr = a[key] || [];
     const item = arr.find(p => p.id === req.params.photoId);
     if (item) { deleteUpload(item.url); a[key] = arr.filter(p => p.id !== req.params.photoId); }
@@ -390,7 +398,13 @@ router.post('/api/shop/quotes', requireAuth, requireRole('full','technician'), s
   // otherwise a partial update (e.g. status change) would wipe the items via merge.
   if (Array.isArray(q.lineItems)) {
     q.lineItems = q.lineItems.map(l=>({ name:String(l.name||'').slice(0,80), price:Number(l.price)||0 }));
-    q.total = q.lineItems.reduce((t,l)=>t+l.price, 0);
+    const subtotal = q.lineItems.reduce((t,l)=>t+l.price, 0);
+    const tax = computeTax(db.get('settings').value() || {}, subtotal);
+    q.subtotal  = subtotal;
+    q.taxRate   = tax.amount ? tax.rate : 0;
+    q.taxLabel  = tax.label;
+    q.taxAmount = tax.amount;
+    q.total     = Math.round((subtotal + tax.amount) * 100) / 100;
   }
   if (!q.id) {
     q.id = genId('q');
@@ -456,10 +470,24 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
   const loyalty = (db.get('settings').value()||{}).loyalty||{enabled:true,visitsForReward:10};
   const activeMembers = customers.filter(c=>c.membership && c.membership.status==='active');
   const mrr = Math.round(activeMembers.reduce((t,c)=>t + (c.membership.interval==='year' ? (Number(c.membership.price)||0)/12 : (Number(c.membership.price)||0)), 0));
+  // Margin = revenue minus the material/product cost snapshotted on each job.
+  // Older jobs with no cost on file count as $0 cost (no margin penalty).
+  const totalRevenue = done.reduce((s,a)=>s+Number(a.price||0),0);
+  const totalCost    = done.reduce((s,a)=>s+Number(a.cost||0),0);
+  const monthRevenue = thisMonth.reduce((s,a)=>s+Number(a.price||0),0);
+  const monthCost    = thisMonth.reduce((s,a)=>s+Number(a.cost||0),0);
+  const round2 = n => Math.round(n*100)/100;
   res.json({
     mrr, activeMembers: activeMembers.length,
-    totalRevenue: done.reduce((s,a)=>s+Number(a.price||0),0),
-    monthRevenue: thisMonth.reduce((s,a)=>s+Number(a.price||0),0),
+    totalRevenue,
+    monthRevenue,
+    totalCost: round2(totalCost),
+    totalMargin: round2(totalRevenue - totalCost),
+    monthCost: round2(monthCost),
+    monthMargin: round2(monthRevenue - monthCost),
+    monthMarginPct: monthRevenue ? Math.round((monthRevenue - monthCost)/monthRevenue*100) : 0,
+    monthTaxCollected: round2(thisMonth.reduce((s,a)=>s+Number(a.taxAmount||0),0)),
+    totalTaxCollected: round2(done.reduce((s,a)=>s+Number(a.taxAmount||0),0)),
     monthJobs: thisMonth.length,
     avgTicket: thisMonth.length?Math.round(thisMonth.reduce((s,a)=>s+Number(a.price||0),0)/thisMonth.length):0,
     byBarber: Object.values(byBarber).sort((a,b)=>b.revenue-a.revenue),
