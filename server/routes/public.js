@@ -159,6 +159,8 @@ router.get('/api/public/:shopSlug/quote/:quoteId', (req, res) => {
         customerName: q.customerName || '',
         vehicle: q.vehicle || null, vehicleSize: q.vehicleSize || null,
         lineItems: q.lineItems || [], total: q.total || 0, notes: q.notes || '',
+        subtotal: q.subtotal != null ? q.subtotal : (q.total || 0),
+        taxRate: q.taxRate || 0, taxLabel: q.taxLabel || 'Sales Tax', taxAmount: q.taxAmount || 0,
         depositRequired: !!q.depositRequired, depositAmount: q.depositAmount || 0, depositPaid: !!q.depositPaid,
       },
     });
@@ -355,6 +357,9 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     const basePrice = sizePrice(svcFromDb, vehicleSize);
     const price = basePrice + addonsTotal;
     const duration = svcFromDb ? Number(svcFromDb.duration) || 45 : 45;
+    // Snapshot material/product cost (service + chosen add-ons) for margin reporting.
+    const addonsCost = (s0.addons || []).filter(a => selAddonIds.includes(a.id)).reduce((t, a) => t + (Number(a.cost) || 0), 0);
+    const cost = Math.round(((Number(svcFromDb.cost) || 0) + addonsCost) * 100) / 100;
 
     // Build a vehicle record from custom fields (detail shops) for the customer's history.
     const vehicle = (cf.vehicleYear || cf.vehicleMake || cf.vehicleModel)
@@ -386,7 +391,7 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     const needsDeposit = !!(s0.deposit?.enabled && stripeConnected);
 
     const apptId = genId('a');
-    const appt = { id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '', barberId: barberId || null, barberName: barberName || null, serviceId: serviceId || null, service: svcFromDb.name, price, duration, date, time, status: needsDeposit ? 'pending-deposit' : 'confirmed', notes: notes || '', customFields: cf, vehicleSize: vehicleSize || null, addons: chosenAddons, inspoPhoto: inspo, source: 'booking-page', createdAt: new Date().toISOString() };
+    const appt = { id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '', barberId: barberId || null, barberName: barberName || null, serviceId: serviceId || null, service: svcFromDb.name, price, cost, duration, date, time, status: needsDeposit ? 'pending-deposit' : 'confirmed', notes: notes || '', customFields: cf, vehicleSize: vehicleSize || null, addons: chosenAddons, inspoPhoto: inspo, source: 'booking-page', createdAt: new Date().toISOString() };
     upsert('appointments', appt);
 
     // Send confirmation SMS via platform Twilio account

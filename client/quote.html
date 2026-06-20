@@ -62,6 +62,7 @@ body{background:var(--bg);font-family:var(--font);color:var(--ink);-webkit-font-
         <div class="card-head"><span class="qnum" id="qnum"></span><span class="badge" id="qbadge"></span></div>
         <div class="veh" id="veh" style="display:none;"></div>
         <div id="lines"></div>
+        <div id="taxrows"></div>
         <div class="total"><span>Total</span><span class="amt" id="total"></span></div>
         <div class="note" id="note" style="display:none;"></div>
       </div>
@@ -114,6 +115,10 @@ const Q = {
     badge.textContent=q.status==='sent'?'Pending':q.status;
     const v=q.vehicle; if(v&&(v.year||v.make||v.model)){ const el=document.getElementById('veh'); el.style.display=''; el.textContent='🚗 '+[v.year,v.make,v.model,v.color].filter(Boolean).join(' '); }
     document.getElementById('lines').innerHTML=(q.lineItems||[]).map(l=>`<div class="li"><span class="li-name">${es(l.name)}</span><span class="li-price">$${l.price}</span></div>`).join('');
+    const tr=document.getElementById('taxrows');
+    if(tr){ tr.innerHTML = q.taxAmount
+      ? `<div class="li"><span class="li-name" style="color:var(--muted);font-weight:600;">Subtotal</span><span class="li-price" style="color:var(--muted);">$${q.subtotal}</span></div><div class="li"><span class="li-name" style="color:var(--muted);font-weight:600;">${es(q.taxLabel||'Sales Tax')} (${q.taxRate}%)</span><span class="li-price" style="color:var(--muted);">$${q.taxAmount}</span></div>`
+      : ''; }
     document.getElementById('total').textContent='$'+q.total;
     if(q.notes){ const n=document.getElementById('note'); n.style.display=''; n.textContent=q.notes; }
     if(q.depositRequired && !q.depositPaid){ const d=document.getElementById('dep'); d.style.display=''; d.textContent='💳 A $'+q.depositAmount+' deposit is required to approve this estimate.'; }

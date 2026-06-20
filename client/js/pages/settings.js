@@ -124,6 +124,16 @@ const Settings = {
       html.push(`<div class="form-group"><label class="form-label">Reward description</label><input class="form-input" id="s-lrew" value="${s.loyalty?.rewardDescription||'One free haircut'}" /></div>`);
       html.push('</div>');
 
+      // Sales Tax — applied to service subtotals at checkout + on estimates
+      const tax = s.tax || { enabled:false, rate:0, label:'Sales Tax' };
+      html.push('<div class="section-header">Sales Tax</div><div class="card">');
+      html.push(`<div class="form-group"><label class="toggle-row" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span><span class="form-label" style="display:block;">Charge sales tax</span><span style="font-size:12px;color:var(--muted);">Adds tax to checkout totals and estimates. Tips are never taxed.</span></span><input type="checkbox" id="s-tax-enabled" ${tax.enabled?'checked':''} style="width:20px;height:20px;flex-shrink:0;" /></label></div>`);
+      html.push('<div class="form-row">');
+      html.push(`<div class="form-group"><label class="form-label">Tax rate (%)</label><input class="form-input" id="s-tax-rate" type="number" step="0.001" value="${tax.rate||''}" placeholder="e.g. 7.5" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Label on receipts</label><input class="form-input" id="s-tax-label" value="${esc(tax.label||'Sales Tax')}" placeholder="Sales Tax" /></div>`);
+      html.push('</div>');
+      html.push('</div>');
+
       // SMS — status + customizable templates
       html.push('<div class="section-header">SMS Messaging</div><div class="card">');
       const smsActive = s.twilioConfigured;
@@ -421,6 +431,7 @@ const Settings = {
         <div class="form-group"><label class="form-label">Price</label><input class="form-input" id="fs-price" type="number" value="${s?.price||35}" /></div>
         <div class="form-group"><label class="form-label">Duration (min)</label><input class="form-input" id="fs-dur" type="number" value="${s?.duration||45}" /></div>
       </div>
+      <div class="form-group"><label class="form-label">Product / supply cost <span style="font-weight:400;color:var(--faint);">(optional — for profit tracking)</span></label><input class="form-input" id="fs-cost" type="number" value="${s?.cost!=null?s.cost:''}" placeholder="What this job costs you" /></div>
       ${(Shop.sizes||[]).length?`<div class="form-group" style="border:1px solid var(--border);border-radius:10px;padding:12px;">
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;margin:0;">
           <input type="checkbox" id="fs-size-on" ${s?.sizePricing?'checked':''} onchange="Settings._toggleSizePricing()" /> Price by vehicle size
@@ -453,7 +464,10 @@ const Settings = {
     Modal.show(`
       <div class="modal-title">${ad?'Edit Add-on':'Add Add-on'}</div>
       <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fad-name" value="${esc(ad?.name||'')}" placeholder="e.g. Pet Hair Removal" /></div>
-      <div class="form-group"><label class="form-label">Price</label><input class="form-input" id="fad-price" type="number" value="${ad?(ad.price):25}" /></div>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Price</label><input class="form-input" id="fad-price" type="number" value="${ad?(ad.price):25}" /></div>
+        <div class="form-group"><label class="form-label">Cost <span style="font-weight:400;color:var(--faint);">(optional)</span></label><input class="form-input" id="fad-cost" type="number" value="${ad&&ad.cost!=null?ad.cost:''}" placeholder="$" /></div>
+      </div>
       <div class="modal-actions">
         ${ad?`<button class="btn btn-danger btn-full" onclick="Settings.deleteAddon('${ad.id}')">Delete</button>`:''}
         <button id="fad-btn" class="btn btn-primary btn-full" onclick="Settings.saveAddon('${ad?.id||''}')">Save</button>
@@ -466,10 +480,11 @@ const Settings = {
     const name=document.getElementById('fad-name')?.value.trim();
     if(!name){toast('Enter a name','warning');return;}
     const price=parseFloat(document.getElementById('fad-price')?.value)||0;
+    const cost=parseFloat(document.getElementById('fad-cost')?.value)||0;
     const btn=document.getElementById('fad-btn'); disableBtn(btn);
     const list=[...(this._addons||[])];
-    if(id){ const i=list.findIndex(a=>a.id===id); if(i>=0) list[i]={...list[i],name,price}; }
-    else list.push({id:genId('ad'),name,price});
+    if(id){ const i=list.findIndex(a=>a.id===id); if(i>=0) list[i]={...list[i],name,price,cost}; }
+    else list.push({id:genId('ad'),name,price,cost});
     try{ await db.settings.save({addons:list}); this._addons=list; Shop.addons=list; Modal.close(); toast(id?'Updated ✓':'Add-on added ✓'); this.render(); }
     catch(e){ toast('Could not save','error'); enableBtn(btn); }
   },
@@ -534,8 +549,9 @@ const Settings = {
     }
     const firstKey=(Shop.sizes||[])[0]?.key;
     const basePrice=(sizeOn&&firstKey&&sizePricing[firstKey]!=null)?sizePricing[firstKey]:(parseFloat(document.getElementById('fs-price')?.value)||35);
+    const cost=parseFloat(document.getElementById('fs-cost')?.value)||0;
     try{
-      await db.services.save({id:id||genId('s'),name,price:basePrice,duration:parseInt(document.getElementById('fs-dur')?.value)||45,category:document.getElementById('fs-cat')?.value||'cut',sizePricing:sizeOn?sizePricing:null});
+      await db.services.save({id:id||genId('s'),name,price:basePrice,cost,duration:parseInt(document.getElementById('fs-dur')?.value)||45,category:document.getElementById('fs-cat')?.value||'cut',sizePricing:sizeOn?sizePricing:null});
       Modal.close(); toast(id?'Updated ✓':'Service added ✓'); this.render();
     }catch(e){toast('Could not save','error');enableBtn(btn);}
   },
@@ -616,6 +632,8 @@ const Settings = {
     const depMsg=document.getElementById('s-dep-msg')?.value.trim()||'A deposit is required to secure your appointment.';
     data.deposit={enabled:depEnabled,amount:depAmount,message:depMsg};
     const inspo=document.getElementById('s-inspo')?.value; if(inspo)data.inspoPhoto=inspo;
+    data.tax={ enabled:document.getElementById('s-tax-enabled')?.checked||false, rate:parseFloat(document.getElementById('s-tax-rate')?.value)||0, label:document.getElementById('s-tax-label')?.value.trim()||'Sales Tax' };
+    Shop.tax=data.tax; // keep checkout + estimate math in sync without a reload
     await db.settings.save(data);
     const title=document.getElementById('topbar-title'); if(title)title.textContent=data.shopName||'ShopFlow';
     toast('Settings saved ✓');

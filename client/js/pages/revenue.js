@@ -8,8 +8,22 @@ const Revenue = {
       html.push('<div class="metric-grid" style="grid-template-columns:1fr 1fr;">');
       html.push(`<div class="metric-card"><div class="metric-label">This Month</div><div class="metric-value green">${fmtMoney(data.monthRevenue)}</div><div class="metric-sub">${data.monthJobs} appointments</div></div>`);
       html.push(`<div class="metric-card"><div class="metric-label">Avg Ticket</div><div class="metric-value">${fmtMoney(data.avgTicket)}</div><div class="metric-sub">This month</div></div>`);
-      html.push(`<div class="metric-card"><div class="metric-label">All Time</div><div class="metric-value">${fmtMoney(data.totalRevenue)}</div></div>`);
+      // Profit card only when the shop has entered any product/supply costs —
+      // otherwise margin equals revenue and the card is just noise.
+      if (data.monthCost || data.totalCost) {
+        html.push(`<div class="metric-card"><div class="metric-label">Profit This Month</div><div class="metric-value">${fmtMoney(data.monthMargin)}</div><div class="metric-sub">${data.monthMarginPct}% margin · ${fmtMoney(data.monthCost)} cost</div></div>`);
+      }
+      html.push(`<div class="metric-card"><div class="metric-label">All Time</div><div class="metric-value">${fmtMoney(data.totalRevenue)}</div>${data.totalCost?`<div class="metric-sub">${fmtMoney(data.totalMargin)} profit</div>`:''}</div>`);
       html.push('</div>');
+
+      // Sales tax collected — a liability the owner needs to set aside, shown
+      // only when tax has actually been charged.
+      if (data.monthTaxCollected || data.totalTaxCollected) {
+        html.push(`<div class="card" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div><div style="font-size:13px;font-weight:700;">Sales tax collected</div><div style="font-size:12px;color:var(--muted);">Set this aside — it's owed, not income.</div></div>
+          <div style="text-align:right;"><div style="font-weight:800;">${fmtMoney(data.monthTaxCollected)}</div><div style="font-size:11px;color:var(--muted);">${fmtMoney(data.totalTaxCollected)} all time</div></div>
+        </div>`);
+      }
 
       if(data.byBarber?.length){
         html.push('<div class="section-header">By '+esc(V('staffPlural','Barber'))+'</div><div class="card">');

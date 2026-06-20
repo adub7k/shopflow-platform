@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const { requireAuth, requireRole } = require('../middleware');
-const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb } = require('../db');
+const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, computeTax } = require('../db');
 
 // ── Stripe helpers ────────────────────────────────────────────────────────────
 function getStripe() {
@@ -136,10 +136,15 @@ router.post('/api/shop/stripe/connect/disconnect', requireAuth, requireRole('ful
 // ── Checkout: cash ────────────────────────────────────────────────────────────
 router.post('/api/shop/checkout/cash', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const { appointmentId, amount, tip, cutNotes } = req.body;
-  const total = Number(amount||0) + Number(tip||0);
   const appt = h.getById('appointments', appointmentId);
   if (!appt) return res.status(404).json({ ok: false });
-  appt.status = 'done'; appt.price = total; appt.tip = Number(tip||0); appt.paymentMethod = 'cash'; appt.paidAt = new Date().toISOString();
+  // Tax applies to the service amount only (never the tip). `price` stays the
+  // revenue figure (service + tip); tax is tracked separately as collected tax.
+  const subtotal = Number(amount||0);
+  const tax = computeTax(db.get('settings').value() || {}, subtotal);
+  appt.status = 'done'; appt.subtotal = subtotal; appt.price = subtotal + Number(tip||0); appt.tip = Number(tip||0);
+  appt.taxRate = tax.amount ? tax.rate : 0; appt.taxAmount = tax.amount;
+  appt.paymentMethod = 'cash'; appt.paidAt = new Date().toISOString();
   if (cutNotes) appt.cutNotes = cutNotes;
   h.upsert('appointments', appt);
   if (appt.customerId) { const c = h.getById('customers', appt.customerId); if(c){c.loyaltyPoints=(c.loyaltyPoints||0)+1;c.lastJobDate=appt.date;h.upsert('customers',c);} }
@@ -150,12 +155,20 @@ router.post('/api/shop/checkout/cash', requireAuth, requireRole('full','technici
 router.post('/api/shop/checkout/session', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   try {
     const { appointmentId, amount, tip } = req.body;
-    const total = Math.round((Number(amount||0) + Number(tip||0)) * 100);
     const s = db.get('settings').value()||{};
+    // Tax applies to the service amount only; the customer is charged service + tax + tip.
+    const subtotal = Number(amount||0);
+    const tax = computeTax(s, subtotal);
+    const total = Math.round((subtotal + tax.amount + Number(tip||0)) * 100);
     const accountId = s.stripe?.connectAccountId;
     if (!accountId || !s.stripe?.onboardingComplete) return res.status(400).json({ ok: false, error: 'Stripe not connected. Go to Settings → Deposits & Payments to connect.' });
     const appt = h.getById('appointments', appointmentId);
     if (!appt) return res.status(404).json({ ok: false, error: 'Appointment not found' });
+    // Snapshot the amounts now so the record is correct regardless of when the
+    // customer completes payment; status flips to 'done' on verify/webhook.
+    appt.subtotal = subtotal; appt.price = subtotal + Number(tip||0); appt.tip = Number(tip||0);
+    appt.taxRate = tax.amount ? tax.rate : 0; appt.taxAmount = tax.amount;
+    h.upsert('appointments', appt);
     const stripe = getStripe();
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
