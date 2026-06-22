@@ -38,13 +38,18 @@ function verifyTwilio(req, res, next) {
 }
 
 // Resolve shop context or null. Returns { shopId, db, h, settings, shopName, realPhone }.
-function shopCtx(shopId) {
-  const shop = master.get('shops').find({ id: shopId }).value();
+// Accepts either the shop's UUID id or its slug in the URL — the slug is the
+// human-friendly identifier (same as /shop/<slug>) and far less error-prone to
+// paste into the Twilio console. ctx.shopId is always the resolved UUID, so the
+// dial/whisper/complete callbacks we generate downstream are id-based regardless.
+function shopCtx(idOrSlug) {
+  const shops = master.get('shops');
+  const shop = shops.find({ id: idOrSlug }).value() || shops.find({ slug: idOrSlug }).value();
   if (!shop || shop.active === false) return null;
-  const db = getShopDb(shopId);
+  const db = getShopDb(shop.id);
   const h = shopHelpers(db);
   const settings = db.get('settings').value() || {};
-  return { shopId, db, h, settings, shop, shopName: settings.shopName || shop.shopName || 'the shop', realPhone: settings.phone || '' };
+  return { shopId: shop.id, db, h, settings, shop, shopName: settings.shopName || shop.shopName || 'the shop', realPhone: settings.phone || '' };
 }
 
 const callTrackingOn = (settings) => settings.callTracking?.enabled !== false; // default on
