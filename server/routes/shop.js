@@ -438,6 +438,36 @@ router.post('/api/shop/quotes/:id/send', requireAuth, requireRole('full','techni
   } catch(e) { res.status(500).json({ ok:false, error:'Could not send the text' }); }
 }));
 
+// ── PROTECTED: Expenses (operating costs for true net-profit reporting) ───────
+const EXPENSE_CATEGORIES = ['Rent','Supplies','Equipment','Marketing','Software','Insurance','Payroll','Fuel','Utilities','Other'];
+
+router.get('/api/shop/expenses', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
+  res.json(h.getAll('expenses').sort((a,b)=>String(b.date).localeCompare(String(a.date))));
+}));
+
+router.post('/api/shop/expenses', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
+  const b = req.body || {};
+  const amount = Math.round((Number(b.amount)||0)*100)/100;
+  if (!(amount > 0)) return res.status(400).json({ ok:false, error:'Enter an amount greater than 0.' });
+  const exp = {
+    id: b.id || genId('exp'),
+    date:        /^\d{4}-\d{2}-\d{2}$/.test(b.date) ? b.date : today(),
+    category:    EXPENSE_CATEGORIES.includes(b.category) ? b.category : 'Other',
+    recurring:   (b.recurring === true || b.recurring === 'monthly') ? 'monthly' : 'none',
+    amount,
+    description: String(b.description||'').slice(0,120),
+    createdAt:   new Date().toISOString(),
+  };
+  if (b.id) { const ex = h.getById('expenses', b.id); if (ex) exp.createdAt = ex.createdAt; } // preserve on edit
+  h.upsert('expenses', exp);
+  res.json({ ok:true, expense: exp });
+}));
+
+router.delete('/api/shop/expenses/:id', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
+  h.remove('expenses', req.params.id);
+  res.json({ ok:true });
+}));
+
 // ── PROTECTED: Revenue ────────────────────────────────────────────────────────
 router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   const barbers   = h.getAll('barbers');
@@ -468,22 +498,74 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
   const loyalty = (db.get('settings').value()||{}).loyalty||{enabled:true,visitsForReward:10};
   const activeMembers = customers.filter(c=>c.membership && c.membership.status==='active');
   const mrr = Math.round(activeMembers.reduce((t,c)=>t + (c.membership.interval==='year' ? (Number(c.membership.price)||0)/12 : (Number(c.membership.price)||0)), 0));
-  // Margin = revenue minus the material/product cost snapshotted on each job.
-  // Older jobs with no cost on file count as $0 cost (no margin penalty).
+  // ── Profit (P&L) ──────────────────────────────────────────────────────────
+  // Gross = revenue − material/COGS snapshotted per job (older jobs with no cost
+  // on file count as $0). Net = gross − operating expenses for the period.
+  const round2 = n => Math.round(n*100)/100;
+  const monthOf = d => String(d||'').slice(0,7);
+  const curMonth = ms.slice(0,7);
+
   const totalRevenue = done.reduce((s,a)=>s+Number(a.price||0),0);
   const totalCost    = done.reduce((s,a)=>s+Number(a.cost||0),0);
   const monthRevenue = thisMonth.reduce((s,a)=>s+Number(a.price||0),0);
   const monthCost    = thisMonth.reduce((s,a)=>s+Number(a.cost||0),0);
-  const round2 = n => Math.round(n*100)/100;
+
+  // Operating expenses: a monthly-recurring expense counts in every month from
+  // its start month onward; a one-off counts only in the month it's dated.
+  const expenses = h.getAll('expenses');
+  const opExForMonth = (mk) => round2(expenses.reduce((s,e)=>{
+    const inMonth = e.recurring === 'monthly' ? (monthOf(e.date) <= mk) : (monthOf(e.date) === mk);
+    return inMonth ? s + (Number(e.amount)||0) : s;
+  }, 0));
+  const monthsActive = (startM, endM) => {
+    const [sy,sm]=String(startM).split('-').map(Number), [ey,em]=String(endM).split('-').map(Number);
+    if(!sy||!ey) return 1;
+    return Math.max(1, (ey-sy)*12 + (em-sm) + 1);
+  };
+  const monthOpEx = opExForMonth(curMonth);
+  const totalOpEx = round2(expenses.reduce((s,e)=>
+    s + (e.recurring === 'monthly' ? (Number(e.amount)||0)*monthsActive(monthOf(e.date), curMonth) : (Number(e.amount)||0)), 0));
+
+  // Expense breakdown by category (this month, incl. active recurring).
+  const catMap = {};
+  expenses.forEach(e=>{
+    const inMonth = e.recurring === 'monthly' ? (monthOf(e.date) <= curMonth) : (monthOf(e.date) === curMonth);
+    if (inMonth) catMap[e.category] = (catMap[e.category]||0) + (Number(e.amount)||0);
+  });
+  const byCategory = Object.entries(catMap).map(([category,amount])=>({category,amount:round2(amount)})).sort((a,b)=>b.amount-a.amount);
+
+  // Profitability by service (all-time): revenue, COGS, margin.
+  const svcMap = {};
+  done.forEach(a=>{ const k=a.service||'Other'; (svcMap[k]||(svcMap[k]={service:k,revenue:0,cost:0,count:0}));
+    svcMap[k].revenue+=Number(a.price||0); svcMap[k].cost+=Number(a.cost||0); svcMap[k].count++; });
+  const byService = Object.values(svcMap).map(s=>({service:s.service,count:s.count,revenue:round2(s.revenue),cost:round2(s.cost),margin:round2(s.revenue-s.cost)})).sort((a,b)=>b.margin-a.margin);
+
+  // Net-profit trend: per business month, revenue − COGS − operating expenses.
+  const monMap = {};
+  done.forEach(a=>{ const m=monthOf(a.date); if(!m) return; (monMap[m]||(monMap[m]={revenue:0,cost:0})); monMap[m].revenue+=Number(a.price||0); monMap[m].cost+=Number(a.cost||0); });
+  const netByMonth = Object.keys(monMap).sort().map(m=>{ const opEx=opExForMonth(m);
+    return { month:m, revenue:round2(monMap[m].revenue), cost:round2(monMap[m].cost), opEx, net:round2(monMap[m].revenue-monMap[m].cost-opEx) }; });
+
+  const monthGross = round2(monthRevenue - monthCost);
+  const totalGross = round2(totalRevenue - totalCost);
+  const monthNet   = round2(monthGross - monthOpEx);
+  const totalNet   = round2(totalGross - totalOpEx);
+
   res.json({
     mrr, activeMembers: activeMembers.length,
-    totalRevenue,
-    monthRevenue,
-    totalCost: round2(totalCost),
-    totalMargin: round2(totalRevenue - totalCost),
-    monthCost: round2(monthCost),
-    monthMargin: round2(monthRevenue - monthCost),
-    monthMarginPct: monthRevenue ? Math.round((monthRevenue - monthCost)/monthRevenue*100) : 0,
+    totalRevenue, monthRevenue,
+    totalCost: round2(totalCost), monthCost: round2(monthCost),
+    monthGrossProfit: monthGross, totalGrossProfit: totalGross,
+    monthGrossMarginPct: monthRevenue ? Math.round(monthGross/monthRevenue*100) : 0,
+    monthOpEx, totalOpEx,
+    monthNetProfit: monthNet, totalNetProfit: totalNet,
+    monthNetMarginPct: monthRevenue ? Math.round(monthNet/monthRevenue*100) : 0,
+    // back-compat aliases (old field names = gross margin)
+    totalMargin: totalGross, monthMargin: monthGross,
+    monthMarginPct: monthRevenue ? Math.round(monthGross/monthRevenue*100) : 0,
+    byCategory, byService, netByMonth,
+    expenseCategories: EXPENSE_CATEGORIES,
+    hasExpenses: expenses.length > 0,
     monthTaxCollected: round2(thisMonth.reduce((s,a)=>s+Number(a.taxAmount||0),0)),
     totalTaxCollected: round2(done.reduce((s,a)=>s+Number(a.taxAmount||0),0)),
     monthJobs: thisMonth.length,

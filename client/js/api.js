@@ -37,6 +37,7 @@ const db = {
                    enroll: (id,planId) => apiFetch('/customers/'+id+'/membership',{method:'POST',body:{planId}}), cancelMembership: (id) => apiFetch('/customers/'+id+'/membership/cancel',{method:'POST'}), membershipCheckout: (id,planId) => apiFetch('/customers/'+id+'/membership/checkout',{method:'POST',body:{planId}}) },
   appointments:  { all: (p) => apiFetch('/appointments'+(p?'?'+new URLSearchParams(p):'')), save: (a) => apiFetch('/appointments',{method:'POST',body:a}), complete: (id,d) => apiFetch('/appointments/'+id+'/complete',{method:'POST',body:d}), noshow: (id) => apiFetch('/appointments/'+id+'/noshow',{method:'POST'}), delete: (id) => apiFetch('/appointments/'+id,{method:'DELETE'}), addPhoto: (id,phase,image) => apiFetch('/appointments/'+id+'/photos',{method:'POST',body:{phase,image}}), deletePhoto: (id,photoId) => apiFetch('/appointments/'+id+'/photos/'+photoId,{method:'DELETE'}) },
   revenue:       { get: () => apiFetch('/revenue') },
+  expenses:      { all: () => apiFetch('/expenses'), save: (e) => apiFetch('/expenses',{method:'POST',body:e}), delete: (id) => apiFetch('/expenses/'+id,{method:'DELETE'}) },
   features:      { get: () => apiFetch('/features') },
   conversations: { all: () => apiFetch('/conversations'), forCustomer: (cid) => apiFetch('/conversations/customer/'+cid), markRead: (cid) => apiFetch('/conversations/read/'+cid,{method:'POST'}), save: (c) => apiFetch('/conversations',{method:'POST',body:c}) },
   sms:           { send: (o) => apiFetch('/sms/send',{method:'POST',body:o}) },
