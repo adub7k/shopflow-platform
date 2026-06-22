@@ -84,9 +84,10 @@ const Leads = {
 
     const calls = (l.calls||[]).map(c => {
       const when = _msgTimeFull(c.startedAt);
-      if (c.missed) return `<div class="lead-call missed"><span>⚠ Missed call${c.autoSmsSent?' · auto-text sent':''}</span><span class="lead-call-time">${when}</span></div>`;
+      const vm = c.voicemail ? `<button onclick="event.stopPropagation();Leads.playVoicemail('${c.id}',this)" style="margin:4px 0 8px;padding:6px 12px;border:1px solid var(--green);background:var(--green-lt);color:var(--green);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">▶ Play voicemail${c.voicemail.durationSec?` · ${c.voicemail.durationSec}s`:''}</button>` : '';
+      if (c.missed) return `<div class="lead-call missed"><span>⚠ Missed call${c.autoSmsSent?' · auto-text sent':''}${c.voicemail?' · 🎙 voicemail':''}</span><span class="lead-call-time">${when}</span></div>${vm}`;
       const dur = c.durationSec ? ` · ${Math.floor(c.durationSec/60)}m ${c.durationSec%60}s` : '';
-      return `<div class="lead-call answered"><span>✓ Answered${dur}</span><span class="lead-call-time">${when}</span></div>`;
+      return `<div class="lead-call answered"><span>✓ Answered${dur}</span><span class="lead-call-time">${when}</span></div>${vm}`;
     }).join('') || `<div style="font-size:12px;color:var(--faint);padding:6px 0;">No calls logged.</div>`;
 
     Modal.show(`
@@ -135,9 +136,22 @@ const Leads = {
   },
 
   async setStatus(id, status) {
-    const l = this._leads.find(x => x.id === id); if (l) l.status = status;
-    document.querySelectorAll('.lead-status-opt').forEach(b => b.classList.remove('active'));
+    const l = this._leads.find(x => x.id === id); if (!l) return;
+    // Preserve any unsaved edits typed in the open modal before we re-render it —
+    // otherwise switching status wipes a half-typed name/notes (the re-render
+    // reads l.name/l.notes, which only hold the last-saved values).
+    this._captureModalEdits(l);
+    l.status = status;
     this.open(id); // re-render modal to reflect selection
+  },
+
+  // Pull the current modal field values into the in-memory lead so a re-render
+  // (or a convert) doesn't lose what the user just typed.
+  _captureModalEdits(l) {
+    const nameEl  = document.getElementById('lead-name');
+    const notesEl = document.getElementById('lead-notes');
+    if (nameEl)  l.name  = nameEl.value;
+    if (notesEl) l.notes = notesEl.value;
   },
 
   async save(id) {
@@ -164,11 +178,33 @@ const Leads = {
   },
 
   async convert(id) {
+    const l = this._leads.find(x => x.id === id);
     try {
+      // Persist whatever's in the modal first so the typed name/notes carry onto
+      // the new client record — convert() builds the customer from the saved lead.
+      if (l) {
+        this._captureModalEdits(l);
+        await db.leads.update(id, { name: l.name || '', notes: l.notes || '', status: l.status });
+      }
       const res = await db.leads.convert(id);
       if (!res.ok) throw new Error(res.error || 'Convert failed');
       Modal.close(); toast('Converted to client ✓'); this.render();
     } catch(e) { toast(e.message || 'Could not convert', 'error'); }
+  },
+
+  // Stream + play a voicemail recording. The audio is served by an authed proxy
+  // (JWT bearer), so a bare <audio src> won't work — fetch it as a blob first.
+  async playVoicemail(callId, btn) {
+    const orig = btn.textContent;
+    try {
+      btn.disabled = true; btn.textContent = '⏳ Loading…';
+      const r = await fetch('/api/shop/voicemail/' + callId, { headers: { 'Authorization': 'Bearer ' + Auth.getToken() } });
+      if (!r.ok) throw new Error('Voicemail not available');
+      const audio = new Audio(URL.createObjectURL(await r.blob()));
+      btn.textContent = '🔊 Playing…';
+      audio.onended = audio.onerror = () => { btn.textContent = orig; btn.disabled = false; };
+      await audio.play();
+    } catch(e) { toast(e.message || 'Could not play voicemail', 'error'); btn.disabled = false; btn.textContent = orig; }
   },
 
   async remove(id) {

@@ -87,76 +87,131 @@ router.post('/api/twilio/voice/:shopId', verifyTwilio, (req, res) => {
     action: `/api/twilio/voice/complete/${ctx.shopId}`,
     method: 'POST',
   });
-  dial.number({ url: `/api/twilio/voice/whisper/${ctx.shopId}`, method: 'POST' }, realE164);
+  // Thread the parent (inbound) CallSid through the whisper/screen legs so the
+  // screen handler can mark THIS call as genuinely accepted (the whisper/screen
+  // run on the child leg, whose own CallSid differs from the parent's).
+  dial.number({ url: `/api/twilio/voice/whisper/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`, method: 'POST' }, realE164);
   res.type('text/xml').send(vr.toString());
 });
 
 // ── 2. Whisper (played to the shop staff who answers) ───────────────────────────
 router.post('/api/twilio/voice/whisper/:shopId', verifyTwilio, (req, res) => {
   const vr = new VoiceResponse();
-  const gather = vr.gather({ numDigits: 1, timeout: 8, action: `/api/twilio/voice/screen/${req.params.shopId}`, method: 'POST' });
+  const callSid = encodeURIComponent(req.query.callSid || '');
+  const gather = vr.gather({ numDigits: 1, timeout: 8, action: `/api/twilio/voice/screen/${req.params.shopId}?callSid=${callSid}`, method: 'POST' });
   gather.say('You have a new lead from Shop Flow. Press any key to take the call.');
-  // No keypress → drop this leg so the call rings out to missed (auto-SMS fires).
+  // No keypress → drop this leg so the call rings out to missed (auto-SMS + voicemail).
   vr.hangup();
   res.type('text/xml').send(vr.toString());
 });
 
 // ── 3. Screen keypress → bridge ─────────────────────────────────────────────────
-// An empty <Response> tells Twilio to connect the two legs.
+// An empty <Response> tells Twilio to connect the two legs. The keypress is the
+// ONLY reliable signal the shop actually took the call — DialCallStatus=completed
+// is also reported when the whisper is screened out or a carrier voicemail
+// answers the forward leg, so we record acceptance here, keyed by parent CallSid.
 router.post('/api/twilio/voice/screen/:shopId', verifyTwilio, (req, res) => {
+  const ctx = shopCtx(req.params.shopId);
+  const callSid = req.query.callSid;
+  if (ctx && callSid) {
+    const call = ctx.h.getById('calls', callSid);
+    if (call) { call.accepted = true; ctx.h.upsert('calls', call); }
+  }
   res.type('text/xml').send(new VoiceResponse().toString());
 });
 
-// ── 4. Dial finished → detect missed + auto-SMS ─────────────────────────────────
-router.post('/api/twilio/voice/complete/:shopId', verifyTwilio, async (req, res) => {
+// ── 4. Dial finished → detect missed + auto-SMS + offer voicemail ───────────────
+router.post('/api/twilio/voice/complete/:shopId', verifyTwilio, (req, res) => {
   const vr = new VoiceResponse();
   const ctx = shopCtx(req.params.shopId);
   const dialStatus = req.body.DialCallStatus || '';      // completed|no-answer|busy|failed|canceled
   const callSid = req.body.CallSid;
-  const answered = dialStatus === 'completed';
 
-  if (ctx && callSid) {
-    const call = ctx.h.getById('calls', callSid) || { id: callSid };
-    call.status = dialStatus || call.status;
-    call.missed = !answered;
-    call.durationSec = parseInt(req.body.DialCallDuration || '0', 10) || 0;
-    call.endedAt = new Date().toISOString();
+  if (!ctx || !callSid) { vr.hangup(); return res.type('text/xml').send(vr.toString()); }
 
-    const lead = call.leadId ? ctx.h.getById('leads', call.leadId) : null;
-    if (lead) {
-      lead.lastContactAt = call.endedAt;
-      if (answered) { lead.status = lead.status === 'new' ? 'contacted' : lead.status; }
-      else          { lead.missedCount = (lead.missedCount || 0) + 1; }
-    }
+  const call = ctx.h.getById('calls', callSid) || { id: callSid };
+  // A call only counts as TAKEN if the shop pressed a key to accept (set by the
+  // screen handler). DialCallStatus='completed' is NOT sufficient on its own —
+  // a screen-out or a carrier voicemail answering the forward leg both report it,
+  // which is why every call was wrongly showing up as "contacted".
+  const accepted = !!call.accepted;
+  call.status = dialStatus || call.status;
+  call.missed = !accepted;
+  call.durationSec = parseInt(req.body.DialCallDuration || '0', 10) || 0;
+  call.endedAt = new Date().toISOString();
 
-    // Auto-SMS only on a genuine ring-out (shop didn't pick up). Exclude 'failed'
-    // and 'canceled' — those are errors or the caller hanging up before we
-    // connected, and we shouldn't text someone who abandoned the call.
-    const MISSED_SMS_STATUSES = ['no-answer', 'busy'];
-    if (MISSED_SMS_STATUSES.includes(dialStatus) && callTrackingOn(ctx.settings) && !call.autoSmsSent) {
-      const fromNum = shopFromNumber(ctx.shopId);
-      const toNum = toE164(call.from);
-      if (twilioClient && fromNum && toNum) {
-        // Mark + persist sent BEFORE awaiting the send, so a retried Twilio
-        // callback (they retry) can't fire a second text (at-most-once).
-        call.autoSmsSent = true;
-        ctx.h.upsert('calls', call);
-        const body = buildSms('missedCall', { name: lead?.name, shop: ctx.shopName }, ctx.settings);
-        try {
-          await twilioClient.messages.create({ from: fromNum, to: toNum, body });
-          ctx.h.upsert('conversations', {
-            id: genId('msg'), customerId: lead?.customerId || null, leadId: lead?.id || null,
-            customerName: lead?.name || call.from, type: 'sms', direction: 'outbound',
-            body, sentAt: new Date().toISOString(), read: true, auto: true,
-          });
-        } catch (e) { console.error('Missed-call SMS failed:', e.message); }
-      }
-    }
-
-    ctx.h.upsert('calls', call);
-    if (lead) ctx.h.upsert('leads', lead);
+  const lead = call.leadId ? ctx.h.getById('leads', call.leadId) : null;
+  if (lead) {
+    lead.lastContactAt = call.endedAt;
+    if (accepted) { lead.status = lead.status === 'new' ? 'contacted' : lead.status; }
+    else          { lead.missedCount = (lead.missedCount || 0) + 1; }
   }
 
+  // Took the call → nothing more to do.
+  if (accepted) {
+    ctx.h.upsert('calls', call);
+    if (lead) ctx.h.upsert('leads', lead);
+    vr.hangup();
+    return res.type('text/xml').send(vr.toString());
+  }
+
+  // Not taken (ring-out, screen-out, busy, or carrier-VM). Auto-SMS the caller
+  // if A2P + the toggle are on — but NOT when they abandoned the call before we
+  // connected ('canceled'/'failed'), and at-most-once across Twilio's retries.
+  const smsWorthy = ['no-answer', 'busy', 'completed'].includes(dialStatus);
+  if (smsWorthy && callTrackingOn(ctx.settings) && !call.autoSmsSent) {
+    const fromNum = shopFromNumber(ctx.shopId);
+    const toNum = toE164(call.from);
+    if (twilioClient && fromNum && toNum) {
+      call.autoSmsSent = true;   // persisted below, before the async send resolves
+      const body = buildSms('missedCall', { name: lead?.name, shop: ctx.shopName }, ctx.settings);
+      // Fire-and-forget so the caller isn't left in silence before the voicemail prompt.
+      twilioClient.messages.create({ from: fromNum, to: toNum, body })
+        .then(() => ctx.h.upsert('conversations', {
+          id: genId('msg'), customerId: lead?.customerId || null, leadId: lead?.id || null,
+          customerName: lead?.name || call.from, type: 'sms', direction: 'outbound',
+          body, sentAt: new Date().toISOString(), read: true, auto: true,
+        }))
+        .catch(e => console.error('Missed-call SMS failed:', e.message));
+    }
+  }
+
+  ctx.h.upsert('calls', call);
+  if (lead) ctx.h.upsert('leads', lead);
+
+  // Let the caller leave a voicemail instead of dead-ending the call.
+  vr.say('Sorry, we could not take your call right now. Please leave a message after the tone, and we will call you right back.');
+  vr.record({
+    action: `/api/twilio/voice/voicemail/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
+    method: 'POST',
+    maxLength: 120,
+    playBeep: true,
+    timeout: 5,
+    finishOnKey: '#',
+  });
+  // Reached only if the caller left no message (Record falls through on no input).
+  vr.say('We did not get a message. Goodbye.');
+  vr.hangup();
+  res.type('text/xml').send(vr.toString());
+});
+
+// ── 5. Voicemail recorded → attach it to the call + flag the lead ───────────────
+router.post('/api/twilio/voice/voicemail/:shopId', verifyTwilio, (req, res) => {
+  const vr = new VoiceResponse();
+  const ctx = shopCtx(req.params.shopId);
+  const callSid = req.query.callSid;
+  const recordingSid = req.body.RecordingSid;
+  const durationSec = parseInt(req.body.RecordingDuration || '0', 10) || 0;
+  if (ctx && callSid && recordingSid && durationSec > 0) {
+    const call = ctx.h.getById('calls', callSid);
+    if (call) {
+      call.voicemail = { recordingSid, durationSec, recordedAt: new Date().toISOString() };
+      ctx.h.upsert('calls', call);
+      const lead = call.leadId ? ctx.h.getById('leads', call.leadId) : null;
+      if (lead) { lead.lastContactAt = new Date().toISOString(); ctx.h.upsert('leads', lead); }
+    }
+  }
+  vr.say('Thanks. We will call you right back. Goodbye.');
   vr.hangup();
   res.type('text/xml').send(vr.toString());
 });

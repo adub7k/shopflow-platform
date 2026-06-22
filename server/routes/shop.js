@@ -353,10 +353,8 @@ router.delete('/api/shop/appointments/:id', requireAuth, requireRole('full','tec
 // Images live on disk via saveImageDataUrl; the appointment stores [{id,url,createdAt}].
 router.post('/api/shop/appointments/:id/photos', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const a = h.getById('appointments', req.params.id); if (!a) return res.status(404).json({ ok:false, error:'Not found' });
-  // 'intake' = walkaround/condition shots taken at drop-off (CYA); before/after = work proof.
-  const PHASE_KEY = { before: 'beforePhotos', after: 'afterPhotos', intake: 'intakePhotos' };
-  const phase = PHASE_KEY[req.body.phase] ? req.body.phase : 'before';
-  const key = PHASE_KEY[phase];
+  const phase = req.body.phase === 'after' ? 'after' : 'before';
+  const key = phase === 'after' ? 'afterPhotos' : 'beforePhotos';
   try {
     const url = saveImageDataUrl(req.shopId, 'job-' + phase, req.body.image);
     const item = { id: genId('ph'), url, createdAt: new Date().toISOString() };
@@ -367,7 +365,7 @@ router.post('/api/shop/appointments/:id/photos', requireAuth, requireRole('full'
 }));
 router.delete('/api/shop/appointments/:id/photos/:photoId', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const a = h.getById('appointments', req.params.id); if (!a) return res.status(404).json({ ok:false, error:'Not found' });
-  ['beforePhotos','afterPhotos','intakePhotos'].forEach(key => {
+  ['beforePhotos','afterPhotos'].forEach(key => {
     const arr = a[key] || [];
     const item = arr.find(p => p.id === req.params.photoId);
     if (item) { deleteUpload(item.url); a[key] = arr.filter(p => p.id !== req.params.photoId); }
@@ -642,6 +640,23 @@ router.post('/api/shop/leads/:id/sms', requireAuth, requireRole('full','technici
     h.upsert('leads', lead);
     res.json({ ok:true });
   } catch(e) { res.json({ ok:false, error:e.message }); }
+}));
+
+// Stream a call's voicemail recording, proxied with Twilio auth so the media URL
+// and account creds are never exposed to the browser. Returns audio/mpeg.
+router.get('/api/shop/voicemail/:callId', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  const call = h.getById('calls', req.params.callId);
+  const sid = call && call.voicemail && call.voicemail.recordingSid;
+  const acct = process.env.TWILIO_ACCOUNT_SID, token = process.env.TWILIO_AUTH_TOKEN;
+  if (!sid || !acct || !token) return res.status(404).json({ ok:false, error:'No voicemail for this call' });
+  try {
+    const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${acct}/Recordings/${sid}.mp3`, {
+      headers: { Authorization: 'Basic ' + Buffer.from(`${acct}:${token}`).toString('base64') },
+    });
+    if (!r.ok) return res.status(502).json({ ok:false, error:'Recording fetch failed' });
+    res.set('Content-Type', 'audio/mpeg');
+    res.send(Buffer.from(await r.arrayBuffer()));
+  } catch (e) { res.status(502).json({ ok:false, error:e.message }); }
 }));
 
 // ── PROTECTED: Blocked dates ──────────────────────────────────────────────────
