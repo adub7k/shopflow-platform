@@ -200,30 +200,44 @@ const Settings = {
         html.push('</div>');
       }
 
-      // Stripe Connect
+      // Payments: Square (primary) + Stripe (legacy) — deposits work with either.
       let stripeStatus = { connected:false };
       try { stripeStatus = await db.stripe.status(); } catch(e) {}
+      let squareStatus = { connected:false };
+      try { squareStatus = await db.square.status(); } catch(e) {}
+      const paymentsConnected = stripeStatus.connected || squareStatus.connected;
       const deposit = s.deposit||{enabled:false,amount:10,message:'A deposit is required to secure your appointment.'};
 
       html.push('<div class="section-header">Deposits & Payments</div><div class="card">');
-      html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Collect a deposit when clients book online. Goes directly to your connected Stripe account.</div>');
+      html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Collect a deposit when clients book online. It goes directly to your connected payment account.</div>');
 
-      // Stripe Connect status
+      // Square (primary)
+      if (squareStatus.connected) {
+        html.push('<div style="display:flex;align-items:center;justify-content:space-between;background:var(--green-lt);border:1px solid var(--green-md);border-radius:8px;padding:12px 14px;margin-bottom:10px;">');
+        html.push('<div><div style="font-size:13px;font-weight:700;color:var(--green);">✓ Square Connected</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+(squareStatus.locationName||'Account active')+'</div></div>');
+        html.push('<button class="btn btn-sm btn-danger" onclick="Settings.disconnectSquare()">Disconnect</button>');
+        html.push('</div>');
+      } else {
+        html.push('<div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:10px;font-size:13px;color:var(--muted);">Connect your Square account to collect deposits directly to your business. Takes about a minute.</div>');
+        html.push('<button class="btn btn-primary btn-full" id="square-connect-btn" onclick="Settings.connectSquare()" style="margin-bottom:14px;">Connect Square Account</button>');
+      }
+
+      // Stripe (legacy — still supported)
       if (stripeStatus.connected) {
         html.push('<div style="display:flex;align-items:center;justify-content:space-between;background:var(--green-lt);border:1px solid var(--green-md);border-radius:8px;padding:12px 14px;margin-bottom:14px;">');
         html.push('<div><div style="font-size:13px;font-weight:700;color:var(--green);">✓ Stripe Connected</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+(stripeStatus.email||'Account active')+'</div></div>');
         html.push('<button class="btn btn-sm btn-danger" onclick="Settings.disconnectStripe()">Disconnect</button>');
         html.push('</div>');
-        // Deposit toggle
+      }
+
+      // Deposit settings — available once either processor is connected
+      if (paymentsConnected) {
         html.push('<div class="form-group"><label style="display:flex;align-items:center;gap:10px;cursor:pointer;"><input type="checkbox" id="s-dep-enabled" '+(deposit.enabled?'checked':'')+' style="width:16px;height:16px;" /><span style="font-size:14px;font-weight:600;">Require deposit to book</span></label></div>');
         html.push('<div class="form-row">');
         html.push('<div class="form-group"><label class="form-label">Deposit amount</label><div style="position:relative;"><div style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted);">$</div><input class="form-input" id="s-dep-amount" type="number" value="'+(deposit.amount||10)+'" min="1" max="100" style="padding-left:24px;" /></div></div>');
         html.push('<div class="form-group"><label class="form-label">Quick amounts</label><div style="display:flex;gap:6px;"><button class="btn btn-sm" onclick="document.getElementById(\'s-dep-amount\').value=5">$5</button><button class="btn btn-sm" onclick="document.getElementById(\'s-dep-amount\').value=10">$10</button><button class="btn btn-sm" onclick="document.getElementById(\'s-dep-amount\').value=15">$15</button><button class="btn btn-sm" onclick="document.getElementById(\'s-dep-amount\').value=20">$20</button><button class="btn btn-sm" onclick="document.getElementById(\'s-dep-amount\').value=25">$25</button></div></div>');
         html.push('</div>');
         html.push('<div class="form-group"><label class="form-label">Deposit message shown to client</label><input class="form-input" id="s-dep-msg" value="'+(deposit.message||'A deposit is required to secure your appointment.')+'" /></div>');
-      } else {
-        html.push('<div style="background:var(--surface2);border-radius:8px;padding:14px;margin-bottom:14px;font-size:13px;color:var(--muted);">Connect your Stripe account to start collecting deposits. Takes about 2 minutes.</div>');
-        html.push('<button class="btn btn-primary btn-full" id="stripe-connect-btn" onclick="Settings.connectStripe()">Connect Stripe Account</button>');
       }
       html.push('</div>');
 
@@ -568,6 +582,20 @@ const Settings = {
       if (data.ok && data.url) { window.location.href = data.url; }
       else { toast(data.error||'Could not connect Stripe. Make sure STRIPE_SECRET_KEY is set in Railway.','error'); if(btn){btn.textContent='Connect Stripe Account';btn.disabled=false;} }
     } catch(e) { toast('Error connecting Stripe','error'); if(btn){btn.textContent='Connect Stripe Account';btn.disabled=false;} }
+  },
+
+  async connectSquare() {
+    const btn = document.getElementById('square-connect-btn'); if(btn){btn.textContent='Connecting...';btn.disabled=true;}
+    try {
+      const data = await db.square.onboard();
+      if (data.ok && data.url) { window.location.href = data.url; } // → Square authorize, then back to /shop/:slug
+      else { toast(data.error||'Could not start Square connect.','error'); if(btn){btn.textContent='Connect Square Account';btn.disabled=false;} }
+    } catch(e) { toast('Error connecting Square','error'); if(btn){btn.textContent='Connect Square Account';btn.disabled=false;} }
+  },
+  async disconnectSquare() {
+    if (!confirm('Disconnect Square? Deposit collection will stop until you reconnect.')) return;
+    try { await db.square.disconnect(); toast('Square disconnected'); this.render(); }
+    catch(e) { toast('Could not disconnect','error'); }
   },
 
   async disconnectStripe() {
