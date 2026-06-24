@@ -11,10 +11,11 @@ function advanceDate(dateStr, cadence, customRule) {
   const d = new Date(dateStr + 'T12:00:00');
   const addDays = (n) => d.setDate(d.getDate() + n);
   switch (cadence) {
+    case 'daily':    addDays(1);  break;
     case 'weekly':   addDays(7);  break;
     case 'biweekly': addDays(14); break;
     case 'monthly':  d.setMonth(d.getMonth() + 1); break;
-    case 'custom':   addDays((customRule && customRule.everyDays) || 7); break;
+    case 'custom':   addDays(Math.max(1, (customRule && customRule.everyDays) || 7)); break;
     default:         addDays(7);
   }
   return d.toISOString().slice(0, 10);

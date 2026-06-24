@@ -4,7 +4,8 @@
 // "Run now" spawns the next one immediately.
 const Recurring = {
   _recs: [], _customers: [], _properties: [], _services: [], _crews: [],
-  CADENCE: { weekly:'Weekly', biweekly:'Every 2 weeks', monthly:'Monthly', custom:'Custom' },
+  CADENCE: { daily:'Daily', weekly:'Weekly', biweekly:'Every 2 weeks', monthly:'Monthly', custom:'Custom…' },
+  cadenceLabel(r){ if(r.cadence==='custom'){ const n=(r.customRule&&r.customRule.everyDays); return n?('Every '+n+' days'):'Custom'; } return this.CADENCE[r.cadence]||r.cadence; },
 
   async render() {
     const el = document.getElementById('page-recurring'); if (!el) return;
@@ -24,7 +25,7 @@ const Recurring = {
       } else {
         html.push('<div class="list-card">');
         this._recs.forEach(r=>{
-          const sub = [this.CADENCE[r.cadence]||r.cadence, pName(r.propertyId)].filter(Boolean).join(' · ');
+          const sub = [this.cadenceLabel(r), pName(r.propertyId)].filter(Boolean).join(' · ');
           html.push('<div class="list-row"><div class="list-main">'
             + '<div class="list-name">'+esc(cName(r.customerId))+(r.active?'':' <span class="badge badge-gray">paused</span>')+'</div>'
             + '<div class="list-sub">'+esc(sub)+'</div>'
@@ -51,9 +52,10 @@ const Recurring = {
       + '<div class="form-group"><label class="form-label">Service</label><select class="form-input" id="rec-serviceId"><option value="">— Select —</option>'+sel(this._services,r.serviceId,s=>s.name+' ('+fmtMoney(s.price)+')')+'</select></div>'
       + '<div class="form-group"><label class="form-label">Crew</label><select class="form-input" id="rec-crewId"><option value="">— Unassigned —</option>'+sel(this._crews,r.crewId,c=>c.name)+'</select></div>'
       + '<div class="form-row">'
-      +   '<div class="form-group"><label class="form-label">Repeats</label><select class="form-input" id="rec-cadence">'+cad+'</select></div>'
+      +   '<div class="form-group"><label class="form-label">Repeats</label><select class="form-input" id="rec-cadence" onchange="Recurring._toggleCustom()">'+cad+'</select></div>'
       +   '<div class="form-group"><label class="form-label">Price</label><input class="form-input" id="rec-price" type="number" value="'+esc(r.price!=null?r.price:'')+'" /></div>'
       + '</div>'
+      + '<div class="form-group" id="rec-custom-wrap" style="display:'+(r.cadence==='custom'?'block':'none')+';"><label class="form-label">Every how many days?</label><input class="form-input" id="rec-everyDays" type="number" min="1" value="'+esc((r.customRule&&r.customRule.everyDays)||3)+'" /></div>'
       + '<div class="form-row">'
       +   '<div class="form-group"><label class="form-label">Start / next date</label><input class="form-input" id="rec-nextRunDate" type="date" value="'+esc(r.nextRunDate||today())+'" /></div>'
       +   '<div class="form-group"><label class="form-label">Time</label><input class="form-input" id="rec-time" type="time" value="'+esc(r.time||'09:00')+'" /></div>'
@@ -62,9 +64,15 @@ const Recurring = {
       + '<div class="modal-actions"><button class="btn" onclick="Modal.close()">Cancel</button><button class="btn btn-green" onclick="Recurring.save(\''+(id||'')+'\',this)">Save</button></div>');
   },
 
+  _toggleCustom() {
+    const c=(document.getElementById('rec-cadence')||{}).value;
+    const w=document.getElementById('rec-custom-wrap'); if(w) w.style.display = c==='custom' ? 'block' : 'none';
+  },
+
   async save(id, btn) {
     const g=(k)=>(document.getElementById('rec-'+k)||{}).value||'';
     const body = { customerId:g('customerId'), propertyId:g('propertyId'), serviceId:g('serviceId'), crewId:g('crewId'), cadence:g('cadence'), time:g('time'), nextRunDate:g('nextRunDate'), price:Number(g('price'))||0, active:(document.getElementById('rec-active')||{}).checked };
+    if (body.cadence==='custom') body.customRule = { everyDays: Math.max(1, Number(g('everyDays'))||7) };
     if (id) body.id = id;
     if (!body.customerId) { toast('Select a customer','error'); return; }
     if (!body.nextRunDate) { toast('Pick a start date','error'); return; }
