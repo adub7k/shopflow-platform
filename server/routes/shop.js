@@ -2,7 +2,7 @@ const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const { requireAuth, requireRole } = require('../middleware');
 const { resolveProfile } = require('../industries');
-const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, deleteUpload, computeTax, computeApptCost } = require('../db');
+const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, shopOwnNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, deleteUpload, computeTax, computeApptCost } = require('../db');
 
 // ── PROTECTED: Settings ───────────────────────────────────────────────────────
 // Readable by any signed-in staff (needed for vocabulary/statuses), but sensitive
@@ -22,8 +22,10 @@ router.get('/api/shop/settings', requireAuth, shopRoute(async (req, res, db) => 
   if (!Array.isArray(s.serviceCategories)) s.serviceCategories = _prof.serviceCategories || ['cut','beard','combo','color','design','other'];
   if (s.staffPicker === undefined) s.staffPicker = _prof.staffPicker !== false;
   if (s.supportsQuotes === undefined) s.supportsQuotes = !!_prof.supportsQuotes;
-  // Call tracking: surface the resolved tracking number (read-only) + defaults.
-  s.trackingNumber = shopFromNumber(req.shopId) || '';
+  // Call tracking: surface the shop's OWN tracking number (read-only). No global
+  // fallback — a shop only ever shows a number explicitly assigned to it, so one
+  // tenant never sees another tenant's (e.g. the platform default) number.
+  s.trackingNumber = shopOwnNumber(req.shopId);
   if (!s.callTracking) s.callTracking = { enabled: true };
   // Surface the resolved industry so the frontend can mount industry-specific
   // navigation/modules (the profile lives outside `settings`, on the shop DB root).

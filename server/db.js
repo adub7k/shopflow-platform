@@ -198,6 +198,22 @@ function shopFromNumber(shopId) {
   return (shop && shop.twilioFromNumber) || TWILIO_DEFAULT_FROM;
 }
 
+// A shop's OWN assigned tracking number — per-shop only, with NO global fallback.
+// Use this for anything shown to or attributed to a shop (settings display, leads
+// banner, call-tracking identity) so one tenant never sees or claims another's
+// number. (Outbound SMS keeps using shopFromNumber, which may fall back to the
+// platform default sender.) Checks the master shop record first, then the per-shop
+// settings.twilio.fromNumber.
+function shopOwnNumber(shopId) {
+  const shop = master.get('shops').find({ id: shopId }).value();
+  if (shop && shop.twilioFromNumber) return shop.twilioFromNumber;
+  try {
+    const s = getShopDb(shopId).get('settings').value() || {};
+    if (s.twilio && s.twilio.fromNumber) return s.twilio.fromNumber;
+  } catch (e) { /* shop db may not exist yet */ }
+  return '';
+}
+
 // ── Money helpers: tax + job cost ─────────────────────────────────────────────
 // Sales tax on a service subtotal (never on tips). Returns a zeroed result when
 // the shop hasn't enabled tax, so callers can always read `.amount`. `rate` is a
@@ -248,7 +264,7 @@ function buildSms(type, vars, settings) {
 
 module.exports = {
   master, getShopDb, initShopDb, shopHelpers, shopRoute,
-  shopFromNumber, buildSms, SMS_DEFAULTS,
+  shopFromNumber, shopOwnNumber, buildSms, SMS_DEFAULTS,
   genId, today, slug, toE164,
   computeTax, computeApptCost,
   JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM,

@@ -244,6 +244,10 @@ function seedCleaningDemo({ force = true } = {}) {
   db.get('settings').assign({
     tagline: 'Reliable home & office cleaning.',
     bookingMessage: 'Request a cleaning below — we’ll confirm your time and crew.',
+    // Demo only: never auto-text the (fake) customers — keep the pitch silent and
+    // ensure it can't send from any shared/global number.
+    automations: { reminder: { enabled: false }, rebook: { enabled: false }, review: { enabled: false } },
+    callTracking: { enabled: false },
   }).write();
 
   const doneCount = appts.filter(a => a.status === 'done').length;

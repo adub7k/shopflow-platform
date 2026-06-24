@@ -73,6 +73,27 @@ if (process.env.SEED_CLEANING === 'true') {
   catch(e) { console.error('Cleaning demo seed failed:', e.message); }
 }
 
+// ── One-time: claim the legacy global tracking number for one shop ─────────────
+// Historically TWILIO_FROM_NUMBER was a single shared default, so every shop
+// without its own number displayed it. Set TWILIO_FROM_SHOP to the owning shop's
+// slug (or id) and on boot the number is written onto THAT shop's record; no other
+// shop inherits it anymore. Idempotent (won't overwrite a number already set).
+// Once migrated, remove TWILIO_FROM_SHOP (and TWILIO_FROM_NUMBER if you no longer
+// want it as the outbound-SMS fallback for unassigned shops).
+if (process.env.TWILIO_FROM_NUMBER && process.env.TWILIO_FROM_SHOP) {
+  try {
+    const { master } = require('./db');
+    const key = process.env.TWILIO_FROM_SHOP;
+    const shop = master.get('shops').find(s => s.slug === key || s.id === key).value();
+    if (!shop) console.warn('TWILIO_FROM_SHOP: no shop matches', key);
+    else if (shop.twilioFromNumber) console.log('• Tracking number already set for', shop.slug, '— skipping migration');
+    else {
+      master.get('shops').find({ id: shop.id }).assign({ twilioFromNumber: process.env.TWILIO_FROM_NUMBER }).write();
+      console.log('• Assigned TWILIO_FROM_NUMBER to shop', shop.slug);
+    }
+  } catch (e) { console.error('Tracking-number migration failed:', e.message); }
+}
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => console.log(`ShopFlow Platform on port ${PORT}`));
 setTimeout(runScheduler, 30000);
