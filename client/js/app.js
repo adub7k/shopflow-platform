@@ -9,8 +9,16 @@ const ROLE_PAGES = {
   technician: ['dashboard','messages','appointments','leads','clients','quotes'],
   viewonly:   ['appointments'],
 };
+// Pages that only appear for a given industry. Injected after the role base set,
+// so a barbershop never sees cleaning pages and vice-versa. (Owners + technicians
+// only; view-only stays calendar-only.)
+const INDUSTRY_PAGES = {
+  cleaning: ['jobs','properties','crews','recurring'],
+};
 function allowedPages(){
-  let pages = ROLE_PAGES[Auth.getRole()] || ROLE_PAGES.full;
+  let pages = (ROLE_PAGES[Auth.getRole()] || ROLE_PAGES.full).slice();
+  const extra = INDUSTRY_PAGES[Shop.industry];
+  if (extra && Auth.getRole() !== 'viewonly') pages = pages.concat(extra.filter(p => !pages.includes(p)));
   // Estimates is a detail-shop feature — hide it for industries that don't use it.
   if (!Shop.supportsQuotes) pages = pages.filter(p => p !== 'quotes');
   return pages;
@@ -39,7 +47,7 @@ const App = {
     document.querySelectorAll('.nav-item,.bottom-nav-item').forEach(b=>b.classList.remove('active'));
     const el=document.getElementById('page-'+page); if(el)el.classList.add('active');
     document.querySelectorAll('[data-page="'+page+'"]').forEach(b=>b.classList.add('active'));
-    const titles={dashboard:'Dashboard',messages:'Messages',appointments:'Appointments',leads:'Leads',clients:'Clients',quotes:'Estimates',revenue:'Revenue',reviews:'Reviews',automations:'Automations',settings:'Settings'};
+    const titles={dashboard:'Dashboard',messages:'Messages',appointments:'Appointments',jobs:'Jobs',properties:'Properties',crews:'Crews',recurring:'Recurring',leads:'Leads',clients:'Clients',quotes:'Estimates',revenue:'Revenue',reviews:'Reviews',automations:'Automations',settings:'Settings'};
     const tt=document.getElementById('topbar-title'); if(tt&&titles[page])tt.textContent=titles[page];
     this._render(page);
   },
@@ -47,6 +55,10 @@ const App = {
     if(page==='dashboard')   Dashboard.render();
     if(page==='messages')    Messages.render();
     if(page==='appointments')Appointments.render();
+    if(page==='jobs')        Jobs.render();
+    if(page==='properties')  Properties.render();
+    if(page==='crews')       Crews.render();
+    if(page==='recurring')   Recurring.render();
     if(page==='leads')       Leads.render();
     if(page==='clients')     Clients.render();
     if(page==='quotes')      Quotes.render();
@@ -63,7 +75,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     // Load settings + industry profile (vocabulary, custom fields, statuses)
     const s = await db.settings.get();
-    Shop.settings = s; Shop.vocab = s.vocab||{}; Shop.fields = s.customFields||[]; Shop.statuses = s.statuses||[]; Shop.sizes = s.vehicleSizes||[]; Shop.addons = s.addons||[]; Shop.membershipPlans = s.membershipPlans||[]; Shop.serviceCategories = s.serviceCategories||[]; Shop.supportsQuotes = !!s.supportsQuotes; Shop.tax = s.tax||{enabled:false,rate:0,label:'Sales Tax'};
+    Shop.settings = s; Shop.industry = s.industry||'barbershop'; Shop.vocab = s.vocab||{}; Shop.fields = s.customFields||[]; Shop.statuses = s.statuses||[]; Shop.sizes = s.vehicleSizes||[]; Shop.addons = s.addons||[]; Shop.membershipPlans = s.membershipPlans||[]; Shop.serviceCategories = s.serviceCategories||[]; Shop.supportsQuotes = !!s.supportsQuotes; Shop.tax = s.tax||{enabled:false,rate:0,label:'Sales Tax'};
     const tt=document.getElementById('topbar-title'); if(tt)tt.textContent=s.shopName||'ShopFlow';
     const sn=document.getElementById('sidebar-shop-name'); if(sn&&s.shopName)sn.textContent=s.shopName;
     const ts=document.getElementById('topbar-sub');   if(ts&&s.tagline)ts.textContent=s.tagline;

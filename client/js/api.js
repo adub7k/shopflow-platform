@@ -50,4 +50,8 @@ const db = {
   gallery:       { add: (image,caption) => apiFetch('/gallery',{method:'POST',body:{image,caption}}), remove: (id) => apiFetch('/gallery/'+id,{method:'DELETE'}) },
   reviews:       { all: () => apiFetch('/reviews'), feature: (id) => apiFetch('/reviews/'+id+'/feature',{method:'POST'}), remove: (id) => apiFetch('/reviews/'+id,{method:'DELETE'}), request: (appointmentId) => apiFetch('/reviews/request',{method:'POST',body:{appointmentId}}) },
   quotes:        { all: () => apiFetch('/quotes'), get: (id) => apiFetch('/quotes/'+id), save: (q) => apiFetch('/quotes',{method:'POST',body:q}), delete: (id) => apiFetch('/quotes/'+id,{method:'DELETE'}), send: (id) => apiFetch('/quotes/'+id+'/send',{method:'POST'}) },
+  // ── Cleaning module (industry extension) ──
+  properties:    { all: (customerId) => apiFetch('/properties'+(customerId?'?customerId='+customerId:'')), save: (p) => apiFetch('/properties',{method:'POST',body:p}), delete: (id) => apiFetch('/properties/'+id,{method:'DELETE'}) },
+  crews:         { all: () => apiFetch('/crews'), save: (c) => apiFetch('/crews',{method:'POST',body:c}), delete: (id) => apiFetch('/crews/'+id,{method:'DELETE'}) },
+  recurring:     { all: () => apiFetch('/recurring'), save: (r) => apiFetch('/recurring',{method:'POST',body:r}), delete: (id) => apiFetch('/recurring/'+id,{method:'DELETE'}), generate: (id) => apiFetch('/recurring/'+id+'/generate',{method:'POST'}) },
 };

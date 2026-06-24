@@ -25,6 +25,9 @@ router.get('/api/shop/settings', requireAuth, shopRoute(async (req, res, db) => 
   // Call tracking: surface the resolved tracking number (read-only) + defaults.
   s.trackingNumber = shopFromNumber(req.shopId) || '';
   if (!s.callTracking) s.callTracking = { enabled: true };
+  // Surface the resolved industry so the frontend can mount industry-specific
+  // navigation/modules (the profile lives outside `settings`, on the shop DB root).
+  s.industry = db.get('industry').value() || 'barbershop';
   if ((req.role || 'full') !== 'full') {
     if (s.twilio)    s.twilio    = { ...s.twilio, authToken: '' };
     if (s.emailSmtp) s.emailSmtp = { ...s.emailSmtp, pass: '' };

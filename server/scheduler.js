@@ -1,4 +1,5 @@
 const { master, getShopDb, shopHelpers, shopFromNumber, buildSms, twilioClient, TWILIO_DEFAULT_FROM } = require('./db');
+const { generateDueRecurring } = require('./recurring');
 
 // ── Scheduler: 24hr reminders + 21-day rebook nudges ─────────────────────────
 async function runScheduler() {
@@ -6,8 +7,6 @@ async function runScheduler() {
     const shops = master.get('shops').value().filter(s => s.active);
     for (const shop of shops) {
       try {
-        const fromNum = shopFromNumber(shop.id);
-        if (!twilioClient || !fromNum) continue;  // skip shops without SMS configured
         const db = getShopDb(shop.id);
         const s = db.get('settings').value()||{};
 
@@ -17,6 +16,15 @@ async function runScheduler() {
         const TZ = s.timezone || process.env.DEFAULT_TZ || 'America/Denver';
         const localDate = (offsetMs) => new Date(Date.now()+offsetMs).toLocaleDateString('en-CA', { timeZone: TZ });
         const todayStr = localDate(0);
+
+        // ── Recurring job generation (cleaning/recurring contracts; no SMS needed) ──
+        // Runs before the Twilio guard so jobs are spawned even for shops that
+        // haven't configured SMS. Generated rows are ordinary appointments.
+        try { generateDueRecurring(db, todayStr); } catch(e){}
+
+        // ── SMS-gated automations below ──
+        const fromNum = shopFromNumber(shop.id);
+        if (!twilioClient || !fromNum) continue;  // skip shops without SMS configured
 
         // ── 24hr appointment reminders ──
         const tomorrow = localDate(24*3600000);
