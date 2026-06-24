@@ -88,6 +88,11 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
     const services = db.get('services').value();
     const blockedDates = db.get('blockedDates').value().map(b => b.date);
     const stripeConnected = !!(s.stripe?.connectAccountId && s.stripe?.onboardingComplete);
+    // Square is "connected" if the shop has its own token (OAuth) or the platform
+    // env token is configured (sandbox/MVP fallback). Square takes precedence on
+    // the booking page as we migrate deposits off Stripe.
+    const squareConnected = !!(s.square?.accessToken && s.square?.locationId) || require('../payments/square').enabled();
+    const paymentsConnected = stripeConnected || squareConnected;
     res.json({
       shopId: shop.id,
       shopSlug: shop.slug,
@@ -104,7 +109,8 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
       addons: s.addons || [],
       staffPicker: s.staffPicker !== undefined ? s.staffPicker : (resolveProfile(db.get('industry').value()).staffPicker !== false),
       statuses: s.statuses || [],
-      deposit: { enabled: s.deposit?.enabled && stripeConnected, amount: s.deposit?.amount || 10, message: s.deposit?.message || '' },
+      deposit: { enabled: !!(s.deposit?.enabled && paymentsConnected), amount: s.deposit?.amount || 10, message: s.deposit?.message || '' },
+      depositProvider: squareConnected ? 'square' : (stripeConnected ? 'stripe' : null),
       stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
       stripeAccountId: stripeConnected ? s.stripe.connectAccountId : '',
       // Inspiration photo + work gallery
@@ -386,9 +392,11 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     }
 
     // Deposit status is decided server-side, never taken from the client. A shop
-    // only holds a deposit when it has enabled one AND Stripe is connected.
+    // only holds a deposit when it has enabled one AND a payment processor (Stripe
+    // or Square) is connected.
     const stripeConnected = !!(s0.stripe?.connectAccountId && s0.stripe?.onboardingComplete);
-    const needsDeposit = !!(s0.deposit?.enabled && stripeConnected);
+    const squareConnected = !!(s0.square?.accessToken && s0.square?.locationId) || require('../payments/square').enabled();
+    const needsDeposit = !!(s0.deposit?.enabled && (stripeConnected || squareConnected));
 
     const apptId = genId('a');
     const appt = { id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '', barberId: barberId || null, barberName: barberName || null, serviceId: serviceId || null, service: svcFromDb.name, price, cost, duration, date, time, status: needsDeposit ? 'pending-deposit' : 'confirmed', notes: notes || '', customFields: cf, vehicleSize: vehicleSize || null, addons: chosenAddons, inspoPhoto: inspo, source: 'booking-page', createdAt: new Date().toISOString() };

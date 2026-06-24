@@ -43,6 +43,7 @@ app.use(require('./routes/receptionist'));
 app.use(require('./routes/admin'));
 app.use(require('./routes/sales'));
 app.use(require('./routes/stripe'));
+app.use(require('./routes/square'));
 
 // ── HTML Pages ────────────────────────────────────────────────────────────────
 app.get('/shop/*',  (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app.html')));

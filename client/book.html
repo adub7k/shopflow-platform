@@ -621,7 +621,9 @@ const B = {
           status:dep&&dep.enabled?'pending-deposit':'confirmed'})}).then(r=>r.json());
       if(!res.ok){ this.err(res.error||'Booking failed. Please try again.'); btn.disabled=false; this.updateCTA(); return; }
       if(dep&&dep.enabled){
-        const d=await fetch('/api/public/'+this.slug+'/deposit-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({appointmentId:res.appointmentId,amount:dep.amount})}).then(r=>r.json());
+        // Use the deposit endpoint that matches the shop's payment provider.
+        const depEndpoint = this.shop.depositProvider==='square' ? 'square-deposit-session' : 'deposit-session';
+        const d=await fetch('/api/public/'+this.slug+'/'+depEndpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({appointmentId:res.appointmentId,amount:dep.amount})}).then(r=>r.json());
         if(d.ok&&d.url){ window.location.href=d.url; return; }
       }
       this._confirmed(name,phone,res.smsSent);
