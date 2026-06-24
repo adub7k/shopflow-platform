@@ -80,7 +80,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const sn=document.getElementById('sidebar-shop-name'); if(sn&&s.shopName)sn.textContent=s.shopName;
     const ts=document.getElementById('topbar-sub');   if(ts&&s.tagline)ts.textContent=s.tagline;
 
-    // Role-based navigation — hide disallowed tabs and land on the first allowed page
+    // Build the grouped, industry-aware sidebar from the nav registry, then apply
+    // role-based hiding to the (static) bottom nav and land on the first allowed page.
+    if (typeof NavRegistry !== 'undefined') NavRegistry.render();
     applyRoleNav();
     await App.nav(canSee('dashboard') ? 'dashboard' : allowedPages()[0]);
 
