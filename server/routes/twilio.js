@@ -17,6 +17,7 @@ const {
   master, getShopDb, shopHelpers, shopFromNumber, buildSms,
   twilioClient, genId, toE164,
 } = require('../db');
+const { runIntake } = require('../receptionist/intake');
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
@@ -188,6 +189,9 @@ router.post('/api/twilio/voice/complete/:shopId', verifyTwilio, (req, res) => {
     playBeep: true,
     timeout: 5,
     finishOnKey: '#',
+    // Ask Twilio to transcribe the voicemail; the callback feeds the AI receptionist.
+    transcribe: true,
+    transcribeCallback: `/api/twilio/voice/transcription/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
   });
   // Reached only if the caller left no message (Record falls through on no input).
   vr.say('We did not get a message. Goodbye.');
@@ -214,6 +218,22 @@ router.post('/api/twilio/voice/voicemail/:shopId', verifyTwilio, (req, res) => {
   vr.say('Thanks. We will call you right back. Goodbye.');
   vr.hangup();
   res.type('text/xml').send(vr.toString());
+});
+
+// ── 6. Voicemail transcription ready → AI receptionist intake ───────────────────
+// Twilio posts the transcript here asynchronously once the voicemail recording is
+// transcribed. We always store the transcript on the call; AI enrichment runs only
+// if the shop enabled the receptionist and a key is configured (runIntake guards
+// both). Fire-and-forget so we ACK Twilio immediately.
+router.post('/api/twilio/voice/transcription/:shopId', verifyTwilio, (req, res) => {
+  res.type('text/xml').send('<Response></Response>'); // ACK first; processing is async
+  const ctx = shopCtx(req.params.shopId);
+  const callSid = req.query.callSid;
+  const transcript = req.body.TranscriptionText || '';
+  if (!ctx || !callSid || !transcript || req.body.TranscriptionStatus === 'failed') return;
+  // runIntake stores the transcript and (if enabled) writes lead.ai.
+  Promise.resolve(runIntake(ctx, callSid, { transcript }))
+    .catch(e => console.error('Receptionist intake error:', e.message));
 });
 
 // ── Lead upsert (deduped by caller phone) ───────────────────────────────────────

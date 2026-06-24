@@ -85,9 +85,10 @@ const Leads = {
     const calls = (l.calls||[]).map(c => {
       const when = _msgTimeFull(c.startedAt);
       const vm = c.voicemail ? `<button onclick="event.stopPropagation();Leads.playVoicemail('${c.id}',this)" style="margin:4px 0 8px;padding:6px 12px;border:1px solid var(--green);background:var(--green-lt);color:var(--green);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">▶ Play voicemail${c.voicemail.durationSec?` · ${c.voicemail.durationSec}s`:''}</button>` : '';
-      if (c.missed) return `<div class="lead-call missed"><span>⚠ Missed call${c.autoSmsSent?' · auto-text sent':''}${c.voicemail?' · 🎙 voicemail':''}</span><span class="lead-call-time">${when}</span></div>${vm}`;
+      const tr = c.transcript ? `<div style="font-size:12px;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px 10px;margin:4px 0 8px;line-height:1.45;"><strong>🎙 Transcript:</strong> ${esc(c.transcript)}</div>` : '';
+      if (c.missed) return `<div class="lead-call missed"><span>⚠ Missed call${c.autoSmsSent?' · auto-text sent':''}${c.voicemail?' · 🎙 voicemail':''}</span><span class="lead-call-time">${when}</span></div>${vm}${tr}`;
       const dur = c.durationSec ? ` · ${Math.floor(c.durationSec/60)}m ${c.durationSec%60}s` : '';
-      return `<div class="lead-call answered"><span>✓ Answered${dur}</span><span class="lead-call-time">${when}</span></div>${vm}`;
+      return `<div class="lead-call answered"><span>✓ Answered${dur}</span><span class="lead-call-time">${when}</span></div>${vm}${tr}`;
     }).join('') || `<div style="font-size:12px;color:var(--faint);padding:6px 0;">No calls logged.</div>`;
 
     Modal.show(`
@@ -98,6 +99,8 @@ const Leads = {
           ${l.phone?`<a href="tel:${esc(l.phone)}" style="font-size:12px;font-weight:500;color:var(--green);text-decoration:none;">${esc(l.phone)} ↗</a>`:''}
         </div>
       </div>
+
+      ${this._aiCard(l)}
 
       <div class="form-group">
         <label class="form-label">Name</label>
@@ -129,10 +132,52 @@ const Leads = {
 
       <div class="modal-actions" style="flex-wrap:wrap;gap:8px;">
         <button class="btn btn-primary btn-full" onclick="Leads.save('${l.id}')">Save</button>
+        ${(l.calls&&l.calls.length)?`<button class="btn btn-full" onclick="Leads.analyze('${l.id}',this)">✨ ${l.ai?'Re-analyze':'Analyze'} with AI</button>`:''}
         ${l.customerId?`<button class="btn btn-full" onclick="ClientProfile.open('${l.customerId}')">View client</button>`:`<button class="btn btn-full" onclick="Leads.convert('${l.id}')">Convert to client</button>`}
         <button class="btn btn-full" style="color:var(--red);" onclick="Leads.remove('${l.id}')">Delete lead</button>
       </div>
     `);
+  },
+
+  // ── AI receptionist intake card ──
+  _qualityChip(q) {
+    const map = { hot:{bg:'#fef2f2',fg:'#dc2626',icon:'🔥',label:'Hot lead'}, warm:{bg:'#fffbeb',fg:'#d97706',icon:'🟡',label:'Warm lead'}, cold:{bg:'#f3f4f6',fg:'#6b7280',icon:'🧊',label:'Cold lead'} };
+    const m = map[q] || map.cold;
+    return `<span style="display:inline-flex;align-items:center;gap:5px;background:${m.bg};color:${m.fg};font-weight:700;font-size:12px;padding:3px 10px;border-radius:20px;white-space:nowrap;">${m.icon} ${m.label}</span>`;
+  },
+  _aiCard(l) {
+    const a = l.ai; if (!a) return '';
+    const tags = [];
+    if (a.serviceNeeded) tags.push(['Service', esc(a.serviceNeeded)]);
+    if (a.budget != null) tags.push(['Budget', fmtMoney(a.budget)]);
+    if (a.desiredDate) tags.push(['When', esc(a.desiredDate)]);
+    const grid = tags.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin:9px 0 0;">${tags.map(t=>`<span style="font-size:12px;background:var(--surface2);border-radius:6px;padding:3px 8px;"><strong>${t[0]}:</strong> ${t[1]}</span>`).join('')}</div>` : '';
+    const fu = a.followUp ? `<div style="display:flex;align-items:center;gap:8px;margin-top:10px;"><div style="flex:1;font-size:12px;color:var(--muted);line-height:1.45;"><strong>Suggested follow-up:</strong> ${esc(a.followUp)}</div><button class="btn btn-sm btn-green" style="flex-shrink:0;" onclick="Leads.useFollowUp('${l.id}')">Use</button></div>` : '';
+    return `<div class="card" style="border:1px solid var(--green-md);background:var(--green-lt);margin-bottom:14px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div style="font-size:11px;font-weight:800;color:var(--green);letter-spacing:.05em;">✨ AI RECEPTIONIST</div>
+        ${this._qualityChip(a.quality)}
+      </div>
+      <div style="font-size:14px;line-height:1.5;margin-top:8px;color:var(--text);">${esc(a.summary)}</div>
+      ${grid}${fu}
+    </div>`;
+  },
+  useFollowUp(id) {
+    const l = this._leads.find(x => x.id === id);
+    const el = document.getElementById('lead-sms');
+    if (l && l.ai && l.ai.followUp && el) { el.value = l.ai.followUp; el.focus(); }
+  },
+  async analyze(id, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = '✨ Analyzing…'; }
+    try {
+      await db.leads.aiIntake(id);
+      this._leads = await db.leads.all();   // refetch so transcript + ai both show
+      toast('AI analysis ready ✓');
+      this.open(id);
+    } catch(e) {
+      toast(e.message || 'Could not analyze', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '✨ Analyze with AI'; }
+    }
   },
 
   async setStatus(id, status) {
