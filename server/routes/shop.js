@@ -730,15 +730,22 @@ router.get('/api/shop/voicemail/:callId', requireAuth, requireRole('full','techn
   const call = h.getById('calls', req.params.callId);
   const sid = call && call.voicemail && call.voicemail.recordingSid;
   const acct = process.env.TWILIO_ACCOUNT_SID, token = process.env.TWILIO_AUTH_TOKEN;
-  if (!sid || !acct || !token) return res.status(404).json({ ok:false, error:'No voicemail for this call' });
+  // Distinct causes get distinct messages so a failed Play button is diagnosable.
+  if (!sid)            return res.status(404).json({ ok:false, error:'No voicemail recording is attached to this call.' });
+  if (!acct || !token) return res.status(503).json({ ok:false, error:'Playback needs TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN set in the server environment.' });
+  if (typeof fetch !== 'function') return res.status(500).json({ ok:false, error:'Server Node runtime is too old for playback (needs the built-in fetch, Node 18+).' });
   try {
     const r = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${acct}/Recordings/${sid}.mp3`, {
       headers: { Authorization: 'Basic ' + Buffer.from(`${acct}:${token}`).toString('base64') },
     });
-    if (!r.ok) return res.status(502).json({ ok:false, error:'Recording fetch failed' });
+    if (!r.ok) {
+      console.error(`Voicemail fetch ${sid} -> HTTP ${r.status}`);
+      return res.status(502).json({ ok:false, error:`Twilio returned ${r.status} for the recording${r.status===404?' (still processing, or it belongs to a different Twilio account).':'.'}` });
+    }
     res.set('Content-Type', 'audio/mpeg');
+    res.set('Cache-Control', 'private, max-age=3600');
     res.send(Buffer.from(await r.arrayBuffer()));
-  } catch (e) { res.status(502).json({ ok:false, error:e.message }); }
+  } catch (e) { console.error('Voicemail proxy error:', e.message); res.status(502).json({ ok:false, error:e.message }); }
 }));
 
 // ── PROTECTED: Blocked dates ──────────────────────────────────────────────────

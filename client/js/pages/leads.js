@@ -199,7 +199,11 @@ const Leads = {
     try {
       btn.disabled = true; btn.textContent = '⏳ Loading…';
       const r = await fetch('/api/shop/voicemail/' + callId, { headers: { 'Authorization': 'Bearer ' + Auth.getToken() } });
-      if (!r.ok) throw new Error('Voicemail not available');
+      if (!r.ok) {
+        let msg = 'Voicemail not available';
+        try { const j = await r.json(); if (j && j.error) msg = j.error; } catch(e) {}
+        throw new Error(msg);
+      }
       const audio = new Audio(URL.createObjectURL(await r.blob()));
       btn.textContent = '🔊 Playing…';
       audio.onended = audio.onerror = () => { btn.textContent = orig; btn.disabled = false; };
