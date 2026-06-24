@@ -17,10 +17,10 @@ h1{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margi
 .field{margin-bottom:14px;}
 .field label{font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:5px;letter-spacing:.02em;}
 .field input{width:100%;padding:13px 14px;border:1px solid var(--border);border-radius:10px;font-size:15px;font-family:var(--font);background:var(--white);color:var(--black);outline:none;transition:border-color .15s;}
-.field input:focus{border-color:var(--black);}
+.field input:focus{border-color:var(--green);}
 .field input::placeholder{color:var(--faint);}
-.btn{width:100%;padding:15px;border:none;border-radius:12px;font-size:16px;font-weight:600;font-family:var(--font);cursor:pointer;background:var(--black);color:var(--white);margin-top:8px;transition:opacity .15s;}
-.btn:hover{opacity:.85;}
+.btn{width:100%;padding:15px;border:none;border-radius:12px;font-size:16px;font-weight:600;font-family:var(--font);cursor:pointer;background:var(--green);color:var(--white);margin-top:8px;transition:opacity .15s;}
+.btn:hover{opacity:.9;}
 .btn:disabled{opacity:.4;cursor:not-allowed;}
 .error{background:#fff5f5;border:1px solid #ffd7d5;border-radius:8px;padding:10px 12px;font-size:13px;color:var(--red);margin-bottom:12px;display:none;}
 .signup-link{text-align:center;margin-top:20px;font-size:14px;color:var(--muted);}
@@ -29,10 +29,10 @@ h1{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margi
 </head>
 <body>
 <div class="card">
-  <div class="logo">
+  <a href="/" class="logo" style="text-decoration:none;color:inherit;">
     <img class="logo-img" src="/icons/icon-192.png" />
     <div class="logo-text">ShopFlow</div>
-  </div>
+  </a>
   <h1>Welcome back</h1>
   <div class="subtitle">Sign in to your ShopFlow account</div>
 
