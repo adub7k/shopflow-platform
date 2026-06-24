@@ -98,10 +98,13 @@ router.get('/api/shop/square/connect/status', requireAuth, async (req, res) => {
 router.post('/api/shop/square/connect/onboard', requireAuth, requireRole('full'), async (req, res) => {
   if (!APP_ID)     return res.status(400).json({ ok: false, error: 'Square Application ID not configured' });
   if (!APP_SECRET) return res.status(400).json({ ok: false, error: 'Square Application Secret not configured (set SQUARE_APPLICATION_SECRET)' });
+  // NOTE: omit `session` → defaults to true. Square Sandbox ONLY supports
+  // session=true; passing session=false there yields a blank authorize page.
+  // In production, true is also the better UX (one-click connect when the seller
+  // is already signed into Square, instead of forcing a fresh login).
   const url = OAUTH_BASE + '/oauth2/authorize'
     + '?client_id=' + encodeURIComponent(APP_ID)
     + '&scope=' + encodeURIComponent(SCOPES.join(' '))
-    + '&session=false'
     + '&state=' + encodeURIComponent(signState(req.shopId))
     + '&redirect_uri=' + encodeURIComponent(REDIRECT_URI);
   res.json({ ok: true, url });
