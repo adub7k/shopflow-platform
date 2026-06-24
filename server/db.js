@@ -232,6 +232,7 @@ const SMS_DEFAULTS = {
   reminder:     "Hi {name}! Reminder: your appointment at {shop} is tomorrow at {time}{barber}. See you then! ✂️",
   rebook:       "Hey {name}! It's been a few weeks — we'd love to have you back at {shop}. Book your next cut anytime 💈",
   missedCall:   "Hi, this is {shop} — sorry we missed your call! How can we help? Reply here or book online anytime.",
+  review:       "Hi {name}, thanks for visiting {shop}! We'd love your feedback — leave us a quick review: {link}",
 };
 
 function buildSms(type, vars, settings) {
@@ -241,7 +242,8 @@ function buildSms(type, vars, settings) {
     .replace(/{shop}/g,   vars.shop   || 'the shop')
     .replace(/{date}/g,   vars.date   || '')
     .replace(/{time}/g,   vars.time   || '')
-    .replace(/{barber}/g, vars.barber ? ` with ${vars.barber}` : '');
+    .replace(/{barber}/g, vars.barber ? ` with ${vars.barber}` : '')
+    .replace(/{link}/g,   vars.link   || '');
 }
 
 module.exports = {
