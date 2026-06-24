@@ -139,6 +139,36 @@ const Dashboard = {
         html.push('</div>');
       }
 
+      // Cleaning-specific overview (operational metrics; money cards gated by role)
+      if (Shop.industry === 'cleaning') {
+        let recurring=[], crews=[];
+        try { [recurring, crews] = await Promise.all([db.recurring.all().catch(()=>[]), db.crews.all().catch(()=>[])]); } catch(e){}
+        const activeRec    = recurring.filter(r=>r.active!==false);
+        const recurClients = new Set(activeRec.map(r=>r.customerId).filter(Boolean)).size;
+        const jobsToday    = appts.length;
+        const activeCleaners = barbers.filter(b=>b.active!==false).length || barbers.length;
+        const crewsWorking = new Set(appts.filter(a=>a.crewId).map(a=>a.crewId)).size;
+        const crewUtil     = crews.length ? Math.round(crewsWorking/crews.length*100) : 0;
+        // Normalize each active contract to a monthly figure for recurring revenue.
+        const perMonth = (r)=>{ switch(r.cadence){
+          case 'daily':    return 30;
+          case 'weekly':   return 52/12;
+          case 'biweekly': return 26/12;
+          case 'monthly':  return 1;
+          case 'custom':   return 30/Math.max(1,(r.customRule&&r.customRule.everyDays)||7);
+          default:         return 52/12; } };
+        const recurMrr = activeRec.reduce((s,r)=>s+(Number(r.price)||0)*perMonth(r),0);
+        const cleanerLabel = V('staff','Cleaner');
+        const cards = [];
+        cards.push(`<div class="metric-card"><div class="metric-label">Jobs Today</div><div class="metric-value">${jobsToday}</div><div class="metric-sub">scheduled</div></div>`);
+        cards.push(`<div class="metric-card"><div class="metric-label">Active Recurring</div><div class="metric-value">${recurClients}</div><div class="metric-sub">client${recurClients!==1?'s':''} on a schedule</div></div>`);
+        if (canSee('revenue')) cards.push(`<div class="metric-card"><div class="metric-label">Recurring Revenue</div><div class="metric-value green">${fmtMoney(recurMrr)}</div><div class="metric-sub">/mo from contracts</div></div>`);
+        if (canSee('revenue')) cards.push(`<div class="metric-card"><div class="metric-label">Revenue / ${esc(cleanerLabel)}</div><div class="metric-value">${fmtMoney(activeCleaners?rev.monthRevenue/activeCleaners:0)}</div><div class="metric-sub">${activeCleaners} ${esc(cleanerLabel.toLowerCase())}${activeCleaners!==1?'s':''} · MTD</div></div>`);
+        cards.push(`<div class="metric-card"><div class="metric-label">Crew Utilization</div><div class="metric-value">${crewUtil}%</div><div class="metric-sub">${crewsWorking} of ${crews.length} crew${crews.length!==1?'s':''} today</div></div>`);
+        html.push('<div class="section-header">Cleaning Overview</div>');
+        html.push('<div class="metric-grid">'+cards.join('')+'</div>');
+      }
+
       // Today's appointments
       html.push('<div class="section-header"><span>Today\'s Appointments</span><button class="btn btn-sm btn-green" onclick="App.nav(\'appointments\')">View All</button></div>');
       if (!appts.length) {
