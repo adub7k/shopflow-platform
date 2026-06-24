@@ -5,3 +5,8 @@ data/uploads/
 .claude/
 .DS_Store
 node_modules/
+
+# Local secrets (Square/etc) — never commit
+.env
+.env.*
+*.local.env
