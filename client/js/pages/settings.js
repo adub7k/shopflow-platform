@@ -590,7 +590,7 @@ const Settings = {
       const data = await db.square.onboard();
       if (data.ok && data.url) { window.location.href = data.url; } // → Square authorize, then back to /shop/:slug
       else { toast(data.error||'Could not start Square connect.','error'); if(btn){btn.textContent='Connect Square Account';btn.disabled=false;} }
-    } catch(e) { toast('Error connecting Square','error'); if(btn){btn.textContent='Connect Square Account';btn.disabled=false;} }
+    } catch(e) { toast(e.message||'Could not connect Square. Check the Square env vars in Railway.','error'); if(btn){btn.textContent='Connect Square Account';btn.disabled=false;} }
   },
   async disconnectSquare() {
     if (!confirm('Disconnect Square? Deposit collection will stop until you reconnect.')) return;
