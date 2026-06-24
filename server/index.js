@@ -66,6 +66,13 @@ if (process.env.SEED_DEMO === 'true') {
   catch(e) { console.error('Demo seed failed:', e.message); }
 }
 
+// Set SEED_CLEANING=true to seed a self-contained cleaning-company demo
+// (Summit Home Cleaning) into the volume on boot. Create-only; unset once seeded.
+if (process.env.SEED_CLEANING === 'true') {
+  try { require('../seed-cleaning-demo')({ force: false }); }
+  catch(e) { console.error('Cleaning demo seed failed:', e.message); }
+}
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => console.log(`ShopFlow Platform on port ${PORT}`));
 setTimeout(runScheduler, 30000);
