@@ -114,6 +114,139 @@ const INDUSTRIES = {
     staffPicker: true,
     serviceCategories: ['manicure','pedicure','gel','acrylic','dip','art','other'],
   },
+
+  cleaning: {
+    label: 'Cleaning Company',
+    vocab: {
+      staff: 'Cleaner', staffPlural: 'Cleaners', station: 'Crew',
+      notes: 'Job notes', bookCta: 'Request a cleaning', yourStaff: 'Your cleaner',
+    },
+    services: [
+      { name: 'Standard Clean',  category: 'standard',  price: 120, duration: 120 },
+      { name: 'Deep Clean',      category: 'deep',      price: 250, duration: 240 },
+      { name: 'Move-Out Clean',  category: 'move',      price: 300, duration: 300 },
+      { name: 'Recurring Weekly',category: 'recurring', price: 100, duration: 120 },
+    ],
+    // `en-route` is an operational state (crew on the way); canonical confirmed/
+    // done/no-show keys are preserved so revenue/loyalty/reminder logic is unchanged.
+    statuses: [
+      { key: 'confirmed',   label: 'Scheduled',   confirmed: true, occupiesSlot: true },
+      { key: 'en-route',    label: 'En Route',                     occupiesSlot: true },
+      { key: 'in-progress', label: 'In Progress',                  occupiesSlot: true },
+      { key: 'done',        label: 'Completed',   terminal: true },
+      { key: 'no-show',     label: 'No Show',     noShow: true },
+    ],
+    // Address/size captured on the job now; promoted to a Properties module later
+    // (see docs/v2/03-database-schema.md) without changing these field keys.
+    customFields: [
+      { key: 'serviceAddress', label: 'Service Address', type: 'text', required: true },
+      { key: 'bedrooms',       label: 'Bedrooms',        type: 'text' },
+      { key: 'bathrooms',      label: 'Bathrooms',       type: 'text' },
+    ],
+    supportsFleet: false,
+    deposit: { enabled: false, amount: 25, message: 'A deposit is required to secure your booking.' },
+    inspoDefault: 'off',
+    // The office assigns a crew; clients don't pick an individual cleaner.
+    staffPicker: false,
+    serviceCategories: ['standard','deep','move','recurring','commercial','other'],
+    supportsQuotes: true,
+  },
+
+  tint: {
+    label: 'Tint Shop',
+    vocab: {
+      staff: 'Installer', staffPlural: 'Installers', station: 'Bay',
+      notes: 'Vehicle notes', bookCta: 'Book a tint', yourStaff: 'Your installer',
+    },
+    services: [
+      { name: 'Front Two Windows', category: 'tint',    price: 80,  duration: 60 },
+      { name: 'Full Vehicle Tint', category: 'tint',    price: 250, duration: 180 },
+      { name: 'Ceramic Full Tint', category: 'ceramic', price: 400, duration: 210 },
+      { name: 'Tint Removal',      category: 'removal',  price: 120, duration: 90 },
+    ],
+    // Reuses the detail-shop operational flow (curing/ready) and canonical keys.
+    statuses: [
+      { key: 'confirmed',   label: 'Confirmed',           confirmed: true, occupiesSlot: true },
+      { key: 'dropped-off', label: 'Vehicle Dropped Off', occupiesSlot: true },
+      { key: 'in-progress', label: 'In Progress',         occupiesSlot: true },
+      { key: 'curing',      label: 'Curing',              occupiesSlot: true },
+      { key: 'ready',       label: 'Ready for Pickup' },
+      { key: 'done',        label: 'Completed',           terminal: true },
+      { key: 'no-show',     label: 'No Show',             noShow: true },
+    ],
+    customFields: [
+      { key: 'vehicleYear',  label: 'Year',  type: 'text', required: true },
+      { key: 'vehicleMake',  label: 'Make',  type: 'text', required: true },
+      { key: 'vehicleModel', label: 'Model', type: 'text', required: true },
+      { key: 'vehicleColor', label: 'Color', type: 'text' },
+    ],
+    vehicleSizes: [
+      { key: 'sedan', label: 'Sedan / Coupe' },
+      { key: 'suv',   label: 'SUV / Crossover' },
+      { key: 'truck', label: 'Truck / XL' },
+    ],
+    supportsFleet: true,
+    deposit: { enabled: true, amount: 50, message: 'A $50 deposit is required to book your appointment.' },
+    inspoDefault: 'off',
+    staffPicker: false,
+    serviceCategories: ['tint','ceramic','removal','windshield','other'],
+    supportsQuotes: true,
+  },
+
+  pressure: {
+    label: 'Pressure Washing',
+    vocab: {
+      staff: 'Technician', staffPlural: 'Technicians', station: 'Crew',
+      notes: 'Job notes', bookCta: 'Request a quote', yourStaff: 'Your technician',
+    },
+    services: [
+      { name: 'Driveway Wash',     category: 'driveway',   price: 120, duration: 60 },
+      { name: 'House Soft Wash',   category: 'house',      price: 300, duration: 180 },
+      { name: 'Deck / Patio Wash', category: 'deck',       price: 200, duration: 120 },
+      { name: 'Commercial Flatwork',category: 'commercial',price: 500, duration: 240 },
+    ],
+    statuses: [
+      { key: 'confirmed',   label: 'Scheduled',   confirmed: true, occupiesSlot: true },
+      { key: 'en-route',    label: 'En Route',                     occupiesSlot: true },
+      { key: 'in-progress', label: 'In Progress',                  occupiesSlot: true },
+      { key: 'done',        label: 'Completed',   terminal: true },
+      { key: 'no-show',     label: 'No Show',     noShow: true },
+    ],
+    customFields: [
+      { key: 'serviceAddress', label: 'Service Address', type: 'text', required: true },
+      { key: 'surfaceType',    label: 'Surface Type',    type: 'text' },
+    ],
+    supportsFleet: false,
+    deposit: { enabled: false, amount: 25, message: 'A deposit is required to secure your booking.' },
+    inspoDefault: 'off',
+    staffPicker: false,
+    serviceCategories: ['driveway','house','deck','roof','commercial','other'],
+    supportsQuotes: true,
+  },
+
+  other: {
+    label: 'Other Service Business',
+    vocab: {
+      staff: 'Team Member', staffPlural: 'Team', station: 'Station',
+      notes: 'Notes', bookCta: 'Book an appointment', yourStaff: 'Your specialist',
+    },
+    services: [
+      { name: 'Consultation',    category: 'service', price: 50,  duration: 30 },
+      { name: 'Standard Service',category: 'service', price: 100, duration: 60 },
+    ],
+    statuses: [
+      { key: 'confirmed',   label: 'Confirmed',   confirmed: true, occupiesSlot: true },
+      { key: 'in-progress', label: 'In Progress',                  occupiesSlot: true },
+      { key: 'done',        label: 'Done',        terminal: true },
+      { key: 'no-show',     label: 'No Show',     noShow: true },
+    ],
+    customFields: [],
+    supportsFleet: false,
+    deposit: { enabled: false, amount: 10, message: 'A deposit is required to secure your appointment.' },
+    inspoDefault: 'off',
+    staffPicker: true,
+    serviceCategories: ['service','other'],
+  },
 };
 
 const DEFAULT_INDUSTRY = 'barbershop';
