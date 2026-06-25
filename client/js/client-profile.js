@@ -300,7 +300,7 @@ function _buildProfileHtml(data, services, messages) {
     return out;
   };
   const thumb = (p) => `<a href="${esc(p.url)}" target="_blank" rel="noopener" title="${esc(p.phase || '')} · ${fmtDateShort(p.date) || ''}" style="display:block;width:62px;height:62px;border-radius:8px;overflow:hidden;border:1px solid var(--border);flex-shrink:0;"><img src="${esc(p.url)}" loading="lazy" style="width:100%;height:100%;object-fit:cover;"></a>`;
-  const stat = (label, val, color) => `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center;flex:1;min-width:108px;"><div style="font-size:10px;color:var(--faint);margin-bottom:3px;letter-spacing:.04em;">${label}</div><div style="font-size:19px;font-weight:800;color:${color || 'var(--text)'};">${val}</div></div>`;
+  const stat = (label, val, color) => `<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center;min-width:0;"><div style="font-size:10px;color:var(--faint);margin-bottom:3px;letter-spacing:.04em;">${label}</div><div style="font-size:19px;font-weight:800;color:${color || 'var(--text)'};">${val}</div></div>`;
   const qa = (onclick, ic, label, href) => href
     ? `<a class="cp-qa" href="${href}"><span class="ic">${ic}</span>${label}</a>`
     : `<button class="cp-qa" onclick="${onclick}"><span class="ic">${ic}</span>${label}</button>`;
@@ -331,7 +331,7 @@ function _buildProfileHtml(data, services, messages) {
   </div>`;
 
   // Quick stats
-  h += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+  h += `<div class="cp-stats">
     ${stat('LIFETIME SPEND', fmtMoney(totalRevenue), 'var(--green)')}
     ${stat('TOTAL VISITS', totalVisits)}
     ${stat('AVG TICKET', fmtMoney(avgTicket))}
@@ -340,7 +340,7 @@ function _buildProfileHtml(data, services, messages) {
 
   // Quick actions
   if (write) {
-    h += `<div style="display:flex;gap:8px;flex-wrap:wrap;">
+    h += `<div class="cp-actions">
       ${qa(`ClientProfile.schedule('${c.id}')`, '📅', 'Schedule')}
       ${qa(`ClientProfile.invoicePrompt('${c.id}')`, '🧾', 'Invoice')}
       ${qa(`ClientProfile.textPrompt('${c.id}')`, '💬', 'Send Text')}
