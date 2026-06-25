@@ -85,14 +85,6 @@ router.post('/api/twilio/voice/:shopId', verifyTwilio, (req, res) => {
     answerOnBridge: true,
     callerId: req.body.To || undefined,     // show the tracking number as caller ID
     timeout: 20,
-    // Record the answered conversation (dual channel: caller + shop on separate
-    // tracks). Recording starts when the forward leg answers, so an unanswered
-    // ring-out produces nothing to attach. The status callback fires once the
-    // recording is ready and stores its sid on the call for later playback.
-    record: 'record-from-answer-dual',
-    recordingStatusCallback: `/api/twilio/voice/recording/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
-    recordingStatusCallbackEvent: 'completed',
-    recordingStatusCallbackMethod: 'POST',
     action: `/api/twilio/voice/complete/${ctx.shopId}`,
     method: 'POST',
   });
