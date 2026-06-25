@@ -44,6 +44,9 @@ const ClientProfile = {
       (c.vehicles || []).forEach(v => { if (!v.id) { v.id = genId('veh'); changed = true; } });
       if (changed) { try { await db.customers.save(c); } catch (e) { /* non-fatal */ } }
       this._data = data; this._messages = messages; this._services = services;
+      // Make this customer editable from any entry point (Dashboard/Leads open the
+      // profile without rendering the Clients list, so Clients._data may be empty).
+      try { if (typeof Clients !== 'undefined') { Clients._data = Clients._data || []; const i = Clients._data.findIndex(x => x.id === c.id); if (i >= 0) Clients._data[i] = c; else Clients._data.push(c); } } catch (e) { /* ignore */ }
       title.textContent = c.name;
       body.innerHTML = _buildProfileHtml(data, services, messages);
       body.scrollTop = 0;
@@ -56,6 +59,14 @@ const ClientProfile = {
     const overlay = document.getElementById('cp-overlay');
     if (overlay) overlay.classList.remove('open');
     document.body.style.overflow = '';
+  },
+
+  // Close the overlay, then jump to the appointment form prefilled for this client.
+  schedule(custId) {
+    const c = this._data && this._data.customer;
+    if (typeof Appointments !== 'undefined') Appointments._prefill = { customerId: custId, customerName: c ? c.name : '', customerPhone: c ? (c.phone || '') : '' };
+    this.close();
+    if (typeof App !== 'undefined') App.nav('appointments');
   },
 
   // ── Membership ──────────────────────────────────────────────────────────────
@@ -316,7 +327,7 @@ function _buildProfileHtml(data, services, messages) {
         · Last visit ${lastService ? fmtDateShort(lastService.date) : '—'}
       </div>
     </div>
-    ${write ? `<button onclick="Clients.openForm('${c.id}')" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;color:var(--text);cursor:pointer;flex-shrink:0;">Edit</button>` : ''}
+    ${write ? `<button onclick="ClientProfile.close();Clients.openForm('${c.id}')" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;color:var(--text);cursor:pointer;flex-shrink:0;">Edit</button>` : ''}
   </div>`;
 
   // Quick stats
@@ -330,7 +341,7 @@ function _buildProfileHtml(data, services, messages) {
   // Quick actions
   if (write) {
     h += `<div style="display:flex;gap:8px;flex-wrap:wrap;">
-      ${qa(`Clients.bookAppointment('${c.id}')`, '📅', 'Schedule')}
+      ${qa(`ClientProfile.schedule('${c.id}')`, '📅', 'Schedule')}
       ${qa(`ClientProfile.invoicePrompt('${c.id}')`, '🧾', 'Invoice')}
       ${qa(`ClientProfile.textPrompt('${c.id}')`, '💬', 'Send Text')}
       ${c.phone ? qa('', '📞', 'Call', 'tel:' + c.phone) : ''}
