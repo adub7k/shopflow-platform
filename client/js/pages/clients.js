@@ -1,7 +1,7 @@
 // ── Clients ───────────────────────────────────────────────────────────────────
 const Clients = {
   _data: [], _search: '', _retentionDays: 90, _retentionOpen: false,
-  _view: 'list', _profileId: null, _messages: [], _profileData: null,
+  _view: 'list', _profileId: null, _messages: [], _profileData: null, _tagFilter: '',
 
   async render() {
     const el=document.getElementById('page-clients'); if(!el)return;
@@ -37,21 +37,30 @@ const Clients = {
         ${this._retentionOpen ? this._buildRetention(atRisk, noVisitYet) : ''}
       </div>`);
 
+      // ── Tag filter (tags are filterable across the CRM) ──
+      const allTags = [...new Set(this._data.flatMap(c => c.tags || []))].sort();
+      if (allTags.length) {
+        const chip = (t, label) => `<span onclick="Clients._setTag('${String(t).replace(/'/g, "\\'")}')" style="cursor:pointer;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid ${this._tagFilter === t ? 'var(--green)' : 'var(--border)'};background:${this._tagFilter === t ? 'var(--green-lt)' : 'var(--surface)'};color:${this._tagFilter === t ? 'var(--green)' : 'var(--muted)'};">${label}</span>`;
+        html.push(`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">${chip('', 'All')}${allTags.map(t => chip(t, esc(t))).join('')}</div>`);
+      }
+
       // ── All Clients ──
-      const filtered = this._search ? this._data.filter(c=>c.name.toLowerCase().includes(this._search.toLowerCase())||(c.phone||'').includes(this._search)) : this._data;
+      let filtered = this._search ? this._data.filter(c=>c.name.toLowerCase().includes(this._search.toLowerCase())||(c.phone||'').includes(this._search)) : this._data;
+      if (this._tagFilter) filtered = filtered.filter(c => (c.tags || []).includes(this._tagFilter));
 
       html.push(`<div class="section-header">All Clients <span style="font-size:11px;font-weight:400;color:var(--faint);">${filtered.length} total</span></div>`);
 
       if(!filtered.length){
-        html.push('<div class="card"><div class="empty-state"><div class="empty-icon">👤</div><div class="empty-text">'+(this._search?'No clients found':'No clients yet')+'</div></div></div>');
+        html.push('<div class="card"><div class="empty-state"><div class="empty-icon">👤</div><div class="empty-text">'+(this._search||this._tagFilter?'No clients found':'No clients yet')+'</div></div></div>');
       } else {
         html.push('<div class="list-card">');
         filtered.forEach(c=>{
           const rewardReady=(c.loyaltyPoints||0)>=(loyalty.visitsForReward||10);
+          const tagBadges=(c.tags||[]).slice(0,2).map(t=>`<span style="font-size:9px;font-weight:700;color:var(--green);background:var(--green-lt);border:1px solid #b3dfbf;border-radius:5px;padding:1px 5px;margin-left:4px;">${esc(t)}</span>`).join('');
           html.push(`<div class="list-row" onclick="ClientProfile.open('${c.id}')">
             ${avatarEl(c.name,40)}
             <div class="list-main">
-              <div class="list-name">${c.name}${rewardReady?' 🎉':''}</div>
+              <div class="list-name">${c.name}${rewardReady?' 🎉':''}${tagBadges}</div>
               <div class="list-sub">${c.phone||'No phone'}${c.totalVisits?' · '+c.totalVisits+' visits':''}</div>
             </div>
             <div class="list-right">
@@ -169,6 +178,8 @@ const Clients = {
   },
 
   _filter(v) { this._search=v; this.render(); },
+
+  _setTag(t) { this._tagFilter = (this._tagFilter === t) ? '' : t; this.render(); },
 
   openForm(id) {
     const c=id?this._data.find(x=>x.id===id):null;

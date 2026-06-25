@@ -106,7 +106,16 @@ textarea.form-input{resize:vertical;min-height:80px;}
 #cp-header{display:flex;align-items:center;justify-content:space-between;padding:0 16px;height:var(--topbar-h);background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;position:sticky;top:0;z-index:1;}
 #cp-back-btn{background:none;border:none;cursor:pointer;color:var(--green);padding:6px;border-radius:8px;display:flex;align-items:center;justify-content:center;width:36px;height:36px;}
 #cp-header-name{font-size:16px;font-weight:700;color:var(--text);letter-spacing:-.02em;text-align:center;flex:1;}
-#cp-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:20px;max-width:780px;margin:0 auto;width:100%;}
+#cp-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:20px;max-width:1180px;margin:0 auto;width:100%;}
+.cp-grid{display:grid;grid-template-columns:1.7fr 1fr;gap:18px;align-items:start;}
+@media(max-width:880px){.cp-grid{grid-template-columns:1fr;}}
+.cp-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:16px;}
+.cp-sec{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px;}
+.cp-qa{flex:1;min-width:88px;display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 8px;font-size:12px;font-weight:600;color:var(--text);cursor:pointer;text-decoration:none;transition:border-color .15s,color .15s;}
+.cp-qa:hover{border-color:var(--green);color:var(--green);}
+.cp-qa .ic{font-size:18px;}
+.cp-tag{display:inline-flex;align-items:center;gap:4px;background:var(--green-lt);color:var(--green);border:1px solid #b3dfbf;border-radius:20px;padding:3px 10px;font-size:11px;font-weight:700;cursor:pointer;user-select:none;}
+.cp-tag.off{background:var(--surface);color:var(--muted);border-color:var(--border);}
 
 /* ── Messages ── */
 .msg-thread{display:flex;flex-direction:column;height:calc(100vh - var(--topbar-h) - 70px);} /* 70px = bottom nav */
