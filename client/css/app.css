@@ -74,7 +74,7 @@ textarea.form-input{resize:vertical;min-height:80px;}
 .badge-yellow{background:#fffbeb;color:var(--orange);border:1px solid #fde68a;}
 .badge-red{background:#fef2f2;color:var(--red);border:1px solid #fecaca;}
 .badge-gray{background:var(--surface2);color:var(--muted);border:1px solid var(--border);}
-#modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:flex-end;justify-content:center;}
+#modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:500;align-items:flex-end;justify-content:center;}
 #modal-overlay.open{display:flex;}
 #modal-box{background:var(--surface);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;animation:slideUp .25s ease;}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
