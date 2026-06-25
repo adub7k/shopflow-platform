@@ -82,13 +82,15 @@ const Leads = {
       return `<button class="lead-status-opt ${l.status===k?'active':''}" style="${l.status===k?`background:${sm.bg};color:${sm.fg};border-color:${sm.fg};`:''}" onclick="Leads.setStatus('${l.id}','${k}')">${sm.label}</button>`;
     }).join('');
 
+    const mediaBtn = (cid, kind, dur) => `<button onclick="event.stopPropagation();Leads.playRecording('${cid}',this,'${kind}')" style="margin:4px 0 8px;padding:6px 12px;border:1px solid var(--green);background:var(--green-lt);color:var(--green);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">▶ Play ${kind}${dur?` · ${dur}s`:''}</button>`;
     const calls = (l.calls||[]).map(c => {
       const when = _msgTimeFull(c.startedAt);
-      const vm = c.voicemail ? `<button onclick="event.stopPropagation();Leads.playVoicemail('${c.id}',this)" style="margin:4px 0 8px;padding:6px 12px;border:1px solid var(--green);background:var(--green-lt);color:var(--green);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">▶ Play voicemail${c.voicemail.durationSec?` · ${c.voicemail.durationSec}s`:''}</button>` : '';
+      const vm  = c.voicemail ? mediaBtn(c.id,'voicemail',c.voicemail.durationSec) : '';
+      const rec = c.recording ? mediaBtn(c.id,'recording',c.recording.durationSec) : '';
       const tr = c.transcript ? `<div style="font-size:12px;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px 10px;margin:4px 0 8px;line-height:1.45;"><strong>🎙 Transcript:</strong> ${esc(c.transcript)}</div>` : '';
       if (c.missed) return `<div class="lead-call missed"><span>⚠ Missed call${c.autoSmsSent?' · auto-text sent':''}${c.voicemail?' · 🎙 voicemail':''}</span><span class="lead-call-time">${when}</span></div>${vm}${tr}`;
       const dur = c.durationSec ? ` · ${Math.floor(c.durationSec/60)}m ${c.durationSec%60}s` : '';
-      return `<div class="lead-call answered"><span>✓ Answered${dur}</span><span class="lead-call-time">${when}</span></div>${vm}${tr}`;
+      return `<div class="lead-call answered"><span>✓ Answered${dur}${c.recording?' · 🎙 recorded':''}</span><span class="lead-call-time">${when}</span></div>${rec}${tr}`;
     }).join('') || `<div style="font-size:12px;color:var(--faint);padding:6px 0;">No calls logged.</div>`;
 
     Modal.show(`
@@ -239,13 +241,17 @@ const Leads = {
 
   // Stream + play a voicemail recording. The audio is served by an authed proxy
   // (JWT bearer), so a bare <audio src> won't work — fetch it as a blob first.
-  async playVoicemail(callId, btn) {
+  // Stream + play a call recording or voicemail. The audio is served by an authed
+  // proxy (JWT bearer), so a bare <audio src> won't work — fetch it as a blob first.
+  // kind: 'recording' (answered-call audio) | 'voicemail' (default).
+  async playRecording(callId, btn, kind) {
+    kind = kind === 'recording' ? 'recording' : 'voicemail';
     const orig = btn.textContent;
     try {
       btn.disabled = true; btn.textContent = '⏳ Loading…';
-      const r = await fetch('/api/shop/voicemail/' + callId, { headers: { 'Authorization': 'Bearer ' + Auth.getToken() } });
+      const r = await fetch('/api/shop/call-media/' + callId + '?kind=' + kind, { headers: { 'Authorization': 'Bearer ' + Auth.getToken() } });
       if (!r.ok) {
-        let msg = 'Voicemail not available';
+        let msg = (kind === 'recording' ? 'Recording' : 'Voicemail') + ' not available';
         try { const j = await r.json(); if (j && j.error) msg = j.error; } catch(e) {}
         throw new Error(msg);
       }
@@ -253,8 +259,10 @@ const Leads = {
       btn.textContent = '🔊 Playing…';
       audio.onended = audio.onerror = () => { btn.textContent = orig; btn.disabled = false; };
       await audio.play();
-    } catch(e) { toast(e.message || 'Could not play voicemail', 'error'); btn.disabled = false; btn.textContent = orig; }
+    } catch(e) { toast(e.message || 'Could not play audio', 'error'); btn.disabled = false; btn.textContent = orig; }
   },
+  // Back-compat alias.
+  playVoicemail(callId, btn) { return this.playRecording(callId, btn, 'voicemail'); },
 
   async remove(id) {
     if (!confirm('Delete this lead and its call history?')) return;

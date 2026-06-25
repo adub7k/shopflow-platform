@@ -85,6 +85,14 @@ router.post('/api/twilio/voice/:shopId', verifyTwilio, (req, res) => {
     answerOnBridge: true,
     callerId: req.body.To || undefined,     // show the tracking number as caller ID
     timeout: 20,
+    // Record the answered conversation (dual channel: caller + shop on separate
+    // tracks). Recording starts when the forward leg answers, so an unanswered
+    // ring-out produces nothing to attach. The status callback fires once the
+    // recording is ready and stores its sid on the call for later playback.
+    record: 'record-from-answer-dual',
+    recordingStatusCallback: `/api/twilio/voice/recording/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
+    recordingStatusCallbackEvent: 'completed',
+    recordingStatusCallbackMethod: 'POST',
     action: `/api/twilio/voice/complete/${ctx.shopId}`,
     method: 'POST',
   });
@@ -218,6 +226,27 @@ router.post('/api/twilio/voice/voicemail/:shopId', verifyTwilio, (req, res) => {
   vr.say('Thanks. We will call you right back. Goodbye.');
   vr.hangup();
   res.type('text/xml').send(vr.toString());
+});
+
+// ── 5b. Answered-call recording finished → attach it to the call ─────────────────
+// Fired by the <Dial recordingStatusCallback> once the bridged conversation's
+// recording is ready. Stored alongside the voicemail (call.recording, distinct
+// from call.voicemail) and played back through the same authed media proxy. We
+// attach it whenever a sid is present; the Leads UI only surfaces it for answered
+// calls, so a stray recording from a screened/carrier-VM leg stays hidden.
+router.post('/api/twilio/voice/recording/:shopId', verifyTwilio, (req, res) => {
+  const ctx = shopCtx(req.params.shopId);
+  const callSid = req.query.callSid;
+  const recordingSid = req.body.RecordingSid;
+  const durationSec = parseInt(req.body.RecordingDuration || '0', 10) || 0;
+  if (ctx && callSid && recordingSid) {
+    const call = ctx.h.getById('calls', callSid);
+    if (call) {
+      call.recording = { recordingSid, durationSec, recordedAt: new Date().toISOString() };
+      ctx.h.upsert('calls', call);
+    }
+  }
+  res.type('text/xml').send('<Response></Response>'); // ACK (status callback ignores TwiML)
 });
 
 // ── 6. Voicemail transcription ready → AI receptionist intake ───────────────────

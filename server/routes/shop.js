@@ -729,14 +729,18 @@ router.post('/api/shop/leads/:id/sms', requireAuth, requireRole('full','technici
   } catch(e) { res.json({ ok:false, error:e.message }); }
 }));
 
-// Stream a call's voicemail recording, proxied with Twilio auth so the media URL
-// and account creds are never exposed to the browser. Returns audio/mpeg.
-router.get('/api/shop/voicemail/:callId', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+// Stream a call's audio (voicemail OR the answered-call recording), proxied with
+// Twilio auth so the media URL and account creds are never exposed to the browser.
+// `?kind=recording` serves the bridged-call recording; default is the voicemail.
+// Registered on both /voicemail (back-compat) and /call-media.
+router.get(['/api/shop/voicemail/:callId','/api/shop/call-media/:callId'], requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const call = h.getById('calls', req.params.callId);
-  const sid = call && call.voicemail && call.voicemail.recordingSid;
+  const kind = req.query.kind === 'recording' ? 'recording' : 'voicemail';
+  const media = call && call[kind];
+  const sid = media && media.recordingSid;
   const acct = process.env.TWILIO_ACCOUNT_SID, token = process.env.TWILIO_AUTH_TOKEN;
   // Distinct causes get distinct messages so a failed Play button is diagnosable.
-  if (!sid)            return res.status(404).json({ ok:false, error:'No voicemail recording is attached to this call.' });
+  if (!sid)            return res.status(404).json({ ok:false, error:`No ${kind==='recording'?'call recording':'voicemail recording'} is attached to this call.` });
   if (!acct || !token) return res.status(503).json({ ok:false, error:'Playback needs TWILIO_ACCOUNT_SID + TWILIO_AUTH_TOKEN set in the server environment.' });
   if (typeof fetch !== 'function') return res.status(500).json({ ok:false, error:'Server Node runtime is too old for playback (needs the built-in fetch, Node 18+).' });
   try {
