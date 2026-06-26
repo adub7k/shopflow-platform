@@ -152,21 +152,20 @@ const Clients = {
         <input class="form-input" id="ret-phone" value="${phone}" />
       </div>
       <div class="modal-actions">
-        <button id="ret-btn" class="btn btn-green btn-full" onclick="Clients._doRetentionSend('${id}','${name}')">Send Text</button>
+        <button id="ret-btn" class="btn btn-green btn-full" onclick="Clients._doRetentionSend('${id}','${name}')">📱 Open in Messages</button>
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
       </div>`);
   },
 
-  async _doRetentionSend(customerId, customerName) {
+  _doRetentionSend(customerId, customerName) {
     const msg = document.getElementById('ret-msg')?.value.trim();
     const phone = document.getElementById('ret-phone')?.value.trim();
     if (!msg || !phone) { toast('Fill in all fields','warning'); return; }
-    const btn = document.getElementById('ret-btn'); disableBtn(btn);
-    try {
-      const r = await db.sms.send({ to: phone, body: msg, customerId, customerName });
-      if (r.ok) { Modal.close(); toast('Text sent ✓'); }
-      else toast(r.error||'Could not send text — check Twilio settings','error');
-    } catch(e) { toast('Could not send text','error'); enableBtn(btn); }
+    const tel = phone.replace(/[^\d+]/g,'');
+    Modal.close();
+    // Open the owner's Messages app prefilled (iPhone sms: deep link) — they send
+    // from their own number. No Twilio/A2P required.
+    window.location.href = 'sms:' + tel + '&body=' + encodeURIComponent(msg);
   },
 
   async markContacted(id, name) {

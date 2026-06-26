@@ -18,6 +18,14 @@ const _cpApptKey = (a) => { const cf = a.customFields || {}; return [_cpVn(cf.ve
 const _cpMatch   = (a, v) => (a.vehicleId && a.vehicleId === v.id) || (_cpVehKey(v) !== '||' && _cpApptKey(a) === _cpVehKey(v));
 function _cpNowTime() { const d = new Date(); let h = d.getHours(); const m = d.getMinutes(); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return `${h}:${String(m).padStart(2, '0')} ${ap}`; }
 function _cpDaysAgo(date) { return Math.floor((Date.now() - new Date(date + 'T12:00:00')) / 86400000); }
+// Open the device Messages app prefilled with recipient + draft (iPhone sms: deep
+// link — no Twilio/A2P needed; the owner sends from their own number). iOS uses
+// `&body`; we strip the number to digits/+.
+function _cpSms(phone, body) {
+  const tel = String(phone || '').replace(/[^\d+]/g, '');
+  if (!tel) { toast('No phone number on file', 'warning'); return; }
+  window.location.href = 'sms:' + tel + (body ? '&body=' + encodeURIComponent(body) : '');
+}
 
 const ClientProfile = {
   _data: null, _services: [], _messages: [], _recs: [],
@@ -228,27 +236,9 @@ const ClientProfile = {
     } catch (e) { toast(e.message || 'Could not record invoice', 'error'); enableBtn(btn); }
   },
 
-  // ── Texting (quick action + retention follow-ups) ───────────────────────────
-  textPrompt(custId) { this._openText(custId, ''); },
-  sendRec(custId, i) { const rec = (this._recs || [])[i]; this._openText(custId, rec ? rec.sms : ''); },
-  _openText(custId, prefill) {
-    const c = this._data.customer;
-    if (!c.phone) { toast('No phone number on file', 'warning'); return; }
-    Modal.show(`
-      <div class="modal-title">💬 Text ${esc(c.name)}</div>
-      <div class="form-group"><label class="form-label">Message</label><textarea class="form-input" id="cp-sms" style="min-height:110px;">${esc(prefill || '')}</textarea></div>
-      <div class="modal-actions"><button id="cp-sms-btn" class="btn btn-green btn-full" onclick="ClientProfile.sendText('${custId}')">Send Text</button><button class="btn btn-full" onclick="Modal.close()">Cancel</button></div>`);
-  },
-  async sendText(custId) {
-    const c = this._data.customer; const msg = _cpVal('cp-sms');
-    if (!msg) { toast('Enter a message', 'warning'); return; }
-    const btn = document.getElementById('cp-sms-btn'); disableBtn(btn);
-    try {
-      const r = await db.sms.send({ to: c.phone, body: msg, customerId: c.id, customerName: c.name });
-      if (r.ok) { Modal.close(); toast('Text sent ✓'); this.open(custId); }
-      else { toast(r.error || 'Could not send — check Twilio in Settings', 'error'); enableBtn(btn); }
-    } catch (e) { toast(e.message || 'Could not send', 'error'); enableBtn(btn); }
-  },
+  // ── Texting — opens Messages prefilled (no A2P/Twilio needed) ───────────────
+  textPrompt(custId) { _cpSms(this._data.customer.phone, ''); },
+  sendRec(custId, i) { const rec = (this._recs || [])[i]; _cpSms(this._data.customer.phone, rec ? rec.sms : ''); },
 };
 
 // ── Retention recommendations (heuristic, from service history) ────────────────
