@@ -83,7 +83,7 @@ const callTrackingOn = (settings) => settings.callTracking?.enabled !== false; /
 // voice. Per-shop override via settings.aiReceptionist.greeter.voice; global
 // default via env. (Voice names: Polly.Joanna-Neural / Matthew-Neural /
 // Stephen-Neural / Ruth-Neural / Danielle-Neural …)
-const DEFAULT_RECEPTIONIST_VOICE = process.env.RECEPTIONIST_VOICE || 'Polly.Joanna-Neural';
+const DEFAULT_RECEPTIONIST_VOICE = process.env.RECEPTIONIST_VOICE || 'Polly.Matthew-Neural';
 const greeterVoice = (settings) => (settings && settings.aiReceptionist && settings.aiReceptionist.greeter && settings.aiReceptionist.greeter.voice) || DEFAULT_RECEPTIONIST_VOICE;
 
 // Append the forward <Dial> to a VoiceResponse — the proven ring-the-shop path,
@@ -102,6 +102,22 @@ function buildDial(vr, ctx, callSid, realE164, callerId, intentLabel) {
   });
   const wq = `?callSid=${encodeURIComponent(callSid)}` + (intentLabel ? `&intent=${encodeURIComponent(intentLabel)}` : '');
   dial.number({ url: `/api/twilio/voice/whisper/${ctx.shopId}${wq}`, method: 'POST' }, realE164);
+}
+
+// Record a voicemail (Twilio-transcribed → feeds the AI intake). Shared by the
+// plain no-answer path and the AI-receptionist path so both produce identical,
+// transcribed recordings.
+function recordVoicemail(vr, ctx, callSid) {
+  vr.record({
+    action: `/api/twilio/voice/voicemail/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
+    method: 'POST',
+    maxLength: 120,
+    playBeep: true,
+    timeout: 5,
+    finishOnKey: '#',
+    transcribe: true,
+    transcribeCallback: `/api/twilio/voice/transcription/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
+  });
 }
 
 // ── 1. Incoming call ────────────────────────────────────────────────────────────
@@ -128,39 +144,25 @@ router.post('/api/twilio/voice/:shopId', verifyTwilio, (req, res) => {
   });
   master.get('shops').find({ id: ctx.shopId }).assign({ lastActivity: new Date().toISOString() }).write();
 
-  // AI receptionist greeting (per-shop, default OFF; needs an API key). Greets the
-  // caller, listens for what they want, then hands off to /voice/intent. If the
-  // caller says nothing the <Gather> falls through to the forward below, so a
-  // caller is NEVER stranded — and with the toggle off this whole block is skipped,
-  // making the TwiML byte-identical to the plain forward.
-  if (greeterOn(ctx.settings) && process.env.ANTHROPIC_API_KEY) {
-    const options = greeterOptions(ctx.h.getAll('services'));
-    const greeting = buildGreeting(ctx.shopName, options, ctx.settings.aiReceptionist?.greeter?.prompt);
-    const gather = vr.gather({
-      input: 'speech', speechTimeout: 'auto', speechModel: 'phone_call',
-      hints: options.join(', '),
-      action: `/api/twilio/voice/intent/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
-      method: 'POST',
-    });
-    gather.say({ voice: greeterVoice(ctx.settings) }, greeting);
-  }
-
-  // Ring the real phone. answerOnBridge → caller hears ringing, not silence.
+  // Ring the shop FIRST — no AI gate on callers the shop can answer (better for
+  // a small owner-operated business: regulars reach a human instantly). The AI
+  // receptionist engages only when the shop doesn't pick up — see /voice/complete.
+  // answerOnBridge → caller hears ringing, not silence.
   buildDial(vr, ctx, callSid, realE164, req.body.To);
   res.type('text/xml').send(vr.toString());
 });
 
-// ── 1b. AI receptionist: caller's spoken answer → classify + tag + forward ───────
-// The <Gather input="speech"> action. Classifies the caller's words into one of the
-// shop's services, tags the lead's interest, then forwards exactly like the plain
-// flow (announcing the interest in the whisper). On ANY failure it still forwards —
-// the caller's call is never dropped for the sake of the tagging.
+// ── 1b. AI receptionist (no-answer): caller's spoken answer → tag → take message ──
+// The <Gather input="speech"> action from the missed-call greeting. Classifies the
+// caller's words into one of the shop's services, tags the lead's interest, then
+// confirms and records a callback voicemail (transcribed → AI intake enriches it).
+// On ANY failure it still records a message — the call is never dropped.
 router.post('/api/twilio/voice/intent/:shopId', verifyTwilio, async (req, res) => {
   const vr = new VoiceResponse();
   const ctx = shopCtx(req.params.shopId);
   const callSid = req.query.callSid;
-  const realE164 = ctx ? toE164(ctx.realPhone) : null;
-  if (!ctx || !realE164) { vr.hangup(); return res.type('text/xml').send(vr.toString()); }
+  if (!ctx || !callSid) { vr.hangup(); return res.type('text/xml').send(vr.toString()); }
+  const voice = greeterVoice(ctx.settings);
 
   let label = null;
   try {
@@ -177,8 +179,14 @@ router.post('/api/twilio/voice/intent/:shopId', verifyTwilio, async (req, res) =
     }
   } catch (e) { console.error('intent handler error:', e.message); }
 
-  // Forward regardless. Only announce a concrete service (not "Something else").
-  buildDial(vr, ctx, callSid, realE164, req.body.To, label && label !== 'Something else' ? label : null);
+  // Confirm what we heard, then take a callback message (we already have their
+  // number from caller ID). Only name a concrete service, not "Something else".
+  vr.say({ voice }, (label && label !== 'Something else')
+    ? `Got it — ${label}. Please leave your name and a brief message after the tone, and we will call you right back.`
+    : 'Got it. Please leave your name and a brief message after the tone, and we will call you right back.');
+  recordVoicemail(vr, ctx, callSid);
+  vr.say({ voice }, 'Thanks. We will call you right back. Goodbye.');
+  vr.hangup();
   res.type('text/xml').send(vr.toString());
 });
 
@@ -270,19 +278,27 @@ router.post('/api/twilio/voice/complete/:shopId', verifyTwilio, (req, res) => {
   ctx.h.upsert('calls', call);
   if (lead) ctx.h.upsert('leads', lead);
 
-  // Let the caller leave a voicemail instead of dead-ending the call.
-  vr.say('Sorry, we could not take your call right now. Please leave a message after the tone, and we will call you right back.');
-  vr.record({
-    action: `/api/twilio/voice/voicemail/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
-    method: 'POST',
-    maxLength: 120,
-    playBeep: true,
-    timeout: 5,
-    finishOnKey: '#',
-    // Ask Twilio to transcribe the voicemail; the callback feeds the AI receptionist.
-    transcribe: true,
-    transcribeCallback: `/api/twilio/voice/transcription/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
-  });
+  // Not taken. With the AI receptionist ON, greet the caller, ask what they need,
+  // and capture it (→ /voice/intent) before taking a message. If they say nothing,
+  // the <Gather> falls through to the plain voicemail below, so we always capture
+  // something. With it OFF, this is the original passive voicemail prompt verbatim.
+  if (greeterOn(ctx.settings) && process.env.ANTHROPIC_API_KEY) {
+    const voice = greeterVoice(ctx.settings);
+    const options = greeterOptions(ctx.h.getAll('services'));
+    const greeting = buildGreeting(ctx.shopName, options, ctx.settings.aiReceptionist?.greeter?.prompt, { missed: true });
+    const gather = vr.gather({
+      input: 'speech', speechTimeout: 'auto', speechModel: 'phone_call',
+      hints: options.join(', '),
+      action: `/api/twilio/voice/intent/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
+      method: 'POST',
+    });
+    gather.say({ voice }, greeting);
+    // No speech → fall through to a brief message prompt in the same voice.
+    vr.say({ voice }, 'No problem — please leave a brief message after the tone and we will call you right back.');
+  } else {
+    vr.say('Sorry, we could not take your call right now. Please leave a message after the tone, and we will call you right back.');
+  }
+  recordVoicemail(vr, ctx, callSid);
   // Reached only if the caller left no message (Record falls through on no input).
   vr.say('We did not get a message. Goodbye.');
   vr.hangup();

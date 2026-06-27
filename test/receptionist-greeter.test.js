@@ -33,6 +33,9 @@ check('buildGreeting auto (single)',
 check('buildGreeting custom override',
   buildGreeting('ABC', ['X'], '  Hi there!  '),
   'Hi there!');
+check('buildGreeting missed variant',
+  buildGreeting('ABC Detailing', ['Ceramic Coating', 'Tint'], '', { missed: true }),
+  'Sorry we missed your call at ABC Detailing! What can we help you with — Ceramic Coating, or Tint, or something else?');
 
 // greeterOn toggle.
 checkT('greeterOn default off', greeterOn({}) === false && greeterOn(undefined) === false);

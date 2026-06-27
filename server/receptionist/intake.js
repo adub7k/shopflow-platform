@@ -146,11 +146,13 @@ function greeterOptions(services, cap = 5) {
 }
 
 // Spoken greeting. Owner can override with a custom line; otherwise auto-built.
-function buildGreeting(shopName, options, custom) {
+function buildGreeting(shopName, options, custom, opts = {}) {
   if (custom && custom.trim()) return custom.trim();
   const list = (options && options.length)
     ? (options.length === 1 ? options[0] : options.slice(0, -1).join(', ') + ', or ' + options[options.length - 1])
     : 'our services';
+  // missed = the shop didn't pick up; warmer "sorry we missed you" lead-in.
+  if (opts.missed) return `Sorry we missed your call at ${shopName || 'the shop'}! What can we help you with — ${list}, or something else?`;
   return `Thanks for calling ${shopName || 'us'}! Are you calling about ${list}, or something else?`;
 }
 
