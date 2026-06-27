@@ -181,6 +181,7 @@ router.post('/api/twilio/voice/intent/:shopId', verifyTwilio, async (req, res) =
 
   // Confirm what we heard, then take a callback message (we already have their
   // number from caller ID). Only name a concrete service, not "Something else".
+  vr.pause({ length: 1 });
   vr.say({ voice }, (label && label !== 'Something else')
     ? `Got it — ${label}. Please leave your name and a brief message after the tone, and we will call you right back.`
     : 'Got it. Please leave your name and a brief message after the tone, and we will call you right back.');
@@ -286,13 +287,18 @@ router.post('/api/twilio/voice/complete/:shopId', verifyTwilio, (req, res) => {
     const voice = greeterVoice(ctx.settings);
     const options = greeterOptions(ctx.h.getAll('services'));
     const greeting = buildGreeting(ctx.shopName, options, ctx.settings.aiReceptionist?.greeter?.prompt, { missed: true });
-    const gather = vr.gather({
-      input: 'speech', speechTimeout: 'auto', speechModel: 'phone_call',
+    // Play the greeting BEFORE (not nested in) the <Gather>, so barge-in can't cut
+    // it off, with a short <Pause> first so the media channel is up and the opening
+    // words aren't clipped on the transition from the ring-out. The <Gather> then
+    // just listens for the caller's answer.
+    vr.pause({ length: 1 });
+    vr.say({ voice }, greeting);
+    vr.gather({
+      input: 'speech', speechTimeout: 'auto', speechModel: 'phone_call', timeout: 6,
       hints: options.join(', '),
       action: `/api/twilio/voice/intent/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
       method: 'POST',
     });
-    gather.say({ voice }, greeting);
     // No speech → fall through to a brief message prompt in the same voice.
     vr.say({ voice }, 'No problem — please leave a brief message after the tone and we will call you right back.');
   } else {
