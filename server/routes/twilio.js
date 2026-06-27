@@ -78,6 +78,14 @@ function shopCtx(idOrSlug) {
 
 const callTrackingOn = (settings) => settings.callTracking?.enabled !== false; // default on
 
+// Customer-facing TTS voice for the AI receptionist greeting. A Polly *Neural*
+// voice — far more natural + correct pronunciation than Twilio's default <Say>
+// voice. Per-shop override via settings.aiReceptionist.greeter.voice; global
+// default via env. (Voice names: Polly.Joanna-Neural / Matthew-Neural /
+// Stephen-Neural / Ruth-Neural / Danielle-Neural …)
+const DEFAULT_RECEPTIONIST_VOICE = process.env.RECEPTIONIST_VOICE || 'Polly.Joanna-Neural';
+const greeterVoice = (settings) => (settings && settings.aiReceptionist && settings.aiReceptionist.greeter && settings.aiReceptionist.greeter.voice) || DEFAULT_RECEPTIONIST_VOICE;
+
 // Append the forward <Dial> to a VoiceResponse — the proven ring-the-shop path,
 // extracted so the plain flow AND the AI-greeter flow emit byte-identical TwiML.
 // `intentLabel` (optional) is threaded to the whisper so the shop hears what the
@@ -134,7 +142,7 @@ router.post('/api/twilio/voice/:shopId', verifyTwilio, (req, res) => {
       action: `/api/twilio/voice/intent/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
       method: 'POST',
     });
-    gather.say(greeting);
+    gather.say({ voice: greeterVoice(ctx.settings) }, greeting);
   }
 
   // Ring the real phone. answerOnBridge → caller hears ringing, not silence.
