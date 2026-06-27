@@ -87,6 +87,13 @@ router.post('/api/twilio/voice/:shopId', verifyTwilio, (req, res) => {
     timeout: 20,
     action: `/api/twilio/voice/complete/${ctx.shopId}`,
     method: 'POST',
+    // Record the bridged (answered) conversation. Dual channel keeps caller + shop
+    // on separate tracks for cleaner playback and future transcription. Stored on
+    // call.recording via the status callback; the Leads UI already plays it.
+    record: 'record-from-answer-dual',
+    recordingStatusCallback: `/api/twilio/voice/recording/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
+    recordingStatusCallbackMethod: 'POST',
+    recordingStatusCallbackEvent: 'completed',
   });
   // Thread the parent (inbound) CallSid through the whisper/screen legs so the
   // screen handler can mark THIS call as genuinely accepted (the whisper/screen
