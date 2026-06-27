@@ -103,21 +103,30 @@ const Dashboard = {
   async render() {
     const el = document.getElementById('page-dashboard'); if(!el)return;
     try {
-      let rev={monthRevenue:0,monthJobs:0,avgTicket:0,loyaltyAlerts:[],recentDone:[]};
-      let appts=[];
-      let settings={shopName:'ShopFlow'};
-      let barbers=[];
-      if(canSee('revenue')){ try{rev=await db.revenue.get();}catch(e){console.warn('Revenue:',e.message);} }
-      try{
-        appts=await db.appointments.all({date:today()});
-        // Sort earliest time first
-        appts.sort((a,b)=>{
-          const parse=t=>{if(!t)return0;const[tm,ap]=t.split(' ');let[h,m]=tm.split(':').map(Number);if(ap==='PM'&&h!==12)h+=12;if(ap==='AM'&&h===12)h=0;return h*60+m;};
-          return parse(a.time)-parse(b.time);
-        });
-      }catch(e){console.warn('Appts:',e.message);}
-      try{settings=await db.settings.get();}catch(e){console.warn('Settings:',e.message);}
-      try{barbers=await db.barbers.all();}catch(e){console.warn('Barbers:',e.message);}
+      const showRev = canSee('revenue');
+      const [rev, allAppts, customers, leads, settings, barbers] = await Promise.all([
+        showRev ? db.revenue.get().catch(()=>({})) : Promise.resolve({}),
+        db.appointments.all().catch(()=>[]),
+        db.customers.all().catch(()=>[]),
+        db.leads.all().catch(()=>[]),
+        db.settings.get().catch(()=>({shopName:'ShopFlow'})),
+        db.barbers.all().catch(()=>[]),
+      ]);
+      const t0 = today();
+      // Today's schedule (earliest first), today's collected revenue.
+      const parseTime=t=>{if(!t)return 0;const[tm,ap]=t.split(' ');let[h,m]=tm.split(':').map(Number);if(ap==='PM'&&h!==12)h+=12;if(ap==='AM'&&h===12)h=0;return h*60+m;};
+      const appts = (allAppts||[]).filter(a=>a.date===t0).sort((a,b)=>parseTime(a.time)-parseTime(b.time));
+      const upcomingToday = appts.filter(a=>a.status==='confirmed'||a.status==='in-progress');
+      const todayRevenue = (allAppts||[]).filter(a=>a.date===t0 && a.status==='done').reduce((s,a)=>s+(Number(a.price)||0),0);
+      // Reuse the Tasks worklist engine for the follow-ups (win-backs + service-due);
+      // new leads are surfaced separately below.
+      let followUps = [];
+      try {
+        Tasks._customers=customers||[]; Tasks._leads=leads||[]; Tasks._rebook=(settings&&settings.rebookInterval)||21; Tasks._wb=Tasks._winbackFrom(settings);
+        Tasks._byCust={}; (allAppts||[]).forEach(a=>{ if(a.customerId)(Tasks._byCust[a.customerId]=Tasks._byCust[a.customerId]||[]).push(a); });
+        const g=Tasks._build(); followUps=[...(g.overdue||[]),...(g.today||[])].filter(t=>t.source!=='lead');
+      } catch(e){ console.warn('Tasks:',e.message); }
+      const newLeads=(leads||[]).filter(l=>l.status==='new').sort((a,b)=> new Date(b.createdAt||b.lastContactAt||0)-new Date(a.createdAt||a.lastContactAt||0));
       const html = [];
 
       // Onboarding checklist
@@ -128,16 +137,14 @@ const Dashboard = {
       const greet = hr<12?'morning':hr<17?'afternoon':'evening';
       html.push(`<div style="margin-bottom:20px;"><div style="font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.03em;">Good ${greet} 👋</div><div style="font-size:13px;color:var(--muted);margin-top:2px;">${settings.shopName||'ShopFlow'} &nbsp;·&nbsp; ${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div></div>`);
 
-      // Metrics (revenue hidden for roles without revenue access)
-      if (canSee('revenue')) {
-        html.push('<div class="metric-grid">');
-        html.push(`<div class="metric-card"><div class="metric-label">Revenue MTD</div><div class="metric-value green">${fmtMoney(rev.monthRevenue)}</div><div class="metric-sub">${rev.monthJobs} appointments</div></div>`);
-        html.push(`<div class="metric-card"><div class="metric-label">Avg Ticket</div><div class="metric-value">${fmtMoney(rev.avgTicket)}</div><div class="metric-sub">This month</div></div>`);
-        if (rev.activeMembers) {
-          html.push(`<div class="metric-card"><div class="metric-label">Membership MRR</div><div class="metric-value">${fmtMoney(rev.mrr)}</div><div class="metric-sub">${rev.activeMembers} active member${rev.activeMembers!==1?'s':''}</div></div>`);
-        }
-        html.push('</div>');
-      }
+      // At-a-glance stat row — each card jumps to its section.
+      const stat=(label,value,sub,nav,cls)=>`<div class="metric-card" style="cursor:pointer;" onclick="App.nav('${nav}')"><div class="metric-label">${label}</div><div class="metric-value ${cls||''}">${value}</div><div class="metric-sub">${sub}</div></div>`;
+      html.push('<div class="metric-grid">');
+      if (showRev) html.push(stat('Revenue MTD', fmtMoney(rev.monthRevenue||0), fmtMoney(todayRevenue)+' today', 'revenue', 'green'));
+      html.push(stat("Today's Appts", upcomingToday.length, appts.length+' scheduled', 'appointments', ''));
+      html.push(stat('Follow-ups', followUps.length, followUps.length?'due now':'all clear', 'tasks', ''));
+      html.push(stat('New Leads', newLeads.length, newLeads.length?'to contact':'none waiting', 'leads', ''));
+      html.push('</div>');
 
       // Cleaning-specific overview (operational metrics; money cards gated by role)
       if (Shop.industry === 'cleaning') {
@@ -196,6 +203,31 @@ const Dashboard = {
         html.push('</div>');
       }
 
+      // Follow-ups (retention worklist — win-backs + service-due reminders).
+      if (followUps.length) {
+        html.push(`<div class="section-header"><span>Follow-ups</span><button class="btn btn-sm" onclick="App.nav('tasks')">View all (${followUps.length})</button></div>`);
+        html.push('<div class="list-card">');
+        followUps.slice(0,3).forEach(t=>{
+          html.push('<div class="list-row">'+avatarEl(t.name,38)+'<div class="list-main"><div class="list-name">'+esc(t.name)+'</div><div class="list-sub">'+esc(t.reason)+'</div></div>'+(t.phone?'<button class="btn btn-sm btn-green" onclick="Tasks.text(\''+t.id+'\')">💬 Text</button>':'')+'</div>');
+        });
+        html.push('</div>');
+      }
+
+      // New leads (uncontacted inbound from call tracking).
+      if (newLeads.length) {
+        html.push(`<div class="section-header"><span>New Leads</span><button class="btn btn-sm" onclick="App.nav('leads')">View all (${newLeads.length})</button></div>`);
+        html.push('<div class="list-card">');
+        newLeads.slice(0,3).forEach(l=>{
+          const nm=l.name||l.phone||'Unknown caller';
+          const q=(typeof _leadQuality==='function')?_leadQuality(l):'';
+          const qb=(q&&typeof _leadQualityBadge==='function')?_leadQualityBadge(q):'';
+          const interest=(typeof _leadInterest==='function')?_leadInterest(l):'';
+          const sub=[interest?('🎯 '+interest):'', l.location].filter(Boolean).join(' · ') || 'inbound call';
+          html.push('<div class="list-row" style="cursor:pointer;" onclick="App.nav(\'leads\')">'+avatarEl(l.name||'☎',38)+'<div class="list-main"><div class="list-name">'+esc(nm)+' '+qb+'</div><div class="list-sub">'+esc(sub)+'</div></div>'+(l.phone?'<a class="btn btn-sm" href="tel:'+esc(l.phone)+'" onclick="event.stopPropagation()">📞</a>':'')+'</div>');
+        });
+        html.push('</div>');
+      }
+
       // Loyalty alerts
       if (rev.loyaltyAlerts?.length) {
         html.push('<div class="section-header">🎉 Loyalty Rewards Ready</div>');
@@ -205,20 +237,6 @@ const Dashboard = {
             ${avatarEl(c.name,34)}
             <div style="flex:1;font-size:14px;font-weight:600;color:var(--text);">${c.name}</div>
             <button class="btn btn-sm btn-green" onclick="event.stopPropagation();Clients.redeemReward('${c.id}','${c.name}')">Redeem</button>
-          </div>`);
-        });
-        html.push('</div>');
-      }
-
-      // Recent done
-      if (rev.recentDone?.length) {
-        html.push('<div class="section-header">Recent Completed</div>');
-        html.push('<div class="list-card">');
-        rev.recentDone.slice(0,4).forEach(a => {
-          html.push(`<div class="list-row" onclick="${a.customerId?`ClientProfile.open('${a.customerId}')`:''}" style="${a.customerId?'cursor:pointer;':''}">
-            ${avatarEl(a.customerName,36)}
-            <div class="list-main"><div class="list-name">${a.customerName}</div><div class="list-sub">${a.service} · ${fmtDateShort(a.date)}</div></div>
-            <div style="font-weight:700;color:var(--green);">${fmtMoney(a.price)}</div>
           </div>`);
         });
         html.push('</div>');
