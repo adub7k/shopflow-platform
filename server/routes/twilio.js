@@ -99,6 +99,13 @@ function buildDial(vr, ctx, callSid, realE164, callerId, intentLabel) {
     timeout: 20,
     action: `/api/twilio/voice/complete/${ctx.shopId}`,
     method: 'POST',
+    // Record the bridged (answered) conversation. Dual channel keeps caller + shop
+    // on separate tracks for cleaner playback and future transcription. Stored on
+    // call.recording via the status callback; the Leads UI already plays it.
+    record: 'record-from-answer-dual',
+    recordingStatusCallback: `/api/twilio/voice/recording/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
+    recordingStatusCallbackMethod: 'POST',
+    recordingStatusCallbackEvent: 'completed',
   });
   const wq = `?callSid=${encodeURIComponent(callSid)}` + (intentLabel ? `&intent=${encodeURIComponent(intentLabel)}` : '');
   dial.number({ url: `/api/twilio/voice/whisper/${ctx.shopId}${wq}`, method: 'POST' }, realE164);
