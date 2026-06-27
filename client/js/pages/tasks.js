@@ -146,6 +146,7 @@ const Tasks = {
       const interest = (typeof _leadInterest === 'function') ? _leadInterest(l) : '';
       const task = {
         source: 'lead', leadId: l.id, name, phone: l.phone,
+        quality: (typeof _leadQuality === 'function') ? _leadQuality(l) : '',
         reason: interest ? `New lead · interested in ${interest}` : `New lead · ${l.location || 'inbound call'}`,
         detail: `${calls} call${calls === 1 ? '' : 's'} · ${fmtDateShort(ld)}`,
         message: _tFill(interest
@@ -156,8 +157,9 @@ const Tasks = {
       add(task, ld < t0 ? 'overdue' : 'today');
     });
 
-    // Sort each bucket by due date (most urgent first).
-    Object.values(groups).forEach(arr => arr.sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || '')));
+    // Sort each bucket: hot leads float to the top, cold sink, then by due date.
+    const qRank = (t) => t.quality === 'hot' ? 0 : t.quality === 'cold' ? 2 : 1;
+    Object.values(groups).forEach(arr => arr.sort((a, b) => qRank(a) - qRank(b) || (a.dueDate || '').localeCompare(b.dueDate || '')));
     return groups;
   },
 
@@ -211,7 +213,7 @@ const Tasks = {
       +   '<div style="flex:1;min-width:0;">'
       +     '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">'
       +       '<div style="font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(t.name) + '</div>'
-      +       '<span class="badge ' + SRC[0] + '" style="flex:none;">' + SRC[1] + '</span>'
+      +       '<div style="display:flex;gap:5px;flex:none;align-items:center;">' + (t.quality && typeof _leadQualityBadge === 'function' ? _leadQualityBadge(t.quality) : '') + '<span class="badge ' + SRC[0] + '">' + SRC[1] + '</span></div>'
       +     '</div>'
       +     '<div style="font-size:13px;color:var(--muted);margin-top:2px;">' + esc(t.reason) + '</div>'
       +     (t.detail ? '<div style="font-size:12px;color:var(--faint);margin-top:2px;">' + esc(t.detail) + '</div>' : '')

@@ -47,9 +47,9 @@ const savedKey = process.env.ANTHROPIC_API_KEY;
 delete process.env.ANTHROPIC_API_KEY;
 const OPTS = ['Window Tint', 'Ceramic Coating', 'Interior Detail'];
 (async () => {
-  check('classify tint', (await classifyIntent({ speech: 'I want my windows tinted', options: OPTS })), { label: 'Window Tint', matched: 'keyword' });
-  check('classify ceramic', (await classifyIntent({ speech: 'do you do ceramic?', options: OPTS })), { label: 'Ceramic Coating', matched: 'keyword' });
-  check('classify unknown → Something else', (await classifyIntent({ speech: 'is this a pizza place', options: OPTS })), { label: 'Something else', matched: 'keyword' });
+  check('classify tint', (await classifyIntent({ speech: 'I want my windows tinted', options: OPTS })), { label: 'Window Tint', quality: null, matched: 'keyword' });
+  check('classify ceramic', (await classifyIntent({ speech: 'do you do ceramic?', options: OPTS })), { label: 'Ceramic Coating', quality: null, matched: 'keyword' });
+  check('classify unknown → Something else', (await classifyIntent({ speech: 'is this a pizza place', options: OPTS })), { label: 'Something else', quality: null, matched: 'keyword' });
   check('classify empty → null', (await classifyIntent({ speech: '', options: OPTS })), null);
   if (savedKey !== undefined) process.env.ANTHROPIC_API_KEY = savedKey;
 

@@ -171,7 +171,7 @@ router.post('/api/twilio/voice/intent/:shopId', verifyTwilio, async (req, res) =
     const result = await classifyIntent({ speech, options, shopName: ctx.shopName });
     if (result) {
       label = result.label;
-      const interest = { label, raw: speech, matched: result.matched || null, at: new Date().toISOString() };
+      const interest = { label, quality: result.quality || null, raw: speech, matched: result.matched || null, at: new Date().toISOString() };
       const call = ctx.h.getById('calls', callSid);
       const lead = call && call.leadId ? ctx.h.getById('leads', call.leadId) : null;
       if (lead) { lead.interest = interest; ctx.h.upsert('leads', lead); }

@@ -173,7 +173,9 @@ async function classifyIntent({ speech, options, shopName } = {}) {
       const ll = l.toLowerCase();
       return t.includes(ll) || ll.split(/\s+/).some(w => w.length > 3 && t.includes(w));
     });
-    return { label: hit || 'Something else', matched: 'keyword' };
+    // No AI available → we can classify by keyword but can't judge intent; leave
+    // quality null so the UI falls back to the voicemail AI's rating if any.
+    return { label: hit || 'Something else', quality: null, matched: 'keyword' };
   };
 
   const client = getClient();
@@ -183,20 +185,22 @@ async function classifyIntent({ speech, options, shopName } = {}) {
     type: 'object', additionalProperties: false,
     properties: {
       service: { type: 'string', enum: [...labels, 'Something else'], description: 'The single menu option the caller is asking about; "Something else" if none clearly fit.' },
+      quality: { type: 'string', enum: ['hot', 'warm', 'cold'], description: 'Lead temperature from what the caller said: hot = a clear service + strong intent to book now; warm = interested but needs follow-up; cold = vague, just browsing, wrong number, or spam.' },
     },
-    required: ['service'],
+    required: ['service', 'quality'],
   };
   try {
     const res = await client.messages.create({
       model: MODEL, max_tokens: 80,
       output_config: { effort: 'low', format: { type: 'json_schema', schema } },
-      system: `You route inbound callers for ${shopName || 'a service business'}. Map what the caller said to exactly ONE menu option; if none clearly fit, choose "Something else". Be decisive.`,
+      system: `You triage inbound callers for ${shopName || 'a service business'}. Map what the caller said to exactly ONE menu option ("Something else" if none fit), and rate the lead hot/warm/cold by their intent to book. Be decisive.`,
       messages: [{ role: 'user', content: `Menu options: ${labels.join(', ')}.\nCaller said: "${text.slice(0, 500)}"` }],
     });
     if (res.stop_reason === 'refusal') return keyword();
     const block = (res.content || []).find(b => b.type === 'text');
     if (!block) return keyword();
-    return { label: JSON.parse(block.text).service, matched: 'ai' };
+    const data = JSON.parse(block.text);
+    return { label: data.service, quality: data.quality || null, matched: 'ai' };
   } catch (e) {
     console.error('classifyIntent failed:', e.message);
     return keyword();

@@ -13,6 +13,18 @@ function _leadInterest(l) {
   return svc || '';
 }
 
+// Lead temperature (hot/warm/cold). The voicemail AI's richer transcript rating
+// (lead.ai) wins when present; otherwise the live receptionist's rating
+// (lead.interest). '' when neither rated it.
+function _leadQuality(l) {
+  return (l && l.ai && l.ai.quality) || (l && l.interest && l.interest.quality) || '';
+}
+function _leadQualityBadge(q) {
+  const map = { hot: { bg: '#fef2f2', fg: '#dc2626', icon: '🔥', label: 'Hot' }, warm: { bg: '#fffbeb', fg: '#d97706', icon: '🟡', label: 'Warm' }, cold: { bg: '#f3f4f6', fg: '#6b7280', icon: '🧊', label: 'Cold' } };
+  const m = map[q]; if (!m) return '';
+  return `<span style="display:inline-flex;align-items:center;gap:4px;background:${m.bg};color:${m.fg};font-weight:700;font-size:11px;padding:2px 8px;border-radius:20px;white-space:nowrap;">${m.icon} ${m.label}</span>`;
+}
+
 const Leads = {
   _leads: [],
   _filter: 'all',
@@ -71,6 +83,7 @@ const Leads = {
           </div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">
             <span class="lead-badge" style="background:${m.bg};color:${m.fg};">${m.label}</span>
+            ${_leadQualityBadge(_leadQuality(l))}
             ${_leadInterest(l)?`<span class="lead-badge" style="background:var(--green-lt);color:var(--green);">🎯 ${esc(_leadInterest(l))}</span>`:''}
             ${missedBadge}
             <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">${esc(sub)}</div>
