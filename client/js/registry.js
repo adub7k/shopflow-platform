@@ -30,10 +30,10 @@ const NavRegistry = {
   // Grouped layout. `industry: true` appends the active vertical's INDUSTRY_PAGES.
   GROUPS: [
     { title: 'Overview',   pages: ['dashboard'] },
-    { title: 'CRM',        pages: ['leads', 'clients', 'messages'] },
+    { title: 'CRM',        pages: ['leads', 'clients', 'tasks', 'messages'] },
     { title: 'Operations', pages: ['appointments'], industry: true },
     { title: 'Money',      pages: ['quotes', 'revenue'] },
-    { title: 'Growth',     pages: ['tasks', 'reviews', 'automations'] },
+    { title: 'Growth',     pages: ['reviews', 'automations'] },
     { title: '',           pages: ['settings'] },
   ],
 

@@ -164,26 +164,92 @@ const Messages = {
     this.render();
   },
 
+  // Templated composer: pick a client → pick a preset → the message auto-fills with
+  // their details ({first}/{name}/{shop}/{date}/{time}/{link}) → send via the iPhone
+  // sms: deep link (no Twilio/A2P needed — same as the Tasks one-tap text).
+  _compose: { target: null, appt: null },
+
   openCompose() {
     Modal.show(`
       <div class="modal-title">New Message</div>
       <div class="form-group">
-        <label class="form-label">Search client</label>
+        <label class="form-label">Client</label>
         <div class="autocomplete-wrap">
           <input class="form-input" id="compose-search" placeholder="Name or phone number…" autocomplete="off"/>
           <div class="autocomplete-list" id="compose-list"></div>
         </div>
       </div>
+      <div id="compose-templated" style="display:none;">
+        <div class="form-group">
+          <label class="form-label">Message template</label>
+          <select class="form-input" id="compose-tpl" onchange="Messages._fillCompose()"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Message <span style="font-weight:400;color:var(--muted);">(edit as needed)</span></label>
+          <textarea class="form-input" id="compose-body" rows="4"></textarea>
+        </div>
+        <button class="btn btn-green btn-full" onclick="Messages._sendCompose()">📲 Open in Messages</button>
+      </div>
       <div class="modal-actions">
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
       </div>`);
     setTimeout(() => {
-      makeAutocomplete('compose-search', 'compose-list', (id, name, phone) => {
-        Modal.close();
-        Messages.openThread(id, name, phone);
+      makeAutocomplete('compose-search', 'compose-list', async (id, name, phone) => {
+        Messages._compose = { target: { id, name, phone }, appt: null };
+        const inp = document.getElementById('compose-search'); if (inp) inp.value = name + (phone ? ' · ' + phone : '');
+        // Pull their next upcoming appointment so {date}/{time}/{service} can fill.
+        try {
+          const d = await db.customers.get(id);
+          Messages._compose.appt = (d.appointments || []).filter(a => a.status === 'confirmed' && a.date >= today()).sort((a, b) => a.date.localeCompare(b.date))[0] || null;
+        } catch (e) {}
+        const sel = document.getElementById('compose-tpl');
+        if (sel) sel.innerHTML = Messages._templates().map((t, i) => `<option value="${i}">${esc(t.label)}</option>`).join('');
+        const wrap = document.getElementById('compose-templated'); if (wrap) wrap.style.display = 'block';
+        Messages._fillCompose();
       });
       document.getElementById('compose-search')?.focus();
     }, 100);
+  },
+
+  // The shop's editable presets (Settings → SMS templates) with detail-friendly
+  // fallbacks, plus a blank custom option.
+  _templates() {
+    const t = (Shop.settings && Shop.settings.smsTemplates) || {};
+    return [
+      { label: 'Appointment confirmation', body: t.confirmation || 'Hi {first}! Your appointment at {shop} is confirmed for {date} at {time}. See you then!' },
+      { label: 'Reminder',                 body: t.reminder     || 'Hi {first}! Reminder: your appointment at {shop} is on {date} at {time}. See you then!' },
+      { label: 'Time to rebook',           body: t.rebook       || "Hi {first}! It's been a while — we'd love to get your vehicle looking fresh again at {shop}. Want to get on the schedule?" },
+      { label: 'Review request',           body: t.review       || 'Hi {first}, thanks for visiting {shop}! We\'d love a quick review: {link}' },
+      { label: 'Custom (blank)',           body: '' },
+    ];
+  },
+
+  _fillCompose() {
+    const i = +(document.getElementById('compose-tpl') || {}).value || 0;
+    const tpl = Messages._templates()[i] || { body: '' };
+    const c = Messages._compose.target || {};
+    const a = Messages._compose.appt || {};
+    const vars = {
+      name:  c.name || 'there',
+      first: (c.name || 'there').split(' ')[0],
+      shop:  (Shop.settings && Shop.settings.shopName) || 'us',
+      date:  a.date ? fmtDateFull(a.date) : '',
+      time:  a.time || '',
+      service: a.service || '',
+      link:  (Shop.settings && Shop.settings.googleReviewLink) || '',
+    };
+    const ta = document.getElementById('compose-body');
+    if (ta) ta.value = String(tpl.body || '')
+      .replace(/\{first\}/g, vars.first).replace(/\{name\}/g, vars.name).replace(/\{shop\}/g, vars.shop)
+      .replace(/\{date\}/g, vars.date).replace(/\{time\}/g, vars.time).replace(/\{service\}/g, vars.service).replace(/\{link\}/g, vars.link);
+  },
+
+  _sendCompose() {
+    const c = Messages._compose.target;
+    if (!c || !c.phone) { toast('No phone number for this client', 'error'); return; }
+    const body = (document.getElementById('compose-body') || {}).value || '';
+    Modal.close();
+    _cpSms(c.phone, body);   // opens iPhone Messages prefilled
   },
 
   updateBadge(threads) {
