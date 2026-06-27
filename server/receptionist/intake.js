@@ -133,4 +133,72 @@ async function runIntake(ctx, callId, opts = {}) {
   return { ok: true, reason: 'done', ai };
 }
 
-module.exports = { analyzeTranscript, runIntake, aiEnabled, MODEL };
+// ── Live AI receptionist greeting (caller speaks → we classify the interest) ──
+// Distinct, caller-friendly menu options auto-built from the shop's own services.
+function greeterOptions(services, cap = 5) {
+  const seen = new Set(), out = [];
+  (services || []).forEach(s => {
+    const name = String((s && s.name) || '').trim();
+    const key = name.toLowerCase();
+    if (name && !seen.has(key)) { seen.add(key); out.push(name); }
+  });
+  return out.slice(0, cap);
+}
+
+// Spoken greeting. Owner can override with a custom line; otherwise auto-built.
+function buildGreeting(shopName, options, custom) {
+  if (custom && custom.trim()) return custom.trim();
+  const list = (options && options.length)
+    ? (options.length === 1 ? options[0] : options.slice(0, -1).join(', ') + ', or ' + options[options.length - 1])
+    : 'our services';
+  return `Thanks for calling ${shopName || 'us'}! Are you calling about ${list}, or something else?`;
+}
+
+const greeterOn = (settings) => !!(settings && settings.aiReceptionist && settings.aiReceptionist.greeter && settings.aiReceptionist.greeter.enabled);
+
+// Classify what the caller said into one of the menu options (or "Something else").
+// Reuses the same Claude client/MODEL as the voicemail intake. Degrades to a
+// keyword match when there's no key or the call fails — so the telephony flow
+// always gets an answer and a caller is never stranded.
+async function classifyIntent({ speech, options, shopName } = {}) {
+  const text = String(speech || '').trim();
+  const labels = (options || []).filter(Boolean);
+  if (!text || !labels.length) return null;
+
+  const keyword = () => {
+    const t = text.toLowerCase();
+    const hit = labels.find(l => {
+      const ll = l.toLowerCase();
+      return t.includes(ll) || ll.split(/\s+/).some(w => w.length > 3 && t.includes(w));
+    });
+    return { label: hit || 'Something else', matched: 'keyword' };
+  };
+
+  const client = getClient();
+  if (!client) return keyword();
+
+  const schema = {
+    type: 'object', additionalProperties: false,
+    properties: {
+      service: { type: 'string', enum: [...labels, 'Something else'], description: 'The single menu option the caller is asking about; "Something else" if none clearly fit.' },
+    },
+    required: ['service'],
+  };
+  try {
+    const res = await client.messages.create({
+      model: MODEL, max_tokens: 80,
+      output_config: { effort: 'low', format: { type: 'json_schema', schema } },
+      system: `You route inbound callers for ${shopName || 'a service business'}. Map what the caller said to exactly ONE menu option; if none clearly fit, choose "Something else". Be decisive.`,
+      messages: [{ role: 'user', content: `Menu options: ${labels.join(', ')}.\nCaller said: "${text.slice(0, 500)}"` }],
+    });
+    if (res.stop_reason === 'refusal') return keyword();
+    const block = (res.content || []).find(b => b.type === 'text');
+    if (!block) return keyword();
+    return { label: JSON.parse(block.text).service, matched: 'ai' };
+  } catch (e) {
+    console.error('classifyIntent failed:', e.message);
+    return keyword();
+  }
+}
+
+module.exports = { analyzeTranscript, runIntake, aiEnabled, MODEL, greeterOptions, buildGreeting, greeterOn, classifyIntent };

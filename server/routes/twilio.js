@@ -17,7 +17,7 @@ const {
   master, getShopDb, shopHelpers, shopFromNumber, buildSms,
   twilioClient, genId, toE164,
 } = require('../db');
-const { runIntake } = require('../receptionist/intake');
+const { runIntake, greeterOn, greeterOptions, buildGreeting, classifyIntent } = require('../receptionist/intake');
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
@@ -78,6 +78,24 @@ function shopCtx(idOrSlug) {
 
 const callTrackingOn = (settings) => settings.callTracking?.enabled !== false; // default on
 
+// Append the forward <Dial> to a VoiceResponse — the proven ring-the-shop path,
+// extracted so the plain flow AND the AI-greeter flow emit byte-identical TwiML.
+// `intentLabel` (optional) is threaded to the whisper so the shop hears what the
+// caller asked about. Thread the parent (inbound) CallSid through the whisper/
+// screen legs so the screen handler can mark THIS call as genuinely accepted
+// (the whisper/screen run on the child leg, whose CallSid differs from parent's).
+function buildDial(vr, ctx, callSid, realE164, callerId, intentLabel) {
+  const dial = vr.dial({
+    answerOnBridge: true,
+    callerId: callerId || undefined,        // show the tracking number as caller ID
+    timeout: 20,
+    action: `/api/twilio/voice/complete/${ctx.shopId}`,
+    method: 'POST',
+  });
+  const wq = `?callSid=${encodeURIComponent(callSid)}` + (intentLabel ? `&intent=${encodeURIComponent(intentLabel)}` : '');
+  dial.number({ url: `/api/twilio/voice/whisper/${ctx.shopId}${wq}`, method: 'POST' }, realE164);
+}
+
 // ── 1. Incoming call ────────────────────────────────────────────────────────────
 router.post('/api/twilio/voice/:shopId', verifyTwilio, (req, res) => {
   const vr = new VoiceResponse();
@@ -102,19 +120,57 @@ router.post('/api/twilio/voice/:shopId', verifyTwilio, (req, res) => {
   });
   master.get('shops').find({ id: ctx.shopId }).assign({ lastActivity: new Date().toISOString() }).write();
 
+  // AI receptionist greeting (per-shop, default OFF; needs an API key). Greets the
+  // caller, listens for what they want, then hands off to /voice/intent. If the
+  // caller says nothing the <Gather> falls through to the forward below, so a
+  // caller is NEVER stranded — and with the toggle off this whole block is skipped,
+  // making the TwiML byte-identical to the plain forward.
+  if (greeterOn(ctx.settings) && process.env.ANTHROPIC_API_KEY) {
+    const options = greeterOptions(ctx.h.getAll('services'));
+    const greeting = buildGreeting(ctx.shopName, options, ctx.settings.aiReceptionist?.greeter?.prompt);
+    const gather = vr.gather({
+      input: 'speech', speechTimeout: 'auto', speechModel: 'phone_call',
+      hints: options.join(', '),
+      action: `/api/twilio/voice/intent/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
+      method: 'POST',
+    });
+    gather.say(greeting);
+  }
+
   // Ring the real phone. answerOnBridge → caller hears ringing, not silence.
-  // The <Number url> whisper plays to the shop before the legs bridge.
-  const dial = vr.dial({
-    answerOnBridge: true,
-    callerId: req.body.To || undefined,     // show the tracking number as caller ID
-    timeout: 20,
-    action: `/api/twilio/voice/complete/${ctx.shopId}`,
-    method: 'POST',
-  });
-  // Thread the parent (inbound) CallSid through the whisper/screen legs so the
-  // screen handler can mark THIS call as genuinely accepted (the whisper/screen
-  // run on the child leg, whose own CallSid differs from the parent's).
-  dial.number({ url: `/api/twilio/voice/whisper/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`, method: 'POST' }, realE164);
+  buildDial(vr, ctx, callSid, realE164, req.body.To);
+  res.type('text/xml').send(vr.toString());
+});
+
+// ── 1b. AI receptionist: caller's spoken answer → classify + tag + forward ───────
+// The <Gather input="speech"> action. Classifies the caller's words into one of the
+// shop's services, tags the lead's interest, then forwards exactly like the plain
+// flow (announcing the interest in the whisper). On ANY failure it still forwards —
+// the caller's call is never dropped for the sake of the tagging.
+router.post('/api/twilio/voice/intent/:shopId', verifyTwilio, async (req, res) => {
+  const vr = new VoiceResponse();
+  const ctx = shopCtx(req.params.shopId);
+  const callSid = req.query.callSid;
+  const realE164 = ctx ? toE164(ctx.realPhone) : null;
+  if (!ctx || !realE164) { vr.hangup(); return res.type('text/xml').send(vr.toString()); }
+
+  let label = null;
+  try {
+    const speech = req.body.SpeechResult || '';
+    const options = greeterOptions(ctx.h.getAll('services'));
+    const result = await classifyIntent({ speech, options, shopName: ctx.shopName });
+    if (result) {
+      label = result.label;
+      const interest = { label, raw: speech, matched: result.matched || null, at: new Date().toISOString() };
+      const call = ctx.h.getById('calls', callSid);
+      const lead = call && call.leadId ? ctx.h.getById('leads', call.leadId) : null;
+      if (lead) { lead.interest = interest; ctx.h.upsert('leads', lead); }
+      if (call) { call.interest = label; ctx.h.upsert('calls', call); }
+    }
+  } catch (e) { console.error('intent handler error:', e.message); }
+
+  // Forward regardless. Only announce a concrete service (not "Something else").
+  buildDial(vr, ctx, callSid, realE164, req.body.To, label && label !== 'Something else' ? label : null);
   res.type('text/xml').send(vr.toString());
 });
 
@@ -122,8 +178,11 @@ router.post('/api/twilio/voice/:shopId', verifyTwilio, (req, res) => {
 router.post('/api/twilio/voice/whisper/:shopId', verifyTwilio, (req, res) => {
   const vr = new VoiceResponse();
   const callSid = encodeURIComponent(req.query.callSid || '');
+  const intent = String(req.query.intent || '').trim();
   const gather = vr.gather({ numDigits: 1, timeout: 8, action: `/api/twilio/voice/screen/${req.params.shopId}?callSid=${callSid}`, method: 'POST' });
-  gather.say('You have a new lead from Shop Flow. Press any key to take the call.');
+  gather.say(intent
+    ? `New lead, interested in ${intent}. Press any key to take the call.`
+    : 'You have a new lead from Shop Flow. Press any key to take the call.');
   // No keypress → drop this leg so the call rings out to missed (auto-SMS + voicemail).
   vr.hangup();
   res.type('text/xml').send(vr.toString());
@@ -306,3 +365,4 @@ module.exports = router;
 // Exported for unit testing the signature hardening (see test/verify-twilio.test.js).
 module.exports.verifyTwilio = verifyTwilio;
 module.exports.twilioSignedUrlCandidates = twilioSignedUrlCandidates;
+module.exports.buildDial = buildDial;

@@ -141,11 +141,16 @@ const Tasks = {
       const ld = ((l.createdAt || l.firstContactAt || l.lastContactAt || '') + '').split('T')[0] || t0;
       const ctx = { first: _tFirst(l.name) || 'there', name: l.name || 'there', shop };
       const calls = (l.callCount || 1);
+      // What the AI receptionist heard the caller ask about (falls back to the
+      // voicemail AI). When known, lead with it and tailor the suggested text.
+      const interest = (typeof _leadInterest === 'function') ? _leadInterest(l) : '';
       const task = {
         source: 'lead', leadId: l.id, name, phone: l.phone,
-        reason: `New lead · ${l.location || 'inbound call'}`,
+        reason: interest ? `New lead · interested in ${interest}` : `New lead · ${l.location || 'inbound call'}`,
         detail: `${calls} call${calls === 1 ? '' : 's'} · ${fmtDateShort(ld)}`,
-        message: _tFill("Hi {first}, thanks for reaching out to {shop}! How can we help with your vehicle? Happy to get you on the schedule.", ctx),
+        message: _tFill(interest
+          ? `Hi {first}, thanks for reaching out to {shop} about ${interest}! I'd love to get you taken care of — want me to get you on the schedule?`
+          : "Hi {first}, thanks for reaching out to {shop}! How can we help with your vehicle? Happy to get you on the schedule.", ctx),
         dueDate: ld,
       };
       add(task, ld < t0 ? 'overdue' : 'today');

@@ -169,6 +169,16 @@ const Settings = {
       }
       html.push(`<div class="form-group"><label class="toggle-row" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span><span class="form-label" style="display:block;">Auto-text missed callers</span><span style="font-size:12px;color:var(--muted);">Instantly send a text when a call goes unanswered.</span></span><input type="checkbox" id="s-ct-enabled" ${ct.enabled!==false?'checked':''} style="width:20px;height:20px;flex-shrink:0;" /></label></div>`);
       html.push(`<div class="form-group"><label class="form-label">Missed-Call Auto-Text</label><textarea class="form-input" id="s-tpl-missed" rows="2" placeholder="${defMissed}">${tpl.missedCall||''}</textarea></div>`);
+
+      // AI receptionist (default OFF). Greeter asks callers what they need and tags
+      // the lead; voicemail summaries enrich the lead from the transcript.
+      const air = s.aiReceptionist || {};
+      const greeterPrompt = (air.greeter && air.greeter.prompt) || '';
+      html.push('<div style="height:1px;background:var(--line);margin:14px 0;"></div>');
+      html.push(`<div class="form-group"><label class="toggle-row" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span><span class="form-label" style="display:block;">AI receptionist greeting</span><span style="font-size:12px;color:var(--muted);">Greets callers, asks what they need, tags the lead, then forwards.</span></span><input type="checkbox" id="s-air-greeter" ${air.greeter&&air.greeter.enabled?'checked':''} style="width:20px;height:20px;flex-shrink:0;" /></label></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Custom greeting (optional)</label><textarea class="form-input" id="s-air-prompt" rows="2" placeholder="Thanks for calling ${esc(s.shopName||'us')}! Are you calling about… (leave blank to auto-build from your services)">${esc(greeterPrompt)}</textarea></div>`);
+      html.push(`<div class="form-group"><label class="toggle-row" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span><span class="form-label" style="display:block;">AI voicemail summaries</span><span style="font-size:12px;color:var(--muted);">Summarize each voicemail into the lead automatically.</span></span><input type="checkbox" id="s-air-enabled" ${air.enabled?'checked':''} style="width:20px;height:20px;flex-shrink:0;" /></label></div>`);
+      html.push('<div style="font-size:11px;color:var(--muted);">Both require an ANTHROPIC_API_KEY on the server.</div>');
       html.push('</div>');
 
       // Google Reviews
@@ -647,6 +657,7 @@ const Settings = {
     const tm=document.getElementById('s-tpl-missed')?.value.trim();
     data.smsTemplates={ confirmation:tc||'', reminder:tr||'', rebook:tk||'', missedCall:tm||'' };
     data.callTracking={ enabled: document.getElementById('s-ct-enabled')?.checked!==false };
+    data.aiReceptionist={ enabled: document.getElementById('s-air-enabled')?.checked===true, greeter:{ enabled: document.getElementById('s-air-greeter')?.checked===true, prompt: document.getElementById('s-air-prompt')?.value.trim()||'' } };
     const rd=parseInt(document.getElementById('s-rebook-days')?.value)||21;
     data.rebookInterval=Math.min(90,Math.max(7,rd));
     const gr=document.getElementById('s-grev')?.value.trim(); if(gr)data.googleReviewLink=gr;

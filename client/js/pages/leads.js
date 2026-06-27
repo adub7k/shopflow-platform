@@ -2,6 +2,17 @@
 // Populated by the call-screening webhooks: every inbound call to the shop's
 // tracking number becomes a lead here, with its call history and a one-tap
 // text-back / convert-to-client flow.
+
+// The service a caller asked about — set live by the AI receptionist greeting
+// (lead.interest), falling back to what the voicemail AI extracted (lead.ai).
+// "Something else" is treated as no concrete interest.
+function _leadInterest(l) {
+  const lbl = l && l.interest && l.interest.label;
+  if (lbl && lbl !== 'Something else') return lbl;
+  const svc = l && l.ai && l.ai.serviceNeeded;
+  return svc || '';
+}
+
 const Leads = {
   _leads: [],
   _filter: 'all',
@@ -60,6 +71,7 @@ const Leads = {
           </div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">
             <span class="lead-badge" style="background:${m.bg};color:${m.fg};">${m.label}</span>
+            ${_leadInterest(l)?`<span class="lead-badge" style="background:var(--green-lt);color:var(--green);">🎯 ${esc(_leadInterest(l))}</span>`:''}
             ${missedBadge}
             <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">${esc(sub)}</div>
           </div>
