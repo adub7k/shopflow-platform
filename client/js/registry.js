@@ -19,6 +19,7 @@ const NavRegistry = {
     properties:   { label: 'Properties',   icon: '🏠' },
     crews:        { label: 'Crews',        icon: '👥' },
     recurring:    { label: 'Recurring',    icon: '🔁' },
+    tasks:        { label: 'Tasks',        icon: '✓' },
     quotes:       { label: 'Estimates',    icon: '📄' },
     revenue:      { label: 'Revenue',      icon: '📈' },
     reviews:      { label: 'Reviews',      icon: '⭐' },
@@ -32,7 +33,7 @@ const NavRegistry = {
     { title: 'CRM',        pages: ['leads', 'clients', 'messages'] },
     { title: 'Operations', pages: ['appointments'], industry: true },
     { title: 'Money',      pages: ['quotes', 'revenue'] },
-    { title: 'Growth',     pages: ['reviews', 'automations'] },
+    { title: 'Growth',     pages: ['tasks', 'reviews', 'automations'] },
     { title: '',           pages: ['settings'] },
   ],
 
