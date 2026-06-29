@@ -30,6 +30,13 @@ function _tFill(tpl, ctx) {
     .replace(/\{name\}/g,  ctx.name  || 'there')
     .replace(/\{shop\}/g,  ctx.shop  || 'us');
 }
+// A customer's notes for the owner to read while working a task: the two most
+// recent log entries plus any legacy free-text note, newest first.
+function _notesFor(c) {
+  const parts = (c.noteLog || []).slice(0, 2).map(n => n && n.text).filter(Boolean);
+  if (c.notes) parts.push(c.notes);
+  return parts.join('\n');
+}
 
 const Tasks = {
   _customers: [], _leads: [], _appts: [], _byCust: {}, _rebook: 21, _wb: null, _wbEdit: null,
@@ -108,6 +115,7 @@ const Tasks = {
         source: 'winback', custId: c.id, stepIdx: nextIdx, name: c.name, phone: c.phone,
         reason: `At-risk · ${dsl}d since last visit (${fmtDateShort(c.lastVisit)})`,
         detail: `Win-back step ${nextIdx + 1}/${wb.steps.length}: ${step.label}`,
+        notes: _notesFor(c),
         message: _tFill(step.message, ctx), dueDate,
       };
       const snoozed = fu.snoozeUntil && fu.snoozeUntil > t0;
@@ -130,6 +138,7 @@ const Tasks = {
         const task = {
           source: 'service', custId: c.id, recTitle: r.title, name: c.name, phone: c.phone,
           reason: `${r.icon} ${r.title}`, detail: r.detail,
+          notes: _notesFor(c),
           message: _tFill(r.sms, ctx), dueDate: t0,
         };
         const snoozed = snz[r.title] && snz[r.title] > t0;
@@ -147,6 +156,7 @@ const Tasks = {
         source: 'lead', leadId: l.id, name, phone: l.phone,
         reason: `New lead · ${l.location || 'inbound call'}`,
         detail: `${calls} call${calls === 1 ? '' : 's'} · ${fmtDateShort(ld)}`,
+        notes: l.notes || '',
         message: _tFill("Hi {first}, thanks for reaching out to {shop}! How can we help with your vehicle? Happy to get you on the schedule.", ctx),
         dueDate: ld,
       };
@@ -168,6 +178,7 @@ const Tasks = {
           source: 'reminder', apptId: a.id, name: a.customerName || 'Client', phone: a.customerPhone,
           reason: `Appointment tomorrow${a.time ? ' · ' + a.time : ''}`,
           detail: [a.service, fmtDateShort(a.date)].filter(Boolean).join(' · '),
+          notes: a.notes || '',
           message: _smsFill(reminderTpl, ctx), dueDate: t0,
         };
         add(task, 'today');
@@ -235,7 +246,11 @@ const Tasks = {
       +     (t.detail ? '<div style="font-size:12px;color:var(--faint);margin-top:2px;">' + esc(t.detail) + '</div>' : '')
       +   '</div>'
       + '</div>'
-      + '<div style="margin-top:8px;padding:8px 10px;background:var(--bg,#f9fafb);border-radius:8px;font-size:13px;color:#374151;line-height:1.4;">' + esc(t.message) + '</div>'
+      // Notes for the owner to read while working the task (not the message — that
+      // gets picked from a template when they hit Text).
+      + (t.notes
+          ? '<div style="margin-top:8px;padding:8px 10px;background:var(--bg,#f9fafb);border-radius:8px;font-size:13px;color:#374151;line-height:1.4;white-space:pre-wrap;"><span style="font-weight:700;color:var(--muted);">📝 Notes:</span> ' + esc(t.notes) + '</div>'
+          : '<div style="margin-top:8px;font-size:12px;color:var(--faint);font-style:italic;">No notes yet.</div>')
       + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">' + acts.join('') + '</div>'
       + '</div>';
   },
@@ -245,17 +260,62 @@ const Tasks = {
   _ensureFollowup(c) { if (!c.followup) c.followup = { completedStep: -1, snoozeUntil: null, status: 'active' }; return c.followup; },
 
   // ── Card actions ────────────────────────────────────────────────────────────
+  // Hitting Text opens a template picker: the tailored suggestion is preselected,
+  // but the owner can switch to any saved template, tweak it, then open Messages.
+  _textTask: null, _textOpts: [],
+
   text(id) {
     const t = this._tasks[id]; if (!t) return;
-    _cpSms(t.phone, t.message);                 // opens Messages (iPhone sms: deep link)
-    // Texting a win-back step counts as completing it → advance the cadence.
+    if (!t.phone) { toast('No phone number on file', 'warning'); return; }
+    this._textTask = id;
+    // First option is the smart suggestion; the rest are the owner's templates.
+    this._textOpts = [{ label: 'Suggested message', body: t.message }].concat(_smsTemplates());
+    Modal.show(
+      '<div class="modal-title">Text ' + esc(t.name) + '</div>'
+      + '<div class="form-group"><label class="form-label">Template</label>'
+      +   '<select class="form-input" id="task-tpl" onchange="Tasks._fillText()">'
+      +     this._textOpts.map((o, i) => `<option value="${i}">${esc(o.label)}</option>`).join('')
+      +   '</select></div>'
+      + '<div class="form-group"><label class="form-label">Message <span style="font-weight:400;color:var(--muted);">(edit as needed)</span></label>'
+      +   '<textarea class="form-input" id="task-body" rows="4"></textarea></div>'
+      + '<button class="btn btn-green btn-full" onclick="Tasks._sendText()">📲 Open in Messages</button>'
+      + '<div class="modal-actions"><button class="btn btn-full" onclick="Modal.close()">Cancel</button></div>'
+    );
+    setTimeout(() => this._fillText(), 0);
+  },
+
+  // Merge-field values for the current task (first/name/shop/date/time/service/link).
+  _taskVars(t) {
+    const shop = (Shop.settings && Shop.settings.shopName) || 'us';
+    const v = { first: _tFirst(t.name), name: t.name || 'there', shop,
+                link: (Shop.settings && Shop.settings.googleReviewLink) || '', date: '', time: '', service: '' };
+    let a = null;
+    if (t.source === 'reminder') a = (this._appts || []).find(x => x.id === t.apptId);
+    else if (t.custId) a = (this._byCust[t.custId] || []).filter(x => x.status === 'confirmed' && x.date >= today()).sort((x, y) => x.date.localeCompare(y.date))[0];
+    if (a) { v.date = fmtDateFull(a.date); v.time = a.time || ''; v.service = a.service || ''; }
+    return v;
+  },
+
+  _fillText() {
+    const t = this._tasks[this._textTask]; if (!t) return;
+    const i = +(document.getElementById('task-tpl') || {}).value || 0;
+    const o = this._textOpts[i] || { body: '' };
+    const ta = document.getElementById('task-body');
+    if (ta) ta.value = _smsFill(o.body, this._taskVars(t));   // suggestion is pre-filled → no-op
+  },
+
+  _sendText() {
+    const t = this._tasks[this._textTask]; if (!t) return;
+    const body = (document.getElementById('task-body') || {}).value || '';
+    Modal.close();
+    _cpSms(t.phone, body);                       // opens Messages (iPhone sms: deep link)
+    // Same follow-up bookkeeping the old one-tap text did.
     if (t.source === 'winback') {
       const c = this._cust(t.custId); if (!c) return;
       const fu = this._ensureFollowup(c);
       if (fu.completedStep < t.stepIdx) { fu.completedStep = t.stepIdx; fu.snoozeUntil = null; this._persistCust(c); }
     } else if (t.source === 'reminder') {
-      // Texting tomorrow's reminder clears it from today's list (session-only).
-      this._remDone[t.apptId] = true; this.render();
+      this._remDone[t.apptId] = true; this.render();   // clears it from today's list (session-only)
     }
   },
 
