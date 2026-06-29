@@ -85,23 +85,14 @@ router.delete('/api/shop/reviews/:id', requireAuth, requireRole('full'), shopRou
   res.json({ ok: true });
 }));
 // Text a client a link to leave a review (uses the shop's SMS line).
+// Mark-only: the owner sends the review text manually from their own phone (iPhone
+// sms: deep link, no Twilio/A2P). This endpoint just records that the request went
+// out so the UI can show "Sent ✓" and the review automation won't double-prompt.
 router.post('/api/shop/reviews/request', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const a = h.getById('appointments', req.body.appointmentId);
   if (!a) return res.status(404).json({ ok: false, error: 'Appointment not found' });
-  const phone = (a.customerPhone || '').replace(/\D/g, '');
-  if (phone.length < 10) return res.status(400).json({ ok: false, error: 'No phone number on file for this client' });
-  const from = shopFromNumber(req.shopId);
-  if (!twilioClient || !from) return res.status(400).json({ ok: false, error: 'SMS is not active for this shop yet' });
-  const s = db.get('settings').value() || {};
-  const shopRow = master.get('shops').find({ id: req.shopId }).value();
-  const base = process.env.PUBLIC_BASE_URL || (req.protocol + '://' + req.get('host'));
-  const link = `${base}/review/${shopRow.slug}?a=${a.id}`;
-  const body = `Hi ${(a.customerName||'there').split(' ')[0]}! Thanks for visiting ${s.shopName||'us'}. How did we do? Leave a quick review: ${link}`;
-  try {
-    await twilioClient.messages.create({ from, to: '+1' + phone, body });
-    a.reviewRequestedAt = new Date().toISOString(); h.upsert('appointments', a);
-    res.json({ ok: true });
-  } catch(e) { res.status(500).json({ ok: false, error: 'Could not send the text' }); }
+  a.reviewRequestedAt = new Date().toISOString(); h.upsert('appointments', a);
+  res.json({ ok: true });
 }));
 
 // ── PROTECTED: Staff / users (owner only) ─────────────────────────────────────

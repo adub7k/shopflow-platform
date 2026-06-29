@@ -7,6 +7,7 @@ const Settings = {
     try{
       const [s,barbers,services,staff]=await Promise.all([db.settings.get(),db.barbers.all(),db.services.all(),db.staff.all().catch(()=>[])]);
       this._barbers=barbers; this._services=services; this._staff=staff; this._addons=s.addons||[]; this._plans=s.membershipPlans||[];
+      this._tpls=_smsTemplates(s.smsTemplates);   // owner-managed message templates (normalized list)
       const html=[];
 
       // Shop info
@@ -134,41 +135,26 @@ const Settings = {
       html.push('</div>');
       html.push('</div>');
 
-      // SMS — status + customizable templates
-      html.push('<div class="section-header">SMS Messaging</div><div class="card">');
-      const smsActive = s.twilioConfigured;
-      html.push(`<div style="display:flex;align-items:center;gap:10px;padding:4px 0 14px;">
-        <div style="width:10px;height:10px;border-radius:50%;background:${smsActive?'#16a34a':'#d1d5db'};flex-shrink:0;"></div>
-        <div>
-          <div style="font-size:14px;font-weight:600;color:var(--text);">${smsActive?'SMS Active':'SMS Not Yet Active'}</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px;">${smsActive?'Reminders and confirmations are firing automatically.':'Managed by ShopFlow. Contact support to activate.'}</div>
-        </div>
-      </div>
-      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:8px;">CUSTOMIZE YOUR MESSAGES</div>
-      <div style="font-size:11px;color:var(--faint);margin-bottom:12px;">Variables you can use: <code style="background:var(--off);padding:1px 5px;border-radius:4px;">{name}</code> <code style="background:var(--off);padding:1px 5px;border-radius:4px;">{shop}</code> <code style="background:var(--off);padding:1px 5px;border-radius:4px;">{date}</code> <code style="background:var(--off);padding:1px 5px;border-radius:4px;">{time}</code> <code style="background:var(--off);padding:1px 5px;border-radius:4px;">{barber}</code></div>`);
-      const tpl = s.smsTemplates || {};
-      const defConfirm = "Hi {name}! Your appointment at {shop} is confirmed for {date} at {time}{barber}. See you then! ✂️";
-      const defReminder = "Hi {name}! Reminder: your appointment at {shop} is tomorrow at {time}{barber}. See you then! ✂️";
-      const defRebook   = "Hey {name}! It's been a few weeks — we'd love to have you back at {shop}. Book your next cut anytime 💈";
-      html.push(`<div class="form-group"><label class="form-label">Booking Confirmation</label><textarea class="form-input" id="s-tpl-confirm" rows="2" placeholder="${defConfirm}">${tpl.confirmation||''}</textarea></div>`);
-      html.push(`<div class="form-group"><label class="form-label">24-Hour Reminder</label><textarea class="form-input" id="s-tpl-reminder" rows="2" placeholder="${defReminder}">${tpl.reminder||''}</textarea></div>`);
+      // Message templates — owner-managed presets sent via the iPhone Messages
+      // deep link (no Twilio/A2P). Used by Messages, the Tasks worklist, and the
+      // review prompt.
+      html.push('<div class="section-header">Message Templates</div><div class="card">');
+      html.push(`<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Create the texts you send from Messages, the Tasks worklist, and the review prompt. They open in your phone's Messages app prefilled — edit before sending. Tap a field below a message to insert it.</div>`);
+      html.push(`<div id="s-tpl-list">${this._renderTemplateList()}</div>`);
+      html.push(`<button class="btn btn-sm" onclick="Settings.addTemplate()">+ Add template</button>`);
       const rebookDays = s.rebookInterval || 21;
-      html.push(`<div class="form-group"><label class="form-label">Rebook Nudge — Days Since Last Visit</label><div style="display:flex;align-items:center;gap:10px;"><input class="form-input" id="s-rebook-days" type="number" min="7" max="90" value="${rebookDays}" style="width:90px;" /><span style="font-size:13px;color:var(--muted);">days after last visit</span></div></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Rebook Nudge Message</label><textarea class="form-input" id="s-tpl-rebook" rows="2" placeholder="${defRebook}">${tpl.rebook||''}</textarea></div>`);
-      html.push(`<div style="font-size:11px;color:var(--faint);">Leave message blank to use the default shown as placeholder.</div>`);
+      html.push('<div style="height:1px;background:var(--line);margin:16px 0;"></div>');
+      html.push(`<div class="form-group" style="margin-bottom:0;"><label class="form-label">Rebook reminder window</label><div style="display:flex;align-items:center;gap:10px;"><input class="form-input" id="s-rebook-days" type="number" min="7" max="90" value="${rebookDays}" style="width:90px;" /><span style="font-size:13px;color:var(--muted);">days after last visit → shows in Tasks</span></div></div>`);
       html.push('</div>');
 
       // Call tracking
-      const ct = s.callTracking || { enabled: true };
-      const defMissed = "Hi, this is {shop} — sorry we missed your call! How can we help? Reply here or book online anytime.";
       html.push('<div class="section-header">Call Tracking</div><div class="card">');
       if (s.trackingNumber) {
         html.push(`<div style="display:flex;align-items:center;gap:10px;background:var(--green-lt);border:1px solid var(--green-md);border-radius:10px;padding:12px;margin-bottom:14px;"><span style="font-size:18px;">📞</span><div><div style="font-size:13px;font-weight:700;color:var(--green);">Tracking number: ${s.trackingNumber}</div><div style="font-size:12px;color:var(--muted);margin-top:1px;">Calls forward to your shop phone. Inbound calls appear under Leads.</div></div></div>`);
       } else {
         html.push(`<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Your call-tracking number is managed by ShopFlow. Contact support to activate it for this shop.</div>`);
       }
-      html.push(`<div class="form-group"><label class="toggle-row" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span><span class="form-label" style="display:block;">Auto-text missed callers</span><span style="font-size:12px;color:var(--muted);">Instantly send a text when a call goes unanswered.</span></span><input type="checkbox" id="s-ct-enabled" ${ct.enabled!==false?'checked':''} style="width:20px;height:20px;flex-shrink:0;" /></label></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Missed-Call Auto-Text</label><textarea class="form-input" id="s-tpl-missed" rows="2" placeholder="${defMissed}">${tpl.missedCall||''}</textarea></div>`);
+      html.push(`<div style="font-size:12px;color:var(--muted);">Missed calls are logged as leads — follow up with one tap from the <b>Tasks</b> worklist. Texts open in your Messages app; ShopFlow never auto-texts on your behalf.</div>`);
       html.push('</div>');
 
       // Google Reviews
@@ -640,13 +626,10 @@ const Settings = {
   async save() {
     const data={shopName:document.getElementById('s-name')?.value.trim(),tagline:document.getElementById('s-tag')?.value.trim(),phone:document.getElementById('s-phone')?.value.trim(),address:document.getElementById('s-addr')?.value.trim(),email:document.getElementById('s-email')?.value.trim(),bookingMessage:document.getElementById('s-bmsg')?.value.trim(),bookingEnabled:document.getElementById('s-benabled')?.checked!==false,staffPicker:document.getElementById('s-staffpicker')?.checked!==false};
     const lv=document.getElementById('s-lvis')?.value; if(lv)data.loyalty={visitsForReward:parseInt(lv),rewardDescription:document.getElementById('s-lrew')?.value.trim()||'One free haircut'};
-    // SMS templates (empty string = use server default)
-    const tc=document.getElementById('s-tpl-confirm')?.value.trim();
-    const tr=document.getElementById('s-tpl-reminder')?.value.trim();
-    const tk=document.getElementById('s-tpl-rebook')?.value.trim();
-    const tm=document.getElementById('s-tpl-missed')?.value.trim();
-    data.smsTemplates={ confirmation:tc||'', reminder:tr||'', rebook:tk||'', missedCall:tm||'' };
-    data.callTracking={ enabled: document.getElementById('s-ct-enabled')?.checked!==false };
+    // Message templates: owner-managed [{id,label,body}] list (drops empty rows).
+    this._syncTemplates();
+    data.smsTemplates=(this._tpls||[]).filter(t=>(t.label||'').trim()||(t.body||'').trim())
+      .map(t=>({ id:t.id||genId('tpl'), label:(t.label||'Template').trim(), body:(t.body||'').trim() }));
     const rd=parseInt(document.getElementById('s-rebook-days')?.value)||21;
     data.rebookInterval=Math.min(90,Math.max(7,rd));
     const gr=document.getElementById('s-grev')?.value.trim(); if(gr)data.googleReviewLink=gr;
@@ -663,8 +646,72 @@ const Settings = {
     data.tax={ enabled:document.getElementById('s-tax-enabled')?.checked||false, rate:parseFloat(document.getElementById('s-tax-rate')?.value)||0, label:document.getElementById('s-tax-label')?.value.trim()||'Sales Tax' };
     Shop.tax=data.tax; // keep checkout + estimate math in sync without a reload
     await db.settings.save(data);
+    // Keep templates live for Messages/Tasks/review prompts without a reload.
+    if (Shop.settings) Shop.settings.smsTemplates = data.smsTemplates;
+    if (Shop.settings) Shop.settings.googleReviewLink = (gr || Shop.settings.googleReviewLink || '');
+    this._tpls = _smsTemplates(data.smsTemplates);
     const title=document.getElementById('topbar-title'); if(title)title.textContent=data.shopName||'ShopFlow';
     toast('Settings saved ✓');
+  },
+
+  // ── Message-template manager ──────────────────────────────────────────────────
+  MERGE_FIELDS: ['{first}','{name}','{shop}','{date}','{time}','{service}','{link}'],
+
+  // Render the editable list of templates into #s-tpl-list.
+  _renderTemplateList() {
+    const tpls = this._tpls || [];
+    if (!tpls.length) {
+      return '<div style="font-size:12px;color:var(--faint);padding:6px 0 12px;">No templates yet — add one to get started.</div>';
+    }
+    return tpls.map((t,i) => {
+      const chips = this.MERGE_FIELDS.map(f =>
+        `<button type="button" class="btn btn-xs" style="padding:2px 7px;font-size:11px;" onclick="Settings._insertVar(${i},'${f}')">${f}</button>`
+      ).join(' ');
+      return '<div class="card" style="padding:12px;margin-bottom:10px;background:var(--off,#f9fafb);">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+        +   '<label class="form-label" style="margin:0;">Template name</label>'
+        +   `<button class="btn btn-sm btn-danger" style="padding:2px 10px;" onclick="Settings.delTemplate(${i})" title="Delete template">✕</button>`
+        + '</div>'
+        + `<input class="form-input" id="s-tpl-label-${i}" value="${esc(t.label||'')}" placeholder="e.g. Appointment reminder" style="margin-bottom:10px;" />`
+        + `<label class="form-label">Message</label>`
+        + `<textarea class="form-input" id="s-tpl-body-${i}" rows="3" placeholder="Type your message…" style="margin-bottom:6px;">${esc(t.body||'')}</textarea>`
+        + `<div style="display:flex;flex-wrap:wrap;gap:5px;">${chips}</div>`
+        + '</div>';
+    }).join('');
+  },
+
+  // Read the live inputs back into this._tpls so add/delete/save don't lose edits.
+  _syncTemplates() {
+    (this._tpls || []).forEach((t,i) => {
+      const l = document.getElementById('s-tpl-label-'+i); if (l) t.label = l.value;
+      const b = document.getElementById('s-tpl-body-'+i);  if (b) t.body  = b.value;
+    });
+  },
+
+  _repaintTemplates() {
+    const host = document.getElementById('s-tpl-list');
+    if (host) host.innerHTML = this._renderTemplateList();
+  },
+
+  addTemplate() {
+    this._syncTemplates();
+    (this._tpls = this._tpls || []).push({ id: genId('tpl'), label: '', body: '' });
+    this._repaintTemplates();
+  },
+
+  delTemplate(i) {
+    this._syncTemplates();
+    (this._tpls || []).splice(i, 1);
+    this._repaintTemplates();
+  },
+
+  // Insert a merge field at the cursor in a template's body textarea.
+  _insertVar(i, token) {
+    const ta = document.getElementById('s-tpl-body-'+i); if (!ta) return;
+    const start = ta.selectionStart ?? ta.value.length, end = ta.selectionEnd ?? ta.value.length;
+    ta.value = ta.value.slice(0, start) + token + ta.value.slice(end);
+    const pos = start + token.length; ta.focus(); ta.setSelectionRange(pos, pos);
+    if (this._tpls && this._tpls[i]) this._tpls[i].body = ta.value;
   },
 
   // ── Work gallery ────────────────────────────────────────────────────────────

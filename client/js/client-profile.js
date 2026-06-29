@@ -27,6 +27,61 @@ function _cpSms(phone, body) {
   window.location.href = 'sms:' + tel + (body ? '&body=' + encodeURIComponent(body) : '');
 }
 
+// ── Shared SMS templates ──────────────────────────────────────────────────────
+// The owner's editable message presets (Settings → Message Templates). Stored as a
+// list of { id, label, body }; merge fields {first}/{name}/{shop}/{date}/{time}/
+// {service}/{link} are filled per-recipient at send time. Used by the Messages
+// composer, the Tasks worklist, and the manual review/reminder prompts. No Twilio:
+// every send is the owner tapping the iPhone sms: deep link (_cpSms).
+const SMS_TEMPLATE_DEFAULTS = [
+  { id: 'confirmation', label: 'Appointment confirmation', body: 'Hi {first}! Your appointment at {shop} is confirmed for {date} at {time}. See you then!' },
+  { id: 'reminder',     label: 'Appointment reminder',     body: 'Hi {first}! Reminder: your appointment at {shop} is on {date} at {time}. See you then!' },
+  { id: 'rebook',       label: 'Time to rebook',           body: "Hi {first}! It's been a while — we'd love to get your vehicle looking fresh again at {shop}. Want to get on the schedule?" },
+  { id: 'review',       label: 'Review request',           body: 'Hi {first}, thanks for visiting {shop}! We\'d love a quick review: {link}' },
+];
+// Human labels for legacy keyed-object templates, so a one-time migration keeps the
+// owner's wording.
+const _SMS_LEGACY_LABELS = { confirmation: 'Appointment confirmation', reminder: 'Appointment reminder', rebook: 'Time to rebook', review: 'Review request', missedCall: 'Missed call' };
+
+// Return the shop's templates as a normalized [{id,label,body}] list. Accepts the
+// new list shape as-is, migrates the legacy keyed object, and falls back to the
+// defaults when nothing is saved.
+function _smsTemplates(explicit) {
+  const raw = (arguments.length ? explicit : (typeof Shop !== 'undefined' && Shop.settings && Shop.settings.smsTemplates)) || null;
+  if (Array.isArray(raw)) {
+    return raw.filter(t => t && (t.label || t.body))
+      .map(t => ({ id: t.id || genId('tpl'), label: t.label || 'Template', body: String(t.body || '') }));
+  }
+  // Legacy keyed object → seed defaults, overlay any saved bodies, append extras.
+  const legacy = (raw && typeof raw === 'object') ? raw : {};
+  const list = SMS_TEMPLATE_DEFAULTS.map(d => ({ ...d, body: (typeof legacy[d.id] === 'string' && legacy[d.id]) ? legacy[d.id] : d.body }));
+  Object.keys(legacy).forEach(k => {
+    if (!list.some(t => t.id === k) && typeof legacy[k] === 'string' && legacy[k]) {
+      list.push({ id: k, label: _SMS_LEGACY_LABELS[k] || k, body: legacy[k] });
+    }
+  });
+  return list;
+}
+// Look up one template body by id, falling back to the matching default.
+function _smsTemplateBody(id) {
+  const found = _smsTemplates().find(t => t.id === id);
+  if (found) return found.body;
+  const def = SMS_TEMPLATE_DEFAULTS.find(t => t.id === id);
+  return def ? def.body : '';
+}
+// Pure merge-field substitution (no formatting — pass already-formatted date/time).
+function _smsFill(body, vars) {
+  const v = vars || {};
+  return String(body || '')
+    .replace(/\{first\}/g,   v.first   || 'there')
+    .replace(/\{name\}/g,    v.name    || 'there')
+    .replace(/\{shop\}/g,    v.shop    || 'us')
+    .replace(/\{date\}/g,    v.date    || '')
+    .replace(/\{time\}/g,    v.time    || '')
+    .replace(/\{service\}/g, v.service || '')
+    .replace(/\{link\}/g,    v.link    || '');
+}
+
 const ClientProfile = {
   _data: null, _services: [], _messages: [], _recs: [],
 

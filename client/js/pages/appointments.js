@@ -603,16 +603,15 @@ const Appointments = {
     } catch(e) { toast('Could not create payment link — check Stripe settings','error'); }
   },
 
-  async _textPayLink() {
+  _textPayLink() {
     const { phone, name, url } = Appointments._co;
-    const btn = document.getElementById('send-link-btn'); if(btn){btn.disabled=true;btn.textContent='Sending...';}
-    const firstName = name.split(' ')[0];
+    if (!phone) { toast('No phone number on file', 'warning'); return; }
+    const firstName = (name || '').split(' ')[0];
     const msg = `Hi ${firstName}! Here's your payment link for today's visit: ${url}`;
-    try {
-      await db.sms.send({ to: phone, body: msg, customerName: name });
-      if(btn){btn.textContent='✓ Sent!';btn.style.background='var(--green)';}
-      toast('Payment link sent via text ✓');
-    } catch(e) { toast('Could not send text','error'); if(btn){btn.disabled=false;btn.textContent='📱 Text to '+phone;} }
+    // Manual send via the iPhone Messages deep link (no Twilio/A2P).
+    _cpSms(phone, msg);
+    const btn = document.getElementById('send-link-btn');
+    if (btn) { btn.textContent = '✓ Opened in Messages'; btn.style.background = 'var(--green)'; }
   },
 
   async _verifyPayment(btn) {

@@ -32,8 +32,9 @@ function _tFill(tpl, ctx) {
 }
 
 const Tasks = {
-  _customers: [], _leads: [], _byCust: {}, _rebook: 21, _wb: null, _wbEdit: null,
+  _customers: [], _leads: [], _appts: [], _byCust: {}, _rebook: 21, _wb: null, _wbEdit: null,
   _tasks: {},   // taskId -> task, so action buttons can look one up by id
+  _remDone: {}, // apptId -> true: reminders the owner handled this session (no backend)
 
   // Default win-back cadence (Day 0 / 4 / 10). Used when settings.winback is absent.
   DEFAULT_WINBACK: {
@@ -66,11 +67,12 @@ const Tasks = {
       ]);
       this._customers = customers || [];
       this._leads = leads || [];
+      this._appts = appointments || [];
       this._rebook = (settings && settings.rebookInterval) || 21;
       this._wb = this._winbackFrom(settings);
       // Group appointments by customer client-side (db.customers.all omits them).
       this._byCust = {};
-      (appointments || []).forEach(a => { if (a.customerId) (this._byCust[a.customerId] = this._byCust[a.customerId] || []).push(a); });
+      this._appts.forEach(a => { if (a.customerId) (this._byCust[a.customerId] = this._byCust[a.customerId] || []).push(a); });
 
       const groups = this._build();
       el.innerHTML = this._html(groups);
@@ -151,6 +153,26 @@ const Tasks = {
       add(task, ld < t0 ? 'overdue' : 'today');
     });
 
+    // 4. Tomorrow's appointment reminders — the "text tonight" worklist that
+    //    replaced the old automatic 24-hour reminder (no A2P → owner texts by hand).
+    //    Pulls from the shop's editable "reminder" template; handled items are
+    //    hidden for the session via _remDone (no backend write for a daily list).
+    const tomorrow = _tAddDays(t0, 1);
+    const reminderTpl = _smsTemplateBody('reminder');
+    this._appts
+      .filter(a => a.date === tomorrow && a.status === 'confirmed' && a.customerPhone && !this._remDone[a.id])
+      .forEach(a => {
+        const ctx = { first: _tFirst(a.customerName), name: a.customerName || 'there', shop,
+                      date: fmtDateFull(a.date), time: a.time || '', service: a.service || '' };
+        const task = {
+          source: 'reminder', apptId: a.id, name: a.customerName || 'Client', phone: a.customerPhone,
+          reason: `Appointment tomorrow${a.time ? ' · ' + a.time : ''}`,
+          detail: [a.service, fmtDateShort(a.date)].filter(Boolean).join(' · '),
+          message: _smsFill(reminderTpl, ctx), dueDate: t0,
+        };
+        add(task, 'today');
+      });
+
     // Sort each bucket by due date (most urgent first).
     Object.values(groups).forEach(arr => arr.sort((a, b) => (a.dueDate || '').localeCompare(b.dueDate || '')));
     return groups;
@@ -187,9 +209,10 @@ const Tasks = {
 
   _card(t) {
     const SRC = {
-      winback: ['badge-blue', 'Win-back'],
-      service: ['badge-green', 'Service due'],
-      lead:    ['badge-yellow', 'New lead'],
+      winback:  ['badge-blue', 'Win-back'],
+      service:  ['badge-green', 'Service due'],
+      lead:     ['badge-yellow', 'New lead'],
+      reminder: ['badge-green', 'Reminder'],
     }[t.source];
     const id = t.id;
     const acts = [];
@@ -197,7 +220,7 @@ const Tasks = {
     acts.push('<button class="btn btn-sm btn-green" onclick="Tasks.text(\'' + id + '\')">💬 Text</button>');
     if (t.phone) acts.push('<button class="btn btn-sm" onclick="Tasks.call(\'' + id + '\')">📞 Call</button>');
     acts.push('<button class="btn btn-sm" onclick="Tasks.done(\'' + id + '\')">✓ Done</button>');
-    if (t.source !== 'lead') acts.push('<button class="btn btn-sm" onclick="Tasks.snooze(\'' + id + '\')">⏰ Snooze</button>');
+    if (t.source !== 'lead' && t.source !== 'reminder') acts.push('<button class="btn btn-sm" onclick="Tasks.snooze(\'' + id + '\')">⏰ Snooze</button>');
     acts.push('<button class="btn btn-sm btn-danger" onclick="Tasks.dismiss(\'' + id + '\')">✕</button>');
 
     return '<div class="card" style="margin-bottom:10px;">'
@@ -230,6 +253,9 @@ const Tasks = {
       const c = this._cust(t.custId); if (!c) return;
       const fu = this._ensureFollowup(c);
       if (fu.completedStep < t.stepIdx) { fu.completedStep = t.stepIdx; fu.snoozeUntil = null; this._persistCust(c); }
+    } else if (t.source === 'reminder') {
+      // Texting tomorrow's reminder clears it from today's list (session-only).
+      this._remDone[t.apptId] = true; this.render();
     }
   },
 
@@ -251,6 +277,8 @@ const Tasks = {
       await this._persistCust(c, 'Marked done ✓');
     } else if (t.source === 'lead') {
       await this._persistLead(t.leadId, { status: 'contacted' }, 'Lead contacted ✓');
+    } else if (t.source === 'reminder') {
+      this._remDone[t.apptId] = true; toast('Marked done ✓'); this.render();
     }
   },
 
@@ -282,6 +310,8 @@ const Tasks = {
       await this._persistCust(c, 'Dismissed');
     } else if (t.source === 'lead') {
       await this._persistLead(t.leadId, { status: 'closed' }, 'Dismissed');
+    } else if (t.source === 'reminder') {
+      this._remDone[t.apptId] = true; toast('Dismissed'); this.render();
     }
   },
 

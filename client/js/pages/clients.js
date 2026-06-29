@@ -416,18 +416,14 @@ const Clients = {
     App.nav('appointments');
   },
 
-  async sendMessage() {
+  sendMessage() {
     const input = document.getElementById('chat-input');
     const msg = input?.value.trim();
     if (!msg) return;
     const c = this._profileData?.customer;
-    if (!c?.phone) return;
-    input.value = '';
-    try {
-      const r = await db.sms.send({ to: c.phone, body: msg, customerId: c.id, customerName: c.name });
-      if (r.ok) { await this._renderProfile(document.getElementById('page-clients')); }
-      else toast(r.error||'Could not send — check Twilio in Settings','error');
-    } catch(e) { toast('Could not send message','error'); }
+    if (!c?.phone) { toast('No phone number on file', 'warning'); return; }
+    // Manual send via the iPhone Messages deep link (no Twilio/A2P).
+    _cpSms(c.phone, msg);
   },
 
   async redeemReward(id, name) {

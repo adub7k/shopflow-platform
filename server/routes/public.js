@@ -402,22 +402,11 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     const appt = { id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '', barberId: barberId || null, barberName: barberName || null, serviceId: serviceId || null, service: svcFromDb.name, price, cost, duration, date, time, status: needsDeposit ? 'pending-deposit' : 'confirmed', notes: notes || '', customFields: cf, vehicleSize: vehicleSize || null, addons: chosenAddons, inspoPhoto: inspo, source: 'booking-page', createdAt: new Date().toISOString() };
     upsert('appointments', appt);
 
-    // Send confirmation SMS via platform Twilio account
-    const s = db.get('settings').value() || {};
-    let smsSent = false;
-    const fromNum = shopFromNumber(shop.id);
-    if (twilioClient && fromNum && digits.length >= 10) {
-      try {
-        const msg = buildSms('confirmation', {
-          name: customerName.split(' ')[0],
-          shop: s.shopName,
-          date, time,
-          barber: barberName,
-        }, s);
-        await twilioClient.messages.create({ from: fromNum, to: '+1' + digits, body: msg });
-        smsSent = true;
-      } catch(e) { console.error('SMS failed:', e.message); }
-    }
+    // No confirmation SMS. The platform has no Twilio A2P and the booker isn't the
+    // owner (so we can't open their Messages app), so the auto-text is dropped — the
+    // new booking shows up immediately in Appointments and on the Dashboard for the
+    // owner to act on. smsSent stays false for the booking page.
+    const smsSent = false;
 
     master.get('shops').find({ id: shop.id }).assign({ lastActivity: new Date().toISOString() }).write();
     res.json({ ok: true, appointmentId: apptId, smsSent });

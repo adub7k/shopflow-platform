@@ -252,7 +252,11 @@ const SMS_DEFAULTS = {
 };
 
 function buildSms(type, vars, settings) {
-  const tpl = (settings.smsTemplates && settings.smsTemplates[type]) || SMS_DEFAULTS[type];
+  // smsTemplates is now a [{id,label,body}] list (owner-managed); tolerate both the
+  // new list shape and the legacy keyed object, falling back to the built-in default.
+  const raw = settings.smsTemplates;
+  const fromList = Array.isArray(raw) ? ((raw.find(t => t && t.id === type) || {}).body || '') : '';
+  const tpl = fromList || (raw && !Array.isArray(raw) && raw[type]) || SMS_DEFAULTS[type];
   return tpl
     .replace(/{name}/g,   vars.name   || 'there')
     .replace(/{shop}/g,   vars.shop   || 'the shop')

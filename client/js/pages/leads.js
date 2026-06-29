@@ -211,17 +211,19 @@ const Leads = {
     } catch(e) { toast(e.message || 'Could not save', 'error'); }
   },
 
-  async sendSms(id) {
+  sendSms(id) {
     const input = document.getElementById('lead-sms');
     const body = input?.value.trim();
     if (!body) return;
-    input.value = '';
-    try {
-      const res = await db.leads.sms(id, body);
-      if (!res.ok) throw new Error(res.error || 'SMS failed');
-      toast('Message sent ✓');
-      const l = this._leads.find(x => x.id === id); if (l && l.status === 'new') l.status = 'contacted';
-    } catch(e) { toast(e.message || 'Could not send', 'error'); if (input) input.value = body; }
+    const l = this._leads.find(x => x.id === id);
+    if (!l || !l.phone) { toast('No phone number on file', 'warning'); return; }
+    // Manual send via the iPhone Messages deep link (no Twilio/A2P).
+    _cpSms(l.phone, body);
+    // Texting a new lead counts as the first touch → move it to "contacted".
+    if (l.status === 'new') {
+      l.status = 'contacted';
+      db.leads.update(id, { status: 'contacted' }).catch(() => {});
+    }
   },
 
   async convert(id) {
