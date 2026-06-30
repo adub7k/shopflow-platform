@@ -346,6 +346,64 @@ const ClientProfile = {
     Modal.close();
     _cpSms(this._textPhone, body);   // opens iPhone Messages prefilled
   },
+
+  // ── Request a deposit ────────────────────────────────────────────────────────
+  // Opens a dialog to set the deposit amount, builds a checkout link (the shop's
+  // connected Square/Stripe) for the client's next upcoming appointment, then opens
+  // Messages prefilled with the link. Pay → confirm reuses the booking-page path
+  // (success redirect records depositPaid). Works whenever a processor is connected
+  // — independent of the "require deposit to book" toggle.
+  _depositCtx: null,
+
+  async requestDeposit(custId) {
+    const c = this._data && this._data.customer;
+    if (!c || !c.phone) { toast('No phone number on file', 'warning'); return; }
+    const appt = (this._data.appointments || [])
+      .filter(a => (a.status === 'confirmed' || a.status === 'pending-deposit') && a.date >= today())
+      .sort((a, b) => a.date.localeCompare(b.date))[0];
+    if (!appt) { toast('No upcoming appointment to attach a deposit to — book one first', 'warning'); return; }
+    const slug = (typeof Auth !== 'undefined' && Auth.getShopSlug && Auth.getShopSlug()) || '';
+    let info;
+    try { info = await fetch('/api/public/' + slug + '/info').then(r => r.json()); }
+    catch (e) { toast('Could not load payment settings', 'error'); return; }
+    if (!info || !info.depositProvider) { toast('Connect a payment processor in Settings first', 'warning'); return; }
+    this._depositCtx = { slug, apptId: appt.id, appt, provider: info.depositProvider, phone: c.phone, name: c.name };
+    const defAmt = (info.deposit && info.deposit.amount) || 50;
+    const quick = [25, 50, 75, 100, 150];
+    Modal.show(
+      '<div class="modal-title">Request deposit</div>'
+      + `<div style="font-size:13px;color:var(--muted);margin:-4px 0 14px;">For ${esc(c.name)}'s appointment on ${esc(fmtDateFull(appt.date))}${appt.time ? ' at ' + esc(appt.time) : ''}${appt.service ? ' · ' + esc(appt.service) : ''}</div>`
+      + '<div class="form-group"><label class="form-label">Deposit amount</label>'
+      +   '<div style="position:relative;"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted);">$</span>'
+      +   `<input class="form-input" id="cp-dep-amt" type="number" min="1" value="${defAmt}" style="padding-left:24px;" /></div></div>`
+      + '<div class="form-group"><div style="display:flex;gap:6px;flex-wrap:wrap;">'
+      +   quick.map(a => `<button type="button" class="btn btn-sm" onclick="document.getElementById('cp-dep-amt').value=${a}">$${a}</button>`).join('')
+      +   '</div></div>'
+      + '<button class="btn btn-green btn-full" onclick="ClientProfile._sendDeposit()">📲 Text deposit link</button>'
+      + '<div class="modal-actions"><button class="btn btn-full" onclick="Modal.close()">Cancel</button></div>'
+    );
+  },
+
+  async _sendDeposit() {
+    const ctx = this._depositCtx; if (!ctx) return;
+    const amount = Math.max(1, Math.round(Number(document.getElementById('cp-dep-amt')?.value) || 0));
+    if (!amount) { toast('Enter a deposit amount', 'warning'); return; }
+    const endpoint = ctx.provider === 'square' ? 'square-deposit-session' : 'deposit-session';
+    toast('Building deposit link…');
+    try {
+      const r = await fetch('/api/public/' + ctx.slug + '/' + endpoint, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appointmentId: ctx.apptId, amount }),
+      }).then(r => r.json());
+      if (!r || !r.ok || !r.url) { toast(r && r.error ? r.error : 'Could not create the deposit link', 'error'); return; }
+      Modal.close();
+      const first = (ctx.name || 'there').split(' ')[0];
+      const shop = (Shop.settings && Shop.settings.shopName) || 'us';
+      const a = ctx.appt;
+      const body = `Hi ${first}! Here's the link to pay your $${amount} deposit and lock in your appointment at ${shop} on ${fmtDateFull(a.date)}${a.time ? ' at ' + a.time : ''}: ${r.url}`;
+      _cpSms(ctx.phone, body);   // opens Messages prefilled with the deposit link
+    } catch (e) { toast('Could not create the deposit link', 'error'); }
+  },
 };
 
 // ── Retention recommendations (heuristic, from service history) ────────────────
@@ -440,6 +498,7 @@ function _buildProfileHtml(data, services, messages) {
     h += `<div class="cp-actions">
       ${qa(`ClientProfile.schedule('${c.id}')`, '📅', 'Schedule')}
       ${qa(`ClientProfile.invoicePrompt('${c.id}')`, '🧾', 'Invoice')}
+      ${qa(`ClientProfile.requestDeposit('${c.id}')`, '💳', 'Deposit')}
       ${qa(`ClientProfile.textPrompt('${c.id}')`, '💬', 'Send Text')}
       ${c.phone ? qa('', '📞', 'Call', 'tel:' + c.phone) : ''}
       ${qa(`ClientProfile.vehiclePrompt('${c.id}')`, '🚗', 'Add Vehicle')}

@@ -74,8 +74,11 @@ function squareConnected(s) { return !!((s.square && s.square.accessToken && s.s
 function fulfillSquareDeposit(shopId, apptId, amountCents) {
   const db = getShopDb(shopId); const h = shopHelpers(db);
   const appt = h.getById('appointments', apptId);
-  if (appt && appt.status === 'pending-deposit') {
-    appt.status = 'confirmed'; appt.depositPaid = true;
+  // Confirm a pending booking, OR just record the deposit on an already-confirmed
+  // appointment (e.g. a deposit link sent from the client profile). Idempotent.
+  if (appt && (appt.status === 'pending-deposit' || !appt.depositPaid)) {
+    if (appt.status === 'pending-deposit') appt.status = 'confirmed';
+    appt.depositPaid = true;
     if (amountCents != null) appt.depositAmount = amountCents / 100;
     h.upsert('appointments', appt);
     return true;
@@ -163,7 +166,9 @@ router.post('/api/public/:shopSlug/square-deposit-session', async (req, res) => 
       description: (s.shopName || '') + ' · ' + appt.date + ' at ' + appt.time,
       amountCents,
       redirectUrl: APP_URL + '/sq/booking-deposit-success?appt=' + appointmentId + '&shop=' + shop.id,
-      idempotencyKey: 'dep-' + appointmentId,
+      // Key by appointment + amount so re-sending the same amount is idempotent,
+      // but a different amount (owner-chosen from the profile) creates a fresh link.
+      idempotencyKey: 'dep-' + appointmentId + '-' + amountCents,
       accessToken: creds.accessToken, locationId: creds.locationId,
     });
     appt.squareOrderId = link.orderId; appt.squarePaymentLinkId = link.id; appt.depositAmount = amountCents / 100;
