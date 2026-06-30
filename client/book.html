@@ -273,8 +273,8 @@ img{max-width:100%;display:block;}
     <!-- Details -->
     <section class="block">
       <div class="block-head"><span class="num num-step">5</span><h2 class="block-title">Your details</h2></div>
-      <div class="field"><label>Full name</label><input id="f-name" type="text" placeholder="e.g. Jordan Rivera" autocomplete="name" /></div>
-      <div class="field"><label>Phone number</label><input id="f-phone" type="tel" placeholder="(505) 555-0100" autocomplete="tel" inputmode="tel" /></div>
+      <div class="field"><label>Full name</label><input id="f-name" type="text" placeholder="e.g. Jordan Rivera" autocomplete="name" oninput="B.updateCTA()" /></div>
+      <div class="field"><label>Phone number</label><input id="f-phone" type="tel" placeholder="(505) 555-0100" autocomplete="tel" inputmode="tel" oninput="B.updateCTA()" /></div>
       <div class="field"><label>Email (optional)</label><input id="f-email" type="email" placeholder="you@email.com" autocomplete="email" /></div>
       <div id="custom-fields"></div>
       <div class="field"><label id="lbl-notes">Notes (optional)</label><textarea id="f-notes" placeholder="Anything we should know..."></textarea></div>
@@ -331,7 +331,7 @@ const B = {
       this._renumber();
       this.updateCTA();
       document.getElementById('app').style.display='';
-      document.getElementById('cta').style.display='';
+      document.getElementById('cta').style.display='block';
       const ld=document.getElementById('loading'); ld.classList.add('fade'); setTimeout(()=>ld.style.display='none',360);
     }catch(e){ this.closed(); }
   },
@@ -565,7 +565,7 @@ const B = {
     const wrap=document.getElementById('custom-fields');
     wrap.innerHTML=this.fields.map(f=>`<div class="field">
       <label>${es2(f.label)}${f.required?'':' (optional)'}</label>
-      <input id="cf-${es2(f.key)}" type="${f.type==='number'?'tel':'text'}" placeholder="${es2(f.label)}" />
+      <input id="cf-${es2(f.key)}" type="${f.type==='number'?'tel':'text'}" placeholder="${es2(f.label)}" oninput="B.updateCTA()" />
     </div>`).join('');
     const staff=this.V('staff','Barber');
     document.getElementById('lbl-notes').textContent=(this.V('notes','Notes')+' (optional)');
@@ -587,11 +587,19 @@ const B = {
           price=document.getElementById('cta-price'), btn=document.getElementById('cta-btn');
     if(!s.svcId){ meta.textContent='Choose a service to start'; price.textContent=''; btn.disabled=true; btn.textContent='Book now'; return; }
     price.textContent='$'+(s.svcPrice+this._addonsTotal());
+    // Require the full booking AND contact + vehicle info before the button works,
+    // so we never start a booking with missing details.
+    const name=(document.getElementById('f-name')?.value||'').trim();
+    const phone=(document.getElementById('f-phone')?.value||'').replace(/\D/g,'');
+    const missingField=(this.fields||[]).find(f=>f.required && !(document.getElementById('cf-'+f.key)?.value||'').trim());
     let ready=true, hint='';
     if(!s.date){ hint='Pick a date'; ready=false; }
     else if(!s.time){ hint='Pick a time'; ready=false; }
+    else if(this.inspo==='required' && !s.inspoPhoto){ hint='Add your inspo photo'; ready=false; }
+    else if(!name){ hint='Enter your name'; ready=false; }
+    else if(phone.length<10){ hint='Enter your phone number'; ready=false; }
+    else if(missingField){ hint='Enter your '+String(missingField.label||'details').toLowerCase(); ready=false; }
     else { hint=new Date(s.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+' · '+s.time; }
-    if(ready && this.inspo==='required' && !s.inspoPhoto){ hint='Add your inspo photo'; ready=false; }
     meta.textContent=(s.barberName?s.barberName+' · ':'')+hint;
     btn.disabled=!ready;
     btn.textContent = dep&&dep.enabled ? ('Pay $'+dep.amount+' & book') : 'Book now';
