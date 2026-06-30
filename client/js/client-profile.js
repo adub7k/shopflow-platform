@@ -358,21 +358,19 @@ const ClientProfile = {
   async requestDeposit(custId) {
     const c = this._data && this._data.customer;
     if (!c || !c.phone) { toast('No phone number on file', 'warning'); return; }
-    const appt = (this._data.appointments || [])
-      .filter(a => (a.status === 'confirmed' || a.status === 'pending-deposit') && a.date >= today())
-      .sort((a, b) => a.date.localeCompare(b.date))[0];
-    if (!appt) { toast('No upcoming appointment to attach a deposit to — book one first', 'warning'); return; }
     const slug = (typeof Auth !== 'undefined' && Auth.getShopSlug && Auth.getShopSlug()) || '';
     let info;
     try { info = await fetch('/api/public/' + slug + '/info').then(r => r.json()); }
     catch (e) { toast('Could not load payment settings', 'error'); return; }
-    if (!info || !info.depositProvider) { toast('Connect a payment processor in Settings first', 'warning'); return; }
-    this._depositCtx = { slug, apptId: appt.id, appt, provider: info.depositProvider, phone: c.phone, name: c.name };
+    if (!info || info.depositProvider !== 'square') {
+      toast('Connect Square in Settings to send deposit links', 'warning'); return;
+    }
+    this._depositCtx = { slug, custId, phone: c.phone, name: c.name };
     const defAmt = (info.deposit && info.deposit.amount) || 50;
     const quick = [25, 50, 75, 100, 150];
     Modal.show(
       '<div class="modal-title">Request deposit</div>'
-      + `<div style="font-size:13px;color:var(--muted);margin:-4px 0 14px;">For ${esc(c.name)}'s appointment on ${esc(fmtDateFull(appt.date))}${appt.time ? ' at ' + esc(appt.time) : ''}${appt.service ? ' · ' + esc(appt.service) : ''}</div>`
+      + `<div style="font-size:13px;color:var(--muted);margin:-4px 0 14px;">Text ${esc(c.name)} a link to pay a deposit. It's logged in their notes (and marked paid when they pay).</div>`
       + '<div class="form-group"><label class="form-label">Deposit amount</label>'
       +   '<div style="position:relative;"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted);">$</span>'
       +   `<input class="form-input" id="cp-dep-amt" type="number" min="1" value="${defAmt}" style="padding-left:24px;" /></div></div>`
@@ -388,19 +386,18 @@ const ClientProfile = {
     const ctx = this._depositCtx; if (!ctx) return;
     const amount = Math.max(1, Math.round(Number(document.getElementById('cp-dep-amt')?.value) || 0));
     if (!amount) { toast('Enter a deposit amount', 'warning'); return; }
-    const endpoint = ctx.provider === 'square' ? 'square-deposit-session' : 'deposit-session';
     toast('Building deposit link…');
     try {
-      const r = await fetch('/api/public/' + ctx.slug + '/' + endpoint, {
+      const r = await fetch('/api/public/' + ctx.slug + '/square-customer-deposit', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appointmentId: ctx.apptId, amount }),
+        body: JSON.stringify({ customerId: ctx.custId, amount }),
       }).then(r => r.json());
       if (!r || !r.ok || !r.url) { toast(r && r.error ? r.error : 'Could not create the deposit link', 'error'); return; }
       Modal.close();
+      toast('Deposit link ready — logged to notes ✓');
       const first = (ctx.name || 'there').split(' ')[0];
       const shop = (Shop.settings && Shop.settings.shopName) || 'us';
-      const a = ctx.appt;
-      const body = `Hi ${first}! Here's the link to pay your $${amount} deposit and lock in your appointment at ${shop} on ${fmtDateFull(a.date)}${a.time ? ' at ' + a.time : ''}: ${r.url}`;
+      const body = `Hi ${first}! Here's the link to pay your $${amount} deposit at ${shop}: ${r.url}`;
       _cpSms(ctx.phone, body);   // opens Messages prefilled with the deposit link
     } catch (e) { toast('Could not create the deposit link', 'error'); }
   },
