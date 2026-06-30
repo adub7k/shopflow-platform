@@ -244,9 +244,9 @@ function computeApptCost(db, appt) {
 
 // ── SMS helpers ───────────────────────────────────────────────────────────────
 const SMS_DEFAULTS = {
-  confirmation: "Hi {name}! Your appointment at {shop} is confirmed for {date} at {time}{barber}. See you then! ✂️",
-  reminder:     "Hi {name}! Reminder: your appointment at {shop} is tomorrow at {time}{barber}. See you then! ✂️",
-  rebook:       "Hey {name}! It's been a few weeks — we'd love to have you back at {shop}. Book your next cut anytime 💈",
+  confirmation: "Hi {name}! Your appointment at {shop} is confirmed for {date} at {time}{barber}. See you then!",
+  reminder:     "Hi {name}! Reminder: your appointment at {shop} is tomorrow at {time}{barber}. See you then!",
+  rebook:       "Hey {name}! It's been a few weeks — we'd love to have you back at {shop}. Book your next visit anytime.",
   missedCall:   "Hi, this is {shop} — sorry we missed your call! How can we help? Reply here or book online anytime.",
   review:       "Hi {name}, thanks for visiting {shop}! We'd love your feedback — leave us a quick review: {link}",
 };

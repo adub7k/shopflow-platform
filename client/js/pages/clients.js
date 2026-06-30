@@ -137,8 +137,8 @@ const Clients = {
 
   sendRetentionText(id, name, phone, type) {
     const firstName = name.split(' ')[0];
-    const checkin = `Hey ${firstName}! It's been a while — we'd love to have you back in the chair. Book anytime at ${location.host}/book/ ✂️`;
-    const discount = `Hey ${firstName}! We miss you! Come back in and we'll take care of you — mention this text for a special deal. Book at ${location.host}/book/ ✂️`;
+    const checkin = `Hey ${firstName}! It's been a while — we'd love to get your vehicle looking its best again. Book anytime at ${location.host}/book/`;
+    const discount = `Hey ${firstName}! We miss you! Come on back and we'll take care of you — mention this text for a special deal. Book at ${location.host}/book/`;
     const defaultMsg = type==='discount' ? discount : checkin;
 
     Modal.show(`
@@ -361,7 +361,7 @@ const Clients = {
                 ${hasCutNotes?'<span style="font-size:10px;color:var(--faint);">▼</span>':''}
               </div>
             </div>
-            ${hasCutNotes?`<div style="display:none;padding:0 14px 10px;font-size:12px;color:var(--muted);font-style:italic;background:var(--off);">✂️ ${a.cutNotes}</div>`:''}
+            ${hasCutNotes?`<div style="display:none;padding:0 14px 10px;font-size:12px;color:var(--muted);font-style:italic;background:var(--off);">📝 ${a.cutNotes}</div>`:''}
           </div>`;
         });
         html += `</div>`;

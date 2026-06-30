@@ -11,6 +11,7 @@ const Settings = {
       const html=[];
 
       // Shop info
+      html.push('<div style="margin:4px 0 10px;font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--muted);">SHOP &amp; BOOKING</div>');
       html.push('<div class="section-header">Shop Info</div><div class="card">');
       html.push(`<div class="form-group"><label class="form-label">Shop Name</label><input class="form-input" id="s-name" value="${s.shopName||''}" /></div>`);
       html.push(`<div class="form-group"><label class="form-label">Tagline</label><input class="form-input" id="s-tag" value="${s.tagline||''}" /></div>`);
@@ -60,31 +61,36 @@ const Settings = {
       html.push('</div>');
       html.push('<input type="file" id="s-gallery-file" accept="image/*" style="display:none;" onchange="Settings.galleryUpload(this)" />');
 
-      // Barbers (labelled per industry vocabulary)
-      html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>'+esc(V('staffPlural','Barbers'))+'</span><button class="btn btn-sm btn-green" onclick="Settings.openBarber(null)">+ Add</button></div>');
-      barbers.forEach(b=>{
-        html.push(`<div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;border-left:4px solid ${b.color||'var(--green)}'};">
-          <div style="width:40px;height:40px;border-radius:50%;background:${b.color||'var(--green)'}22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:${b.color||'var(--green)'};">${initials(b.name)}</div>
-          <div style="flex:1;"><div style="font-size:14px;font-weight:700;">${b.name}</div><div style="font-size:12px;color:var(--muted);">${esc(V('station','Chair'))} ${b.chair}${b.bio?' · '+b.bio:''}</div></div>
-          <button class="btn btn-sm" onclick="Settings.openBarber('${b.id}')">Edit</button>
-        </div>`);
-      });
-
-      // Staff & Access (multi-user roles)
-      const roleLabels={full:'Full Access',technician:V('staff','Technician'),viewonly:'View Only'};
+      // Team — one place for everyone. A member can have a login (role) and/or be
+      // assignable to appointments (a linked, color-coded booking record). Logins =
+      // accounts; bookable providers = barber records linked by barber.accountId.
+      const roleLabels={full:'Full Access',technician:'Technician',viewonly:'View Only'};
       const roleColors={full:'#16a34a',technician:'#2563eb',viewonly:'#6e6e73'};
-      html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Staff &amp; Access</span><button class="btn btn-sm btn-green" onclick="Settings.openStaff(null)">+ Add</button></div>');
-      html.push('<div style="font-size:12px;color:var(--muted);margin:-6px 0 10px;">Each staff member logs in with their own email and password. Full Access sees everything · '+esc(V('staff','Technician'))+' sees appointments &amp; clients (no revenue or settings) · View Only sees the calendar.</div>');
-      staff.forEach(u=>{
-        html.push(`<div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
-          <div style="width:40px;height:40px;border-radius:50%;background:${roleColors[u.role]||'#6e6e73'}22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:${roleColors[u.role]||'#6e6e73'};">${initials(u.name||u.email)}</div>
-          <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;">${esc(u.name||'—')}${u.isOwner?' <span style="font-size:10px;color:var(--faint);font-weight:600;">(owner)</span>':''}</div><div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(u.email)}</div></div>
-          <span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:${roleColors[u.role]||'#6e6e73'}1a;color:${roleColors[u.role]||'#6e6e73'};white-space:nowrap;">${roleLabels[u.role]||u.role}</span>
-          <button class="btn btn-sm" onclick="Settings.openStaff('${u.id}')">Edit</button>
+      // Build a unified roster: every login, plus any bookable provider with no login.
+      const team=[];
+      staff.forEach(u=>team.push({ account:u, barber:barbers.find(b=>b.accountId===u.id)||null }));
+      barbers.filter(b=>!staff.some(u=>u.id===b.accountId)).forEach(b=>team.push({ account:null, barber:b }));
+      html.push('<div style="margin:26px 0 10px;border-top:1px solid var(--line);padding-top:16px;font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--muted);">TEAM</div>');
+      html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Team</span><button class="btn btn-sm btn-green" onclick="Settings.openTeam(\'\',\'\')">+ Add</button></div>');
+      html.push('<div style="font-size:12px;color:var(--muted);margin:-6px 0 10px;">Add the people who work with you. Give them a login (Full Access sees everything · Technician sees jobs &amp; clients, no money or settings · View Only sees the calendar) and/or make them assignable to appointments.</div>');
+      team.forEach(m=>{
+        const u=m.account, b=m.barber;
+        const name=(u&&u.name)||(b&&b.name)||'—';
+        const accent=(b&&b.color)||roleColors[u&&u.role]||'#6e6e73';
+        const sub=u?u.email:'No login';
+        const chips=[];
+        if(u) chips.push(`<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:${roleColors[u.role]||'#6e6e73'}1a;color:${roleColors[u.role]||'#6e6e73'};white-space:nowrap;">${roleLabels[u.role]||u.role}</span>`);
+        if(b) chips.push(`<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:${b.color||'#16a34a'}1a;color:${b.color||'#16a34a'};white-space:nowrap;">● Bookable</span>`);
+        html.push(`<div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;border-left:4px solid ${accent};">
+          <div style="width:40px;height:40px;border-radius:50%;background:${accent}22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:${accent};">${initials(name)}</div>
+          <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;">${esc(name)}${u&&u.isOwner?' <span style="font-size:10px;color:var(--faint);font-weight:600;">(owner)</span>':''}</div><div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(sub)}</div></div>
+          <div style="display:flex;gap:5px;flex:none;align-items:center;">${chips.join('')}</div>
+          <button class="btn btn-sm" onclick="Settings.openTeam('${u?u.id:''}','${b?b.id:''}')">Edit</button>
         </div>`);
       });
 
       // Services
+      html.push('<div style="margin:26px 0 10px;border-top:1px solid var(--line);padding-top:16px;font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--muted);">SERVICES &amp; PRICING</div>');
       html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Services</span><button class="btn btn-sm btn-green" onclick="Settings.openService(null)">+ Add</button></div>');
       html.push('<div class="list-card">');
       services.forEach(s=>{
@@ -122,7 +128,7 @@ const Settings = {
       // Loyalty
       html.push('<div class="section-header">Loyalty Program</div><div class="card">');
       html.push(`<div class="form-group"><label class="form-label">Visits for free service</label><input class="form-input" id="s-lvis" type="number" value="${s.loyalty?.visitsForReward||10}" /></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Reward description</label><input class="form-input" id="s-lrew" value="${s.loyalty?.rewardDescription||'One free haircut'}" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Reward description</label><input class="form-input" id="s-lrew" value="${s.loyalty?.rewardDescription||'One free service'}" /></div>`);
       html.push('</div>');
 
       // Sales Tax — applied to service subtotals at checkout + on estimates
@@ -138,6 +144,7 @@ const Settings = {
       // Message templates — owner-managed presets sent via the iPhone Messages
       // deep link (no Twilio/A2P). Used by Messages, the Tasks worklist, and the
       // review prompt.
+      html.push('<div style="margin:26px 0 10px;border-top:1px solid var(--line);padding-top:16px;font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--muted);">MESSAGING &amp; CALLS</div>');
       html.push('<div class="section-header">Message Templates</div><div class="card">');
       html.push(`<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Create the texts you send from Messages, the Tasks worklist, and the review prompt. They open in your phone's Messages app prefilled — edit before sending. Tap a field below a message to insert it.</div>`);
       html.push(`<div id="s-tpl-list">${this._renderTemplateList()}</div>`);
@@ -173,6 +180,7 @@ const Settings = {
       // Blocked Dates
       let blockedDates = [];
       try { blockedDates = await db.blockedDates.all(); } catch(e) {}
+      html.push('<div style="margin:26px 0 10px;border-top:1px solid var(--line);padding-top:16px;font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--muted);">BOOKING RULES &amp; PAYMENTS</div>');
       html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Blocked Booking Dates</span><button class="btn btn-sm btn-danger" onclick="Settings.openBlockDate()">+ Block Date</button></div>');
       if (!blockedDates.length) {
         html.push('<div class="card"><div style="font-size:13px;color:var(--faint);text-align:center;padding:12px 0;">No dates blocked — booking is open every working day</div></div>');
@@ -232,8 +240,20 @@ const Settings = {
     }catch(e){el.innerHTML='<div class="card"><p style="color:var(--muted)">Could not load settings</p></div>';}
   },
 
-  openBarber(id) {
-    const b=id?this._barbers.find(x=>x.id===id):null;
+  // Unified Team member modal: login (email/password/role) + an optional "bookable"
+  // section (color + schedule) that maps to a linked booking record. Pass the
+  // account id and/or the barber id (either may be empty for a new member).
+  openTeam(accountId, barberId) {
+    const u = accountId ? this._staff.find(x=>x.id===accountId) : null;
+    const b = barberId ? this._barbers.find(x=>x.id===barberId) : (u ? this._barbers.find(x=>x.accountId===u.id) : null);
+    const isOwner = !!(u && u.isOwner);
+    const bookable = !!b;
+    const name = (u&&u.name)||(b&&b.name)||'';
+    const roles = [
+      ['full','Full Access — sees everything'],
+      ['technician','Technician — jobs & clients only'],
+      ['viewonly','View Only — calendar only'],
+    ];
     const sched=b?.schedule||{workDays:[1,2,3,4,5,6],startTime:'9:00 AM',endTime:'6:00 PM',slotMinutes:30};
     const colors=['#16a34a','#2563eb','#d97706','#7c3aed','#dc2626','#0891b2','#be185d'];
     const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -245,63 +265,74 @@ const Settings = {
     const allowed=Array.isArray(sched.allowedTimes)?sched.allowedTimes:[];
     const customOn=allowed.length>0;
     Modal.show(`
-      <div class="modal-title">${b?'Edit '+esc(V('staff','Barber')):'Add '+esc(V('staff','Barber'))}</div>
-      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fb-name" value="${b?.name||''}" placeholder="e.g. Chris" /></div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">${esc(V('station','Chair'))} #</label><input class="form-input" id="fb-chair" type="number" value="${b?.chair||this._barbers.length+1}" min="1" /></div>
-        <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="fb-phone" type="tel" value="${b?.phone||''}" /></div>
-      </div>
-      <div class="form-group"><label class="form-label">Bio / specialty</label><input class="form-input" id="fb-bio" value="${b?.bio||''}" placeholder="e.g. Fades and designs" /></div>
-      <div class="form-group"><label class="form-label">Color</label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          ${colors.map(c=>`<div onclick="document.getElementById('fb-col').value='${c}';document.querySelectorAll('.bc').forEach(x=>x.style.outline='none');this.style.outline='3px solid #000';" class="bc" style="width:30px;height:30px;border-radius:50%;background:${c};cursor:pointer;outline:${b?.color===c?'3px solid #000':'none'};outline-offset:2px;"></div>`).join('')}
-        </div>
-        <input type="hidden" id="fb-col" value="${b?.color||colors[0]}" />
-      </div>
+      <div class="modal-title">${(u||b)?'Edit team member':'Add team member'}</div>
+      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fu-name" value="${esc(name)}" placeholder="e.g. Marcus Reyes" /></div>
 
-      <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:14px;">
-        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;">📅 Booking Schedule</div>
-        <div class="form-group">
-          <label class="form-label">Working Days</label>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">${dayBtns}</div>
-          <input type="hidden" id="fb-workdays" value="${JSON.stringify(sched.workDays||[1,2,3,4,5,6])}" />
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin:6px 0 8px;">LOGIN</div>
+      <div class="form-group"><label class="form-label">Email${u?'':' <span style="font-weight:400;color:var(--faint);">(optional — leave blank for no login)</span>'}</label><input class="form-input" id="fu-email" type="email" value="${esc(u?.email||'')}" placeholder="them@email.com" /></div>
+      <div class="form-group"><label class="form-label">Password ${u?'<span style="font-weight:400;color:var(--faint);">(leave blank to keep current)</span>':'<span style="font-weight:400;color:var(--faint);">(needed for a login)</span>'}</label><input class="form-input" id="fu-pass" type="password" placeholder="At least 6 characters" autocomplete="new-password" /></div>
+      ${isOwner
+        ? '<input type="hidden" id="fu-role" value="full" /><div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Owner account — always Full Access.</div>'
+        : `<div class="form-group"><label class="form-label">Role</label><select class="form-input" id="fu-role">${roles.map(([v,l])=>`<option value="${v}"${(u?.role||'technician')===v?' selected':''}>${esc(l)}</option>`).join('')}</select></div>`}
+
+      <div class="form-group" style="margin-top:6px;"><label class="toggle-row" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span><span class="form-label" style="display:block;">Assignable to appointments</span><span style="font-size:12px;color:var(--muted);">Show them as a bookable provider with their own color.</span></span><input type="checkbox" id="fu-bookable" ${bookable?'checked':''} onchange="Settings._toggleBookable()" style="width:20px;height:20px;flex-shrink:0;" /></label></div>
+
+      <div id="team-booking" style="${bookable?'':'display:none;'}">
+        <div class="form-group"><label class="form-label">Color</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${colors.map(c=>`<div onclick="document.getElementById('fb-col').value='${c}';document.querySelectorAll('.bc').forEach(x=>x.style.outline='none');this.style.outline='3px solid #000';" class="bc" style="width:30px;height:30px;border-radius:50%;background:${c};cursor:pointer;outline:${(b&&b.color===c)?'3px solid #000':'none'};outline-offset:2px;"></div>`).join('')}
+          </div>
+          <input type="hidden" id="fb-col" value="${(b&&b.color)||colors[0]}" />
         </div>
-        <div class="form-group">
-          <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-            <input type="checkbox" id="fb-customtimes" ${customOn?'checked':''} onchange="Settings._toggleCustomTimes()" style="width:auto;margin:0;" />
-            Only offer specific times
-          </label>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Take bookings at set times only — e.g. 10:00 AM &amp; 2:00 PM — instead of every slot in a range.</div>
-        </div>
-        <div id="fb-range-fields" style="${customOn?'display:none;':''}">
-          <div class="form-row">
-            <div class="form-group"><label class="form-label">Start Time</label><select class="form-input" id="fb-start">${startOpts}</select></div>
-            <div class="form-group"><label class="form-label">End Time</label><select class="form-input" id="fb-end">${endOpts}</select></div>
+        <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:14px;">
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;">📅 Booking Schedule</div>
+          <div class="form-group">
+            <label class="form-label">Working Days</label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">${dayBtns}</div>
+            <input type="hidden" id="fb-workdays" value="${JSON.stringify(sched.workDays||[1,2,3,4,5,6])}" />
           </div>
           <div class="form-group">
-            <label class="form-label">Slot Duration</label>
-            <select class="form-input" id="fb-slot">
-              ${[15,20,30,45,60].map(m=>`<option value="${m}"${sched.slotMinutes===m?' selected':''}>${m} minutes</option>`).join('')}
-            </select>
+            <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="fb-customtimes" ${customOn?'checked':''} onchange="Settings._toggleCustomTimes()" style="width:auto;margin:0;" />
+              Only offer specific times
+            </label>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">Take bookings at set times only — e.g. 10:00 AM &amp; 2:00 PM — instead of every slot in a range.</div>
           </div>
-        </div>
-        <div id="fb-customtimes-wrap" style="${customOn?'':'display:none;'}">
-          <label class="form-label">Available times</label>
-          <div id="fb-times-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
-          <div style="display:flex;gap:8px;">
-            <select class="form-input" id="fb-time-pick" style="flex:1;">${pickOpts}</select>
-            <button type="button" class="btn" onclick="Settings._addTime()">+ Add</button>
+          <div id="fb-range-fields" style="${customOn?'display:none;':''}">
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">Start Time</label><select class="form-input" id="fb-start">${startOpts}</select></div>
+              <div class="form-group"><label class="form-label">End Time</label><select class="form-input" id="fb-end">${endOpts}</select></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Slot Duration</label>
+              <select class="form-input" id="fb-slot">
+                ${[15,20,30,45,60].map(m=>`<option value="${m}"${sched.slotMinutes===m?' selected':''}>${m} minutes</option>`).join('')}
+              </select>
+            </div>
           </div>
-          <input type="hidden" id="fb-allowedtimes" value='${JSON.stringify(allowed)}' />
+          <div id="fb-customtimes-wrap" style="${customOn?'':'display:none;'}">
+            <label class="form-label">Available times</label>
+            <div id="fb-times-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+            <div style="display:flex;gap:8px;">
+              <select class="form-input" id="fb-time-pick" style="flex:1;">${pickOpts}</select>
+              <button type="button" class="btn" onclick="Settings._addTime()">+ Add</button>
+            </div>
+            <input type="hidden" id="fb-allowedtimes" value='${JSON.stringify(allowed)}' />
+          </div>
         </div>
       </div>
 
       <div class="modal-actions">
-        ${b?`<button class="btn btn-danger btn-full" onclick="Settings.deleteBarber('${b.id}')">Remove ${esc(V('staff','Barber'))}</button>`:''}
-        <button id="fb-btn" class="btn btn-primary btn-full" onclick="Settings.saveBarber('${b?.id||''}')">Save</button>
+        ${((u&&!isOwner)||b)?`<button class="btn btn-danger btn-full" onclick="Settings.removeTeam('${u?u.id:''}','${b?b.id:''}')">Remove</button>`:''}
+        <button id="fu-btn" class="btn btn-primary btn-full" onclick="Settings.saveTeam('${u?u.id:''}','${b?b.id:''}')">Save</button>
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
       </div>`);
-    setTimeout(()=>{document.getElementById('fb-name')?.focus();Settings._renderTimeChips();},150);
+    setTimeout(()=>{document.getElementById('fu-name')?.focus();Settings._renderTimeChips();},150);
+  },
+
+  _toggleBookable() {
+    const on=document.getElementById('fu-bookable')?.checked;
+    const w=document.getElementById('team-booking'); if(w)w.style.display=on?'':'none';
   },
 
   _toggleCustomTimes() {
@@ -338,88 +369,63 @@ const Settings = {
     el.value = JSON.stringify(days.sort());
   },
 
-  async saveBarber(id) {
-    const name=document.getElementById('fb-name')?.value.trim();
-    if(!name){toast('Enter a name','warning');return;}
-    const btn=document.getElementById('fb-btn'); disableBtn(btn);
-    const schedule={
-      workDays: JSON.parse(document.getElementById('fb-workdays')?.value||'[1,2,3,4,5,6]'),
-      startTime: document.getElementById('fb-start')?.value||'9:00 AM',
-      endTime:   document.getElementById('fb-end')?.value||'6:00 PM',
-      slotMinutes: parseInt(document.getElementById('fb-slot')?.value)||30,
-    };
-    // Specific-times mode: offer ONLY the listed times on working days.
-    if (document.getElementById('fb-customtimes')?.checked) {
-      const times = this._getTimes();
-      if (!times.length) { toast('Add at least one time, or turn off specific times','warning'); enableBtn(btn); return; }
-      schedule.allowedTimes = times;
-    }
-    try{
-      await db.barbers.save({
-        id:id||genId('b'),
-        name,
-        chair:parseInt(document.getElementById('fb-chair')?.value)||1,
-        phone:document.getElementById('fb-phone')?.value.trim()||'',
-        bio:document.getElementById('fb-bio')?.value.trim()||'',
-        color:document.getElementById('fb-col')?.value||'#16a34a',
-        active:true,
-        schedule,
-        joinedAt:id?(this._barbers.find(b=>b.id===id)?.joinedAt||today()):today()
-      });
-      Modal.close(); toast(id?'Updated ✓':V('staff','Barber')+' added ✓'); this.render();
-    }catch(e){toast('Could not save','error');enableBtn(btn);}
-  },
-
-  async deleteBarber(id) {
-    if(!confirm('Remove this '+V('staff','barber').toLowerCase()+'?'))return;
-    await db.barbers.delete(id); Modal.close(); this.render(); toast('Removed');
-  },
-
-  // ── Staff & Access ──────────────────────────────────────────────────────────
-  openStaff(id) {
-    const u = id ? this._staff.find(x=>x.id===id) : null;
-    const isOwner = !!u?.isOwner;
-    const roles = [
-      ['full','Full Access — sees everything'],
-      ['technician', V('staff','Technician')+' — appointments & clients only'],
-      ['viewonly','View Only — calendar only'],
-    ];
-    Modal.show(`
-      <div class="modal-title">${u?'Edit Staff':'Add Staff'}</div>
-      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fu-name" value="${esc(u?.name||'')}" placeholder="e.g. Marcus Reyes" /></div>
-      <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="fu-email" type="email" value="${esc(u?.email||'')}" placeholder="them@email.com" /></div>
-      <div class="form-group"><label class="form-label">Password ${u?'<span style="font-weight:400;color:var(--faint);">(leave blank to keep current)</span>':'*'}</label><input class="form-input" id="fu-pass" type="password" placeholder="At least 6 characters" autocomplete="new-password" /></div>
-      ${isOwner
-        ? '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">This is the owner account — it always has Full Access.</div>'
-        : `<div class="form-group"><label class="form-label">Role</label><select class="form-input" id="fu-role">${roles.map(([v,l])=>`<option value="${v}"${u?.role===v?' selected':''}>${esc(l)}</option>`).join('')}</select></div>`}
-      <div class="modal-actions">
-        ${u&&!isOwner?`<button class="btn btn-danger btn-full" onclick="Settings.deleteStaff('${u.id}')">Remove Staff</button>`:''}
-        <button id="fu-btn" class="btn btn-primary btn-full" onclick="Settings.saveStaff('${u?.id||''}')">Save</button>
-        <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
-      </div>`);
-    setTimeout(()=>document.getElementById('fu-name')?.focus(),150);
-  },
-
-  async saveStaff(id) {
+  async saveTeam(accountId, barberId) {
     const name  = document.getElementById('fu-name')?.value.trim();
     const email = document.getElementById('fu-email')?.value.trim();
     const pass  = document.getElementById('fu-pass')?.value||'';
     const role  = document.getElementById('fu-role')?.value||'technician';
-    if(!name){toast('Enter a name','warning');return;}
-    if(!email){toast('Enter an email','warning');return;}
-    if(!id && pass.length<6){toast('Set a password of 6+ characters','warning');return;}
+    const bookable = !!document.getElementById('fu-bookable')?.checked;
+    if(!name){ toast('Enter a name','warning'); return; }
+    const wantLogin = !!email || !!accountId;
+    if(!wantLogin && !bookable){ toast('Add a login (email) or make them assignable to appointments','warning'); return; }
+    if(wantLogin && !email){ toast('Enter an email for the login','warning'); return; }
+    if(wantLogin && !accountId && pass.length<6){ toast('Set a password of 6+ characters for the login','warning'); return; }
     const btn=document.getElementById('fu-btn'); disableBtn(btn);
     try{
-      const body={name,email,role}; if(id)body.id=id; if(pass)body.password=pass;
-      await db.staff.save(body);
-      Modal.close(); toast(id?'Updated ✓':'Staff added ✓'); this.render();
-    }catch(e){toast(e.message||'Could not save','error');enableBtn(btn);}
+      let acctId = accountId;
+      if(wantLogin){
+        const body={name,email,role}; if(accountId)body.id=accountId; if(pass)body.password=pass;
+        const r = await db.staff.save(body); acctId = accountId || (r&&r.id);
+      }
+      if(bookable){
+        const schedule={
+          workDays: JSON.parse(document.getElementById('fb-workdays')?.value||'[1,2,3,4,5,6]'),
+          startTime: document.getElementById('fb-start')?.value||'9:00 AM',
+          endTime:   document.getElementById('fb-end')?.value||'6:00 PM',
+          slotMinutes: parseInt(document.getElementById('fb-slot')?.value)||30,
+        };
+        if(document.getElementById('fb-customtimes')?.checked){
+          const times=this._getTimes();
+          if(!times.length){ toast('Add at least one time, or turn off specific times','warning'); enableBtn(btn); return; }
+          schedule.allowedTimes=times;
+        }
+        const existing = barberId ? this._barbers.find(b=>b.id===barberId) : null;
+        await db.barbers.save({
+          id: barberId||genId('b'),
+          name,
+          color: document.getElementById('fb-col')?.value||'#16a34a',
+          chair: existing?.chair || (this._barbers.length+1),
+          phone: existing?.phone || '',
+          bio:   existing?.bio || '',
+          active: true,
+          accountId: acctId || null,
+          schedule,
+          joinedAt: existing?.joinedAt || today(),
+        });
+      } else if(barberId){
+        await db.barbers.delete(barberId);   // was bookable, now off → drop booking record
+      }
+      Modal.close(); toast((accountId||barberId)?'Updated ✓':'Team member added ✓'); this.render();
+    }catch(e){ toast(e.message||'Could not save','error'); enableBtn(btn); }
   },
 
-  async deleteStaff(id) {
-    if(!confirm('Remove this staff member? They will no longer be able to log in.'))return;
-    try{ await db.staff.delete(id); Modal.close(); toast('Removed'); this.render(); }
-    catch(e){ toast(e.message||'Could not remove','error'); }
+  async removeTeam(accountId, barberId) {
+    if(!confirm('Remove this team member? Any login will stop working.'))return;
+    try{
+      if(accountId) await db.staff.delete(accountId);
+      if(barberId)  await db.barbers.delete(barberId);
+      Modal.close(); toast('Removed'); this.render();
+    }catch(e){ toast(e.message||'Could not remove','error'); }
   },
 
   openService(id) {
@@ -625,7 +631,7 @@ const Settings = {
 
   async save() {
     const data={shopName:document.getElementById('s-name')?.value.trim(),tagline:document.getElementById('s-tag')?.value.trim(),phone:document.getElementById('s-phone')?.value.trim(),address:document.getElementById('s-addr')?.value.trim(),email:document.getElementById('s-email')?.value.trim(),bookingMessage:document.getElementById('s-bmsg')?.value.trim(),bookingEnabled:document.getElementById('s-benabled')?.checked!==false,staffPicker:document.getElementById('s-staffpicker')?.checked!==false};
-    const lv=document.getElementById('s-lvis')?.value; if(lv)data.loyalty={visitsForReward:parseInt(lv),rewardDescription:document.getElementById('s-lrew')?.value.trim()||'One free haircut'};
+    const lv=document.getElementById('s-lvis')?.value; if(lv)data.loyalty={visitsForReward:parseInt(lv),rewardDescription:document.getElementById('s-lrew')?.value.trim()||'One free service'};
     // Message templates: owner-managed [{id,label,body}] list (drops empty rows).
     this._syncTemplates();
     data.smsTemplates=(this._tpls||[]).filter(t=>(t.label||'').trim()||(t.body||'').trim())

@@ -477,7 +477,7 @@ const Appointments = {
     try { const st = await db.stripe.status(); stripeConnected = st.connected; } catch(e) {}
 
     Modal.show(`
-      <div class="modal-title">💈 Checkout</div>
+      <div class="modal-title">🧾 Checkout</div>
       <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">${a.customerName} · ${a.service}</div>
       <div class="form-group">
         <label class="form-label">Amount</label>

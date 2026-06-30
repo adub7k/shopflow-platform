@@ -14,7 +14,7 @@ function renderOnboarding(settings, barbers) {
     },
     {
       key: 'addBarber',
-      icon: '✂️',
+      icon: '🚗',
       label: 'Add your '+V('staffPlural','barbers').toLowerCase(),
       desc: 'Replace the default '+V('staff','barber').toLowerCase()+' with your real team',
       done: barbers.some(b => b.name && b.name !== V('staff','Barber')+' 1'),
@@ -32,7 +32,7 @@ function renderOnboarding(settings, barbers) {
       key: 'review',
       icon: '⭐',
       label: 'Add your Google review link',
-      desc: 'Sent to clients 48 hours after each visit automatically',
+      desc: 'Use it to ask clients for a review after a visit',
       done: !!(settings.googleReviewLink),
       action: `App.nav('settings')`,
     },
