@@ -253,5 +253,35 @@ router.get('/sq/customer-deposit-success', async (req, res) => {
   res.send('<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="font-family:-apple-system,sans-serif;text-align:center;padding:60px 20px;background:#f5f5f7;"><div style="font-size:64px;margin-bottom:20px;">✅</div><div style="font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:8px;">Deposit received!</div><div style="font-size:15px;color:#6e6e73;line-height:1.6;margin-bottom:24px;">Thanks — your deposit was received. We\'ll see you soon.</div><div style="font-size:13px;color:#aeaeb2;">You can close this tab.</div></body></html>');
 });
 
+// ── AUTHED: reconcile a client's pending deposits against Square ───────────────
+// The success redirect can be missed (closed tab / PUBLIC_URL mismatch), so the
+// owner app calls this when opening a profile: ask Square whether each "sent"
+// deposit is actually paid, and if so flip it + drop the "paid" note. No webhook
+// needed; this is the authoritative catch-up.
+router.post('/api/shop/square/reconcile-deposits', requireAuth, async (req, res) => {
+  try {
+    const db = getShopDb(req.shopId); const s = db.get('settings').value() || {}; const h = shopHelpers(db);
+    const cust = h.getById('customers', req.body.customerId);
+    if (!cust) return res.status(404).json({ ok: false, error: 'Client not found' });
+    const pending = (cust.deposits || []).filter(d => d.status === 'sent' && d.orderId);
+    if (!pending.length) return res.json({ ok: true, updated: 0, customer: cust });
+    const creds = (await resolveSquare(db, s)) || {};
+    let updated = 0;
+    for (const dep of pending) {
+      if (await sq.isOrderPaid(dep.orderId, { accessToken: creds.accessToken })) {
+        dep.status = 'paid'; dep.paidAt = new Date().toISOString();
+        cust.noteLog = cust.noteLog || [];
+        cust.noteLog.unshift({ id: genId('note'), scope: 'customer', text: '💳 $' + dep.amount + ' deposit paid', at: dep.paidAt, by: 'Deposit' });
+        updated++;
+      }
+    }
+    if (updated) h.upsert('customers', cust);
+    res.json({ ok: true, updated, customer: cust });
+  } catch (e) {
+    console.error('reconcile-deposits error:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 module.exports = router;
 module.exports.squareConnected = squareConnected;

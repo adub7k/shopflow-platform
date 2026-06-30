@@ -106,6 +106,14 @@ const ClientProfile = {
       let changed = false;
       (c.vehicles || []).forEach(v => { if (!v.id) { v.id = genId('veh'); changed = true; } });
       if (changed) { try { await db.customers.save(c); } catch (e) { /* non-fatal */ } }
+      // Catch up any paid-but-unmarked deposits with Square (the success redirect
+      // can be missed) so they show in the notes without waiting on a webhook.
+      if ((c.deposits || []).some(d => d.status === 'sent' && d.orderId) && db.square && db.square.reconcileDeposits) {
+        try {
+          const rec = await db.square.reconcileDeposits(c.id);
+          if (rec && rec.ok && rec.updated && rec.customer) { c.noteLog = rec.customer.noteLog; c.deposits = rec.customer.deposits; }
+        } catch (e) { /* non-fatal */ }
+      }
       this._data = data; this._messages = messages; this._services = services;
       // Make this customer editable from any entry point (Dashboard/Leads open the
       // profile without rendering the Clients list, so Clients._data may be empty).
@@ -398,6 +406,7 @@ const ClientProfile = {
       const first = (ctx.name || 'there').split(' ')[0];
       const shop = (Shop.settings && Shop.settings.shopName) || 'us';
       const body = `Hi ${first}! Here's the link to pay your $${amount} deposit at ${shop}: ${r.url}`;
+      this.open(ctx.custId);     // refresh so the "Sent deposit link" note shows now
       _cpSms(ctx.phone, body);   // opens Messages prefilled with the deposit link
     } catch (e) { toast('Could not create the deposit link', 'error'); }
   },
