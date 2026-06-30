@@ -291,9 +291,61 @@ const ClientProfile = {
     } catch (e) { toast(e.message || 'Could not record invoice', 'error'); enableBtn(btn); }
   },
 
-  // ── Texting — opens Messages prefilled (no A2P/Twilio needed) ───────────────
-  textPrompt(custId) { _cpSms(this._data.customer.phone, ''); },
-  sendRec(custId, i) { const rec = (this._recs || [])[i]; _cpSms(this._data.customer.phone, rec ? rec.sms : ''); },
+  // ── Texting — pick a template, then open Messages prefilled (no A2P/Twilio) ──
+  // Both entry points open a picker first instead of jumping straight to Messages:
+  //  • textPrompt → generic "Text {name}" (owner's saved templates + blank custom)
+  //  • sendRec    → seeds the picker with the recommendation's tailored follow-up
+  textPrompt(custId) { this._textModal(); },
+  sendRec(custId, i) { const rec = (this._recs || [])[i]; this._textModal(rec ? rec.sms : ''); },
+
+  // Merge-field values for this client (next confirmed appt fills {date}/{time}/{service}).
+  _textVars() {
+    const c = (this._data && this._data.customer) || {};
+    const next = (this._data && this._data.appointments || [])
+      .filter(a => a.status === 'confirmed' && a.date >= today())
+      .sort((a, b) => a.date.localeCompare(b.date))[0];
+    return {
+      first: (c.name || 'there').split(' ')[0], name: c.name || 'there',
+      shop: (Shop.settings && Shop.settings.shopName) || 'us',
+      link: (Shop.settings && Shop.settings.googleReviewLink) || '',
+      date: next ? fmtDateFull(next.date) : '', time: (next && next.time) || '', service: (next && next.service) || '',
+    };
+  },
+
+  _textModal(suggested) {
+    const c = (this._data && this._data.customer) || {};
+    if (!c.phone) { toast('No phone number on file', 'warning'); return; }
+    this._textPhone = c.phone;
+    // First option = the tailored suggestion (when there is one), then the owner's
+    // saved templates, then a blank custom message.
+    const head = suggested ? [{ label: 'Suggested message', body: suggested }] : [];
+    this._textOpts = head.concat(_smsTemplates()).concat([{ label: 'Custom (blank)', body: '' }]);
+    Modal.show(
+      '<div class="modal-title">Text ' + esc(c.name || 'client') + '</div>'
+      + '<div class="form-group"><label class="form-label">Template</label>'
+      +   '<select class="form-input" id="cp-text-tpl" onchange="ClientProfile._fillText()">'
+      +     this._textOpts.map((o, i) => `<option value="${i}">${esc(o.label)}</option>`).join('')
+      +   '</select></div>'
+      + '<div class="form-group"><label class="form-label">Message <span style="font-weight:400;color:var(--muted);">(edit as needed)</span></label>'
+      +   '<textarea class="form-input" id="cp-text-body" rows="4"></textarea></div>'
+      + '<button class="btn btn-green btn-full" onclick="ClientProfile._sendText()">📲 Open in Messages</button>'
+      + '<div class="modal-actions"><button class="btn btn-full" onclick="Modal.close()">Cancel</button></div>'
+    );
+    setTimeout(() => this._fillText(), 0);
+  },
+
+  _fillText() {
+    const i = +(document.getElementById('cp-text-tpl') || {}).value || 0;
+    const o = this._textOpts[i] || { body: '' };
+    const ta = document.getElementById('cp-text-body');
+    if (ta) ta.value = _smsFill(o.body, this._textVars());   // a pre-filled suggestion stays as-is
+  },
+
+  _sendText() {
+    const body = (document.getElementById('cp-text-body') || {}).value || '';
+    Modal.close();
+    _cpSms(this._textPhone, body);   // opens iPhone Messages prefilled
+  },
 };
 
 // ── Retention recommendations (heuristic, from service history) ────────────────
