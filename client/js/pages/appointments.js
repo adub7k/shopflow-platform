@@ -155,7 +155,9 @@ const Appointments = {
   openForm(id) {
     const a = id ? this._data.find(x=>x.id===id) : null;
     const barberOpts = this._barbers.map(b=>`<option value="${b.id}|${b.name}"${a?.barberId===b.id?' selected':''}>${b.name}</option>`).join('');
-    const svcOpts = this._services.map(s=>`<option value="${s.id}|${s.name}|${s.price}"${a?.serviceId===s.id?' selected':''}>${s.name} — ${fmtMoney(s.price)}</option>`).join('');
+    // Service options show the name only — no price, to avoid confusion at booking
+    // (the actual price still fills the Price field below via _recalcPrice).
+    const svcOpts = this._services.map(s=>`<option value="${s.id}|${s.name}|${s.price}"${a?.serviceId===s.id?' selected':''}>${s.name}</option>`).join('');
     Modal.show(`
       <div class="modal-title">${a?'Edit Appointment':'New Appointment'}</div>
       <div class="form-group"><label class="form-label">Client *</label>
@@ -169,7 +171,7 @@ const Appointments = {
           <select class="form-input" id="fa-svc" onchange="Appointments._svcChange()">${svcOpts}</select>
         </div>
         <div class="form-group"><label class="form-label">Price</label>
-          <input class="form-input" id="fa-price" type="number" value="${a?.price||35}" />
+          <input class="form-input" id="fa-price" type="number" value="${a?.price||35}" oninput="Appointments._priceEdited=true" />
         </div>
       </div>
       ${(Shop.sizes||[]).length?`<div class="form-group"><label class="form-label">Vehicle size</label>
@@ -200,7 +202,10 @@ const Appointments = {
       </div>`);
     setTimeout(()=>{
       makeAutocomplete('fa-name','fa-list',(id,name,phone)=>{document.getElementById('fa-name').value=name;document.getElementById('fa-cid').value=id;document.getElementById('fa-phone').value=phone||'';});
-      // For a new appointment, sync price to the preselected service + size.
+      // New appt: auto-price from the preselected service + size. Editing an existing
+      // appt: treat the saved price as owner-set so a size/add-on tweak won't wipe it
+      // (only picking a new service resets it). A manual edit locks it either way.
+      Appointments._priceEdited = !!a;
       if(!a) Appointments._recalcPrice();
     },150);
   },
@@ -357,11 +362,15 @@ const Appointments = {
     } catch(e) { toast('Could not update status','error'); }
   },
 
-  _svcChange() { this._recalcPrice(); },
+  // Picking a different service resets to that service's price; a manual edit to
+  // the Price field afterward locks it again.
+  _svcChange() { this._priceEdited=false; this._recalcPrice(); },
 
   // Set the price field to the total: the selected service (size-adjusted for
-  // detail shops) plus any checked add-ons. Falls back to the flat price.
+  // detail shops) plus any checked add-ons. Falls back to the flat price. Skips
+  // when the owner has typed their own price so size/add-on changes don't wipe it.
   _recalcPrice() {
+    if (this._priceEdited) return;
     const svcId=(document.getElementById('fa-svc')?.value||'').split('|')[0];
     const svc=this._services.find(s=>s.id===svcId); if(!svc)return;
     const sizeKey=document.getElementById('fa-size')?.value||'';
