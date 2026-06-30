@@ -109,6 +109,16 @@ const Revenue = {
         </div>`);
       }
 
+      // ── Deposits collected ──────────────────────────────────────────────────
+      // Shown separately on purpose: deposits are prepayments applied at checkout,
+      // so they're tracked here without inflating the service-based Revenue/Profit.
+      if (data.monthDeposits || data.totalDeposits) {
+        html.push(`<div class="section-header">Deposits Collected</div><div class="card" style="display:flex;justify-content:space-between;align-items:center;">
+          <div><div style="font-size:13px;font-weight:700;">Prepaid by clients</div><div style="font-size:12px;color:var(--muted);">Tracked separately — applied to the balance at checkout.</div></div>
+          <div style="text-align:right;"><div style="font-weight:800;color:var(--green);">${fmtMoney(data.monthDeposits)}</div><div style="font-size:11px;color:var(--muted);">${fmtMoney(data.totalDeposits)} all time</div></div>
+        </div>`);
+      }
+
       // ── By staff ────────────────────────────────────────────────────────────
       if (data.byBarber?.length > 1) {
         html.push('<div class="section-header">Revenue by '+esc(V('staffPlural','Barber'))+'</div><div class="card">');

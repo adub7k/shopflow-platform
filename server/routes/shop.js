@@ -547,6 +547,12 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
   const monthNet   = round2(monthGross - monthOpEx);
   const totalNet   = round2(totalGross - totalOpEx);
 
+  // Deposits collected (standalone, profile-requested). Tracked as their own
+  // stream so the P&L stays service-based; bucketed by when they were paid.
+  const paidDeposits = customers.flatMap(c => (c.deposits || []).filter(d => d.status === 'paid'));
+  const totalDeposits = round2(paidDeposits.reduce((s, d) => s + Number(d.amount || 0), 0));
+  const monthDeposits = round2(paidDeposits.filter(d => monthOf(d.paidAt) === curMonth).reduce((s, d) => s + Number(d.amount || 0), 0));
+
   res.json({
     mrr, activeMembers: activeMembers.length,
     totalRevenue, monthRevenue,
@@ -564,6 +570,7 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
     hasExpenses: expenses.length > 0,
     monthTaxCollected: round2(thisMonth.reduce((s,a)=>s+Number(a.taxAmount||0),0)),
     totalTaxCollected: round2(done.reduce((s,a)=>s+Number(a.taxAmount||0),0)),
+    monthDeposits, totalDeposits,
     monthJobs: thisMonth.length,
     avgTicket: thisMonth.length?Math.round(thisMonth.reduce((s,a)=>s+Number(a.price||0),0)/thisMonth.length):0,
     byBarber: Object.values(byBarber).sort((a,b)=>b.revenue-a.revenue),
