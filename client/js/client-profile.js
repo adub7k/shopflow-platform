@@ -21,10 +21,27 @@ function _cpDaysAgo(date) { return Math.floor((Date.now() - new Date(date + 'T12
 // Open the device Messages app prefilled with recipient + draft (iPhone sms: deep
 // link — no Twilio/A2P needed; the owner sends from their own number). iOS uses
 // `&body`; we strip the number to digits/+.
-function _cpSms(phone, body) {
+function _cpSms(phone, body, customerId) {
   const tel = String(phone || '').replace(/[^\d+]/g, '');
   if (!tel) { toast('No phone number on file', 'warning'); return; }
   window.location.href = 'sms:' + tel + (body ? '&body=' + encodeURIComponent(body) : '');
+  if (customerId) logClientNote(customerId, 'Texted');
+}
+
+// Append an activity entry to a client's notes — the audit trail for who did what
+// (added / texted / called / …). Fire-and-forget; no-op without an id. The server
+// stamps "by" from the signed-in user.
+function logClientNote(customerId, text) {
+  if (!customerId || !text) return;
+  try { db.customers.log(customerId, text).catch(() => {}); } catch (e) { /* non-fatal */ }
+}
+
+// Open the phone dialer and log the call against the client.
+function _cpCall(phone, customerId) {
+  const tel = String(phone || '').replace(/[^\d+]/g, '');
+  if (!tel) { toast('No phone number on file', 'warning'); return; }
+  if (customerId) logClientNote(customerId, 'Called');
+  window.location.href = 'tel:' + tel;
 }
 
 // ── Shared SMS templates ──────────────────────────────────────────────────────
@@ -352,7 +369,7 @@ const ClientProfile = {
   _sendText() {
     const body = (document.getElementById('cp-text-body') || {}).value || '';
     Modal.close();
-    _cpSms(this._textPhone, body);   // opens iPhone Messages prefilled
+    _cpSms(this._textPhone, body, this._data && this._data.customer && this._data.customer.id);   // opens Messages + logs to notes
   },
 
   // ── Request a deposit ────────────────────────────────────────────────────────
@@ -482,7 +499,7 @@ function _buildProfileHtml(data, services, messages) {
     <div style="flex:1;min-width:0;">
       <div style="font-size:20px;font-weight:800;letter-spacing:-.02em;">${esc(c.name)}${c.isFleet ? ' <span style="font-size:11px;font-weight:700;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:2px 7px;vertical-align:middle;">🚚 Fleet</span>' : ''}</div>
       <div style="font-size:12px;color:var(--muted);margin-top:2px;">
-        ${c.phone ? `<a href="tel:${c.phone}" style="color:var(--muted);text-decoration:none;">${esc(c.phone)}</a>` : 'No phone'}
+        ${c.phone ? `<a href="javascript:void 0" onclick="_cpCall('${c.phone}','${c.id}')" style="color:var(--muted);text-decoration:none;">${esc(c.phone)}</a>` : 'No phone'}
         ${c.email ? ' · ' + esc(c.email) : ''}
         · Customer since ${fmtDateShort(c.createdAt) || '—'}
         · Last visit ${lastService ? fmtDateShort(lastService.date) : '—'}
@@ -506,7 +523,7 @@ function _buildProfileHtml(data, services, messages) {
       ${qa(`ClientProfile.invoicePrompt('${c.id}')`, '🧾', 'Invoice')}
       ${qa(`ClientProfile.requestDeposit('${c.id}')`, '💳', 'Deposit')}
       ${qa(`ClientProfile.textPrompt('${c.id}')`, '💬', 'Send Text')}
-      ${c.phone ? qa('', '📞', 'Call', 'tel:' + c.phone) : ''}
+      ${c.phone ? qa(`_cpCall('${c.phone}','${c.id}')`, '📞', 'Call') : ''}
       ${qa(`ClientProfile.vehiclePrompt('${c.id}')`, '🚗', 'Add Vehicle')}
     </div>`;
   }
@@ -686,7 +703,7 @@ function _buildProfileHtml(data, services, messages) {
   h += `<div class="cp-card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;"><div class="cp-sec" style="margin:0;">Notes</div>${write ? `<button onclick="ClientProfile.notePrompt('${c.id}')" style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px;font-weight:700;color:var(--text);cursor:pointer;">+ Note</button>` : ''}</div>`;
   const noteLog = (c.noteLog || []).slice();
-  const scopeMeta = { customer: { ic: '👤', label: 'Customer' }, internal: { ic: '🔒', label: 'Internal' }, vehicle: { ic: '🚗', label: 'Vehicle' } };
+  const scopeMeta = { customer: { ic: '👤', label: 'Customer' }, internal: { ic: '🔒', label: 'Internal' }, vehicle: { ic: '🚗', label: 'Vehicle' }, activity: { ic: '⚡', label: 'Activity' } };
   if (c.notes && !noteLog.length) h += `<div style="font-size:13px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;">${esc(c.notes)}</div>`;
   if (!noteLog.length && !c.notes) {
     h += `<div style="font-size:13px;color:var(--faint);">No notes yet.</div>`;

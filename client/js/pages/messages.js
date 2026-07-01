@@ -113,7 +113,7 @@ const Messages = {
             <div class="msg-thread-name">${esc(thread.customerName)}</div>
             ${thread.customerPhone ? `<div class="msg-thread-phone">${esc(thread.customerPhone)}</div>` : ''}
           </div>
-          ${thread.customerPhone ? `<a href="tel:${thread.customerPhone}" style="color:var(--green);font-size:20px;text-decoration:none;padding:4px;">📞</a>` : ''}
+          ${thread.customerPhone ? `<a href="javascript:void 0" onclick="_cpCall('${thread.customerPhone}','${thread.customerId||''}')" style="color:var(--green);font-size:20px;text-decoration:none;padding:4px;">📞</a>` : ''}
         </div>
         <div class="msg-bubbles" id="msg-bubbles-scroll">${bubbles}</div>
         <div class="msg-compose">
@@ -140,13 +140,13 @@ const Messages = {
     const input = document.getElementById('msg-compose-input');
     const body  = input?.value.trim();
     if (!body || !this._currentThread) return;
-    const { customerPhone } = this._currentThread;
+    const { customerPhone, customerId } = this._currentThread;
     if (!customerPhone) { toast('No phone number for this client', 'error'); return; }
 
     // Manual send: open the owner's Messages app prefilled (iPhone sms: deep link).
     // No Twilio/A2P — the owner sends from their own number, so we don't clear the
-    // draft or append a server-side bubble.
-    _cpSms(customerPhone, body);
+    // draft or append a server-side bubble. Logs to the client's notes.
+    _cpSms(customerPhone, body, customerId);
   },
 
   closeThread() {
@@ -229,7 +229,7 @@ const Messages = {
     if (!c || !c.phone) { toast('No phone number for this client', 'error'); return; }
     const body = (document.getElementById('compose-body') || {}).value || '';
     Modal.close();
-    _cpSms(c.phone, body);   // opens iPhone Messages prefilled
+    _cpSms(c.phone, body, c.id);   // opens iPhone Messages prefilled; logs to notes
   },
 
   updateBadge(threads) {

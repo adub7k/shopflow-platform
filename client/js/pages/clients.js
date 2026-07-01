@@ -209,7 +209,9 @@ const Clients = {
     const btn=document.getElementById('fc-btn'); disableBtn(btn);
     try{
       const isFleet=!!document.getElementById('fc-fleet')?.checked;
-      await db.customers.save({id:id||genId('c'),name,phone:document.getElementById('fc-phone')?.value.trim()||'',email:document.getElementById('fc-email')?.value.trim()||'',notes:document.getElementById('fc-notes')?.value.trim()||'',isFleet,companyName:isFleet?(document.getElementById('fc-company')?.value.trim()||''):'',loyaltyPoints:id?(this._data.find(c=>c.id===id)?.loyaltyPoints||0):0,source:'manual',createdAt:id?(this._data.find(c=>c.id===id)?.createdAt||today()):today()});
+      const newId=id||genId('c');
+      await db.customers.save({id:newId,name,phone:document.getElementById('fc-phone')?.value.trim()||'',email:document.getElementById('fc-email')?.value.trim()||'',notes:document.getElementById('fc-notes')?.value.trim()||'',isFleet,companyName:isFleet?(document.getElementById('fc-company')?.value.trim()||''):'',loyaltyPoints:id?(this._data.find(c=>c.id===id)?.loyaltyPoints||0):0,source:'manual',createdAt:id?(this._data.find(c=>c.id===id)?.createdAt||today()):today()});
+      if(!id && typeof logClientNote==='function') logClientNote(newId,'Added as a client');
       Modal.close(); toast(id?'Updated ✓':'Client added ✓');
       if (id && this._view==='profile') { await this._renderProfile(document.getElementById('page-clients')); } else { this._view='list'; this.render(); }
     }catch(e){toast('Could not save','error');enableBtn(btn);}
@@ -422,8 +424,8 @@ const Clients = {
     if (!msg) return;
     const c = this._profileData?.customer;
     if (!c?.phone) { toast('No phone number on file', 'warning'); return; }
-    // Manual send via the iPhone Messages deep link (no Twilio/A2P).
-    _cpSms(c.phone, msg);
+    // Manual send via the iPhone Messages deep link (no Twilio/A2P); logs to notes.
+    _cpSms(c.phone, msg, c.id);
   },
 
   async redeemReward(id, name) {

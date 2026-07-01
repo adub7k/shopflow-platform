@@ -208,6 +208,18 @@ router.delete('/api/shop/customers/:id', requireAuth, requireRole('full','techni
 router.post('/api/shop/customers/:id/redeem', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const c = h.getById('customers', req.params.id); if(c){c.loyaltyPoints=0;h.upsert('customers',c);} res.json({ ok: true });
 }));
+// Activity log: append an entry (added / texted / called / …) to a client's notes.
+router.post('/api/shop/customers/:id/log', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  const c = h.getById('customers', req.params.id);
+  if (!c) return res.status(404).json({ ok: false, error: 'Client not found' });
+  const text = String(req.body.text || '').trim().slice(0, 200);
+  if (text) {
+    c.noteLog = c.noteLog || [];
+    c.noteLog.unshift({ id: genId('note'), scope: 'activity', text, at: new Date().toISOString(), by: String(req.body.by || '').slice(0, 60) });
+    h.upsert('customers', c);
+  }
+  res.json({ ok: true });
+}));
 
 // ── Memberships — recurring wash-club / maintenance plans ─────────────────────
 // Plans live in settings.membershipPlans; a customer's membership is stored on
