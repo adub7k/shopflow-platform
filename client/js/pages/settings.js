@@ -11,7 +11,7 @@ const Settings = {
       const html=[];
 
       // Shop info
-      html.push('<div style="margin:4px 0 10px;font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--muted);">SHOP &amp; BOOKING</div>');
+      html.push(`<div style="margin:4px 0 10px;font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--muted);">SHOP &amp; ${this._leadMode()?'LEAD FORM':'BOOKING'}</div>`);
       html.push('<div class="section-header">Shop Info</div><div class="card">');
       html.push(`<div class="form-group"><label class="form-label">Shop Name</label><input class="form-input" id="s-name" value="${s.shopName||''}" /></div>`);
       html.push(`<div class="form-group"><label class="form-label">Tagline</label><input class="form-input" id="s-tag" value="${s.tagline||''}" /></div>`);
@@ -20,34 +20,55 @@ const Settings = {
       html.push(`<div class="form-group"><label class="form-label">Email</label><input class="form-input" id="s-email" type="email" value="${s.email||''}" /></div>`);
       html.push('</div>');
 
-      // Booking page settings
-      html.push('<div class="section-header">Client Booking Page</div><div class="card">');
+      // Public page settings — the calendar booking page for scheduling verticals,
+      // or the opt-in lead form for quote-first verticals (detail shops). Lead mode
+      // hides the booking-only controls (welcome message, staff picker, inspo photo)
+      // and instead lets the owner pick which services appear on the form.
+      const leadMode = this._leadMode();
+      html.push(`<div class="section-header">${leadMode?'Lead Form':'Client Booking Page'}</div><div class="card">`);
       const shopSlug = Auth.getShopSlug();
       const bookUrl = location.origin+'/book/'+(shopSlug||'');
       html.push(`<div style="background:var(--green-lt);border:1px solid var(--green-md);border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-        <span>Your booking link: <strong><a href="${bookUrl}" target="_blank" style="color:var(--green);">${bookUrl}</a></strong></span>
+        <span>Your ${leadMode?'lead form':'booking'} link: <strong><a href="${bookUrl}" target="_blank" style="color:var(--green);">${bookUrl}</a></strong></span>
         <button onclick="navigator.clipboard.writeText('${bookUrl}');toast('Link copied ✓')" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">Copy Link</button>
       </div>`);
-      html.push(`<div class="form-group"><label class="form-label">Booking Welcome Message</label><textarea class="form-input" id="s-bmsg" rows="2">${s.bookingMessage||'Book your appointment below!'}</textarea></div>`);
-      html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-benabled" ${s.bookingEnabled!==false?'checked':''} style="margin-right:6px;" /> Booking page enabled</label></div>`);
-      html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-staffpicker" ${s.staffPicker!==false?'checked':''} style="margin-right:6px;" /> Let customers choose their ${esc(V('staff','barber').toLowerCase())} when booking</label></div>`);
-      // Inspiration photo at booking
-      const inspoMode = s.inspoPhoto || 'off';
-      html.push(`<div class="form-group"><label class="form-label">Inspiration Photo</label>
-        <select class="form-input" id="s-inspo">
-          <option value="off"${inspoMode==='off'?' selected':''}>Off — don't ask for a photo</option>
-          <option value="optional"${inspoMode==='optional'?' selected':''}>Optional — clients can attach one</option>
-          <option value="required"${inspoMode==='required'?' selected':''}>Required — must attach to book</option>
-        </select>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;">Let clients send a reference photo when they book, so you know the look before they arrive.</div>
-      </div>`);
+      if (leadMode) {
+        html.push(`<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Visitors tell you their name, phone, vehicle, and what they're interested in — then you text them a quote. In ads, add <strong>?utm_source=facebook</strong> (or google, etc.) to the link to track where leads come from.</div>`);
+        html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-benabled" ${s.bookingEnabled!==false?'checked':''} style="margin-right:6px;" /> Lead form enabled</label></div>`);
+        // "Services considering" options: free-standing labels, deliberately NOT
+        // wired to the real service catalog — they exist to put the visitor in a
+        // buying mindframe and tell the owner what to quote. Edit freely here;
+        // nothing else (bookings, pricing, revenue) is affected.
+        this._leadOpts = (Array.isArray(s.leadFormOptions) && s.leadFormOptions.length)
+          ? [...s.leadFormOptions]
+          : services.map(sv=>sv.name);
+        html.push(`<div class="form-group" style="margin-bottom:0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;"><label class="form-label" style="margin:0;">Options on the form</label><button class="btn btn-sm btn-green" onclick="Settings.addLeadOpt()">+ Add</button></div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">What visitors can say they're interested in. Just labels — no prices, not tied to your service menu. Remember to hit Save below.</div>
+          <div id="lf-opts">${this._leadOpts.map((o,i)=>this._leadOptRow(o,i)).join('')}</div>
+        </div>`);
+      } else {
+        html.push(`<div class="form-group"><label class="form-label">Booking Welcome Message</label><textarea class="form-input" id="s-bmsg" rows="2">${s.bookingMessage||'Book your appointment below!'}</textarea></div>`);
+        html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-benabled" ${s.bookingEnabled!==false?'checked':''} style="margin-right:6px;" /> Booking page enabled</label></div>`);
+        html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-staffpicker" ${s.staffPicker!==false?'checked':''} style="margin-right:6px;" /> Let customers choose their ${esc(V('staff','barber').toLowerCase())} when booking</label></div>`);
+        // Inspiration photo at booking (scheduling verticals only)
+        const inspoMode = s.inspoPhoto || 'off';
+        html.push(`<div class="form-group"><label class="form-label">Inspiration Photo</label>
+          <select class="form-input" id="s-inspo">
+            <option value="off"${inspoMode==='off'?' selected':''}>Off — don't ask for a photo</option>
+            <option value="optional"${inspoMode==='optional'?' selected':''}>Optional — clients can attach one</option>
+            <option value="required"${inspoMode==='required'?' selected':''}>Required — must attach to book</option>
+          </select>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;">Let clients send a reference photo when they book, so you know the look before they arrive.</div>
+        </div>`);
+      }
       html.push('</div>');
 
       // Work Gallery — showcased at the top of the booking page
       const gallery = Array.isArray(s.gallery) ? s.gallery : [];
       html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Work Gallery</span><button class="btn btn-sm btn-green" onclick="Settings.galleryPick()">+ Add Photo</button></div>');
       html.push('<div class="card">');
-      html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:'+(gallery.length?'12px':'0')+';">Showcase your best work on your booking page. Photos appear at the top for clients to browse.</div>');
+      html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:'+(gallery.length?'12px':'0')+';">Showcase your best work on your '+(leadMode?'lead form':'booking page')+'. Photos appear at the top for '+(leadMode?'visitors':'clients')+' to browse.</div>');
       if (gallery.length) {
         html.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">');
         gallery.forEach(g=>{
@@ -428,6 +449,12 @@ const Settings = {
     }catch(e){ toast(e.message||'Could not remove','error'); }
   },
 
+  // Shops whose public /book page is the lead-capture form (quote-first verticals).
+  _leadMode(){
+    const st=Shop.settings||{};
+    return (st.bookingMode || (st.industry==='detail'?'leads':'booking'))==='leads';
+  },
+
   openService(id) {
     const s=id?this._services.find(x=>x.id===id):null;
     Modal.show(`
@@ -463,6 +490,29 @@ const Settings = {
   _toggleSizePricing(){
     const on=document.getElementById('fs-size-on')?.checked;
     const rows=document.getElementById('fs-size-rows'); if(rows)rows.style.display=on?'grid':'none';
+  },
+
+  // Lead-form "options" editor (Settings → Lead Form card). Plain labels held in
+  // this._leadOpts; persisted as settings.leadFormOptions by the main Save button.
+  _leadOptRow(val,i){
+    return `<div style="display:flex;gap:8px;margin-bottom:7px;" data-lfopt>
+      <input class="form-input lf-opt" value="${esc(val)}" placeholder="e.g. Ceramic Coating" style="flex:1;" />
+      <button class="btn btn-sm" onclick="Settings.removeLeadOpt(this)" title="Remove" style="color:var(--red);flex-shrink:0;">×</button>
+    </div>`;
+  },
+  _syncLeadOpts(){
+    const box=document.getElementById('lf-opts'); if(!box) return;
+    this._leadOpts=[...box.querySelectorAll('.lf-opt')].map(inp=>inp.value);
+  },
+  addLeadOpt(){
+    this._syncLeadOpts();
+    const box=document.getElementById('lf-opts'); if(!box) return;
+    box.insertAdjacentHTML('beforeend', this._leadOptRow('', this._leadOpts.length));
+    const inputs=box.querySelectorAll('.lf-opt'); inputs[inputs.length-1]?.focus();
+  },
+  removeLeadOpt(btn){
+    btn.closest('[data-lfopt]')?.remove();
+    this._syncLeadOpts();
   },
 
   openAddon(id){
@@ -630,7 +680,13 @@ const Settings = {
   },
 
   async save() {
-    const data={shopName:document.getElementById('s-name')?.value.trim(),tagline:document.getElementById('s-tag')?.value.trim(),phone:document.getElementById('s-phone')?.value.trim(),address:document.getElementById('s-addr')?.value.trim(),email:document.getElementById('s-email')?.value.trim(),bookingMessage:document.getElementById('s-bmsg')?.value.trim(),bookingEnabled:document.getElementById('s-benabled')?.checked!==false,staffPicker:document.getElementById('s-staffpicker')?.checked!==false};
+    const data={shopName:document.getElementById('s-name')?.value.trim(),tagline:document.getElementById('s-tag')?.value.trim(),phone:document.getElementById('s-phone')?.value.trim(),address:document.getElementById('s-addr')?.value.trim(),email:document.getElementById('s-email')?.value.trim(),bookingEnabled:document.getElementById('s-benabled')?.checked!==false};
+    // Booking-only fields aren't rendered in lead mode — only save what's on screen,
+    // so a lead-mode save never clobbers the shop's stored booking config.
+    const bmsg=document.getElementById('s-bmsg'); if(bmsg)data.bookingMessage=bmsg.value.trim();
+    const spk=document.getElementById('s-staffpicker'); if(spk)data.staffPicker=spk.checked;
+    // Lead-form options (lead-mode shops): plain labels, empties dropped.
+    if(document.getElementById('lf-opts')){ this._syncLeadOpts(); data.leadFormOptions=this._leadOpts.map(o=>o.trim()).filter(Boolean); }
     const lv=document.getElementById('s-lvis')?.value; if(lv)data.loyalty={visitsForReward:parseInt(lv),rewardDescription:document.getElementById('s-lrew')?.value.trim()||'One free service'};
     // Message templates: owner-managed [{id,label,body}] list (drops empty rows).
     this._syncTemplates();

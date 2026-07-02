@@ -168,7 +168,7 @@ img{max-width:100%;display:block;}
 
 <script>
 const L = {
-  slug:'', shop:null, fields:[], services:[], selected:{},
+  slug:'', shop:null, fields:[], options:[], selected:{},
   utm:{}, referrer:'',
 
   async init(){
@@ -186,7 +186,7 @@ const L = {
     try{
       const info = await fetch('/api/public/'+this.slug+'/info').then(r=>r.json());
       if(!info.shopName || info.bookingEnabled===false){ return this.closed(); }
-      this.shop=info; this.fields=info.customFields||[]; this.services=info.services||[];
+      this.shop=info; this.fields=info.customFields||[]; this.options=info.leadFormOptions||[];
       this._accent(info.accentColor||'#16a34a');
       this._header(info);
       this._gallery();
@@ -242,24 +242,18 @@ const L = {
   },
 
   _svcs(){
-    if(!this.services.length) return;
+    // Plain owner-written labels, no prices — the checkboxes exist to get the
+    // visitor thinking about what they want; the shop prices it in the quote.
+    if(!this.options.length) return;
     document.getElementById('svc-sec').style.display='';
-    // Show the cheapest configured price as "from $X" — per-size pricing means
-    // the real number comes with the quote.
-    const fromPrice = s=>{
-      const prices=[Number(s.price)||0];
-      if(s.sizePricing) Object.values(s.sizePricing).forEach(v=>{ if(v!==''&&v!=null) prices.push(Number(v)); });
-      const p=Math.min(...prices.filter(x=>x>0));
-      return isFinite(p)&&p>0 ? 'from $'+p : '';
-    };
-    document.getElementById('svc-list').innerHTML=this.services.map(s=>
-      `<label class="svc-opt" id="so-${s.id}"><input type="checkbox" onchange="L.toggle('${es(s.id)}')" /><span class="nm">${es2(s.name)}</span><span class="pr">${fromPrice(s)}</span></label>`
+    document.getElementById('svc-list').innerHTML=this.options.map((o,i)=>
+      `<label class="svc-opt" id="so-${i}"><input type="checkbox" onchange="L.toggle(${i})" /><span class="nm">${es2(o)}</span></label>`
     ).join('');
   },
 
-  toggle(id){
-    this.selected[id]=!this.selected[id];
-    document.getElementById('so-'+id)?.classList.toggle('on',!!this.selected[id]);
+  toggle(i){
+    this.selected[i]=!this.selected[i];
+    document.getElementById('so-'+i)?.classList.toggle('on',!!this.selected[i]);
   },
 
   async submit(){
@@ -281,7 +275,7 @@ const L = {
           email:document.getElementById('f-email').value.trim(),
           website:document.getElementById('f-website').value,
           customFields:cf,
-          services:Object.keys(this.selected).filter(k=>this.selected[k]),
+          services:this.options.filter((o,i)=>this.selected[i]),
           notes:document.getElementById('f-notes').value.trim(),
           utm:this.utm, referrer:this.referrer,
         })}).then(r=>r.json());

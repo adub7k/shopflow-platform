@@ -113,6 +113,11 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
       depositProvider: squareConnected ? 'square' : (stripeConnected ? 'stripe' : null),
       stripePublishableKey: process.env.STRIPE_PUBLISHABLE_KEY || '',
       stripeAccountId: stripeConnected ? s.stripe.connectAccountId : '',
+      // Lead-form "services considering" options — plain labels, intentionally
+      // independent of the services catalog (falls back to service names).
+      leadFormOptions: (Array.isArray(s.leadFormOptions) && s.leadFormOptions.length)
+        ? s.leadFormOptions
+        : (db.get('services').value() || []).map(x => x.name),
       // Inspiration photo + work gallery
       inspo: inspoMode(s, db.get('industry').value()),
       gallery: s.gallery || [],
@@ -331,9 +336,15 @@ router.post('/api/public/:shopSlug/lead', async (req, res) => {
       ? { year: cf.vehicleYear || '', make: cf.vehicleMake || '', model: cf.vehicleModel || '', color: cf.vehicleColor || '' }
       : null;
 
-    // Services the visitor checked — resolved server-side, names snapshotted.
-    const svcIds = Array.isArray(req.body.services) ? req.body.services : [];
-    const servicesInterested = (db.get('services').value() || []).filter(x => svcIds.includes(x.id)).map(x => x.name);
+    // Options the visitor checked — plain labels (not service ids; the list is
+    // owner-curated copy, not the catalog). Validated against the shop's own
+    // option list so a crafted request can't inject arbitrary text.
+    const optList = (Array.isArray(s.leadFormOptions) && s.leadFormOptions.length)
+      ? s.leadFormOptions
+      : (db.get('services').value() || []).map(x => x.name);
+    const allowed = new Set(optList);
+    const picked = Array.isArray(req.body.services) ? req.body.services : [];
+    const servicesInterested = [...new Set(picked.map(x => String(x || '').trim()).filter(x => allowed.has(x)))].slice(0, 20);
 
     // Attribution: source is derived from utm_source ('facebook', 'google', …),
     // falling back to 'website' for organic/direct visits.
