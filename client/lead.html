@@ -187,6 +187,7 @@ const L = {
       const info = await fetch('/api/public/'+this.slug+'/info').then(r=>r.json());
       if(!info.shopName || info.bookingEnabled===false){ return this.closed(); }
       this.shop=info; this.fields=info.customFields||[]; this.options=info.leadFormOptions||[];
+      this._pixel(info.metaPixelId);
       this._accent(info.accentColor||'#16a34a');
       this._header(info);
       this._gallery();
@@ -196,6 +197,18 @@ const L = {
       document.getElementById('app').style.display='';
       const ld=document.getElementById('loading'); ld.classList.add('fade'); setTimeout(()=>ld.style.display='none',360);
     }catch(e){ this.closed(); }
+  },
+
+  // Meta Pixel — only when the shop has entered a pixel ID in Settings. Fires
+  // PageView on load; the submit handler fires the Lead event, which is what
+  // lets Meta optimize ad delivery for real form-fills instead of clicks.
+  _pixel(id){
+    if(!id || window.fbq) return;
+    try{
+      !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+      fbq('init', String(id));
+      fbq('track', 'PageView');
+    }catch(e){ /* pixel is best-effort — never break the form */ }
   },
 
   _accent(hex){
@@ -280,8 +293,9 @@ const L = {
           utm:this.utm, referrer:this.referrer,
         })}).then(r=>r.json());
       if(!res.ok){ this.err(res.error||'Something went wrong. Please try again.'); btn.disabled=false; btn.textContent='Get My Free Quote →'; return; }
+      if(window.fbq){ try{ fbq('track','Lead'); }catch(e){} }
       document.getElementById('app').style.display='none';
-      document.getElementById('conf-sub').textContent=(res.smsSent?'We just texted you a confirmation. ':'')+(this.shop.shopName||'The shop')+' will follow up with your quote shortly — keep an eye on your messages!';
+      document.getElementById('conf-sub').textContent=(this.shop.shopName||'The shop')+' will text you back with your quote shortly — keep an eye on your messages!';
       document.getElementById('confirmed').style.display='block';
       window.scrollTo({top:0,behavior:'smooth'});
     }catch(e){ this.err('Something went wrong. Please try again.'); btn.disabled=false; btn.textContent='Get My Free Quote →'; }

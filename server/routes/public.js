@@ -118,6 +118,8 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
       leadFormOptions: (Array.isArray(s.leadFormOptions) && s.leadFormOptions.length)
         ? s.leadFormOptions
         : (db.get('services').value() || []).map(x => x.name),
+      // Meta Pixel for ad-conversion tracking on the lead form (empty = off).
+      metaPixelId: String(s.metaPixelId || ''),
       // Inspiration photo + work gallery
       inspo: inspoMode(s, db.get('industry').value()),
       gallery: s.gallery || [],
@@ -379,29 +381,10 @@ router.post('/api/public/:shopSlug/lead', async (req, res) => {
     h.upsert('leads', lead);
     master.get('shops').find({ id: shop.id }).assign({ lastActivity: now }).write();
 
-    // Speed-to-lead: auto-text the visitor, and give the owner a heads-up on
-    // their real phone. Both best-effort — the lead is already saved.
-    const fromNum = shopFromNumber(shop.id);
-    let smsSent = false;
-    if (twilioClient && fromNum) {
-      const to = toE164(phone);
-      if (to) {
-        try {
-          const msg = buildSms('newLead', { name: name.split(' ')[0], shop: s.shopName || shop.shopName }, s);
-          await twilioClient.messages.create({ from: fromNum, to, body: msg });
-          smsSent = true;
-        } catch(e) { console.error('Lead auto-SMS failed:', e.message); }
-      }
-      const ownerTo = toE164(s.phone);
-      if (ownerTo && ownerTo !== toE164(phone)) {
-        const veh = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ') : '';
-        const bits = [veh, servicesInterested.join(', '), utm.source ? `via ${utm.source}${utm.campaign ? ' · ' + utm.campaign : ''}` : ''].filter(Boolean).join(' — ');
-        try {
-          await twilioClient.messages.create({ from: fromNum, to: ownerTo, body: `🔔 New lead: ${name} (${phone})${bits ? ' — ' + bits : ''}. Reply from ShopFlow → Leads.` });
-        } catch(e) { console.error('Owner lead alert failed:', e.message); }
-      }
-    }
-    res.json({ ok: true, smsSent });
+    // No automated SMS here — A2P isn't registered, and the product stance is
+    // manual texting anyway: the owner sees the lead in ShopFlow → Leads and
+    // texts back from there. The lead is saved; that's the whole job.
+    res.json({ ok: true });
   } catch(e) {
     console.error('Lead capture error:', e.message);
     res.status(500).json({ ok: false, error: 'Something went wrong. Please try again.' });

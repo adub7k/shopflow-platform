@@ -35,6 +35,7 @@ const Settings = {
       if (leadMode) {
         html.push(`<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Visitors tell you their name, phone, vehicle, and what they're interested in — then you text them a quote. In ads, add <strong>?utm_source=facebook</strong> (or google, etc.) to the link to track where leads come from.</div>`);
         html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-benabled" ${s.bookingEnabled!==false?'checked':''} style="margin-right:6px;" /> Lead form enabled</label></div>`);
+        html.push(`<div class="form-group"><label class="form-label">Meta Pixel ID <span style="font-weight:400;color:var(--faint);">(optional)</span></label><input class="form-input" id="s-metapixel" value="${esc(s.metaPixelId||'')}" placeholder="e.g. 1234567890123456" inputmode="numeric" /><div style="font-size:11px;color:var(--muted);margin-top:6px;">From Meta Events Manager. Lets Facebook/Instagram ads optimize for people who actually submit the form — fires PageView on load and a Lead event on submit.</div></div>`);
         // "Services considering" options: free-standing labels, deliberately NOT
         // wired to the real service catalog — they exist to put the visitor in a
         // buying mindframe and tell the owner what to quote. Edit freely here;
@@ -687,6 +688,7 @@ const Settings = {
     const spk=document.getElementById('s-staffpicker'); if(spk)data.staffPicker=spk.checked;
     // Lead-form options (lead-mode shops): plain labels, empties dropped.
     if(document.getElementById('lf-opts')){ this._syncLeadOpts(); data.leadFormOptions=this._leadOpts.map(o=>o.trim()).filter(Boolean); }
+    const mp=document.getElementById('s-metapixel'); if(mp)data.metaPixelId=mp.value.trim();
     const lv=document.getElementById('s-lvis')?.value; if(lv)data.loyalty={visitsForReward:parseInt(lv),rewardDescription:document.getElementById('s-lrew')?.value.trim()||'One free service'};
     // Message templates: owner-managed [{id,label,body}] list (drops empty rows).
     this._syncTemplates();
