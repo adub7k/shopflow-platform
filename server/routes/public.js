@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
-const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl } = require('../db');
+const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl } = require('../db');
 const { resolveProfile } = require('../industries');
 
 // Resolve a shop's inspo-photo mode: explicit per-shop setting wins, else the
@@ -295,6 +295,106 @@ router.get('/api/public/:shopSlug/availability', (req, res) => {
     const sorted = [...allSlots].sort((a,b) => { const p=t=>{const [tm,ap]=t.split(' ');let[h,m]=tm.split(':').map(Number);if(ap==='PM'&&h!==12)h+=12;if(ap==='AM'&&h===12)h=0;return h*60+m;};return p(a)-p(b); });
     res.json(sorted);
   } catch(e) { res.status(500).json({ error: 'Server error' }); }
+});
+
+// ── PUBLIC: Lead capture (quote-first verticals) ──────────────────────────────
+// The opt-in form on lead.html posts here. Creates/updates a lead (deduped by
+// phone, same as inbound calls) carrying vehicle info, the services the visitor
+// is considering, and ad attribution (utm_* + referrer) so every paid click can
+// be traced to a booked job. First-touch wins: an existing lead keeps its
+// original source, but the latest utm payload is stored for reference.
+router.post('/api/public/:shopSlug/lead', async (req, res) => {
+  try {
+    const ctx = publicShopFromSlug(req.params.shopSlug);
+    if (!ctx) return res.status(404).json({ ok: false, error: 'Shop not found' });
+    // Honeypot: a hidden "website" field real visitors never see. Bots fill it —
+    // pretend success so they don't adapt, and log nothing.
+    if (String(req.body.website || '').trim()) return res.json({ ok: true });
+
+    const name  = String(req.body.name || '').trim().slice(0, 80);
+    const phone = String(req.body.phone || '').trim().slice(0, 25);
+    const email = String(req.body.email || '').trim().slice(0, 120);
+    const notes = String(req.body.notes || '').trim().slice(0, 1000);
+    const digits = phone.replace(/\D/g, '');
+    if (!name || digits.length < 10) return res.status(400).json({ ok: false, error: 'Please enter your name and a valid phone number.' });
+
+    const { db, shop } = ctx;
+    const h = shopHelpers(db);
+    const s = db.get('settings').value() || {};
+
+    // Enforce required custom fields (vehicle year/make/model/color for detail).
+    const cf = req.body.customFields || {};
+    Object.keys(cf).forEach(k => { cf[k] = String(cf[k] || '').trim().slice(0, 80); });
+    const missing = (s.customFields || []).filter(f => f.required && !String(cf[f.key] || '').trim());
+    if (missing.length) return res.status(400).json({ ok: false, error: 'Missing required fields: ' + missing.map(f => f.label).join(', ') });
+    const vehicle = (cf.vehicleYear || cf.vehicleMake || cf.vehicleModel)
+      ? { year: cf.vehicleYear || '', make: cf.vehicleMake || '', model: cf.vehicleModel || '', color: cf.vehicleColor || '' }
+      : null;
+
+    // Services the visitor checked — resolved server-side, names snapshotted.
+    const svcIds = Array.isArray(req.body.services) ? req.body.services : [];
+    const servicesInterested = (db.get('services').value() || []).filter(x => svcIds.includes(x.id)).map(x => x.name);
+
+    // Attribution: source is derived from utm_source ('facebook', 'google', …),
+    // falling back to 'website' for organic/direct visits.
+    const rawUtm = req.body.utm || {};
+    const utm = {};
+    ['source','medium','campaign','term','content'].forEach(k => { const v = String(rawUtm[k] || '').trim().slice(0, 80); if (v) utm[k] = v; });
+    const source = (utm.source || 'website').toLowerCase();
+    const referrer = String(req.body.referrer || '').trim().slice(0, 300);
+
+    const now = new Date().toISOString();
+    const existing = h.getAll('leads').find(l => String(l.phone || '').replace(/\D/g, '') === digits);
+    let lead;
+    if (existing) {
+      lead = existing;
+      if (!lead.name) lead.name = name;
+      if (email) lead.email = email;
+      if (vehicle) lead.vehicle = vehicle;
+      if (servicesInterested.length) lead.servicesInterested = servicesInterested;
+      if (notes) lead.notes = [lead.notes, notes].filter(Boolean).join('\n');
+      if (Object.keys(utm).length) lead.utm = utm;      // latest campaign, for reference
+      lead.formSubmits = (lead.formSubmits || 0) + 1;
+      lead.lastContactAt = now;
+    } else {
+      lead = {
+        id: genId('lead'), name, phone, email,
+        location: '', source, utm: Object.keys(utm).length ? utm : null, referrer,
+        vehicle, servicesInterested, status: 'new',
+        callCount: 0, missedCount: 0, formSubmits: 1, customerId: null, notes,
+        firstContactAt: now, lastContactAt: now, createdAt: now,
+      };
+    }
+    h.upsert('leads', lead);
+    master.get('shops').find({ id: shop.id }).assign({ lastActivity: now }).write();
+
+    // Speed-to-lead: auto-text the visitor, and give the owner a heads-up on
+    // their real phone. Both best-effort — the lead is already saved.
+    const fromNum = shopFromNumber(shop.id);
+    let smsSent = false;
+    if (twilioClient && fromNum) {
+      const to = toE164(phone);
+      if (to) {
+        try {
+          const msg = buildSms('newLead', { name: name.split(' ')[0], shop: s.shopName || shop.shopName }, s);
+          await twilioClient.messages.create({ from: fromNum, to, body: msg });
+          smsSent = true;
+        } catch(e) { console.error('Lead auto-SMS failed:', e.message); }
+      }
+      const ownerTo = toE164(s.phone);
+      if (ownerTo && ownerTo !== toE164(phone)) {
+        const veh = vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ') : '';
+        const bits = [veh, servicesInterested.join(', '), utm.source ? `via ${utm.source}${utm.campaign ? ' · ' + utm.campaign : ''}` : ''].filter(Boolean).join(' — ');
+        try {
+          await twilioClient.messages.create({ from: fromNum, to: ownerTo, body: `🔔 New lead: ${name} (${phone})${bits ? ' — ' + bits : ''}. Reply from ShopFlow → Leads.` });
+        } catch(e) { console.error('Owner lead alert failed:', e.message); }
+      }
+    }
+    res.json({ ok: true, smsSent });
+  } catch(e) {
+    console.error('Lead capture error:', e.message);
+    res.status(500).json({ ok: false, error: 'Something went wrong. Please try again.' });
+  }
 });
 
 // ── PUBLIC: Book appointment ──────────────────────────────────────────────────

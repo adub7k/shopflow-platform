@@ -249,6 +249,7 @@ const SMS_DEFAULTS = {
   rebook:       "Hey {name}! It's been a few weeks — we'd love to have you back at {shop}. Book your next visit anytime.",
   missedCall:   "Hi, this is {shop} — sorry we missed your call! How can we help? Reply here or book online anytime.",
   review:       "Hi {name}, thanks for visiting {shop}! We'd love your feedback — leave us a quick review: {link}",
+  newLead:      "Hi {name}, this is {shop}! We got your request and we'll text you back shortly with your quote. 🚗",
 };
 
 function buildSms(type, vars, settings) {

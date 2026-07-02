@@ -4,7 +4,8 @@ const cors      = require('cors');
 const rateLimit = require('express-rate-limit');
 const path      = require('path');
 
-const { CLIENT_DIR, UPLOADS_DIR } = require('./db');
+const { CLIENT_DIR, UPLOADS_DIR, master, getShopDb } = require('./db');
+const { resolveProfile } = require('./industries');
 const { runScheduler } = require('./scheduler');
 
 const app  = express();
@@ -47,7 +48,23 @@ app.use(require('./routes/square'));
 
 // ── HTML Pages ────────────────────────────────────────────────────────────────
 app.get('/shop/*',  (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app.html')));
-app.get('/book/*',  (req, res) => res.sendFile(path.join(CLIENT_DIR, 'book.html')));
+// Quote-first verticals (detail shops) get the opt-in lead-capture page at the
+// same /book/<slug> URL; scheduling verticals keep the calendar booking flow.
+// Per-shop override: settings.bookingMode ('booking' | 'leads').
+app.get('/book/*',  (req, res) => {
+  let page = 'book.html';
+  try {
+    const shopSlug = req.path.replace(/^\/book\/?/, '').split('/')[0];
+    const shop = shopSlug && master.get('shops').find({ slug: shopSlug, active: true }).value();
+    if (shop) {
+      const db = getShopDb(shop.id);
+      const mode = (db.get('settings').value() || {}).bookingMode
+        || (resolveProfile(db.get('industry').value()).leadCapture ? 'leads' : 'booking');
+      if (mode === 'leads') page = 'lead.html';
+    }
+  } catch(e) { /* fall through to the booking page */ }
+  res.sendFile(path.join(CLIENT_DIR, page));
+});
 app.get('/review/*',(req, res) => res.sendFile(path.join(CLIENT_DIR, 'review.html')));
 app.get('/quote/*', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'quote.html')));
 app.get('/demo',    (req, res) => res.sendFile(path.join(CLIENT_DIR, 'demo.html')));

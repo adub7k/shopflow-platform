@@ -86,6 +86,10 @@ const INDUSTRIES = {
     serviceCategories: ['wash','interior','exterior','detail','coating','tint','correction','other'],
     // Estimates/quotes are a detail-shop workflow (ceramic, PPF, correction).
     supportsQuotes: true,
+    // Detail jobs are quoted, not self-scheduled — the public /book page serves an
+    // opt-in lead-capture form (name/phone/vehicle/services) instead of the
+    // calendar booking flow. Per-shop override: settings.bookingMode.
+    leadCapture: true,
   },
 
   nails: {

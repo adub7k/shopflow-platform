@@ -26,6 +26,8 @@ router.get('/api/shop/settings', requireAuth, shopRoute(async (req, res, db) => 
   // fallback — a shop only ever shows a number explicitly assigned to it, so one
   // tenant never sees another tenant's (e.g. the platform default) number.
   s.trackingNumber = shopOwnNumber(req.shopId);
+  // Public slug (read-only) so the UI can show shareable /book/<slug> links.
+  s.shopSlug = (master.get('shops').find({ id: req.shopId }).value() || {}).slug || '';
   if (!s.callTracking) s.callTracking = { enabled: true };
   // Surface the resolved industry so the frontend can mount industry-specific
   // navigation/modules (the profile lives outside `settings`, on the shop DB root).
@@ -707,9 +709,9 @@ router.post('/api/shop/leads/:id/convert', requireAuth, requireRole('full','tech
     cust = h.getAll('customers').find(c => String(c.phone||'').replace(/\D/g,'') === digits && digits);
   }
   if (!cust) {
-    cust = { id: genId('c'), name: lead.name || lead.phone, phone: lead.phone, email: '', source: 'call',
+    cust = { id: genId('c'), name: lead.name || lead.phone, phone: lead.phone, email: lead.email || '', source: lead.source || 'call',
              notes: lead.notes || '', loyaltyPoints: 0, noShows: 0, preferredBarberId: null,
-             isFleet: false, companyName: '', vehicles: [], createdAt: today() };
+             isFleet: false, companyName: '', vehicles: lead.vehicle ? [lead.vehicle] : [], createdAt: today() };
     h.upsert('customers', cust);
   }
   lead.customerId = cust.id;

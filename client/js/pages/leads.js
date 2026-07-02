@@ -1,7 +1,8 @@
-// ── Leads (inbound call tracking) ─────────────────────────────────────────────
-// Populated by the call-screening webhooks: every inbound call to the shop's
-// tracking number becomes a lead here, with its call history and a one-tap
-// text-back / convert-to-client flow.
+// ── Leads (inbound calls + web lead form) ─────────────────────────────────────
+// Populated two ways: the call-screening webhooks (every inbound call to the
+// shop's tracking number) and the public lead-capture form at /book/<slug>.
+// Web leads carry ad attribution (source = utm_source, e.g. 'facebook'), so the
+// breakdown up top shows exactly which channel each lead came from.
 const Leads = {
   _leads: [],
   _filter: 'all',
@@ -11,6 +12,52 @@ const Leads = {
     contacted: { label: 'Contacted', bg: '#fef3c7',          fg: '#92400e',      dot: '#d97706' },
     booked:    { label: 'Booked',    bg: 'var(--green-lt)',  fg: 'var(--green)', dot: '#16a34a' },
     closed:    { label: 'Closed',    bg: '#f3f4f6',          fg: '#6b7280',      dot: '#9ca3af' },
+  },
+
+  // Display meta for a lead source. Known channels get an icon; anything else
+  // (a custom utm_source) is shown as typed, capitalized.
+  _sourceMeta(src) {
+    const known = {
+      call:      { icon: '📞', label: 'Phone call' },
+      website:   { icon: '🌐', label: 'Website' },
+      facebook:  { icon: '📘', label: 'Facebook' },
+      instagram: { icon: '📸', label: 'Instagram' },
+      google:    { icon: '🔍', label: 'Google' },
+      tiktok:    { icon: '🎵', label: 'TikTok' },
+      nextdoor:  { icon: '🏘', label: 'Nextdoor' },
+      yelp:      { icon: '⭐', label: 'Yelp' },
+    };
+    const s = String(src || 'call').toLowerCase();
+    return known[s] || { icon: '🔗', label: s.charAt(0).toUpperCase() + s.slice(1) };
+  },
+
+  // Leads by source: total + booked per channel, best-converting first.
+  // This is the read on ad spend — "Facebook sent 12, 4 booked".
+  _sourceBreakdown() {
+    if (!this._leads.length) return '';
+    const bySrc = {};
+    this._leads.forEach(l => {
+      const k = String(l.source || 'call').toLowerCase();
+      bySrc[k] = bySrc[k] || { total: 0, booked: 0 };
+      bySrc[k].total++;
+      if (l.status === 'booked') bySrc[k].booked++;
+    });
+    const keys = Object.keys(bySrc);
+    if (keys.length < 2 && keys[0] === 'call') return ''; // calls-only shops: nothing to compare yet
+    const max = Math.max(...keys.map(k => bySrc[k].total));
+    const rows = keys.sort((a,b) => bySrc[b].total - bySrc[a].total).map(k => {
+      const m = this._sourceMeta(k), d = bySrc[k];
+      const pct = d.total ? Math.round(d.booked / d.total * 100) : 0;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;">
+        <div style="width:110px;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;">${m.icon} ${esc(m.label)}</div>
+        <div style="flex:1;height:8px;background:var(--off);border-radius:99px;overflow:hidden;"><div style="width:${Math.max(4, Math.round(d.total/max*100))}%;height:100%;background:var(--green);border-radius:99px;"></div></div>
+        <div style="font-size:12px;color:var(--muted);white-space:nowrap;flex-shrink:0;"><strong style="color:var(--text);">${d.total}</strong> lead${d.total!==1?'s':''} · ${d.booked} booked${d.booked?` (${pct}%)`:''}</div>
+      </div>`;
+    }).join('');
+    return `<div class="card" style="margin-bottom:12px;">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Leads by source</div>
+      ${rows}
+    </div>`;
   },
 
   async render() {
@@ -34,32 +81,51 @@ const Leads = {
       </div>
     </div>`;
 
+    // Shareable lead-form link — this is the URL that goes in ads. Tag ad links
+    // with ?utm_source=... so the source breakdown can attribute them.
+    const slug = (Shop.settings && Shop.settings.shopSlug) || '';
+    const leadUrl = slug ? location.origin + '/book/' + slug : '';
+    const linkBanner = leadUrl ? `<div class="lead-banner" style="margin-top:8px;">
+      <span style="font-size:18px;">🔗</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:700;color:var(--text);">Your lead form</div>
+        <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(leadUrl)} — in ads, add <strong>?utm_source=facebook</strong> (or google, etc.) to track where leads come from.</div>
+      </div>
+      <button class="btn" style="flex-shrink:0;font-size:12px;padding:7px 12px;" onclick="navigator.clipboard.writeText('${esc(leadUrl)}');toast('Link copied ✓')">Copy</button>
+    </div>` : '';
+
     const shown = this._filter==='all' ? this._leads : this._leads.filter(l => l.status===this._filter);
 
+    const breakdown = this._sourceBreakdown();
+
     if (!shown.length) {
-      el.innerHTML = banner + filters + `<div class="card"><div class="empty-state">
+      el.innerHTML = banner + linkBanner + breakdown + filters + `<div class="card"><div class="empty-state">
         <div class="empty-icon">📞</div>
         <div class="empty-text">No ${this._filter==='all'?'':this._filter+' '}leads yet</div>
-        <div style="font-size:12px;color:var(--faint);margin-top:6px;">Inbound calls will show up here automatically.</div>
+        <div style="font-size:12px;color:var(--faint);margin-top:6px;">Inbound calls and lead-form submissions show up here automatically.</div>
       </div></div>`;
       return;
     }
 
     const rows = shown.map(l => {
       const m = this._statusMeta[l.status] || this._statusMeta.new;
+      const sm = this._sourceMeta(l.source);
       const name = l.name || l.phone || 'Unknown caller';
       const lastCall = (l.calls||[])[0];
+      const when = (lastCall && lastCall.startedAt) || l.lastContactAt;
       const missedBadge = (l.missedCount||0) > 0 ? `<span class="lead-missed">⚠ ${l.missedCount} missed</span>` : '';
-      const sub = [l.phone, l.location].filter(Boolean).join(' · ');
+      const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model].filter(Boolean).join(' ') : '';
+      const sub = [veh || l.location, (l.servicesInterested||[]).join(', ') || l.phone].filter(Boolean).join(' · ');
       return `<div class="msg-inbox-row" onclick="Leads.open('${l.id}')">
-        ${avatarEl(l.name || '☎', 42)}
+        ${avatarEl(l.name || sm.icon, 42)}
         <div style="flex:1;min-width:0;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
             <div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</div>
-            <div style="font-size:11px;color:var(--faint);white-space:nowrap;flex-shrink:0;">${lastCall?_msgTime(lastCall.startedAt):''}</div>
+            <div style="font-size:11px;color:var(--faint);white-space:nowrap;flex-shrink:0;">${when?_msgTime(when):''}</div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">
             <span class="lead-badge" style="background:${m.bg};color:${m.fg};">${m.label}</span>
+            <span class="lead-badge" style="background:var(--off);color:var(--muted);">${sm.icon} ${esc(sm.label)}</span>
             ${missedBadge}
             <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">${esc(sub)}</div>
           </div>
@@ -67,7 +133,7 @@ const Leads = {
       </div>`;
     }).join('');
 
-    el.innerHTML = banner + filters + `<div class="list-card">${rows}</div>`;
+    el.innerHTML = banner + linkBanner + breakdown + filters + `<div class="list-card">${rows}</div>`;
   },
 
   setFilter(f) { this._filter = f; this.render(); },
@@ -93,9 +159,20 @@ const Leads = {
       return `<div class="lead-call answered"><span>✓ Answered${dur}${c.recording?' · 🎙 recorded':''}</span><span class="lead-call-time">${when}</span></div>${rec}${tr}`;
     }).join('') || `<div style="font-size:12px;color:var(--faint);padding:6px 0;">No calls logged.</div>`;
 
+    // Web-lead extras: where the lead came from (channel + campaign), the
+    // vehicle they told us about, and the services they checked on the form.
+    const sm = this._sourceMeta(l.source);
+    const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model, l.vehicle.color].filter(Boolean).join(' ') : '';
+    const infoRow = (k, v) => v ? `<div style="display:flex;gap:10px;padding:5px 0;font-size:13px;"><span style="width:86px;color:var(--muted);flex-shrink:0;">${k}</span><span style="font-weight:600;color:var(--text);">${esc(v)}</span></div>` : '';
+    const detailCard = `
+      ${infoRow('Source', sm.icon + ' ' + sm.label + (l.utm && l.utm.campaign ? ' · ' + l.utm.campaign : ''))}
+      ${infoRow('Vehicle', veh)}
+      ${infoRow('Interested in', (l.servicesInterested||[]).join(', '))}
+      ${l.email ? `<div style="display:flex;gap:10px;padding:5px 0;font-size:13px;"><span style="width:86px;color:var(--muted);flex-shrink:0;">Email</span><a href="mailto:${esc(l.email)}" style="font-weight:600;color:var(--green);text-decoration:none;">${esc(l.email)}</a></div>` : ''}`;
+
     Modal.show(`
       <div class="modal-title" style="display:flex;align-items:center;gap:10px;">
-        ${avatarEl(l.name || '☎', 38)}
+        ${avatarEl(l.name || sm.icon, 38)}
         <div style="flex:1;min-width:0;">
           <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</div>
           ${l.phone?`<a href="tel:${esc(l.phone)}" style="font-size:12px;font-weight:500;color:var(--green);text-decoration:none;">${esc(l.phone)} ↗</a>`:''}
@@ -103,6 +180,8 @@ const Leads = {
       </div>
 
       ${this._aiCard(l)}
+
+      ${detailCard.trim()?`<div class="form-group" style="background:var(--off);border-radius:10px;padding:8px 12px;">${detailCard}</div>`:''}
 
       <div class="form-group">
         <label class="form-label">Name</label>
