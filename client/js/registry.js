@@ -11,6 +11,7 @@ const NavRegistry = {
   // Label + icon for every page. Industry pages (jobs/properties/…) live here too.
   META: {
     dashboard:    { label: 'Dashboard',    icon: '🏠' },
+    response:     { label: 'Response Center', icon: '⏱️' },
     leads:        { label: 'Leads',        icon: '📞' },
     clients:      { label: 'Clients',      icon: '👤' },
     messages:     { label: 'Messages',     icon: '💬', badge: 'sidebar-msg-badge' },
@@ -30,7 +31,7 @@ const NavRegistry = {
   // Grouped layout. `industry: true` appends the active vertical's INDUSTRY_PAGES.
   GROUPS: [
     { title: 'Overview',   pages: ['dashboard'] },
-    { title: 'CRM',        pages: ['leads', 'clients', 'tasks', 'messages'] },
+    { title: 'CRM',        pages: ['response', 'leads', 'clients', 'tasks', 'messages'] },
     { title: 'Operations', pages: ['appointments'], industry: true },
     { title: 'Money',      pages: ['quotes', 'revenue'] },
     { title: 'Growth',     pages: ['reviews', 'automations'] },

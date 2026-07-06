@@ -688,7 +688,13 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   const { name, status, notes } = req.body;
   if (name   !== undefined) lead.name = String(name).slice(0,80);
   if (notes  !== undefined) lead.notes = String(notes).slice(0,2000);
-  if (status !== undefined && ['new','contacted','booked','closed'].includes(status)) lead.status = status;
+  if (status !== undefined && ['new','contacted','booked','closed'].includes(status)) {
+    // Speed-to-lead metric: the first move off 'new' is the shop's first
+    // response (owner texted via the sms: deep link or called back, then set
+    // the status). Stamped once, server-side, so response times are durable.
+    if (lead.status === 'new' && status !== 'new' && !lead.firstResponseAt) lead.firstResponseAt = new Date().toISOString();
+    lead.status = status;
+  }
   h.upsert('leads', lead);
   res.json({ ok:true, lead });
 }));
@@ -735,6 +741,7 @@ router.post('/api/shop/leads/:id/sms', requireAuth, requireRole('full','technici
     h.upsert('conversations', { id: genId('msg'), customerId: lead.customerId || null, leadId: lead.id,
       customerName: lead.name || lead.phone, type:'sms', direction:'outbound', body, sentAt:new Date().toISOString(), read:true });
     if (lead.status === 'new') { lead.status = 'contacted'; }
+    if (!lead.firstResponseAt) lead.firstResponseAt = new Date().toISOString();
     lead.lastContactAt = new Date().toISOString();
     h.upsert('leads', lead);
     res.json({ ok:true });

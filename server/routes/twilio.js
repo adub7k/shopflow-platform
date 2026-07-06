@@ -152,7 +152,11 @@ router.post('/api/twilio/voice/complete/:shopId', verifyTwilio, (req, res) => {
   const lead = call.leadId ? ctx.h.getById('leads', call.leadId) : null;
   if (lead) {
     lead.lastContactAt = call.endedAt;
-    if (accepted) { lead.status = lead.status === 'new' ? 'contacted' : lead.status; }
+    if (accepted) {
+      lead.status = lead.status === 'new' ? 'contacted' : lead.status;
+      // Answering the call IS the first response — stamp it for response-time metrics.
+      if (!lead.firstResponseAt) lead.firstResponseAt = call.endedAt;
+    }
     else          { lead.missedCount = (lead.missedCount || 0) + 1; }
   }
 

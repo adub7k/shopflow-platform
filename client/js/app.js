@@ -5,8 +5,8 @@ function closeSidebar(){document.body.classList.remove('sidebar-open');}
 // ── Role-based page permissions ───────────────────────────────────────────────
 // full = owner/full access · technician = appts + clients · viewonly = calendar only
 const ROLE_PAGES = {
-  full:       ['dashboard','messages','appointments','leads','clients','quotes','revenue','tasks','reviews','automations','settings'],
-  technician: ['dashboard','messages','appointments','leads','clients','quotes','tasks'],
+  full:       ['dashboard','messages','appointments','response','leads','clients','quotes','revenue','tasks','reviews','automations','settings'],
+  technician: ['dashboard','messages','appointments','response','leads','clients','quotes','tasks'],
   viewonly:   ['appointments'],
 };
 // Pages that only appear for a given industry. Injected after the role base set,
@@ -47,7 +47,7 @@ const App = {
     document.querySelectorAll('.nav-item,.bottom-nav-item').forEach(b=>b.classList.remove('active'));
     const el=document.getElementById('page-'+page); if(el)el.classList.add('active');
     document.querySelectorAll('[data-page="'+page+'"]').forEach(b=>b.classList.add('active'));
-    const titles={dashboard:'Dashboard',messages:'Messages',appointments:'Appointments',jobs:'Jobs',properties:'Properties',crews:'Crews',recurring:'Recurring',leads:'Leads',clients:'Clients',quotes:'Estimates',revenue:'Revenue',tasks:'Tasks',reviews:'Reviews',automations:'Automations',settings:'Settings'};
+    const titles={dashboard:'Dashboard',messages:'Messages',appointments:'Appointments',jobs:'Jobs',properties:'Properties',crews:'Crews',recurring:'Recurring',response:'Response Center',leads:'Leads',clients:'Clients',quotes:'Estimates',revenue:'Revenue',tasks:'Tasks',reviews:'Reviews',automations:'Automations',settings:'Settings'};
     const tt=document.getElementById('topbar-title'); if(tt&&titles[page])tt.textContent=titles[page];
     this._render(page);
   },
@@ -59,6 +59,7 @@ const App = {
     if(page==='properties')  Properties.render();
     if(page==='crews')       Crews.render();
     if(page==='recurring')   Recurring.render();
+    if(page==='response')    Response.render();
     if(page==='leads')       Leads.render();
     if(page==='clients')     Clients.render();
     if(page==='quotes')      Quotes.render();
