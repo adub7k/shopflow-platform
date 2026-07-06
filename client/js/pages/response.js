@@ -44,7 +44,14 @@ const Response = {
     if ((l.formSubmits || 0) > 1)  { s += 6; why.push('Submitted the form ' + l.formSubmits + '×'); }
     if ((l.callCount || 0) > 1)    { s += 4; why.push('Called ' + l.callCount + '×'); }
 
-    return { score: Math.min(100, Math.round(s)), why };
+    // AI receptionist rating (from the voicemail transcript, when available).
+    // Hot jumps the queue, cold sinks — the model has read what redialing hasn't.
+    const q = l.ai && l.ai.quality;
+    if      (q === 'hot')  { s += 12; why.unshift('🔥 AI rated: hot lead'); }
+    else if (q === 'warm') { s += 6;  why.push('AI rated: warm lead'); }
+    else if (q === 'cold') { s -= 15; why.push('🧊 AI rated: cold lead'); }
+
+    return { score: Math.max(0, Math.min(100, Math.round(s))), why };
   },
   _scoreMeta(score) {
     if (score >= 75) return { label: 'Hot',    bg: '#fef2f2', fg: '#dc2626' };
@@ -206,7 +213,10 @@ const Response = {
     const first = String(l.name || '').trim().split(/\s+/)[0] || 'there';
     const shop = (Shop.settings && Shop.settings.shopName) || 'us';
     const fill = (t) => String(t || '').replace(/\{first\}/g, first).replace(/\{name\}/g, l.name || 'there').replace(/\{shop\}/g, shop);
-    const defaultMsg = fill("Hi {first}, this is {shop} — got your request! I'm putting your price together now. Quick reply here if there's anything else I should know about the vehicle.");
+    // The AI receptionist's suggested reply (written from the voicemail
+    // transcript) beats the generic opener when it exists.
+    const defaultMsg = (l.ai && l.ai.followUp) ? l.ai.followUp
+      : fill("Hi {first}, this is {shop} — got your request! I'm putting your price together now. Quick reply here if there's anything else I should know about the vehicle.");
     const tpls = Array.isArray(Shop.settings && Shop.settings.smsTemplates) ? Shop.settings.smsTemplates.filter(t => t && t.body) : [];
     const opts = tpls.map((t, i) => `<option value="${i}">${esc(t.label || 'Template')}</option>`).join('');
     Modal.show(`

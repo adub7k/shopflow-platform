@@ -72,6 +72,15 @@ const Settings = {
       }
       html.push('</div>');
 
+      // AI Receptionist — auto-analyze voicemail transcripts into lead intake.
+      // The per-shop opt-in read by server/receptionist/intake.js; analysis also
+      // needs ANTHROPIC_API_KEY set in the server environment.
+      html.push('<div class="section-header">AI Receptionist</div><div class="card">');
+      html.push(`<div class="form-group" style="margin-bottom:0;"><label class="form-label"><input type="checkbox" id="s-aireceptionist" ${s.aiReceptionist&&s.aiReceptionist.enabled?'checked':''} style="margin-right:6px;" /> Auto-analyze voicemails with AI</label>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;">When a missed call leaves a voicemail, AI reads the transcript and rates the lead (hot / warm / cold), summarizes what they want, and suggests a reply — shown on the lead and used by the Response Center to prioritize your queue. You can always run it manually from any lead with "Analyze with AI".</div>
+      </div>`);
+      html.push('</div>');
+
       // Work Gallery — showcased at the top of the booking page
       const gallery = Array.isArray(s.gallery) ? s.gallery : [];
       html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Work Gallery</span><button class="btn btn-sm btn-green" onclick="Settings.galleryPick()">+ Add Photo</button></div>');
@@ -698,6 +707,7 @@ const Settings = {
     const mp=document.getElementById('s-metapixel'); if(mp)data.metaPixelId=mp.value.trim();
     const tpl=document.getElementById('s-leadtpl'); if(tpl)data.leadPageTemplate=tpl.value;
     const pp=document.getElementById('s-publicphone'); if(pp)data.publicPhone=pp.value.trim();
+    const ar=document.getElementById('s-aireceptionist'); if(ar)data.aiReceptionist={enabled:ar.checked};
     const lv=document.getElementById('s-lvis')?.value; if(lv)data.loyalty={visitsForReward:parseInt(lv),rewardDescription:document.getElementById('s-lrew')?.value.trim()||'One free service'};
     // Message templates: owner-managed [{id,label,body}] list (drops empty rows).
     this._syncTemplates();
