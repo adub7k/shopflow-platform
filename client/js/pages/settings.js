@@ -35,6 +35,13 @@ const Settings = {
       if (leadMode) {
         html.push(`<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Visitors tell you their name, phone, vehicle, and what they're interested in — then you text them a quote. In ads, add <strong>?utm_source=facebook</strong> (or google, etc.) to the link to track where leads come from.</div>`);
         html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-benabled" ${s.bookingEnabled!==false?'checked':''} style="margin-right:6px;" /> Lead form enabled</label></div>`);
+        html.push(`<div class="form-group"><label class="form-label">Page style</label>
+          <select class="form-input" id="s-leadtpl">
+            <option value="classic"${(s.leadPageTemplate||'classic')!=='premium'?' selected':''}>Classic — light, compact quote form</option>
+            <option value="premium"${s.leadPageTemplate==='premium'?' selected':''}>Premium — dark long-form landing page (benefits, FAQ, comparison)</option>
+          </select>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;">Premium is built for paid ad traffic — it sells the service before asking for contact info. Same link, same leads either way.</div></div>`);
+        html.push(`<div class="form-group"><label class="form-label">Public phone <span style="font-weight:400;color:var(--faint);">(optional)</span></label><input class="form-input" id="s-publicphone" type="tel" value="${esc(s.publicPhone||'')}" placeholder="(505) 555-0100" /><div style="font-size:11px;color:var(--muted);margin-top:6px;">Shown as a click-to-call option after someone requests an estimate (Premium page). Use your tracking number if you have one — leave blank to hide.</div></div>`);
         html.push(`<div class="form-group"><label class="form-label">Meta Pixel ID <span style="font-weight:400;color:var(--faint);">(optional)</span></label><input class="form-input" id="s-metapixel" value="${esc(s.metaPixelId||'')}" placeholder="e.g. 1234567890123456" inputmode="numeric" /><div style="font-size:11px;color:var(--muted);margin-top:6px;">From Meta Events Manager. Lets Facebook/Instagram ads optimize for people who actually submit the form — fires PageView on load and a Lead event on submit.</div></div>`);
         // "Services considering" options: free-standing labels, deliberately NOT
         // wired to the real service catalog — they exist to put the visitor in a
@@ -689,6 +696,8 @@ const Settings = {
     // Lead-form options (lead-mode shops): plain labels, empties dropped.
     if(document.getElementById('lf-opts')){ this._syncLeadOpts(); data.leadFormOptions=this._leadOpts.map(o=>o.trim()).filter(Boolean); }
     const mp=document.getElementById('s-metapixel'); if(mp)data.metaPixelId=mp.value.trim();
+    const tpl=document.getElementById('s-leadtpl'); if(tpl)data.leadPageTemplate=tpl.value;
+    const pp=document.getElementById('s-publicphone'); if(pp)data.publicPhone=pp.value.trim();
     const lv=document.getElementById('s-lvis')?.value; if(lv)data.loyalty={visitsForReward:parseInt(lv),rewardDescription:document.getElementById('s-lrew')?.value.trim()||'One free service'};
     // Message templates: owner-managed [{id,label,body}] list (drops empty rows).
     this._syncTemplates();

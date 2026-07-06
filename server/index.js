@@ -97,9 +97,12 @@ app.get('/book/*',  (req, res) => {
     const shop = shopSlug && master.get('shops').find({ slug: shopSlug, active: true }).value();
     if (shop) {
       const db = getShopDb(shop.id);
-      const mode = (db.get('settings').value() || {}).bookingMode
+      const settings = db.get('settings').value() || {};
+      const mode = settings.bookingMode
         || (resolveProfile(db.get('industry').value()).leadCapture ? 'leads' : 'booking');
-      if (mode === 'leads') page = 'lead.html';
+      // Two lead-page templates: the classic light card, or the premium dark
+      // long-form landing page (settings.leadPageTemplate: 'classic'|'premium').
+      if (mode === 'leads') page = settings.leadPageTemplate === 'premium' ? 'lead-premium.html' : 'lead.html';
     }
   } catch(e) { /* fall through to the booking page */ }
   res.sendFile(path.join(CLIENT_DIR, page));

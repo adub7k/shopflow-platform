@@ -129,6 +129,10 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
         : (db.get('services').value() || []).map(x => x.name),
       // Meta Pixel for ad-conversion tracking on the lead form (empty = off).
       metaPixelId: String(s.metaPixelId || ''),
+      // Owner-chosen public phone for click-to-call on the landing page (empty =
+      // hidden). Deliberately a separate field from settings.phone, which is the
+      // private call-forwarding destination and must never be exposed here.
+      publicPhone: String(s.publicPhone || ''),
       // Inspiration photo + work gallery
       inspo: inspoMode(s, db.get('industry').value()),
       gallery: s.gallery || [],
