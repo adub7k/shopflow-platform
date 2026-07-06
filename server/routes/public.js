@@ -3,6 +3,7 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl } = require('../db');
 const { resolveProfile } = require('../industries');
+const { notifyNewLead } = require('../email');
 
 // Resolve a shop's inspo-photo mode: explicit per-shop setting wins, else the
 // industry default ('required' for nail studios, 'off' elsewhere).
@@ -399,7 +400,9 @@ router.post('/api/public/:shopSlug/lead', async (req, res) => {
 
     // No automated SMS here — A2P isn't registered, and the product stance is
     // manual texting anyway: the owner sees the lead in ShopFlow → Leads and
-    // texts back from there. The lead is saved; that's the whole job.
+    // texts back from there. Speed-to-lead is covered by an email ping to the
+    // owner instead (fire-and-forget — a mail failure never breaks the submit).
+    notifyNewLead({ shop, settings: s, lead, kind: existing ? 'form-repeat' : 'form' });
     res.json({ ok: true });
   } catch(e) {
     console.error('Lead capture error:', e.message);

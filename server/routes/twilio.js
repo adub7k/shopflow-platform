@@ -18,6 +18,7 @@ const {
   twilioClient, genId, toE164,
 } = require('../db');
 const { runIntake } = require('../receptionist/intake');
+const { notifyNewLead } = require('../email');
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
@@ -167,6 +168,19 @@ router.post('/api/twilio/voice/complete/:shopId', verifyTwilio, (req, res) => {
   // if A2P + the toggle are on — but NOT when they abandoned the call before we
   // connected ('canceled'/'failed'), and at-most-once across Twilio's retries.
   const smsWorthy = ['no-answer', 'busy', 'completed'].includes(dialStatus);
+
+  // Speed-to-lead: email the owner about the missed call (A2P isn't registered,
+  // so the caller gets no auto-text — the owner calling back fast is the whole
+  // play). Same status filter as the SMS so abandoned dials don't ping, and a
+  // flag on the call keeps it at-most-once across Twilio's retries.
+  if (smsWorthy && !call.ownerEmailSent) {
+    call.ownerEmailSent = true;   // persisted below with the rest of the call
+    notifyNewLead({
+      shop: ctx.shop, settings: ctx.settings,
+      lead: lead || { phone: call.from, source: 'call' },
+      kind: 'missed-call',
+    });
+  }
   if (smsWorthy && callTrackingOn(ctx.settings) && !call.autoSmsSent) {
     const fromNum = shopFromNumber(ctx.shopId);
     const toNum = toE164(call.from);

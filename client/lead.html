@@ -84,6 +84,8 @@ img{max-width:100%;display:block;}
 .cta-btn:active{transform:scale(.98);}
 .cta-btn:disabled{opacity:.55;cursor:not-allowed;}
 .trust{text-align:center;font-size:12px;color:var(--faint);margin-top:12px;line-height:1.5;}
+.consent{text-align:center;font-size:10.5px;color:var(--faint);opacity:.8;margin-top:10px;line-height:1.55;}
+.consent a{color:var(--faint);text-decoration:underline;}
 
 .err{background:#fef2f2;border:1.5px solid #fecaca;border-radius:var(--r-md);padding:12px 16px;font-size:13px;color:#dc2626;margin-bottom:14px;display:none;line-height:1.5;font-weight:600;}
 
@@ -159,6 +161,9 @@ img{max-width:100%;display:block;}
 
         <button class="cta-btn" id="cta-btn" onclick="L.submit()">Get My Free Quote →</button>
         <div class="trust" id="trust-line">📱 We'll text you — no spam, no sales calls.</div>
+        <!-- A2P 10DLC consent disclosure — TCR vetting checks the opt-in page for
+             exactly this language (consent, frequency, rates, STOP/HELP, policy links). -->
+        <div class="consent">By submitting this form, you agree to receive text messages from <span id="consent-shop">us</span> about your quote and appointments. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out or HELP for help. <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a> &middot; <a href="/terms.html" target="_blank" rel="noopener">Terms</a></div>
       </div>
     </section>
   </div>
@@ -224,6 +229,7 @@ const L = {
     av.textContent=i.shopName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
     document.getElementById('sh-name').textContent=i.shopName;
     document.getElementById('sh-tag').textContent=i.tagline||'';
+    document.getElementById('consent-shop').textContent=i.shopName;
     document.title='Get a Quote — '+i.shopName;
   },
 
