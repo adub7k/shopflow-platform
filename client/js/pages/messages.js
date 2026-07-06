@@ -62,7 +62,7 @@ const Messages = {
       const isOut = last.direction === 'outbound';
       const preview = (isOut ? 'You: ' : '') + (last.body || '').slice(0, 60) + ((last.body||'').length > 60 ? '…' : '');
       const timeStr = last.sentAt ? _msgTime(last.sentAt) : '';
-      return `<div class="msg-inbox-row" onclick="Messages.openThread('${t.customerId}','${esc(t.customerName)}','${esc(t.customerPhone||'')}')">
+      return `<div class="msg-inbox-row" onclick="Messages.openThread('${t.customerId}','${jsAttr(t.customerName)}','${jsAttr(t.customerPhone||'')}')">
         ${avatarEl(t.customerName, 42)}
         <div style="flex:1;min-width:0;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
@@ -113,7 +113,7 @@ const Messages = {
             <div class="msg-thread-name">${esc(thread.customerName)}</div>
             ${thread.customerPhone ? `<div class="msg-thread-phone">${esc(thread.customerPhone)}</div>` : ''}
           </div>
-          ${thread.customerPhone ? `<a href="javascript:void 0" onclick="_cpCall('${thread.customerPhone}','${thread.customerId||''}')" style="color:var(--green);font-size:20px;text-decoration:none;padding:4px;">📞</a>` : ''}
+          ${thread.customerPhone ? `<a href="javascript:void 0" onclick="_cpCall('${jsAttr(thread.customerPhone)}','${jsAttr(thread.customerId||'')}')" style="color:var(--green);font-size:20px;text-decoration:none;padding:4px;">📞</a>` : ''}
         </div>
         <div class="msg-bubbles" id="msg-bubbles-scroll">${bubbles}</div>
         <div class="msg-compose">

@@ -200,9 +200,11 @@ router.get('/sq/booking-deposit-success', async (req, res) => {
 // Builds a Square checkout link for an owner-chosen amount and records it on the
 // client (deposits[] + a notes-log entry). The paid status is logged on the
 // client when they return from the success redirect.
-router.post('/api/public/:shopSlug/square-customer-deposit', async (req, res) => {
+router.post('/api/shop/square/customer-deposit', requireAuth, requireRole('full','technician'), async (req, res) => {
   try {
-    const shop = master.get('shops').find({ slug: req.params.shopSlug, active: true }).value();
+    // Owner/tech-only: derive the shop from the auth token, never from a URL slug,
+    // so nobody can spam deposit links / note entries onto another shop's clients.
+    const shop = master.get('shops').find({ id: req.shopId, active: true }).value();
     if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
     const db = getShopDb(shop.id); const s = db.get('settings').value() || {}; const h = shopHelpers(db);
     const creds = await resolveSquare(db, s);

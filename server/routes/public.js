@@ -85,7 +85,15 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
     // personal phone numbers or other internal fields.
     const barbers = (db.get('barbers').value() || []).filter(b => b.active !== false)
       .map(b => ({ id: b.id, name: b.name, color: b.color, bio: b.bio || '', schedule: b.schedule }));
-    const services = db.get('services').value();
+    // Project services to public-safe fields only — never expose the internal
+    // `cost` (COGS/margin) field that lives on each service for owner reporting.
+    const services = (db.get('services').value() || []).map(s => ({
+      id: s.id, name: s.name, category: s.category, price: s.price,
+      duration: s.duration, sizePricing: s.sizePricing, description: s.description,
+      image: s.image,
+    }));
+    // Same for add-ons: expose id/name/price to the booking page, never `cost`.
+    const publicAddons = (s.addons || []).map(a => ({ id: a.id, name: a.name, price: a.price }));
     const blockedDates = db.get('blockedDates').value().map(b => b.date);
     const stripeConnected = !!(s.stripe?.connectAccountId && s.stripe?.onboardingComplete);
     // Square is "connected" if the shop has its own token (OAuth) or the platform
@@ -106,7 +114,7 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
       vocab: s.vocab || null,
       customFields: s.customFields || [],
       vehicleSizes: (s.vehicleSizes && s.vehicleSizes.length) ? s.vehicleSizes : (resolveProfile(db.get('industry').value()).vehicleSizes || []),
-      addons: s.addons || [],
+      addons: publicAddons,
       staffPicker: s.staffPicker !== undefined ? s.staffPicker : (resolveProfile(db.get('industry').value()).staffPicker !== false),
       statuses: s.statuses || [],
       deposit: { enabled: !!(s.deposit?.enabled && paymentsConnected), amount: s.deposit?.amount || 10, message: s.deposit?.message || '' },
@@ -290,13 +298,21 @@ router.get('/api/public/:shopSlug/availability', (req, res) => {
     const allSlots = new Set();
     working.forEach(b => {
       const sched = b.schedule || { startTime:'9:00 AM', endTime:'6:00 PM', slotMinutes:30 };
-      const booked = appts.filter(a => a.barberId === b.id).map(a => a.time);
+      // Occupied minute-intervals for this staff member. A booked job blocks its
+      // whole [start, start+duration) span, not just its start slot — otherwise a
+      // 180-min detail job leaves every following 30-min slot bookable (overbook).
+      const intervals = appts.filter(a => a.barberId === b.id).map(a => {
+        const start = parseClock(a.time);
+        return { start, end: start + (Number(a.duration) || sched.slotMinutes || 30) };
+      });
       // If this staff member set explicit times, offer ONLY those; otherwise
       // generate the usual start→end slots at the chosen interval.
       const candidates = (Array.isArray(sched.allowedTimes) && sched.allowedTimes.length)
         ? sched.allowedTimes
         : generateSlots(sched.startTime, sched.endTime, sched.slotMinutes);
-      candidates.filter(s => !booked.includes(s)).forEach(s => allSlots.add(s));
+      candidates
+        .filter(s => { const m = parseClock(s); return !intervals.some(iv => m >= iv.start && m < iv.end); })
+        .forEach(s => allSlots.add(s));
     });
 
     const sorted = [...allSlots].sort((a,b) => { const p=t=>{const [tm,ap]=t.split(' ');let[h,m]=tm.split(':').map(Number);if(ap==='PM'&&h!==12)h+=12;if(ap==='AM'&&h===12)h=0;return h*60+m;};return p(a)-p(b); });
@@ -428,14 +444,21 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
         b.active !== false &&
         (b.schedule?.workDays || [1,2,3,4,5,6]).includes(dow) &&
         barberSlotList(b).includes(time));
+      // Overlap test on real minute-intervals, not exact-start equality — so a
+      // requested job that would run into an existing one (or start inside it) is
+      // rejected. Duration is taken server-side from the chosen service.
+      const reqSvc = serviceId ? (db.get('services').value() || []).find(x => x.id === serviceId) : null;
+      const reqStart = parseClock(time);
+      const reqEnd = reqStart + ((reqSvc && Number(reqSvc.duration)) || 30);
+      const overlaps = a => { const aStart = parseClock(a.time); const aEnd = aStart + (Number(a.duration) || 30); return reqStart < aEnd && aStart < reqEnd; };
       if (barberId) {
         const b = workingBarbers.find(x => x.id === barberId);
         if (!b) return res.status(409).json({ ok: false, error: 'That time is no longer available. Please pick another.' });
-        if (dayAppts.some(a => a.barberId === barberId && a.time === time))
+        if (dayAppts.some(a => a.barberId === barberId && overlaps(a)))
           return res.status(409).json({ ok: false, error: 'Sorry, that time was just booked. Please pick another.' });
       } else {
-        // "Any" staff — make sure the shop still has an open chair at that time.
-        const takenAtTime = dayAppts.filter(a => a.time === time).length;
+        // "Any" staff — make sure the shop still has an open chair across the span.
+        const takenAtTime = dayAppts.filter(overlaps).length;
         if (!workingBarbers.length || takenAtTime >= workingBarbers.length)
           return res.status(409).json({ ok: false, error: 'Sorry, that time was just booked. Please pick another.' });
       }

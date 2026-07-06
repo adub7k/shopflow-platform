@@ -413,10 +413,9 @@ const ClientProfile = {
     if (!amount) { toast('Enter a deposit amount', 'warning'); return; }
     toast('Building deposit link…');
     try {
-      const r = await fetch('/api/public/' + ctx.slug + '/square-customer-deposit', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ customerId: ctx.custId, amount }),
-      }).then(r => r.json());
+      const r = await apiFetch('/square/customer-deposit', {
+        method: 'POST', body: { customerId: ctx.custId, amount },
+      }).catch(e => ({ ok: false, error: e && e.message }));
       if (!r || !r.ok || !r.url) { toast(r && r.error ? r.error : 'Could not create the deposit link', 'error'); return; }
       Modal.close();
       toast('Deposit link ready — logged to notes ✓');
@@ -499,7 +498,7 @@ function _buildProfileHtml(data, services, messages) {
     <div style="flex:1;min-width:0;">
       <div style="font-size:20px;font-weight:800;letter-spacing:-.02em;">${esc(c.name)}${c.isFleet ? ' <span style="font-size:11px;font-weight:700;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:2px 7px;vertical-align:middle;">🚚 Fleet</span>' : ''}</div>
       <div style="font-size:12px;color:var(--muted);margin-top:2px;">
-        ${c.phone ? `<a href="javascript:void 0" onclick="_cpCall('${c.phone}','${c.id}')" style="color:var(--muted);text-decoration:none;">${esc(c.phone)}</a>` : 'No phone'}
+        ${c.phone ? `<a href="javascript:void 0" onclick="_cpCall('${jsAttr(c.phone)}','${c.id}')" style="color:var(--muted);text-decoration:none;">${esc(c.phone)}</a>` : 'No phone'}
         ${c.email ? ' · ' + esc(c.email) : ''}
         · Customer since ${fmtDateShort(c.createdAt) || '—'}
         · Last visit ${lastService ? fmtDateShort(lastService.date) : '—'}
@@ -523,7 +522,7 @@ function _buildProfileHtml(data, services, messages) {
       ${qa(`ClientProfile.invoicePrompt('${c.id}')`, '🧾', 'Invoice')}
       ${qa(`ClientProfile.requestDeposit('${c.id}')`, '💳', 'Deposit')}
       ${qa(`ClientProfile.textPrompt('${c.id}')`, '💬', 'Send Text')}
-      ${c.phone ? qa(`_cpCall('${c.phone}','${c.id}')`, '📞', 'Call') : ''}
+      ${c.phone ? qa(`_cpCall('${jsAttr(c.phone)}','${c.id}')`, '📞', 'Call') : ''}
       ${qa(`ClientProfile.vehiclePrompt('${c.id}')`, '🚗', 'Add Vehicle')}
     </div>`;
   }
@@ -537,7 +536,7 @@ function _buildProfileHtml(data, services, messages) {
     h += `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">`;
     tagList.forEach(t => {
       const on = active.has(t);
-      h += `<span class="cp-tag ${on ? '' : 'off'}" ${write ? `onclick="ClientProfile.toggleTag('${c.id}','${esc(t)}')"` : 'style="cursor:default;"'}>${on ? '✓ ' : ''}${esc(t)}</span>`;
+      h += `<span class="cp-tag ${on ? '' : 'off'}" ${write ? `onclick="ClientProfile.toggleTag('${c.id}','${jsAttr(t)}')"` : 'style="cursor:default;"'}>${on ? '✓ ' : ''}${esc(t)}</span>`;
     });
     h += `</div>`;
   }
@@ -553,7 +552,7 @@ function _buildProfileHtml(data, services, messages) {
     h += `<div style="border:1px dashed var(--border);border-radius:12px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;"><div style="font-size:13px;color:var(--muted);">Not a member</div><button onclick="ClientProfile.enrollPrompt('${c.id}')" style="background:#7c3aed;color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">⭐ Enroll</button></div>`;
   }
   if ((c.noShows || 0) > 0) h += `<div style="background:#fff5f5;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;font-size:12px;color:#dc2626;margin-bottom:14px;">⚠️ ${c.noShows} no-show${c.noShows > 1 ? 's' : ''} on record</div>`;
-  if (data.rewardReady) h += `<div style="background:var(--green-lt);border:1px solid #b3dfbf;border-radius:8px;padding:8px 12px;font-size:12px;color:var(--green);margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">🎉 Loyalty reward ready!${write ? ` <button onclick="Clients.redeemReward('${c.id}','${c.name}')" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">Redeem</button>` : ''}</div>`;
+  if (data.rewardReady) h += `<div style="background:var(--green-lt);border:1px solid #b3dfbf;border-radius:8px;padding:8px 12px;font-size:12px;color:var(--green);margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">🎉 Loyalty reward ready!${write ? ` <button onclick="Clients.redeemReward('${c.id}','${jsAttr(c.name)}')" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">Redeem</button>` : ''}</div>`;
 
   // ══ TWO-COLUMN DASHBOARD ══
   h += `<div class="cp-grid">`;

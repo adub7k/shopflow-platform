@@ -781,11 +781,15 @@ router.delete('/api/shop/blocked-dates/:date', requireAuth, requireRole('full'),
   db.get('blockedDates').remove({ date:req.params.date }).write(); res.json({ ok: true });
 }));
 
-// ── PROTECTED: Deposit ────────────────────────────────────────────────────────
-router.post('/api/shop/deposit/confirm', requireAuth, shopRoute(async (req, res, db, h) => {
+// ── PROTECTED: Deposit (owner only) ───────────────────────────────────────────
+// Manual/owner-side mark that a deposit was collected out-of-band. Owner-only:
+// this flips an appointment to confirmed and records a deposit amount, so it must
+// never be reachable by technician/viewonly roles. (Automated deposit capture goes
+// through the verified Stripe/Square return + webhook paths, not this route.)
+router.post('/api/shop/deposit/confirm', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   const { appointmentId, paymentIntentId, amount } = req.body;
   const a = h.getById('appointments', appointmentId); if(!a) return res.status(404).json({ ok:false });
-  a.depositPaid=true; a.depositAmount=amount; a.depositPaymentId=paymentIntentId; a.status='confirmed';
+  a.depositPaid=true; a.depositAmount=Number(amount) || 0; a.depositPaymentId=paymentIntentId; a.status='confirmed';
   h.upsert('appointments',a); res.json({ ok: true });
 }));
 

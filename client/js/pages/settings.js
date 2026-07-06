@@ -13,11 +13,11 @@ const Settings = {
       // Shop info
       html.push(`<div style="margin:4px 0 10px;font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--muted);">SHOP &amp; ${this._leadMode()?'LEAD FORM':'BOOKING'}</div>`);
       html.push('<div class="section-header">Shop Info</div><div class="card">');
-      html.push(`<div class="form-group"><label class="form-label">Shop Name</label><input class="form-input" id="s-name" value="${s.shopName||''}" /></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Tagline</label><input class="form-input" id="s-tag" value="${s.tagline||''}" /></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="s-phone" type="tel" value="${s.phone||''}" /></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Address</label><input class="form-input" id="s-addr" value="${s.address||''}" /></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Email</label><input class="form-input" id="s-email" type="email" value="${s.email||''}" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Shop Name</label><input class="form-input" id="s-name" value="${esc(s.shopName||'')}" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Tagline</label><input class="form-input" id="s-tag" value="${esc(s.tagline||'')}" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="s-phone" type="tel" value="${esc(s.phone||'')}" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Address</label><input class="form-input" id="s-addr" value="${esc(s.address||'')}" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Email</label><input class="form-input" id="s-email" type="email" value="${esc(s.email||'')}" /></div>`);
       html.push('</div>');
 
       // Public page settings — the calendar booking page for scheduling verticals,
@@ -49,7 +49,7 @@ const Settings = {
           <div id="lf-opts">${this._leadOpts.map((o,i)=>this._leadOptRow(o,i)).join('')}</div>
         </div>`);
       } else {
-        html.push(`<div class="form-group"><label class="form-label">Booking Welcome Message</label><textarea class="form-input" id="s-bmsg" rows="2">${s.bookingMessage||'Book your appointment below!'}</textarea></div>`);
+        html.push(`<div class="form-group"><label class="form-label">Booking Welcome Message</label><textarea class="form-input" id="s-bmsg" rows="2">${esc(s.bookingMessage||'Book your appointment below!')}</textarea></div>`);
         html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-benabled" ${s.bookingEnabled!==false?'checked':''} style="margin-right:6px;" /> Booking page enabled</label></div>`);
         html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-staffpicker" ${s.staffPicker!==false?'checked':''} style="margin-right:6px;" /> Let customers choose their ${esc(V('staff','barber').toLowerCase())} when booking</label></div>`);
         // Inspiration photo at booking (scheduling verticals only)
@@ -101,7 +101,7 @@ const Settings = {
         const accent=(b&&b.color)||roleColors[u&&u.role]||'#6e6e73';
         const sub=u?u.email:'No login';
         const chips=[];
-        if(u) chips.push(`<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:${roleColors[u.role]||'#6e6e73'}1a;color:${roleColors[u.role]||'#6e6e73'};white-space:nowrap;">${roleLabels[u.role]||u.role}</span>`);
+        if(u) chips.push(`<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:${roleColors[u.role]||'#6e6e73'}1a;color:${roleColors[u.role]||'#6e6e73'};white-space:nowrap;">${esc(roleLabels[u.role]||u.role)}</span>`);
         if(b) chips.push(`<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:${b.color||'#16a34a'}1a;color:${b.color||'#16a34a'};white-space:nowrap;">● Bookable</span>`);
         html.push(`<div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;border-left:4px solid ${accent};">
           <div style="width:40px;height:40px;border-radius:50%;background:${accent}22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:${accent};">${initials(name)}</div>
@@ -117,7 +117,7 @@ const Settings = {
       html.push('<div class="list-card">');
       services.forEach(s=>{
         const bySize = s.sizePricing && Object.keys(s.sizePricing).length;
-        html.push(`<div class="list-row"><div class="list-main"><div class="list-name">${s.name}</div><div class="list-sub">${s.category} · ${s.duration} min${bySize?' · by size':''}</div></div><div style="font-weight:700;color:var(--green);margin-right:8px;">${bySize?'from ':''}${fmtMoney(s.price)}</div><button class="btn btn-sm" onclick="Settings.openService('${s.id}')">Edit</button></div>`);
+        html.push(`<div class="list-row"><div class="list-main"><div class="list-name">${esc(s.name)}</div><div class="list-sub">${esc(s.category)} · ${s.duration} min${bySize?' · by size':''}</div></div><div style="font-weight:700;color:var(--green);margin-right:8px;">${bySize?'from ':''}${fmtMoney(s.price)}</div><button class="btn btn-sm" onclick="Settings.openService('${s.id}')">Edit</button></div>`);
       });
       html.push('</div>');
 
@@ -150,7 +150,7 @@ const Settings = {
       // Loyalty
       html.push('<div class="section-header">Loyalty Program</div><div class="card">');
       html.push(`<div class="form-group"><label class="form-label">Visits for free service</label><input class="form-input" id="s-lvis" type="number" value="${s.loyalty?.visitsForReward||10}" /></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Reward description</label><input class="form-input" id="s-lrew" value="${s.loyalty?.rewardDescription||'One free service'}" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Reward description</label><input class="form-input" id="s-lrew" value="${esc(s.loyalty?.rewardDescription||'One free service')}" /></div>`);
       html.push('</div>');
 
       // Sales Tax — applied to service subtotals at checkout + on estimates
@@ -179,7 +179,7 @@ const Settings = {
       // Call tracking
       html.push('<div class="section-header">Call Tracking</div><div class="card">');
       if (s.trackingNumber) {
-        html.push(`<div style="display:flex;align-items:center;gap:10px;background:var(--green-lt);border:1px solid var(--green-md);border-radius:10px;padding:12px;margin-bottom:14px;"><span style="font-size:18px;">📞</span><div><div style="font-size:13px;font-weight:700;color:var(--green);">Tracking number: ${s.trackingNumber}</div><div style="font-size:12px;color:var(--muted);margin-top:1px;">Calls forward to your shop phone. Inbound calls appear under Leads.</div></div></div>`);
+        html.push(`<div style="display:flex;align-items:center;gap:10px;background:var(--green-lt);border:1px solid var(--green-md);border-radius:10px;padding:12px;margin-bottom:14px;"><span style="font-size:18px;">📞</span><div><div style="font-size:13px;font-weight:700;color:var(--green);">Tracking number: ${esc(s.trackingNumber)}</div><div style="font-size:12px;color:var(--muted);margin-top:1px;">Calls forward to your shop phone. Inbound calls appear under Leads.</div></div></div>`);
       } else {
         html.push(`<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Your call-tracking number is managed by ShopFlow. Contact support to activate it for this shop.</div>`);
       }
@@ -188,15 +188,15 @@ const Settings = {
 
       // Google Reviews
       html.push('<div class="section-header">Google Reviews</div><div class="card">');
-      html.push(`<div class="form-group"><label class="form-label">Google Review Link</label><input class="form-input" id="s-grev" value="${s.googleReviewLink||''}" placeholder="https://g.page/r/..." /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Google Review Link</label><input class="form-input" id="s-grev" value="${esc(s.googleReviewLink||'')}" placeholder="https://g.page/r/..." /></div>`);
       html.push('</div>');
 
       // Email (fallback when Twilio not set up)
       html.push('<div class="section-header">Email Confirmations</div><div class="card">');
       html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Optional — sends booking confirmation emails when SMS is not configured. Use Gmail with an App Password.</div>');
-      html.push(`<div class="form-group"><label class="form-label">SMTP Host</label><input class="form-input" id="s-ehost" value="${s.emailSmtp?.host||''}" placeholder="smtp.gmail.com" /></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Email Address</label><input class="form-input" id="s-euser" type="email" value="${s.emailSmtp?.user||''}" placeholder="yourshop@gmail.com" /></div>`);
-      html.push(`<div class="form-group"><label class="form-label">App Password</label><input class="form-input" id="s-epass" type="password" value="${s.emailSmtp?.pass||''}" placeholder="Gmail App Password" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">SMTP Host</label><input class="form-input" id="s-ehost" value="${esc(s.emailSmtp?.host||'')}" placeholder="smtp.gmail.com" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Email Address</label><input class="form-input" id="s-euser" type="email" value="${esc(s.emailSmtp?.user||'')}" placeholder="yourshop@gmail.com" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">App Password</label><input class="form-input" id="s-epass" type="password" value="${esc(s.emailSmtp?.pass||'')}" placeholder="Gmail App Password" /></div>`);
       html.push('</div>');
 
       // Blocked Dates
@@ -211,7 +211,7 @@ const Settings = {
         blockedDates.sort((a,b)=>a.date.localeCompare(b.date)).forEach(bd=>{
           const dt = new Date(bd.date+'T12:00:00');
           const label = dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
-          html.push('<div class="list-row"><div class="list-main"><div class="list-name">'+label+'</div><div class="list-sub">'+(bd.reason||'No reason given')+'</div></div><button class="btn btn-sm btn-danger" onclick="Settings.unblockDate(\'' + bd.date + '\')">Unblock</button></div>');
+          html.push('<div class="list-row"><div class="list-main"><div class="list-name">'+label+'</div><div class="list-sub">'+esc(bd.reason||'No reason given')+'</div></div><button class="btn btn-sm btn-danger" onclick="Settings.unblockDate(\'' + bd.date + '\')">Unblock</button></div>');
         });
         html.push('</div>');
       }
@@ -230,7 +230,7 @@ const Settings = {
       // Square (primary)
       if (squareStatus.connected) {
         html.push('<div style="display:flex;align-items:center;justify-content:space-between;background:var(--green-lt);border:1px solid var(--green-md);border-radius:8px;padding:12px 14px;margin-bottom:10px;">');
-        html.push('<div><div style="font-size:13px;font-weight:700;color:var(--green);">✓ Square Connected</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+(squareStatus.locationName||'Account active')+'</div></div>');
+        html.push('<div><div style="font-size:13px;font-weight:700;color:var(--green);">✓ Square Connected</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+esc(squareStatus.locationName||'Account active')+'</div></div>');
         html.push('<button class="btn btn-sm btn-danger" onclick="Settings.disconnectSquare()">Disconnect</button>');
         html.push('</div>');
       } else {
@@ -241,7 +241,7 @@ const Settings = {
       // Stripe (legacy — still supported)
       if (stripeStatus.connected) {
         html.push('<div style="display:flex;align-items:center;justify-content:space-between;background:var(--green-lt);border:1px solid var(--green-md);border-radius:8px;padding:12px 14px;margin-bottom:14px;">');
-        html.push('<div><div style="font-size:13px;font-weight:700;color:var(--green);">✓ Stripe Connected</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+(stripeStatus.email||'Account active')+'</div></div>');
+        html.push('<div><div style="font-size:13px;font-weight:700;color:var(--green);">✓ Stripe Connected</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+esc(stripeStatus.email||'Account active')+'</div></div>');
         html.push('<button class="btn btn-sm btn-danger" onclick="Settings.disconnectStripe()">Disconnect</button>');
         html.push('</div>');
       }
@@ -253,7 +253,7 @@ const Settings = {
         html.push('<div class="form-group"><label class="form-label">Deposit amount</label><div style="position:relative;"><div style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted);">$</div><input class="form-input" id="s-dep-amount" type="number" value="'+(deposit.amount||10)+'" min="1" max="100" style="padding-left:24px;" /></div></div>');
         html.push('<div class="form-group"><label class="form-label">Quick amounts</label><div style="display:flex;gap:6px;"><button class="btn btn-sm" onclick="document.getElementById(\'s-dep-amount\').value=5">$5</button><button class="btn btn-sm" onclick="document.getElementById(\'s-dep-amount\').value=10">$10</button><button class="btn btn-sm" onclick="document.getElementById(\'s-dep-amount\').value=15">$15</button><button class="btn btn-sm" onclick="document.getElementById(\'s-dep-amount\').value=20">$20</button><button class="btn btn-sm" onclick="document.getElementById(\'s-dep-amount\').value=25">$25</button></div></div>');
         html.push('</div>');
-        html.push('<div class="form-group"><label class="form-label">Deposit message shown to client</label><input class="form-input" id="s-dep-msg" value="'+(deposit.message||'A deposit is required to secure your appointment.')+'" /></div>');
+        html.push('<div class="form-group"><label class="form-label">Deposit message shown to client</label><input class="form-input" id="s-dep-msg" value="'+esc(deposit.message||'A deposit is required to secure your appointment.')+'" /></div>');
       }
       html.push('</div>');
 
@@ -460,7 +460,7 @@ const Settings = {
     const s=id?this._services.find(x=>x.id===id):null;
     Modal.show(`
       <div class="modal-title">${s?'Edit Service':'Add Service'}</div>
-      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fs-name" value="${s?.name||''}" placeholder="e.g. Fade" /></div>
+      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fs-name" value="${esc(s?.name||'')}" placeholder="e.g. Fade" /></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Price</label><input class="form-input" id="fs-price" type="number" value="${s?.price||35}" /></div>
         <div class="form-group"><label class="form-label">Duration (min)</label><input class="form-input" id="fs-dur" type="number" value="${s?.duration||45}" /></div>
@@ -477,7 +477,7 @@ const Settings = {
       </div>`:''}
       <div class="form-group"><label class="form-label">Category</label>
         <select class="form-input" id="fs-cat">
-          ${(()=>{ const base=(Shop.serviceCategories&&Shop.serviceCategories.length?Shop.serviceCategories:['cut','beard','combo','color','design','other']); const cats=(s?.category&&!base.includes(s.category))?[s.category,...base]:base; return cats.map(c=>`<option value="${c}"${s?.category===c?' selected':''}>${c}</option>`).join(''); })()}
+          ${(()=>{ const base=(Shop.serviceCategories&&Shop.serviceCategories.length?Shop.serviceCategories:['cut','beard','combo','color','design','other']); const cats=(s?.category&&!base.includes(s.category))?[s.category,...base]:base; return cats.map(c=>`<option value="${esc(c)}"${s?.category===c?' selected':''}>${esc(c)}</option>`).join(''); })()}
         </select>
       </div>
       <div class="modal-actions">

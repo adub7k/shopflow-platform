@@ -52,8 +52,8 @@ const Appointments = {
             <div style="width:3px;min-height:44px;background:${barber?.color||'#ccc'};border-radius:2px;flex-shrink:0;"></div>
             ${avatarEl(a.customerName,38)}
             <div class="list-main">
-              <div class="list-name" ${a.customerId&&canSeeClients()?`onclick="event.stopPropagation();ClientProfile.open('${a.customerId}')" style="cursor:pointer;color:var(--text);"`:''}">${a.customerName}</div>
-              <div class="list-sub">${a.time} · ${a.service}${barber?' · '+barber.name:''}</div>
+              <div class="list-name" ${a.customerId&&canSeeClients()?`onclick="event.stopPropagation();ClientProfile.open('${a.customerId}')" style="cursor:pointer;color:var(--text);"`:''}">${esc(a.customerName)}</div>
+              <div class="list-sub">${a.time} · ${esc(a.service)}${barber?' · '+esc(barber.name):''}</div>
             </div>
             <div class="list-right">${statusBadge(a.status)}<div style="font-size:12px;color:var(--muted);margin-top:3px;">${fmtMoney(a.price)}</div></div>
           </div>`);
@@ -134,8 +134,8 @@ const Appointments = {
           <div style="width:52px;font-size:11px;color:var(--muted);font-weight:600;flex-shrink:0;">${a.time}</div>
           ${avatarEl(a.customerName,32)}
           <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${a.customerId&&canSeeClients()?'cursor:pointer;':''}" onclick="event.stopPropagation();${a.customerId&&canSeeClients()?`ClientProfile.open('${a.customerId}')`:''}">${a.customerName}</div>
-            <div style="font-size:11px;color:var(--muted);">${a.service}${barber?' · '+barber.name:''}</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${a.customerId&&canSeeClients()?'cursor:pointer;':''}" onclick="event.stopPropagation();${a.customerId&&canSeeClients()?`ClientProfile.open('${a.customerId}')`:''}">${esc(a.customerName)}</div>
+            <div style="font-size:11px;color:var(--muted);">${esc(a.service)}${barber?' · '+esc(barber.name):''}</div>
           </div>
           ${statusBadge(a.status)}
         </div>`;
@@ -154,16 +154,16 @@ const Appointments = {
 
   openForm(id) {
     const a = id ? this._data.find(x=>x.id===id) : null;
-    const barberOpts = this._barbers.map(b=>`<option value="${b.id}|${b.name}"${a?.barberId===b.id?' selected':''}>${b.name}</option>`).join('');
+    const barberOpts = this._barbers.map(b=>`<option value="${b.id}|${esc(b.name)}"${a?.barberId===b.id?' selected':''}>${esc(b.name)}</option>`).join('');
     // Service options show the name only — no price, to avoid confusion at booking
     // (the actual price still fills the Price field below via _recalcPrice).
-    const svcOpts = this._services.map(s=>`<option value="${s.id}|${s.name}|${s.price}"${a?.serviceId===s.id?' selected':''}>${s.name}</option>`).join('');
+    const svcOpts = this._services.map(s=>`<option value="${s.id}|${esc(s.name)}|${s.price}"${a?.serviceId===s.id?' selected':''}>${esc(s.name)}</option>`).join('');
     Modal.show(`
       <div class="modal-title">${a?'Edit Appointment':'New Appointment'}</div>
       <div class="form-group"><label class="form-label">Client *</label>
-        <div class="autocomplete-wrap"><input class="form-input" id="fa-name" value="${a?.customerName||''}" placeholder="Search or type name..." /><div class="autocomplete-list" id="fa-list"></div></div>
+        <div class="autocomplete-wrap"><input class="form-input" id="fa-name" value="${esc(a?.customerName||'')}" placeholder="Search or type name..." /><div class="autocomplete-list" id="fa-list"></div></div>
         <input type="hidden" id="fa-cid" value="${a?.customerId||''}" />
-        <input type="hidden" id="fa-phone" value="${a?.customerPhone||''}" />
+        <input type="hidden" id="fa-phone" value="${esc(a?.customerPhone||'')}" />
         <input type="hidden" id="fa-quote-id" value="" />
       </div>
       <div class="form-row">
@@ -449,14 +449,14 @@ const Appointments = {
     Modal.show(`
       <div class="modal-title">📅 Appointment</div>
       <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:16px;">
-        <div style="font-size:16px;font-weight:700;${a.customerId?'cursor:pointer;color:var(--green);':''}" onclick="${a.customerId?`Modal.close();ClientProfile.open('${a.customerId}')`:''}">${a.customerName}${a.customerId?' ↗':''}</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:4px;">${a.service} · ${fmtDateFull(a.date)} at ${a.time}</div>
-        ${barber?`<div style="font-size:13px;color:var(--muted);">with ${barber.name}</div>`:''}
+        <div style="font-size:16px;font-weight:700;${a.customerId?'cursor:pointer;color:var(--green);':''}" onclick="${a.customerId?`Modal.close();ClientProfile.open('${a.customerId}')`:''}">${esc(a.customerName)}${a.customerId?' ↗':''}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px;">${esc(a.service)} · ${fmtDateFull(a.date)} at ${a.time}</div>
+        ${barber?`<div style="font-size:13px;color:var(--muted);">with ${esc(barber.name)}</div>`:''}
         <div style="margin-top:8px;">${statusBadge(a.status)} <span style="font-weight:700;color:var(--green);margin-left:8px;">${fmtMoney(a.price)}</span>${a.vehicleSize?`<span style="font-size:12px;color:var(--muted);margin-left:8px;">${esc((Shop.sizes.find(z=>z.key===a.vehicleSize)||{}).label||a.vehicleSize)}</span>`:''}</div>
         ${(a.addons&&a.addons.length)?`<div style="font-size:12px;color:var(--muted);margin-top:6px;">＋ ${a.addons.map(x=>esc(x.name)+' ('+fmtMoney(x.price)+')').join(' · ')}</div>`:''}
         ${this._customFieldsDetail(a)}
         ${a.notes?`<div style="font-size:13px;color:var(--muted);margin-top:8px;">${esc(a.notes)}</div>`:''}
-        ${a.customerPhone?`<div style="font-size:13px;color:var(--muted);margin-top:4px;">📱 ${a.customerPhone}</div>`:''}
+        ${a.customerPhone?`<div style="font-size:13px;color:var(--muted);margin-top:4px;">📱 ${esc(a.customerPhone)}</div>`:''}
         ${a.inspoPhoto?`<div style="margin-top:10px;">
           <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:6px;">📸 INSPO PHOTO</div>
           <img src="${esc(a.inspoPhoto)}" onclick="window.open('${esc(a.inspoPhoto)}','_blank')" style="width:100%;max-height:300px;object-fit:cover;border-radius:10px;cursor:zoom-in;" />
@@ -487,7 +487,7 @@ const Appointments = {
 
     Modal.show(`
       <div class="modal-title">🧾 Checkout</div>
-      <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">${a.customerName} · ${a.service}</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">${esc(a.customerName)} · ${esc(a.service)}</div>
       <div class="form-group">
         <label class="form-label">Amount</label>
         <div style="position:relative;">
@@ -578,7 +578,7 @@ const Appointments = {
     Modal.show(`
       <div class="modal-title">💳 Card Payment</div>
       <div style="font-size:22px;font-weight:800;color:var(--green);text-align:center;margin-bottom:4px;">${fmtMoney(total)}</div>
-      <div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:20px;">for ${name}</div>
+      <div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:20px;">for ${esc(name)}</div>
       <div id="card-status" style="text-align:center;padding:16px 0;">
         <div style="font-size:13px;color:var(--muted);">Generating payment link...</div>
       </div>
@@ -602,7 +602,7 @@ const Appointments = {
           <input class="form-input" id="pay-link-input" readonly style="font-size:11px;flex:1;" onclick="this.select()" />
           <button class="btn btn-sm" onclick="navigator.clipboard.writeText(Appointments._co.url);toast('Link copied ✓')">Copy</button>
         </div>
-        ${hasPhone ? `<button class="btn btn-green btn-full" id="send-link-btn" onclick="Appointments._textPayLink()">📱 Text to ${phone}</button>` : ''}
+        ${hasPhone ? `<button class="btn btn-green btn-full" id="send-link-btn" onclick="Appointments._textPayLink()">📱 Text to ${esc(phone)}</button>` : ''}
         <div style="margin-top:10px;">
           <button class="btn btn-full" id="verify-btn" onclick="Appointments._verifyPayment(this)">✓ Check Payment</button>
         </div>`;

@@ -141,7 +141,7 @@ const Revenue = {
     let exp = null;
     if (id) { try { exp = (await db.expenses.all()).find(e => e.id === id) || null; } catch(e){} }
     const todayStr = new Date().toISOString().slice(0,10);
-    const opts = this._categories.map(c => `<option value="${c}" ${exp&&exp.category===c?'selected':''}>${c}</option>`).join('');
+    const opts = this._categories.map(c => `<option value="${esc(c)}" ${exp&&exp.category===c?'selected':''}>${esc(c)}</option>`).join('');
     Modal.show(`
       <div class="modal-title">${id?'Edit':'Add'} expense</div>
       <div class="form-group"><label class="form-label">Amount</label>

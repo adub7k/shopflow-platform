@@ -13,7 +13,7 @@ const Clients = {
 
       // Search + add
       html.push(`<div style="display:flex;gap:8px;margin-bottom:16px;">
-        <input class="form-input" id="client-search" placeholder="Search clients..." value="${this._search}" oninput="Clients._filter(this.value)" style="flex:1;" />
+        <input class="form-input" id="client-search" placeholder="Search clients..." value="${esc(this._search)}" oninput="Clients._filter(this.value)" style="flex:1;" />
         <button class="btn btn-green" onclick="Clients.openForm(null)">+ Add</button>
       </div>`);
 
@@ -40,7 +40,7 @@ const Clients = {
       // ── Tag filter (tags are filterable across the CRM) ──
       const allTags = [...new Set(this._data.flatMap(c => c.tags || []))].sort();
       if (allTags.length) {
-        const chip = (t, label) => `<span onclick="Clients._setTag('${String(t).replace(/'/g, "\\'")}')" style="cursor:pointer;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid ${this._tagFilter === t ? 'var(--green)' : 'var(--border)'};background:${this._tagFilter === t ? 'var(--green-lt)' : 'var(--surface)'};color:${this._tagFilter === t ? 'var(--green)' : 'var(--muted)'};">${label}</span>`;
+        const chip = (t, label) => `<span onclick="Clients._setTag('${jsAttr(t)}')" style="cursor:pointer;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid ${this._tagFilter === t ? 'var(--green)' : 'var(--border)'};background:${this._tagFilter === t ? 'var(--green-lt)' : 'var(--surface)'};color:${this._tagFilter === t ? 'var(--green)' : 'var(--muted)'};">${label}</span>`;
         html.push(`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">${chip('', 'All')}${allTags.map(t => chip(t, esc(t))).join('')}</div>`);
       }
 
@@ -60,8 +60,8 @@ const Clients = {
           html.push(`<div class="list-row" onclick="ClientProfile.open('${c.id}')">
             ${avatarEl(c.name,40)}
             <div class="list-main">
-              <div class="list-name">${c.name}${rewardReady?' 🎉':''}${tagBadges}</div>
-              <div class="list-sub">${c.phone||'No phone'}${c.totalVisits?' · '+c.totalVisits+' visits':''}</div>
+              <div class="list-name">${esc(c.name)}${rewardReady?' 🎉':''}${tagBadges}</div>
+              <div class="list-sub">${esc(c.phone||'No phone')}${c.totalVisits?' · '+c.totalVisits+' visits':''}</div>
             </div>
             <div class="list-right">
               ${c.lastVisit?`<div style="font-size:11px;color:var(--faint);">${fmtDateShort(c.lastVisit)}</div>`:''}
@@ -101,10 +101,10 @@ const Clients = {
         html += `<div style="display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface);border-radius:10px;border:1px solid var(--border);cursor:pointer;" onclick="ClientProfile.open('${c.id}')">
           ${avatarEl(c.name,38)}
           <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:700;color:var(--text);">${c.name}</div>
+            <div style="font-size:13px;font-weight:700;color:var(--text);">${esc(c.name)}</div>
             <div style="font-size:11px;color:var(--muted);margin-top:2px;">Last in ${fmtDateShort(c.lastVisit)} · <span style="color:#dc2626;font-weight:600;">${daysSince} days ago</span></div>
           </div>
-          <button class="btn btn-sm btn-green" onclick="event.stopPropagation();Clients.retentionAction('${c.id}','${c.name}','${c.phone||''}')">Reach Out</button>
+          <button class="btn btn-sm btn-green" onclick="event.stopPropagation();Clients.retentionAction('${c.id}','${jsAttr(c.name)}','${jsAttr(c.phone||'')}')">Reach Out</button>
         </div>`;
       });
       html += `</div>`;
@@ -117,18 +117,18 @@ const Clients = {
   retentionAction(id, name, phone) {
     const hasPhone = phone && phone.length > 0;
     Modal.show(`
-      <div class="modal-title">📉 Re-capture ${name}</div>
+      <div class="modal-title">📉 Re-capture ${esc(name)}</div>
       <div style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.6;">Choose how you want to reach out and bring them back.</div>
       <div style="display:flex;flex-direction:column;gap:10px;">
         ${hasPhone ? `
-        <button class="btn btn-full" onclick="Clients.sendRetentionText('${id}','${name}','${phone}','checkin')">
+        <button class="btn btn-full" onclick="Clients.sendRetentionText('${id}','${jsAttr(name)}','${jsAttr(phone)}','checkin')">
           💬 Send a Check-in Text
         </button>
-        <button class="btn btn-full" onclick="Clients.sendRetentionText('${id}','${name}','${phone}','discount')">
+        <button class="btn btn-full" onclick="Clients.sendRetentionText('${id}','${jsAttr(name)}','${jsAttr(phone)}','discount')">
           🎟️ Text Them a Discount Offer
         </button>` : `
         <div style="background:#fff5f5;border:1px solid #ffd7d5;border-radius:8px;padding:10px 12px;font-size:13px;color:#dc2626;margin-bottom:4px;">No phone number on file for this client.</div>`}
-        <button class="btn btn-full" onclick="Clients.markContacted('${id}','${name}')">
+        <button class="btn btn-full" onclick="Clients.markContacted('${id}','${jsAttr(name)}')">
           ✅ Mark as Contacted
         </button>
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
@@ -144,15 +144,15 @@ const Clients = {
     Modal.show(`
       <div class="modal-title">${type==='discount'?'🎟️ Discount Offer':'💬 Check-in Text'}</div>
       <div class="form-group">
-        <label class="form-label">Message to ${name}</label>
-        <textarea class="form-input" id="ret-msg" style="min-height:100px;">${defaultMsg}</textarea>
+        <label class="form-label">Message to ${esc(name)}</label>
+        <textarea class="form-input" id="ret-msg" style="min-height:100px;">${esc(defaultMsg)}</textarea>
       </div>
       <div class="form-group">
         <label class="form-label">Phone</label>
-        <input class="form-input" id="ret-phone" value="${phone}" />
+        <input class="form-input" id="ret-phone" value="${esc(phone)}" />
       </div>
       <div class="modal-actions">
-        <button id="ret-btn" class="btn btn-green btn-full" onclick="Clients._doRetentionSend('${id}','${name}')">📱 Open in Messages</button>
+        <button id="ret-btn" class="btn btn-green btn-full" onclick="Clients._doRetentionSend('${id}','${jsAttr(name)}')">📱 Open in Messages</button>
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
       </div>`);
   },
@@ -184,10 +184,10 @@ const Clients = {
     const c=id?this._data.find(x=>x.id===id):null;
     Modal.show(`
       <div class="modal-title">${c?'Edit Client':'New Client'}</div>
-      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fc-name" value="${c?.name||''}" placeholder="Full name" /></div>
-      <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="fc-phone" type="tel" value="${c?.phone||''}" placeholder="(505) 555-0100" /></div>
-      <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="fc-email" type="email" value="${c?.email||''}" placeholder="optional" /></div>
-      <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="fc-notes">${c?.notes||''}</textarea></div>
+      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fc-name" value="${esc(c?.name||'')}" placeholder="Full name" /></div>
+      <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="fc-phone" type="tel" value="${esc(c?.phone||'')}" placeholder="(505) 555-0100" /></div>
+      <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="fc-email" type="email" value="${esc(c?.email||'')}" placeholder="optional" /></div>
+      <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="fc-notes">${esc(c?.notes||'')}</textarea></div>
       ${Shop.settings.supportsFleet?`
       <div class="form-group" style="display:flex;align-items:center;gap:8px;">
         <input type="checkbox" id="fc-fleet" ${c?.isFleet?'checked':''} onchange="document.getElementById('fc-company-wrap').style.display=this.checked?'block':'none'" style="width:auto;" />
@@ -249,8 +249,8 @@ const Clients = {
         <button onclick="Clients._back()" style="background:none;border:none;font-size:22px;cursor:pointer;padding:0;line-height:1;color:var(--text);">←</button>
         ${avatarEl(c.name, 44)}
         <div style="flex:1;">
-          <div style="font-size:18px;font-weight:800;color:var(--text);letter-spacing:-.03em;">${c.name}</div>
-          <div style="font-size:12px;color:var(--muted);">${c.phone||'No phone'}${c.email?' · '+c.email:''}</div>
+          <div style="font-size:18px;font-weight:800;color:var(--text);letter-spacing:-.03em;">${esc(c.name)}</div>
+          <div style="font-size:12px;color:var(--muted);">${esc(c.phone||'No phone')}${c.email?' · '+esc(c.email):''}</div>
         </div>
         <div style="display:flex;gap:6px;">
           <button onclick="Clients.bookAppointment('${c.id}')" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">📅 Book</button>
@@ -273,7 +273,7 @@ const Clients = {
 
       // ── Flags ──
       if ((c.noShows||0) > 0) html += `<div style="background:#fff5f5;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;font-size:12px;color:#dc2626;margin-bottom:12px;">⚠️ ${c.noShows} no-show${c.noShows>1?'s':''} on record</div>`;
-      if (data.rewardReady) html += `<div style="background:var(--green-lt);border:1px solid #b3dfbf;border-radius:8px;padding:8px 12px;font-size:12px;color:var(--green);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">🎉 Reward ready! <button onclick="Clients.redeemReward('${c.id}','${c.name}')" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">Redeem</button></div>`;
+      if (data.rewardReady) html += `<div style="background:var(--green-lt);border:1px solid #b3dfbf;border-radius:8px;padding:8px 12px;font-size:12px;color:var(--green);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">🎉 Reward ready! <button onclick="Clients.redeemReward('${c.id}','${jsAttr(c.name)}')" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">Redeem</button></div>`;
       if (c.notes) html += `<div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:13px;color:var(--muted);margin-bottom:12px;">📝 ${esc(c.notes)}</div>`;
 
       // ── Fleet account ──
@@ -355,15 +355,15 @@ const Clients = {
           html += `<div style="${i>0?'border-top:1px solid var(--border)':''}">
             <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;${hasCutNotes?'cursor:pointer;':''}" ${hasCutNotes?`onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'"`:''}>
               <div>
-                <div style="font-size:13px;font-weight:600;">${a.service}</div>
-                <div style="font-size:11px;color:var(--muted);">${fmtDateShort(a.date)}${a.barberName?' · '+a.barberName:''}${hasCutNotes?' · <span style="color:var(--green);">✂ notes</span>':''}</div>
+                <div style="font-size:13px;font-weight:600;">${esc(a.service)}</div>
+                <div style="font-size:11px;color:var(--muted);">${fmtDateShort(a.date)}${a.barberName?' · '+esc(a.barberName):''}${hasCutNotes?' · <span style="color:var(--green);">✂ notes</span>':''}</div>
               </div>
               <div style="display:flex;align-items:center;gap:8px;">
                 <div style="font-size:14px;font-weight:700;color:var(--green);">${fmtMoney(a.price)}</div>
                 ${hasCutNotes?'<span style="font-size:10px;color:var(--faint);">▼</span>':''}
               </div>
             </div>
-            ${hasCutNotes?`<div style="display:none;padding:0 14px 10px;font-size:12px;color:var(--muted);font-style:italic;background:var(--off);">📝 ${a.cutNotes}</div>`:''}
+            ${hasCutNotes?`<div style="display:none;padding:0 14px 10px;font-size:12px;color:var(--muted);font-style:italic;background:var(--off);">📝 ${esc(a.cutNotes)}</div>`:''}
           </div>`;
         });
         html += `</div>`;

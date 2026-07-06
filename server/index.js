@@ -11,6 +11,18 @@ const { runScheduler } = require('./scheduler');
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
+// ── Crash guards ──────────────────────────────────────────────────────────────
+// Express 4 does not catch async throws, and several fire-and-forget sends (SMS,
+// email) can reject. A single unhandled rejection would kill the process, and
+// Railway stops restarting after 10 crashes — so log loudly and stay up rather
+// than let one bad request take down every tenant.
+process.on('unhandledRejection', (reason) => {
+  console.error('UNHANDLED REJECTION:', reason && reason.stack || reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err && err.stack || err);
+});
+
 // ── Production secret guard ───────────────────────────────────────────────────
 // These have insecure in-repo defaults for local dev. In production they MUST be
 // set, or anyone could forge owner/admin tokens. Fail fast rather than run open.
@@ -19,6 +31,11 @@ if (process.env.NODE_ENV === 'production') {
   if (missing.length) {
     console.error('FATAL: required secrets not set in production:', missing.join(', '));
     process.exit(1);
+  }
+  // Not fatal (Stripe may be unused), but if it's unset the webhook silently ACKs
+  // every event and drops payment confirmations — warn loudly so it's caught.
+  if (process.env.STRIPE_SECRET_KEY && !process.env.STRIPE_WEBHOOK_SECRET) {
+    console.warn('WARNING: STRIPE_SECRET_KEY is set but STRIPE_WEBHOOK_SECRET is not — Stripe webhooks will be dropped unverified. Set it in the Railway environment.');
   }
 }
 
@@ -33,6 +50,28 @@ app.use(express.urlencoded({ extended: false })); // Twilio webhooks POST form-e
 app.use(express.static(CLIENT_DIR));
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '30d' }));
 app.use('/api', rateLimit({ windowMs: 60000, max: 500 }));
+
+// ── Targeted throttles on abuse-prone endpoints ───────────────────────────────
+// The global limiter (500/min/IP) is too loose to stop credential stuffing or
+// lead/booking spam. These tighter, per-IP limiters sit in front of the sensitive
+// write endpoints. standardHeaders on; legacy headers off.
+const strictLimiter = (max, windowMs = 15 * 60 * 1000) => rateLimit({
+  windowMs, max, standardHeaders: true, legacyHeaders: false,
+  message: { ok: false, error: 'Too many attempts. Please wait a few minutes and try again.' },
+});
+// Auth + PIN: 20 tries per 15 min per IP.
+const authLimiter = strictLimiter(20);
+// Public writes (lead capture, public booking): 15 per minute per IP.
+const publicWriteLimiter = strictLimiter(15, 60 * 1000);
+// Apply a limiter only to requests matching a predicate (path/method), so we can
+// throttle the mutating public endpoints without slowing the booking page's reads.
+const limitWhen = (limiter, match) => (req, res, next) => match(req) ? limiter(req, res, next) : next();
+
+app.use('/api/accounts/login', authLimiter);
+app.use('/api/accounts/signup', authLimiter);
+app.use(limitWhen(authLimiter, req => req.method === 'POST' && req.path === '/api/shop/auth/verify-pin'));
+app.use(limitWhen(authLimiter, req => req.method === 'POST' && req.path === '/api/sales/login'));
+app.use(limitWhen(publicWriteLimiter, req => req.method === 'POST' && /^\/api\/public\/[^/]+\/(lead|book)$/.test(req.path)));
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 app.use(require('./routes/auth'));
