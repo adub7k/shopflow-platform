@@ -7,6 +7,9 @@
 // dev and self-hosted installs without mail just skip it. Required env:
 //   SMTP_HOST, SMTP_USER, SMTP_PASS   (SMTP_PORT optional, default 587;
 //   port 465 switches to implicit TLS)
+//   SMTP_FROM optional — the visible From address, e.g.
+//   'ShopFlow <no-reply@yourdomain.com>'. Set this when SMTP_USER isn't a real
+//   mailbox (SendGrid 'apikey', SES IAM name). Falls back to SMTP_USER.
 // Recipient: settings.notificationEmail (per-shop override) → shop.email (the
 // signup/login email on the master shop record).
 const nodemailer = require('nodemailer');
@@ -77,7 +80,7 @@ function notifyNewLead({ shop, settings, lead, kind }) {
       : 'Someone just asked for a quote. Leads answered in 5 minutes book far more often.';
 
     t.sendMail({
-      from: `"ShopFlow" <${process.env.SMTP_USER}>`,
+      from: process.env.SMTP_FROM || `"ShopFlow" <${process.env.SMTP_USER}>`,
       to,
       subject,
       html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;">
