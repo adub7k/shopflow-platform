@@ -673,11 +673,14 @@ router.post('/api/shop/sms/send', requireAuth, requireRole('full','technician'),
 // List leads, newest contact first, each with its call log attached.
 router.get('/api/shop/leads', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const calls = h.getAll('calls');
-  const leads = h.getAll('leads').map(l => ({
+  // Website-intake leads (routes/website-leads.router.js) may carry a base64
+  // photo — never ship it in the list payload.
+  const leads = h.getAll('leads').map(({ photo, ...l }) => ({
     ...l,
+    has_photo: !!photo,
     calls: calls.filter(c => c.leadId === l.id).sort((a,b) => new Date(b.startedAt) - new Date(a.startedAt)),
   }));
-  leads.sort((a,b) => new Date(b.lastContactAt||0) - new Date(a.lastContactAt||0));
+  leads.sort((a,b) => new Date(b.lastContactAt || b.updated_at || b.created_at || 0) - new Date(a.lastContactAt || a.updated_at || a.created_at || 0));
   res.json(leads);
 }));
 
@@ -689,11 +692,26 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   if (name   !== undefined) lead.name = String(name).slice(0,80);
   if (notes  !== undefined) lead.notes = String(notes).slice(0,2000);
   if (status !== undefined && ['new','contacted','booked','closed'].includes(status)) {
-    // Speed-to-lead metric: the first move off 'new' is the shop's first
-    // response (owner texted via the sms: deep link or called back, then set
-    // the status). Stamped once, server-side, so response times are durable.
-    if (lead.status === 'new' && status !== 'new' && !lead.firstResponseAt) lead.firstResponseAt = new Date().toISOString();
-    lead.status = status;
+    if (lead.channel === 'website') {
+      // Website-intake leads run the Response Center's richer status machine
+      // (routes/website-leads.router.js). Map the kanban's four statuses onto
+      // it and stamp the same first-response fields its endpoints stamp, so
+      // both views stay coherent whichever one the owner works from.
+      const mapped = { new:'NEW_LEAD', contacted:'CONTACTED', booked:'APPOINTMENT_SET', closed:'LOST' }[status];
+      if (lead.status === 'NEW_LEAD' && mapped !== 'NEW_LEAD' && !lead.first_response_at) {
+        lead.first_response_at = new Date().toISOString();
+        lead.response_time_seconds = Math.max(0, Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 1000));
+        if (lead.contact_status === 'UNCONTACTED') lead.contact_status = 'ATTEMPTED';
+      }
+      lead.status = mapped;
+      lead.updated_at = new Date().toISOString();
+    } else {
+      // Speed-to-lead metric: the first move off 'new' is the shop's first
+      // response (owner texted via the sms: deep link or called back, then set
+      // the status). Stamped once, server-side, so response times are durable.
+      if (lead.status === 'new' && status !== 'new' && !lead.firstResponseAt) lead.firstResponseAt = new Date().toISOString();
+      lead.status = status;
+    }
   }
   h.upsert('leads', lead);
   res.json({ ok:true, lead });
@@ -741,6 +759,16 @@ router.post('/api/shop/leads/:id/sms', requireAuth, requireRole('full','technici
     h.upsert('conversations', { id: genId('msg'), customerId: lead.customerId || null, leadId: lead.id,
       customerName: lead.name || lead.phone, type:'sms', direction:'outbound', body, sentAt:new Date().toISOString(), read:true });
     if (lead.status === 'new') { lead.status = 'contacted'; }
+    if (lead.channel === 'website' && lead.status === 'NEW_LEAD') {
+      // Website-intake lead: advance its own status machine + response stamps.
+      lead.status = 'CONTACTED';
+      if (!lead.first_response_at) {
+        lead.first_response_at = new Date().toISOString();
+        lead.response_time_seconds = Math.max(0, Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 1000));
+      }
+      if (lead.contact_status === 'UNCONTACTED') lead.contact_status = 'ATTEMPTED';
+      lead.updated_at = new Date().toISOString();
+    }
     if (!lead.firstResponseAt) lead.firstResponseAt = new Date().toISOString();
     lead.lastContactAt = new Date().toISOString();
     h.upsert('leads', lead);

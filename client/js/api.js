@@ -12,6 +12,27 @@ const Auth = {
   }
 };
 
+// Website-intake leads (server/routes/website-leads.router.js) use a richer
+// schema (NEW_LEAD-style statuses, snake_case fields). Normalize just the
+// fields this UI reads so the kanban and Response Center render them like any
+// other lead; status writes go through /api/shop/leads/:id, which maps the
+// kanban statuses back onto the website state machine server-side.
+function _normalizeLead(l) {
+  if (!l || l.channel !== 'website') return l;
+  const status = ({ NEW_LEAD:'new', CONTACTED:'contacted', APPOINTMENT_SET:'booked', COMPLETED:'closed', LOST:'closed' })[l.status] || l.status;
+  return {
+    ...l,
+    status,
+    createdAt: l.createdAt || l.created_at,
+    lastContactAt: l.lastContactAt || l.updated_at || l.created_at,
+    firstResponseAt: l.firstResponseAt || l.first_response_at,
+    vehicle: l.vehicle || ((l.vehicle_year || l.vehicle_make || l.vehicle_model)
+      ? { year: l.vehicle_year, make: l.vehicle_make, model: l.vehicle_model, color: l.vehicle_color } : null),
+    servicesInterested: l.servicesInterested || (l.service_requested ? [l.service_requested] : []),
+    notes: l.notes !== undefined ? l.notes : (l.message || ''),
+  };
+}
+
 async function apiFetch(path, opts={}) {
   const token = Auth.getToken();
   const headers = { 'Content-Type': 'application/json' };
@@ -41,7 +62,7 @@ const db = {
   features:      { get: () => apiFetch('/features') },
   conversations: { all: () => apiFetch('/conversations'), forCustomer: (cid) => apiFetch('/conversations/customer/'+cid), markRead: (cid) => apiFetch('/conversations/read/'+cid,{method:'POST'}), save: (c) => apiFetch('/conversations',{method:'POST',body:c}) },
   sms:           { send: (o) => apiFetch('/sms/send',{method:'POST',body:o}) },
-  leads:         { all: () => apiFetch('/leads'), update: (id,d) => apiFetch('/leads/'+id,{method:'POST',body:d}), delete: (id) => apiFetch('/leads/'+id,{method:'DELETE'}), convert: (id) => apiFetch('/leads/'+id+'/convert',{method:'POST'}), sms: (id,body) => apiFetch('/leads/'+id+'/sms',{method:'POST',body:{body}}), aiIntake: (id,transcript) => apiFetch('/leads/'+id+'/ai-intake',{method:'POST',body:{transcript}}) },
+  leads:         { all: async () => ((await apiFetch('/leads')) || []).map(_normalizeLead), update: (id,d) => apiFetch('/leads/'+id,{method:'POST',body:d}), delete: (id) => apiFetch('/leads/'+id,{method:'DELETE'}), convert: (id) => apiFetch('/leads/'+id+'/convert',{method:'POST'}), sms: (id,body) => apiFetch('/leads/'+id+'/sms',{method:'POST',body:{body}}), aiIntake: (id,transcript) => apiFetch('/leads/'+id+'/ai-intake',{method:'POST',body:{transcript}}) },
   auth:          { verifyPin: (pin) => apiFetch('/auth/verify-pin',{method:'POST',body:{pin}}), changePin: (cur,n) => apiFetch('/auth/change-pin',{method:'POST',body:{currentPin:cur,newPin:n}}) },
   blockedDates:  { all: () => apiFetch('/blocked-dates'), block: (date,reason) => apiFetch('/blocked-dates',{method:'POST',body:{date,reason}}), unblock: (date) => apiFetch('/blocked-dates/'+date,{method:'DELETE'}) },
   checkout:      { cash: (o) => apiFetch('/checkout/cash',{method:'POST',body:o}), session: (o) => apiFetch('/checkout/session',{method:'POST',body:o}), verify: (sid,aid) => apiFetch('/checkout/verify/'+sid+'?apptId='+aid) },
