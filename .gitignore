@@ -13,3 +13,5 @@ node_modules/
 .env
 .env.*
 *.local.env
+# …but the placeholder template is safe to commit
+!.env.example
