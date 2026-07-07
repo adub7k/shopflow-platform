@@ -31,6 +31,27 @@ const Leads = {
     return known[s] || { icon: '🔗', label: s.charAt(0).toUpperCase() + s.slice(1) };
   },
 
+  // Overall conversion stats: how many leads become booked jobs. The 30-day
+  // window is the ad-spend read; all-time rides along as the subtitle.
+  _convStats() {
+    const all = this._leads; if (!all.length) return '';
+    const isBooked = l => l.status === 'booked';
+    const last30 = all.filter(l => (Date.now() - new Date(l.createdAt || l.firstContactAt || 0)) < 30 * 86400000);
+    const b30 = last30.filter(isBooked).length, bAll = all.filter(isBooked).length;
+    const pct = (n, d) => d ? Math.round(n / d * 100) : 0;
+    const r30 = pct(b30, last30.length), rAll = pct(bAll, all.length);
+    const stat = (label, value, sub, fg) => `<div class="card" style="flex:1;min-width:105px;margin:0;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">${label}</div>
+      <div style="font-size:22px;font-weight:800;letter-spacing:-.03em;color:${fg || 'var(--text)'};margin-top:3px;">${value}</div>
+      <div style="font-size:11px;color:var(--faint);margin-top:2px;">${sub}</div>
+    </div>`;
+    return `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+      ${stat('Leads', last30.length, `30 days · ${all.length} all-time`)}
+      ${stat('Booked', b30, `30 days · ${bAll} all-time`)}
+      ${stat('Conversion', r30 + '%', `30 days · ${rAll}% all-time`, r30 >= 25 ? 'var(--green)' : (r30 >= 10 ? '#d97706' : (last30.length ? '#dc2626' : 'var(--text)')))}
+    </div>`;
+  },
+
   // Leads by source: total + booked per channel, best-converting first.
   // This is the read on ad spend — "Facebook sent 12, 4 booked".
   _sourceBreakdown() {
@@ -96,10 +117,11 @@ const Leads = {
 
     const shown = this._filter==='all' ? this._leads : this._leads.filter(l => l.status===this._filter);
 
+    const stats = this._convStats();
     const breakdown = this._sourceBreakdown();
 
     if (!shown.length) {
-      el.innerHTML = banner + linkBanner + breakdown + filters + `<div class="card"><div class="empty-state">
+      el.innerHTML = banner + linkBanner + stats + breakdown + filters + `<div class="card"><div class="empty-state">
         <div class="empty-icon">📞</div>
         <div class="empty-text">No ${this._filter==='all'?'':this._filter+' '}leads yet</div>
         <div style="font-size:12px;color:var(--faint);margin-top:6px;">Inbound calls and lead-form submissions show up here automatically.</div>
@@ -133,7 +155,7 @@ const Leads = {
       </div>`;
     }).join('');
 
-    el.innerHTML = banner + linkBanner + breakdown + filters + `<div class="list-card">${rows}</div>`;
+    el.innerHTML = banner + linkBanner + stats + breakdown + filters + `<div class="list-card">${rows}</div>`;
   },
 
   setFilter(f) { this._filter = f; this.render(); },
