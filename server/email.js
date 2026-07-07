@@ -105,4 +105,6 @@ function notifyNewLead({ shop, settings, lead, kind }) {
   }
 }
 
-module.exports = { notifyNewLead };
+// mailer is exported for server/integrations.js so the website-leads modules
+// share the same SMTP transport + config-gating as the owner notifications.
+module.exports = { notifyNewLead, mailer };

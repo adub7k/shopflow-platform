@@ -85,8 +85,65 @@ app.use(require('./routes/sales'));
 app.use(require('./routes/stripe'));
 app.use(require('./routes/square'));
 
+// ── Website lead intake + Response Center + platform + push + automations ─────
+// Drop-in modules (docs/website-leads/) wired through server/integrations.js
+// adapters. POST /api/leads stays PUBLIC — the router authenticates landing
+// sites itself with per-tenant x-api-key. Everything else is JWT-gated, with a
+// tenant match so one shop's token can never touch another shop's data.
+const integrations = require('./integrations');
+const { requireAuth, requireRole } = require('./middleware');
+
+const requireTenantMatch = (req, res, next) => {
+  const tid = (req.body && req.body.tenant_id) || (req.query && req.query.tenant_id);
+  if (tid && tid !== req.shopId) return res.status(403).json({ error: 'Tenant mismatch' });
+  next();
+};
+const chain = (...mws) => (req, res, next) => {
+  let i = 0;
+  const step = (err) => err ? next(err) : (i < mws.length ? mws[i++](req, res, step) : next());
+  step();
+};
+const requireOwnerTenant = chain(requireAuth, requireRole('full'), requireTenantMatch);
+const requireStaffTenant = chain(requireAuth, requireRole('full', 'technician'), requireTenantMatch);
+
+const push = require('./routes/push')({ getShopDb: integrations.getShopDb });
+const platformR = require('./routes/platform.router')({
+  getShopDb: integrations.getShopDb,
+  requireOwner: requireOwnerTenant,
+});
+const automations = require('./routes/automations')({
+  getShopDb: integrations.getShopDb,
+  getAllTenantIds: integrations.getAllTenantIds,
+  sendSms: integrations.sendSms,
+  sendEmail: integrations.sendEmail,
+  sendPush: push.sendPush,
+});
+automations.start();
+
+app.use('/api/push', requireAuth, requireTenantMatch, push.router);
+app.use('/api', platformR); // public GET /site-config; owner routes guarded internally
+const websiteLeads = require('./routes/website-leads.router')({
+  getShopDb: integrations.getShopDb,
+  sendSms: integrations.sendSms,
+  sendEmailAlert: integrations.sendEmailAlert,
+  sendPush: push.sendPush,
+  automations,
+  onCompleted: platformR.recordCompletion,
+});
+// Gate ONLY the router's staff endpoints (Response Center + lead actions);
+// POST /api/leads and paths this router doesn't own fall through untouched.
+app.use('/api', (req, res, next) => {
+  const staffPath = req.path === '/response-center'
+    || /^\/leads\/[^/]+\/(assign|contact|appointment|status)$/.test(req.path);
+  if (staffPath) return requireStaffTenant(req, res, next);
+  next();
+}, websiteLeads);
+
 // ── HTML Pages ────────────────────────────────────────────────────────────────
 app.get('/shop/*',  (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app.html')));
+// Push-notification deep link (sw-push.js opens /response-center?lead=…):
+// serve the app shell; the client boot lands on the Response Center page.
+app.get('/response-center', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app.html')));
 // Quote-first verticals (detail shops) get the opt-in lead-capture page at the
 // same /book/<slug> URL; scheduling verticals keep the calendar booking flow.
 // Per-shop override: settings.bookingMode ('booking' | 'leads').
