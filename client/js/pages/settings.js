@@ -646,9 +646,20 @@ const Settings = {
   async enablePush(btn) {
     const orig = btn.textContent; btn.disabled = true; btn.textContent = 'Enabling…';
     try {
-      const ok = await enablePushNotifications(localStorage.getItem('sf_shopId'), Auth.getName() || 'owner');
-      if (ok) toast('Notifications enabled on this device ✓');
-      else toast('Notifications were not enabled — check the browser permission.', 'warning');
+      // Pre-flight: if the server has no VAPID keys, say so instead of letting
+      // the subscribe helper choke on the missing key (503 → undefined).
+      const chk = await fetch('/api/push/vapid-public-key', {
+        headers: { 'Authorization': 'Bearer ' + Auth.getToken() },
+      });
+      if (!chk.ok) {
+        toast(chk.status === 503
+          ? 'Push isn\'t configured on the server yet (VAPID keys missing in Railway).'
+          : 'Could not reach the push service (' + chk.status + ').', 'warning');
+      } else {
+        const ok = await enablePushNotifications(localStorage.getItem('sf_shopId'), Auth.getName() || 'owner');
+        if (ok) toast('Notifications enabled on this device ✓');
+        else toast('Notifications were not enabled — check the browser permission.', 'warning');
+      }
     } catch(e) { toast(e.message || 'Could not enable notifications', 'error'); }
     btn.disabled = false; btn.textContent = orig;
   },
