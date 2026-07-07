@@ -74,6 +74,8 @@ const App = {
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  // PWA service worker: offline shell + web-push notifications (sw-push.js).
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
   try {
     // Load settings + industry profile (vocabulary, custom fields, statuses)
     const s = await db.settings.get();
@@ -86,7 +88,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // role-based hiding to the (static) bottom nav and land on the first allowed page.
     if (typeof NavRegistry !== 'undefined') NavRegistry.render();
     applyRoleNav();
-    await App.nav(canSee('dashboard') ? 'dashboard' : allowedPages()[0]);
+    // Push-notification deep link: sw-push.js opens /response-center?lead=… —
+    // the server serves the app shell there, so land on the Response Center.
+    const wantsResponse = location.pathname.startsWith('/response-center') && canSee('response');
+    await App.nav(wantsResponse ? 'response' : (canSee('dashboard') ? 'dashboard' : allowedPages()[0]));
 
     // Load unread badge in background
     db.conversations.all().then(threads => Messages.updateBadge(threads)).catch(()=>{});

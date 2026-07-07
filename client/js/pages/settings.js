@@ -202,6 +202,12 @@ const Settings = {
       html.push(`<div style="font-size:12px;color:var(--muted);">Missed calls are logged as leads — follow up with one tap from the <b>Tasks</b> worklist. Texts open in your Messages app; ShopFlow never auto-texts on your behalf.</div>`);
       html.push('</div>');
 
+      // Phone notifications (web push via the installed PWA)
+      html.push('<div class="section-header">Phone Notifications</div><div class="card">');
+      html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Get an instant notification on this phone when a new website lead comes in — free, no texting fees. Requires ShopFlow installed to your home screen (iPhone: iOS 16.4+).</div>');
+      html.push('<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-primary" style="flex:1;min-width:150px;" onclick="Settings.enablePush(this)">🔔 Enable notifications</button><button class="btn" style="flex:1;min-width:150px;" onclick="Settings.testPush(this)">Test notifications</button></div>');
+      html.push('</div>');
+
       // Google Reviews
       html.push('<div class="section-header">Google Reviews</div><div class="card">');
       html.push(`<div class="form-group"><label class="form-label">Google Review Link</label><input class="form-input" id="s-grev" value="${esc(s.googleReviewLink||'')}" placeholder="https://g.page/r/..." /></div>`);
@@ -632,6 +638,34 @@ const Settings = {
   async deleteService(id) {
     if(!confirm('Delete this service?'))return;
     await db.services.delete(id); Modal.close(); this.render(); toast('Deleted');
+  },
+
+  // ── Phone notifications (web push via the PWA) ──
+  // enablePushNotifications lives in js/pwa-push-client.js; /api/push/* is
+  // JWT-gated, so both buttons send the same bearer token as apiFetch.
+  async enablePush(btn) {
+    const orig = btn.textContent; btn.disabled = true; btn.textContent = 'Enabling…';
+    try {
+      const ok = await enablePushNotifications(localStorage.getItem('sf_shopId'), Auth.getName() || 'owner');
+      if (ok) toast('Notifications enabled on this device ✓');
+      else toast('Notifications were not enabled — check the browser permission.', 'warning');
+    } catch(e) { toast(e.message || 'Could not enable notifications', 'error'); }
+    btn.disabled = false; btn.textContent = orig;
+  },
+  async testPush(btn) {
+    const orig = btn.textContent; btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      const r = await fetch('/api/push/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.getToken() },
+        body: JSON.stringify({ tenant_id: localStorage.getItem('sf_shopId') }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (j.sent) toast(`Test sent to ${j.sent} device${j.sent !== 1 ? 's' : ''} ✓`);
+      else if (j.error === 'not configured') toast('Push is not configured on the server (VAPID keys).', 'warning');
+      else toast('No devices enabled yet — tap "Enable notifications" first.', 'warning');
+    } catch(e) { toast(e.message || 'Could not send test', 'error'); }
+    btn.disabled = false; btn.textContent = orig;
   },
 
   async connectStripe() {
