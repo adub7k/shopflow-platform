@@ -91,11 +91,12 @@
     el.innerHTML = html.join('');
   };
 
-  // Click-to-call → auto-clear. The <a href="tel:"> launches the dialer; this
-  // arms a one-shot listener so that when the owner returns to the app (the tab
-  // regains visibility/focus after the call), the lead is marked responded and
-  // drops out of the queue — with an Undo in case the call didn't connect.
-  // Primary path is mobile (visibilitychange); desktop falls back to blur/focus.
+  // Click-to-call → "Did you reach them?". The <a href="tel:"> launches the
+  // dialer; this arms a one-shot listener so that when the owner returns to the
+  // app (the tab regains visibility/focus after the call), we ask whether they
+  // connected — Yes marks the lead responded and drops it from the queue, No
+  // leaves it. Primary path is mobile (visibilitychange); desktop falls back to
+  // blur/focus and disarms after 2 min if the call never actually happened.
   Response.armCallClear = function (id) {
     const l = this._leads.find(x => x.id === id);
     if (!l || !l.phone) return;
@@ -103,7 +104,7 @@
     let leftForCall = false;
     const finish = () => {
       cleanup();
-      Response._clearAfterCall(id, name);
+      Response._askReached(id, name);
     };
     const onVis = () => {
       if (document.hidden) { leftForCall = true; return; }
@@ -121,35 +122,44 @@
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('blur', onBlur);
     window.addEventListener('focus', onFocus);
-    // Disarm if they never actually left (e.g. desktop with no tel handler) so a
-    // later unrelated tab-switch can't clear the lead.
     setTimeout(cleanup, 120000);
   };
 
-  Response._clearAfterCall = async function (id, name) {
+  // "Did you reach {name}?" prompt on return from the call. Lives on <body> so a
+  // queue re-render / 30s auto-refresh doesn't remove it. Auto-dismisses after
+  // 20s leaving the lead in the queue (the safe default).
+  Response._askReached = function (id, name) {
     const l = this._leads.find(x => x.id === id);
     if (!l || l.status !== 'new') return; // already handled elsewhere
+    const old = document.getElementById('rc-callprompt'); if (old) old.remove();
+    const p = document.createElement('div');
+    p.id = 'rc-callprompt';
+    p.style.cssText = 'position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 15px;box-shadow:var(--shadow-lg);z-index:9999;width:min(360px, calc(100vw - 24px));';
+    p.innerHTML =
+      `<div style="font-size:13px;font-weight:650;color:var(--text);margin-bottom:11px;">Did you reach ${esc(name)}?</div>
+       <div style="display:flex;flex-direction:column;gap:8px;">
+         <button class="btn btn-green" id="rc-cp-yes" style="justify-content:center;">Yes — mark responded</button>
+         <div style="display:flex;gap:8px;">
+           <button class="btn btn-sm" id="rc-cp-text" style="flex:1;justify-content:center;">No — text them</button>
+           <button class="btn btn-sm" id="rc-cp-no" style="flex:1;justify-content:center;">Not yet</button>
+         </div>
+       </div>`;
+    document.body.appendChild(p);
+    const close = () => { if (p.parentNode) p.remove(); };
+    p.querySelector('#rc-cp-yes').onclick = () => { close(); Response._markReached(id); };
+    p.querySelector('#rc-cp-text').onclick = () => { close(); Response.text(id); };
+    p.querySelector('#rc-cp-no').onclick = close;
+    setTimeout(close, 20000);
+  };
+
+  Response._markReached = async function (id) {
+    const l = this._leads.find(x => x.id === id);
+    if (!l || l.status !== 'new') return;
     // Persist first, THEN re-render — render() refetches, so an early render
     // would still show the lead until the write lands.
     try { await db.leads.update(id, { status: 'contacted' }); } catch (e) {}
     this.render();
-    this._callToast(name, async () => {
-      try { await db.leads.update(id, { status: 'new' }); } catch (e) {}
-      this.render();
-    });
-  };
-
-  // Small action toast with Undo — lives on <body> so a queue re-render or the
-  // 30s auto-refresh doesn't remove it. Auto-dismisses after 6s.
-  Response._callToast = function (name, onUndo) {
-    const old = document.getElementById('rc-calltoast'); if (old) old.remove();
-    const t = document.createElement('div');
-    t.id = 'rc-calltoast';
-    t.style.cssText = 'position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--text);color:#fff;border-radius:10px;padding:10px 8px 10px 14px;font-size:12.5px;font-weight:500;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow-lg);z-index:9999;max-width:calc(100vw - 24px);';
-    t.innerHTML = `<span>✓ ${esc(name)} marked responded</span><button style="background:none;border:none;color:#7FE3B8;font-weight:700;cursor:pointer;font-size:12.5px;padding:4px 10px;border-radius:7px;">Undo</button>`;
-    t.querySelector('button').onclick = () => { t.remove(); onUndo(); };
-    document.body.appendChild(t);
-    setTimeout(() => { if (t.parentNode) t.remove(); }, 6000);
+    toast('Marked responded ✓');
   };
 })();
 
