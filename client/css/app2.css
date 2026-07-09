@@ -235,7 +235,9 @@ body.sidebar-open #sidebar-backdrop{display:block;}
 .v2-down{color:var(--red);font-size:11.5px;font-weight:600;}
 @media(max-width:1000px){.v2-mgrid{grid-template-columns:repeat(3,1fr);}.v2-dgrid{grid-template-columns:1fr;}}
 @media(max-width:640px){
-  .v2-mgrid{grid-template-columns:1fr 1fr;gap:9px;}
+  /* !important beats the inline grid-template-columns some pages set (4-up/3-up)
+     so every metric row is a comfortable 2-up on phones. */
+  .v2-mgrid{grid-template-columns:1fr 1fr!important;gap:9px;}
   .v2-pagehd{gap:8px 10px;}
   .v2-pagehd .sub{width:100%;order:3;}
   /* Clients table: drop min-width and hide secondary columns so the money
@@ -256,6 +258,30 @@ body.sidebar-open #sidebar-backdrop{display:block;}
   #page-appointments .list-sub,#page-dashboard .list-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   #page-appointments .list-right,#page-dashboard .list-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;}
   #page-appointments .badge,#page-dashboard .badge{white-space:nowrap;}
+
+  /* Estimates table: collapse to Customer / Total / Status (tap row for the rest). */
+  #page-quotes table.v2-table{min-width:0;font-size:12px;}
+  #page-quotes .v2-table th:nth-child(1),#page-quotes .v2-table td:nth-child(1),
+  #page-quotes .v2-table th:nth-child(3),#page-quotes .v2-table td:nth-child(3),
+  #page-quotes .v2-table th:nth-child(4),#page-quotes .v2-table td:nth-child(4){display:none;}
+  #page-quotes .v2-table th,#page-quotes .v2-table td{padding:11px 9px;}
+
+  /* Leads board: stack the stages vertically (full-width) instead of a
+     horizontal-scroll kanban — no side-scroll, cards tap to open + change stage.
+     (Specificity bumped past the later base .v2-bcol{width:230px} rule.) */
+  .v2-board{flex-direction:column;overflow-x:visible;}
+  .v2-board .v2-bcol{width:100%;}
+  .v2-board .v2-bh{display:flex;align-items:baseline;justify-content:space-between;}
+  .v2-board .v2-bh .bv{margin-top:0;}
+
+  /* Bigger, thumb-friendly touch targets for the main actions. */
+  .v2-pagehd .btn{min-height:40px;}
+  .btn-green,.btn-primary{min-height:42px;}
+  .v2-chip{height:34px;}
+  /* Response queue: let the action buttons sit on their own line, full reach. */
+  #page-response .list-row{flex-wrap:wrap;}
+  #page-response .list-row>div:last-child{width:100%;margin-left:52px;}
+  #page-response .list-row>div:last-child .btn{flex:1;justify-content:center;min-height:38px;}
 }
 
 /* v2 data table */
