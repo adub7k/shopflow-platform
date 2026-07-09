@@ -141,6 +141,8 @@ app.use('/api', (req, res, next) => {
 
 // ── HTML Pages ────────────────────────────────────────────────────────────────
 app.get('/shop/*',  (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app.html')));
+// v2 redesign shell (opt-in preview): same app, same auth, new design system.
+app.get(['/app2', '/app2/*'], (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app2.html')));
 // Push-notification deep link (sw-push.js opens /response-center?lead=…):
 // serve the app shell; the client boot lands on the Response Center page.
 app.get('/response-center', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app.html')));
