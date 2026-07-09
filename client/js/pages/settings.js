@@ -18,6 +18,9 @@ const Settings = {
       html.push(`<div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="s-phone" type="tel" value="${esc(s.phone||'')}" /></div>`);
       html.push(`<div class="form-group"><label class="form-label">Address</label><input class="form-input" id="s-addr" value="${esc(s.address||'')}" /></div>`);
       html.push(`<div class="form-group"><label class="form-label">Email</label><input class="form-input" id="s-email" type="email" value="${esc(s.email||'')}" /></div>`);
+      // Monthly revenue goal drives the dashboard pace line — a redesign (/app2)
+      // feature, so only surface the field there (the v1 dashboard has no chart).
+      if (window.SF_V2) html.push(`<div class="form-group"><label class="form-label">Monthly revenue goal ($)</label><input class="form-input" id="s-revgoal" type="number" min="0" step="100" inputmode="numeric" value="${s.revenueGoal||''}" placeholder="e.g. 15000" /><div style="font-size:11px;color:var(--muted);margin-top:5px;">Shown as a pace line on your dashboard revenue chart. Leave blank to hide it.</div></div>`);
       html.push('</div>');
 
       // Public page settings — the calendar booking page for scheduling verticals,
@@ -760,6 +763,9 @@ const Settings = {
       .map(t=>({ id:t.id||genId('tpl'), label:(t.label||'Template').trim(), body:(t.body||'').trim() }));
     const rd=parseInt(document.getElementById('s-rebook-days')?.value)||21;
     data.rebookInterval=Math.min(90,Math.max(7,rd));
+    // Monthly revenue goal → dashboard pace line. Blank clears it (stored 0).
+    const rgEl=document.getElementById('s-revgoal');
+    if(rgEl){ const rg=parseFloat(rgEl.value); data.revenueGoal=(!isNaN(rg)&&rg>0)?Math.round(rg):0; }
     const gr=document.getElementById('s-grev')?.value.trim(); if(gr)data.googleReviewLink=gr;
     const ehost=document.getElementById('s-ehost')?.value.trim();
     const euser=document.getElementById('s-euser')?.value.trim();

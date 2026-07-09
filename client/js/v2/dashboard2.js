@@ -6,24 +6,67 @@
 (function () {
   const _v1Render = Dashboard.render.bind(Dashboard);
 
-  // Minimal inline area chart — daily collected revenue, last 30 days.
-  function areaChart(vals, { w = 640, h = 170 } = {}) {
-    const max = Math.max(...vals, 1) * 1.12, pad = 6;
-    const X = i => pad + i * (w - 2 * pad) / (vals.length - 1);
-    const Y = v => h - 14 - (v / max) * (h - 28);
-    const pts = vals.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+  // Month-to-date cumulative revenue vs. the goal pace. The emerald line is the
+  // running total of collected revenue this month; the red dotted line is the
+  // straight track from $0 (month start) to the owner's goal (month end) —
+  // above it = ahead of pace, below = behind. Hover reads MTD + pace at any day.
+  // `cum` = [{d, v}] running total for days 1..todayDay; goal from settings.
+  function mtdGoalChart(cum, goal, dim, todayDay) {
+    const w = 640, h = 184, padL = 8, padR = 8, padT = 16, padB = 20;
+    const mtd = cum.length ? cum[cum.length - 1].v : 0;
+    const maxV = Math.max(goal, mtd, 1) * 1.12;
+    const X = d => padL + (dim <= 1 ? 0 : (d - 1) / (dim - 1)) * (w - padL - padR);
+    const Y = v => h - padB - (v / maxV) * (h - padT - padB);
     let grid = '';
-    for (let g = 1; g <= 3; g++) {
-      const y = 14 + (h - 28) * g / 4;
-      grid += `<line x1="0" y1="${y}" x2="${w}" y2="${y}" stroke="var(--border)" stroke-width="1"/>`;
-    }
-    const last = vals[vals.length - 1], lx = X(vals.length - 1), ly = Y(last);
-    return `<svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block" role="img" aria-label="Revenue, last 30 days">${grid}
-      <polygon points="${pad},${h - 14} ${pts} ${lx},${h - 14}" fill="var(--green-lt)"/>
-      <polyline points="${pts}" fill="none" stroke="var(--green)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-      <circle cx="${lx}" cy="${ly}" r="3.5" fill="var(--green-deep)"/>
-      ${last > 0 ? `<text x="${lx - 6}" y="${ly - 8}" font-size="10.5" font-weight="700" fill="var(--green-deep)" text-anchor="end" font-family="var(--font)">${fmtMoney(last)}</text>` : ''}</svg>`;
+    for (let g = 1; g <= 3; g++) { const y = (padT + (h - padT - padB) * g / 4).toFixed(1); grid += `<line x1="0" y1="${y}" x2="${w}" y2="${y}" stroke="var(--border)"/>`; }
+    const linePts = cum.map(p => `${X(p.d).toFixed(1)},${Y(p.v).toFixed(1)}`).join(' ');
+    const area = cum.length ? `<polygon points="${X(1).toFixed(1)},${Y(0).toFixed(1)} ${linePts} ${X(cum[cum.length - 1].d).toFixed(1)},${Y(0).toFixed(1)}" fill="var(--green-lt)"/>` : '';
+    const line = cum.length ? `<polyline points="${linePts}" fill="none" stroke="var(--green)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>` : '';
+    const pace = goal > 0 ? `<line x1="${X(1).toFixed(1)}" y1="${Y(0).toFixed(1)}" x2="${X(dim).toFixed(1)}" y2="${Y(goal).toFixed(1)}" stroke="var(--red)" stroke-width="1.6" stroke-dasharray="4 4" opacity="0.85"/>
+      <text x="${(X(dim) - 2).toFixed(1)}" y="${(Y(goal) - 5).toFixed(1)}" font-size="10" font-weight="700" fill="var(--red)" text-anchor="end" font-family="var(--font)">Goal ${fmtMoney(goal)}</text>` : '';
+    const ex = X(todayDay), ey = Y(mtd);
+    const end = cum.length ? `<circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="3.5" fill="var(--green-deep)"/>
+      <text x="${(ex - 6).toFixed(1)}" y="${(ey - 8).toFixed(1)}" font-size="10.5" font-weight="700" fill="var(--green-deep)" text-anchor="${todayDay > dim * 0.6 ? 'end' : 'start'}" font-family="var(--font)">${fmtMoney(mtd)}</text>` : '';
+    const hover = `<line id="dchart-guide" y1="${padT}" y2="${h - padB}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" style="display:none"/>
+      <circle id="dchart-dot" r="4" fill="var(--green-deep)" stroke="#fff" stroke-width="1.5" style="display:none"/>`;
+    const payload = JSON.stringify({ cum, goal, dim, todayDay, geo: { w, h, padL, padR, padT, padB, maxV } }).replace(/'/g, '&#39;');
+    return `<div id="dchart" style="position:relative;" data-chart='${payload}'>
+      <svg viewBox="0 0 ${w} ${h}" width="100%" style="display:block" role="img" aria-label="Month-to-date revenue versus goal pace">${grid}${pace}${area}${line}${end}${hover}</svg>
+      <div id="dchart-tip" style="position:absolute;pointer-events:none;display:none;background:var(--text);color:#fff;font-size:11px;line-height:1.45;padding:6px 9px;border-radius:8px;box-shadow:var(--shadow-lg);white-space:nowrap;transform:translate(-50%,-100%);z-index:5;"></div>
+    </div>`;
   }
+
+  // Wire the hover readout after the chart is in the DOM (mouse only; the
+  // always-visible endpoint label + pace caption cover touch/mobile).
+  Dashboard._wireGoalChart = function () {
+    const host = document.getElementById('dchart'); if (!host) return;
+    let data; try { data = JSON.parse(host.getAttribute('data-chart')); } catch (e) { return; }
+    const { cum, goal, dim, todayDay, geo } = data; if (!cum || !cum.length) return;
+    const { w, h, padL, padR, padT, padB, maxV } = geo;
+    const X = d => padL + (dim <= 1 ? 0 : (d - 1) / (dim - 1)) * (w - padL - padR);
+    const Y = v => h - padB - (v / maxV) * (h - padT - padB);
+    const svg = host.querySelector('svg'), guide = host.querySelector('#dchart-guide'), dot = host.querySelector('#dchart-dot'), tip = host.querySelector('#dchart-tip');
+    const mon = new Date().toLocaleDateString('en-US', { month: 'short' });
+    const show = clientX => {
+      const r = host.getBoundingClientRect();
+      let frac = Math.max(0, Math.min(1, (clientX - r.left) / r.width));
+      let day = Math.round(1 + (dim <= 1 ? 0 : (frac * w - padL) / (w - padL - padR) * (dim - 1)));
+      day = Math.max(1, Math.min(todayDay, day));
+      const v = cum[day - 1].v, target = goal > 0 && dim > 1 ? goal * (day - 1) / (dim - 1) : 0;
+      const gx = X(day), gy = Y(v);
+      guide.setAttribute('x1', gx); guide.setAttribute('x2', gx); guide.style.display = '';
+      dot.setAttribute('cx', gx); dot.setAttribute('cy', gy); dot.style.display = '';
+      let txt = `${mon} ${day} · MTD ${fmtMoney(v)}`;
+      if (goal > 0) { const dlt = v - target; txt += `<br>${dlt >= 0 ? 'ahead of' : 'behind'} pace by ${fmtMoney(Math.abs(dlt))}`; }
+      tip.innerHTML = txt;
+      tip.style.left = Math.max(46, Math.min(r.width - 46, gx / w * r.width)) + 'px';
+      tip.style.top = (gy / h * r.height - 6) + 'px';
+      tip.style.display = '';
+    };
+    const hide = () => { guide.style.display = 'none'; dot.style.display = 'none'; tip.style.display = 'none'; };
+    svg.addEventListener('mousemove', e => show(e.clientX));
+    svg.addEventListener('mouseleave', hide);
+  };
 
   const metric = (label, value, sub, nav, green) =>
     `<div class="metric-card" style="cursor:pointer;" onclick="App.nav('${nav}')">
@@ -83,11 +126,22 @@
       const newLeads = (leads || []).filter(l => l.status === 'new')
         .sort((a, b) => new Date(b.createdAt || b.lastContactAt || 0) - new Date(a.createdAt || a.lastContactAt || 0));
 
-      // 30-day collected revenue series
-      const days = []; const sums = {};
-      for (let i = 29; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days.push(d.toISOString().slice(0, 10)); }
-      doneAll.forEach(a => { if (a.date in sums === false) sums[a.date] = 0; sums[a.date] += Number(a.price) || 0; });
-      const series = days.map(d => sums[d] || 0);
+      // Cumulative month-to-date revenue (running total, days 1..today) + the
+      // owner's monthly goal (settings.revenueGoal) for the pace line.
+      const [yy, mm] = t0.split('-').map(Number);
+      const daysInMonth = new Date(yy, mm, 0).getDate();
+      const todayDay = Number(t0.slice(8, 10));
+      const perDay = {};
+      monthDone.forEach(a => { const dd = Number((a.date || '').slice(8, 10)); if (dd) perDay[dd] = (perDay[dd] || 0) + (Number(a.price) || 0); });
+      let run = 0; const cum = [];
+      for (let d = 1; d <= todayDay; d++) { run += (perDay[d] || 0); cum.push({ d, v: run }); }
+      const goal = Math.max(0, Number(settings.revenueGoal) || 0);
+      // Pace math for the always-visible caption (mobile-friendly; no hover needed).
+      const targetToday = goal > 0 && daysInMonth > 1 ? goal * (todayDay - 1) / (daysInMonth - 1) : 0;
+      const paceDelta = run - targetToday;
+      const daysLeft = daysInMonth - todayDay;
+      const needPerDay = goal > 0 && daysLeft > 0 ? Math.max(0, (goal - run) / daysLeft) : 0;
+      const goalPct = goal > 0 ? Math.round(run / goal * 100) : 0;
 
       // Top service this month
       const svcCount = {};
@@ -121,10 +175,18 @@
 
       html.push('<div class="v2-dgrid"><div class="v2-col">');
 
-      if (showRev) html.push(`<div class="v2-card"><div class="v2-chd"><div>
-        <div class="t">Revenue — last 30 days</div><div class="sub">Collected from completed jobs</div></div>
-        <button class="act" onclick="App.nav('revenue')">Revenue →</button></div>
-        <div style="padding:14px 16px 10px;">${areaChart(series)}</div></div>`);
+      if (showRev) {
+        const caption = goal <= 0
+          ? `<span style="color:var(--muted);">${fmtMoney(run)} collected this month.</span> <a onclick="App.nav('settings')" style="color:var(--green-deep);font-weight:600;cursor:pointer;">Set a monthly goal →</a>`
+          : paceDelta >= 0
+            ? `<span style="color:var(--green-deep);font-weight:600;">On pace — ${fmtMoney(paceDelta)} ahead.</span> <span style="color:var(--muted);">${fmtMoney(run)} of ${fmtMoney(goal)} (${goalPct}%).</span>`
+            : `<span style="color:var(--red);font-weight:600;">${fmtMoney(-paceDelta)} behind pace.</span> <span style="color:var(--muted);">Need ${fmtMoney(needPerDay)}/day over ${daysLeft} day${daysLeft !== 1 ? 's' : ''} to hit ${fmtMoney(goal)}.</span>`;
+        html.push(`<div class="v2-card"><div class="v2-chd"><div>
+          <div class="t">Revenue — this month</div><div class="sub">Month-to-date vs. goal pace</div></div>
+          <button class="act" onclick="App.nav('revenue')">Revenue →</button></div>
+          <div style="padding:14px 16px 4px;">${mtdGoalChart(cum, goal, daysInMonth, todayDay)}</div>
+          <div style="padding:2px 16px 14px;font-size:12px;">${caption}</div></div>`);
+      }
 
       html.push(`<div class="v2-card"><div class="v2-chd"><div class="t">Today's schedule</div>
         <span class="sub">${dateLabel.split(', ')[1] || ''}</span>
@@ -190,6 +252,7 @@
 
       html.push('</div></div>');
       el.innerHTML = html.join('');
+      Dashboard._wireGoalChart();
     } catch (e) {
       console.error('v2 dashboard:', e);
       el.innerHTML = '<div class="card"><p style="color:var(--muted)">Could not load dashboard</p></div>';
