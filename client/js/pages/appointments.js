@@ -158,6 +158,11 @@ const Appointments = {
     // Service options show the name only — no price, to avoid confusion at booking
     // (the actual price still fills the Price field below via _recalcPrice).
     const svcOpts = this._services.map(s=>`<option value="${s.id}|${esc(s.name)}|${s.price}"${a?.serviceId===s.id?' selected':''}>${esc(s.name)}</option>`).join('');
+    // "Custom service" lets the owner book an off-menu job: a free-text label plus a
+    // price they set by hand. Auto-selected when editing an appt whose service isn't
+    // (or is no longer) in the catalog.
+    const isCustomSvc = !!a && !this._services.some(s=>s.id===a.serviceId);
+    const customOpt = `<option value="__custom__"${isCustomSvc?' selected':''}>✏️ Custom service…</option>`;
     Modal.show(`
       <div class="modal-title">${a?'Edit Appointment':'New Appointment'}</div>
       <div class="form-group"><label class="form-label">Client *</label>
@@ -168,11 +173,14 @@ const Appointments = {
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Service</label>
-          <select class="form-input" id="fa-svc" onchange="Appointments._svcChange()">${svcOpts}</select>
+          <select class="form-input" id="fa-svc" onchange="Appointments._svcChange()">${svcOpts}${customOpt}</select>
         </div>
         <div class="form-group"><label class="form-label">Price</label>
           <input class="form-input" id="fa-price" type="number" value="${a?.price||35}" oninput="Appointments._priceEdited=true" />
         </div>
+      </div>
+      <div class="form-group" id="fa-svc-custom-row" style="display:${isCustomSvc?'block':'none'};"><label class="form-label">What service?</label>
+        <input class="form-input" id="fa-svc-custom" value="${isCustomSvc?esc(a?.service||''):''}" placeholder="Describe the service (e.g. Headlight restoration)" />
       </div>
       ${(Shop.sizes||[]).length?`<div class="form-group"><label class="form-label">Vehicle size</label>
         <select class="form-input" id="fa-size" onchange="Appointments._recalcPrice()">${Shop.sizes.map(sz=>`<option value="${esc(sz.key)}"${a?.vehicleSize===sz.key?' selected':''}>${esc(sz.label)}</option>`).join('')}</select>
@@ -364,7 +372,18 @@ const Appointments = {
 
   // Picking a different service resets to that service's price; a manual edit to
   // the Price field afterward locks it again.
-  _svcChange() { this._priceEdited=false; this._recalcPrice(); },
+  _svcChange() {
+    const custom = (document.getElementById('fa-svc')?.value||'')==='__custom__';
+    const row=document.getElementById('fa-svc-custom-row'); if(row) row.style.display=custom?'block':'none';
+    if(custom){
+      // Off-menu job: no catalog price to pull, so leave the Price field for the owner
+      // to set and stop _recalcPrice from clobbering it.
+      this._priceEdited=true;
+      document.getElementById('fa-svc-custom')?.focus();
+    } else {
+      this._priceEdited=false; this._recalcPrice();
+    }
+  },
 
   // Set the price field to the total: the selected service (size-adjusted for
   // detail shops) plus any checked add-ons. Falls back to the flat price. Skips
@@ -401,7 +420,14 @@ const Appointments = {
     const name=document.getElementById('fa-name')?.value.trim();
     if(!name){toast('Please enter a client name','warning');return;}
     const svcVal=document.getElementById('fa-svc')?.value||'';
-    const[svcId,svcName]=svcVal.split('|');
+    let svcId, svcName;
+    if(svcVal==='__custom__'){
+      svcId=null;
+      svcName=(document.getElementById('fa-svc-custom')?.value||'').trim();
+      if(!svcName){ toast('Describe the custom service','warning'); return; }
+    } else {
+      [svcId,svcName]=svcVal.split('|');
+    }
     const barberVal=document.getElementById('fa-barber')?.value||'';
     const[barberId,barberName]=barberVal.split('|');
     const timeVal=document.getElementById('fa-time')?.value||'10:00';
