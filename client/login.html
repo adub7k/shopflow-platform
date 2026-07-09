@@ -84,7 +84,10 @@ async function login() {
       localStorage.setItem('sf_shopName', data.shopName);
       localStorage.setItem('sf_role', data.role || 'full');
       localStorage.setItem('sf_name', data.name || '');
-      window.location.href = data.crmUrl;
+      // v2 shell sets sf_next before bouncing here — return the user to it.
+      const next = sessionStorage.getItem('sf_next');
+      if (next) sessionStorage.removeItem('sf_next');
+      window.location.href = next || data.crmUrl;
     } else {
       errEl.textContent = data.error || 'Invalid email or password.';
       errEl.style.display = 'block';

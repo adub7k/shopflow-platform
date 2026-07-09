@@ -119,7 +119,7 @@
 <div id="toast"></div>
 
 <script src="/js/api.js"></script>
-<script>if(!localStorage.getItem("sf_token")){window.location.href="/login";}</script>
+<script>if(!localStorage.getItem("sf_token")){try{sessionStorage.setItem("sf_next","/app2");}catch(e){}window.location.href="/login";}</script>
 <script src="/js/utils.js"></script>
 <script src="/js/pwa-push-client.js"></script>
 <script src="/js/client-profile.js"></script>

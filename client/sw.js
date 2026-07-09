@@ -1,7 +1,7 @@
 // Web-push + notification-click handlers (kept as a drop-in module).
 importScripts('/sw-push.js');
 
-const CACHE = 'shopflow-v3';
+const CACHE = 'shopflow-v4';
 const STATIC = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
