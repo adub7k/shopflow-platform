@@ -140,12 +140,16 @@ app.use('/api', (req, res, next) => {
 }, websiteLeads);
 
 // ── HTML Pages ────────────────────────────────────────────────────────────────
-app.get('/shop/*',  (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app.html')));
-// v2 redesign shell (opt-in preview): same app, same auth, new design system.
+// The redesigned shell (app2.html) is now the default CRM everywhere. Same app,
+// same auth, same data — only the frontend design changed. The original shell
+// stays reachable at /classic/* as an instant per-shop rollback (no redeploy),
+// and /app2 is kept so existing bookmarks keep working.
+app.get('/shop/*',  (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app2.html')));
 app.get(['/app2', '/app2/*'], (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app2.html')));
+app.get('/classic/*', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app.html')));
 // Push-notification deep link (sw-push.js opens /response-center?lead=…):
 // serve the app shell; the client boot lands on the Response Center page.
-app.get('/response-center', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app.html')));
+app.get('/response-center', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app2.html')));
 // Quote-first verticals (detail shops) get the opt-in lead-capture page at the
 // same /book/<slug> URL; scheduling verticals keep the calendar booking flow.
 // Per-shop override: settings.bookingMode ('booking' | 'leads').
