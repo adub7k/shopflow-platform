@@ -152,10 +152,14 @@ const Appointments = {
 
   _ymd(dt){ return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`; },
 
-  // Top arrows: step by the granularity that matches the current view — a month
-  // when paging the month grid, a week when in week view (a full-month jump there
-  // is too coarse to be useful).
-  _navStep(delta){ this._view==='week' ? this.changeDay(delta*7) : this.changeMonth(delta); },
+  // Nav arrows step by the granularity of the current view: a day in day view, a
+  // week in week view, a month in month view — so paging never overshoots what's
+  // on screen. (v1 has month/week; the v2 redesign adds a day view.)
+  _navStep(delta){
+    if (this._view==='day') this.changeDay(delta);
+    else if (this._view==='week') this.changeDay(delta*7);
+    else this.changeMonth(delta);
+  },
 
   changeDay(delta) {
     const dt=new Date(this._selected+'T12:00:00');

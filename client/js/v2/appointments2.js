@@ -62,9 +62,9 @@
           <button class="v2-chip${this._view === 'day' ? ' on' : ''}" onclick="Appointments._view='day';Appointments.render()">Day</button>
           <button class="v2-chip${this._view === 'week' ? ' on' : ''}" onclick="Appointments._view='week';Appointments.render()">Week</button>
           <button class="v2-chip${this._view === 'month' ? ' on' : ''}" onclick="Appointments._view='month';Appointments.render()">Month</button></div>
-        <button class="btn btn-sm" onclick="Appointments.changeMonth(-1)" aria-label="Previous">‹</button>
+        <button class="btn btn-sm" onclick="Appointments._navStep(-1)" aria-label="Previous ${this._view}">‹</button>
         <button class="btn btn-sm" onclick="Appointments.selectDay(today())">Today</button>
-        <button class="btn btn-sm" onclick="Appointments.changeMonth(1)" aria-label="Next">›</button>
+        <button class="btn btn-sm" onclick="Appointments._navStep(1)" aria-label="Next ${this._view}">›</button>
         ${canWrite() ? `<button class="btn btn-green" onclick="Appointments.openForm(null)">＋ New appointment</button>` : ''}</div>`);
 
       if (this._view === 'week') {
