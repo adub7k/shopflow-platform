@@ -19,9 +19,9 @@ const Appointments = {
       const dt = new Date(this._selected+'T12:00:00');
       const monthLabel = dt.toLocaleDateString('en-US',{month:'long',year:'numeric'});
       html.push(`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <button class="btn btn-sm" onclick="Appointments.changeMonth(-1)">&#8249;</button>
+        <button class="btn btn-sm" onclick="Appointments._navStep(-1)" title="${this._view==='week'?'Previous week':'Previous month'}">&#8249;</button>
         <div style="font-size:15px;font-weight:700;">${monthLabel}</div>
-        <button class="btn btn-sm" onclick="Appointments.changeMonth(1)">&#8250;</button>
+        <button class="btn btn-sm" onclick="Appointments._navStep(1)" title="${this._view==='week'?'Next week':'Next month'}">&#8250;</button>
       </div>`);
 
       // View toggle
@@ -38,7 +38,12 @@ const Appointments = {
       }
 
       // Add button (hidden for view-only role)
-      html.push(`<div class="section-header"><span>Appointments — ${fmtDateFull(this._selected)}</span>${canWrite()?'<button class="btn btn-sm btn-green" onclick="Appointments.openForm(null)">+ Add</button>':''}</div>`);
+      html.push(`<div class="section-header" style="display:flex;align-items:center;gap:8px;">
+        <button class="btn btn-sm" onclick="Appointments.changeDay(-1)" title="Previous day">&#8249;</button>
+        <span style="flex:1;text-align:center;">${fmtDateFull(this._selected)}</span>
+        <button class="btn btn-sm" onclick="Appointments.changeDay(1)" title="Next day">&#8250;</button>
+        ${canWrite()?'<button class="btn btn-sm btn-green" onclick="Appointments.openForm(null)">+ Add</button>':''}
+      </div>`);
 
       // Day's appointments
       const dayAppts = this._data.filter(a=>a.date===this._selected).sort((a,b)=>a.time.localeCompare(b.time));
@@ -145,10 +150,28 @@ const Appointments = {
     return html;
   },
 
+  _ymd(dt){ return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`; },
+
+  // Top arrows: step by the granularity that matches the current view — a month
+  // when paging the month grid, a week when in week view (a full-month jump there
+  // is too coarse to be useful).
+  _navStep(delta){ this._view==='week' ? this.changeDay(delta*7) : this.changeMonth(delta); },
+
+  changeDay(delta) {
+    const dt=new Date(this._selected+'T12:00:00');
+    dt.setDate(dt.getDate()+delta);
+    this._selected=this._ymd(dt);
+    this.render();
+  },
+
   changeMonth(delta) {
     const dt=new Date(this._selected+'T12:00:00');
+    const d=dt.getDate();
+    dt.setDate(1);                 // pin to the 1st first so a short target month can't overflow
     dt.setMonth(dt.getMonth()+delta);
-    this._selected=dt.toISOString().split('T')[0];
+    const last=new Date(dt.getFullYear(),dt.getMonth()+1,0).getDate();
+    dt.setDate(Math.min(d,last));  // keep the day, clamped to the target month's length
+    this._selected=this._ymd(dt);
     this.render();
   },
 
