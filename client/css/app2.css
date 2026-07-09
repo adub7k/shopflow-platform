@@ -234,7 +234,29 @@ body.sidebar-open #sidebar-backdrop{display:block;}
 .v2-up{color:var(--green-deep);font-size:11.5px;font-weight:600;}
 .v2-down{color:var(--red);font-size:11.5px;font-weight:600;}
 @media(max-width:1000px){.v2-mgrid{grid-template-columns:repeat(3,1fr);}.v2-dgrid{grid-template-columns:1fr;}}
-@media(max-width:640px){.v2-mgrid{grid-template-columns:1fr 1fr;gap:9px;}}
+@media(max-width:640px){
+  .v2-mgrid{grid-template-columns:1fr 1fr;gap:9px;}
+  .v2-pagehd{gap:8px 10px;}
+  .v2-pagehd .sub{width:100%;order:3;}
+  /* Clients table: drop min-width and hide secondary columns so the money
+     columns (visits / loyalty / last visit) fit a phone without side-scroll. */
+  #page-clients table.v2-table{min-width:0;font-size:12px;}
+  #page-clients .v2-table th:nth-child(3),#page-clients .v2-table td:nth-child(3),
+  #page-clients .v2-table th:nth-child(4),#page-clients .v2-table td:nth-child(4),
+  #page-clients .v2-table th:nth-child(5),#page-clients .v2-table td:nth-child(5),
+  #page-clients .v2-table th:nth-child(6),#page-clients .v2-table td:nth-child(6),
+  #page-clients .v2-table th:nth-child(7),#page-clients .v2-table td:nth-child(7){display:none;}
+  #page-clients .v2-table th:last-child,#page-clients .v2-table td:last-child{display:none;}
+  #page-clients .v2-table th,#page-clients .v2-table td{padding:11px 8px;}
+  #page-clients .v2-table td:first-child b{max-width:104px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:middle;}
+  #page-clients .v2-table td:first-child .badge{display:none;}
+  /* Schedule / appointment rows: keep the service line to one line and let the
+     status badge sit tight instead of wrapping to three lines. */
+  #page-appointments .list-row,#page-dashboard .list-row{gap:9px;}
+  #page-appointments .list-sub,#page-dashboard .list-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #page-appointments .list-right,#page-dashboard .list-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;}
+  #page-appointments .badge,#page-dashboard .badge{white-space:nowrap;}
+}
 
 /* v2 data table */
 .v2-tablewrap{overflow-x:auto;}
