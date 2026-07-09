@@ -57,7 +57,7 @@
             ${w.why.length ? `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;">${w.why.slice(0, 3).map(r => `<span style="font-size:10.5px;background:var(--surface2);color:var(--muted);border-radius:6px;padding:2px 7px;white-space:nowrap;">${esc(r)}</span>`).join('')}</div>` : ''}
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0;" onclick="event.stopPropagation();">
-            ${l.phone ? `<a class="btn btn-sm" href="${esc(tel)}" style="text-decoration:none;">Call</a>
+            ${l.phone ? `<a class="btn btn-sm" href="${esc(tel)}" onclick="Response.armCallClear('${l.id}')" style="text-decoration:none;">Call</a>
             <button class="btn btn-sm btn-green" onclick="Response.text('${l.id}')">Text</button>` : ''}
             <button class="btn btn-sm" onclick="Response.markContacted('${l.id}')" title="Mark responded">✓</button>
           </div></div>`);
@@ -89,6 +89,67 @@
     }
     html.push('</div></div>');
     el.innerHTML = html.join('');
+  };
+
+  // Click-to-call → auto-clear. The <a href="tel:"> launches the dialer; this
+  // arms a one-shot listener so that when the owner returns to the app (the tab
+  // regains visibility/focus after the call), the lead is marked responded and
+  // drops out of the queue — with an Undo in case the call didn't connect.
+  // Primary path is mobile (visibilitychange); desktop falls back to blur/focus.
+  Response.armCallClear = function (id) {
+    const l = this._leads.find(x => x.id === id);
+    if (!l || !l.phone) return;
+    const name = l.name || l.phone;
+    let leftForCall = false;
+    const finish = () => {
+      cleanup();
+      Response._clearAfterCall(id, name);
+    };
+    const onVis = () => {
+      if (document.hidden) { leftForCall = true; return; }
+      if (leftForCall) finish();
+    };
+    const onBlur = () => { leftForCall = true; };
+    const onFocus = () => { if (leftForCall) finish(); };
+    let done = false;
+    const cleanup = () => {
+      if (done) return; done = true;
+      document.removeEventListener('visibilitychange', onVis);
+      window.removeEventListener('blur', onBlur);
+      window.removeEventListener('focus', onFocus);
+    };
+    document.addEventListener('visibilitychange', onVis);
+    window.addEventListener('blur', onBlur);
+    window.addEventListener('focus', onFocus);
+    // Disarm if they never actually left (e.g. desktop with no tel handler) so a
+    // later unrelated tab-switch can't clear the lead.
+    setTimeout(cleanup, 120000);
+  };
+
+  Response._clearAfterCall = async function (id, name) {
+    const l = this._leads.find(x => x.id === id);
+    if (!l || l.status !== 'new') return; // already handled elsewhere
+    // Persist first, THEN re-render — render() refetches, so an early render
+    // would still show the lead until the write lands.
+    try { await db.leads.update(id, { status: 'contacted' }); } catch (e) {}
+    this.render();
+    this._callToast(name, async () => {
+      try { await db.leads.update(id, { status: 'new' }); } catch (e) {}
+      this.render();
+    });
+  };
+
+  // Small action toast with Undo — lives on <body> so a queue re-render or the
+  // 30s auto-refresh doesn't remove it. Auto-dismisses after 6s.
+  Response._callToast = function (name, onUndo) {
+    const old = document.getElementById('rc-calltoast'); if (old) old.remove();
+    const t = document.createElement('div');
+    t.id = 'rc-calltoast';
+    t.style.cssText = 'position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));transform:translateX(-50%);background:var(--text);color:#fff;border-radius:10px;padding:10px 8px 10px 14px;font-size:12.5px;font-weight:500;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow-lg);z-index:9999;max-width:calc(100vw - 24px);';
+    t.innerHTML = `<span>✓ ${esc(name)} marked responded</span><button style="background:none;border:none;color:#7FE3B8;font-weight:700;cursor:pointer;font-size:12.5px;padding:4px 10px;border-radius:7px;">Undo</button>`;
+    t.querySelector('button').onclick = () => { t.remove(); onUndo(); };
+    document.body.appendChild(t);
+    setTimeout(() => { if (t.parentNode) t.remove(); }, 6000);
   };
 })();
 
