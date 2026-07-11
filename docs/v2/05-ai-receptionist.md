@@ -92,3 +92,21 @@ inbound call ──► twilio.js (existing) ──► call + lead created
 Full conversational AI voice answering (`<Gather input="speech">` dialog where the AI books the appointment
 live) is **Phase 4b / optional** — it's a larger UX and latency surface. The first cut makes the receptionist
 *understand and summarize* every call and *populate the CRM*, which is the brief's core ask, before it *speaks*.
+
+## 7. Phase 4b — conversational voice (BUILT)
+
+Implemented as a turn-by-turn `<Gather input="speech">` agent (no media streams). Files:
+- `server/booking.js` — single source of truth for menu / availability / createAppointment (extracted from
+  `routes/public.js`, which now delegates — one double-book guard shared by the page and the AI).
+- `server/receptionist/voice.js` — the dialog engine: grounds Claude in the shop's real menu + hours, exposes
+  tools (`check_availability`, `book_appointment`, `capture_lead`, `end_call`), executes them
+  server-authoritatively, and manages per-turn state on `call.voiceAI`.
+- `routes/twilio.js` — `POST /voice/ai/:shopId` (greet + listen) and `/voice/ai/gather/:shopId` (one turn).
+  Routing by `settings.voiceAI.mode`: `always` answers every call; `fallback` hands off only on a miss
+  (replacing the plain voicemail); `off` = today's behavior. Any error / missing key falls back to voicemail.
+
+**Vertical-aware:** quote-first shops (detail/tint/pressure) qualify + quote from the menu + `capture_lead`
+(writes `lead.ai`, same shape as voicemail intake → reused by the Response Center); calendar shops book live.
+**Model:** `claude-haiku-4-5` (override `VOICE_AI_MODEL`) for low latency; hard turn cap bounds cost.
+**Config:** Settings → *AI Phone Receptionist* (mode, greeting, voice). **Voice:** Polly Neural (default Joanna).
+**Tests:** `test/voice-receptionist.test.js` (booking parity + helpers + two full simulated calls, no key needed).

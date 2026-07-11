@@ -84,6 +84,37 @@ const Settings = {
       </div>`);
       html.push('</div>');
 
+      // AI Phone Receptionist — live conversational voice (Phase 4b). The AI
+      // actually answers the call, quotes from the menu, and books or captures a
+      // qualified lead. Config read by server/receptionist/voice.js.
+      const va = s.voiceAI || {};
+      const vaMode = ['off','fallback','always'].includes(va.mode) ? va.mode : 'off';
+      const voices = [['Polly.Joanna-Neural','Joanna — warm female'],['Polly.Danielle-Neural','Danielle — female'],['Polly.Matthew-Neural','Matthew — warm male'],['Polly.Stephen-Neural','Stephen — male']];
+      html.push('<div class="section-header">AI Phone Receptionist</div><div class="card">');
+      html.push(`
+        <div class="form-group">
+          <label class="form-label">When should the AI answer the phone?</label>
+          <select id="s-voiceai-mode" class="form-input">
+            <option value="off" ${vaMode==='off'?'selected':''}>Off — never answer</option>
+            <option value="fallback" ${vaMode==='fallback'?'selected':''}>Missed calls only (recommended)</option>
+            <option value="always" ${vaMode==='always'?'selected':''}>Every call</option>
+          </select>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;">The AI has a real conversation with the caller, quotes from your service menu, and captures a qualified lead (or books the appointment, for calendar shops) — then texts/emails you the outcome. <strong>Missed calls only</strong> rings your phone first and lets the AI step in just when you can't pick up.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Greeting <span style="color:var(--faint);font-weight:400;">(optional)</span></label>
+          <input id="s-voiceai-greeting" class="form-input" maxlength="240" placeholder="Thanks for calling ${esc(s.shopName||'us')}! How can I help you today?" value="${esc(va.greeting||'')}" />
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label class="form-label">Voice</label>
+          <select id="s-voiceai-voice" class="form-input">
+            ${voices.map(([v,label])=>`<option value="${v}" ${(va.voice||'Polly.Joanna-Neural')===v?'selected':''}>${label}</option>`).join('')}
+          </select>
+        </div>
+        <div style="font-size:11px;color:var(--muted);">Requires an AI key configured on the server (the same one that powers voicemail analysis). Each answered call costs a few cents.</div>
+      `);
+      html.push('</div>');
+
       // Work Gallery — showcased at the top of the booking page
       const gallery = Array.isArray(s.gallery) ? s.gallery : [];
       html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Work Gallery</span><button class="btn btn-sm btn-green" onclick="Settings.galleryPick()">+ Add Photo</button></div>');
@@ -756,6 +787,7 @@ const Settings = {
     const tpl=document.getElementById('s-leadtpl'); if(tpl)data.leadPageTemplate=tpl.value;
     const pp=document.getElementById('s-publicphone'); if(pp)data.publicPhone=pp.value.trim();
     const ar=document.getElementById('s-aireceptionist'); if(ar)data.aiReceptionist={enabled:ar.checked};
+    const vam=document.getElementById('s-voiceai-mode'); if(vam){ data.voiceAI={ mode:vam.value, greeting:(document.getElementById('s-voiceai-greeting')?.value||'').trim(), voice:document.getElementById('s-voiceai-voice')?.value||'Polly.Joanna-Neural' }; }
     const lv=document.getElementById('s-lvis')?.value; if(lv)data.loyalty={visitsForReward:parseInt(lv),rewardDescription:document.getElementById('s-lrew')?.value.trim()||'One free service'};
     // Message templates: owner-managed [{id,label,body}] list (drops empty rows).
     this._syncTemplates();

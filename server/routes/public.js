@@ -1,32 +1,14 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
-const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl } = require('../db');
+const { master, getShopDb, shopHelpers, shopRoute, genId, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl } = require('../db');
 const { resolveProfile } = require('../industries');
 const { notifyNewLead } = require('../email');
-
-// Resolve a shop's inspo-photo mode: explicit per-shop setting wins, else the
-// industry default ('required' for nail studios, 'off' elsewhere).
-function inspoMode(settings, industry) {
-  return settings.inspoPhoto || resolveProfile(industry).inspoDefault || 'off';
-}
-
-// ── Slot helpers (shared by availability + the booking double-book guard) ─────
-function parseClock(t){ const [tm,ap]=t.split(' '); let [h,m]=tm.split(':').map(Number); if(ap==='PM'&&h!==12)h+=12; if(ap==='AM'&&h===12)h=0; return h*60+m; }
-function fmtClock(mins){ const h=Math.floor(mins/60),m=mins%60,ap=h>=12?'PM':'AM',h12=h%12||12; return `${h12}:${String(m).padStart(2,'0')} ${ap}`; }
-// The exact times a staff member offers on a working day (explicit list or range).
-function barberSlotList(b){
-  const s = b.schedule || { startTime:'9:00 AM', endTime:'6:00 PM', slotMinutes:30 };
-  if (Array.isArray(s.allowedTimes) && s.allowedTimes.length) return s.allowedTimes;
-  const out = [];
-  for (let t = parseClock(s.startTime||'9:00 AM'); t < parseClock(s.endTime||'6:00 PM'); t += (s.slotMinutes||30)) out.push(fmtClock(t));
-  return out;
-}
-// Statuses that hold a slot (so a pending-deposit booking doesn't block others).
-function occupyingStatusKeys(settings){
-  const occ = (settings.statuses||[]).filter(s=>s.occupiesSlot).map(s=>s.key);
-  return occ.length ? occ : ['confirmed','in-progress'];
-}
+// Booking core (single source of truth): the menu, open-slot availability, and
+// the create-appointment path (double-book guard + price resolution) live in
+// ../booking so the public page and the AI voice receptionist share one
+// implementation. inspoMode is re-exported from there.
+const { computeAvailability, createAppointment, inspoMode } = require('../booking');
 
 // ── PUBLIC: Industry list (for the signup business-type picker) ──────────────
 router.get('/api/industries', (req, res) => {
@@ -274,54 +256,7 @@ router.get('/api/public/:shopSlug/availability', (req, res) => {
     if (!shop) return res.status(404).json({ error: 'Shop not found' });
     const db = getShopDb(shop.id);
     const { date, barberId } = req.query;
-    if (!date) return res.json([]);
-
-    const blocked = db.get('blockedDates').value().find(b => b.date === date);
-    if (blocked) return res.json([]);
-
-    const now = new Date(); now.setHours(0,0,0,0);
-    if (new Date(date + 'T12:00:00') < now) return res.json([]);
-
-    function generateSlots(start, end, step) {
-      const parse = t => { const [time,ap]=t.split(' '); let [h,m]=time.split(':').map(Number); if(ap==='PM'&&h!==12)h+=12; if(ap==='AM'&&h===12)h=0; return h*60+m; };
-      const format = mins => { const h=Math.floor(mins/60),m=mins%60,ap=h>=12?'PM':'AM',h12=h%12||12; return `${h12}:${String(m).padStart(2,'0')} ${ap}`; };
-      const slots = [];
-      for (let t = parse(start); t < parse(end); t += step) slots.push(format(t));
-      return slots;
-    }
-
-    const barbers = db.get('barbers').value().filter(b => b.active !== false);
-    const dow = new Date(date + 'T12:00:00').getDay();
-    let working = barberId ? barbers.filter(b => b.id === barberId) : barbers;
-    working = working.filter(b => (b.schedule?.workDays || [1,2,3,4,5,6]).includes(dow));
-    if (!working.length) return res.json([]);
-
-    const settings = db.get('settings').value() || {};
-    const occupying = (settings.statuses || []).filter(s => s.occupiesSlot).map(s => s.key);
-    const occupies = occupying.length ? occupying : ['confirmed', 'in-progress'];
-    const appts = db.get('appointments').value().filter(a => a.date === date && occupies.includes(a.status));
-    const allSlots = new Set();
-    working.forEach(b => {
-      const sched = b.schedule || { startTime:'9:00 AM', endTime:'6:00 PM', slotMinutes:30 };
-      // Occupied minute-intervals for this staff member. A booked job blocks its
-      // whole [start, start+duration) span, not just its start slot — otherwise a
-      // 180-min detail job leaves every following 30-min slot bookable (overbook).
-      const intervals = appts.filter(a => a.barberId === b.id).map(a => {
-        const start = parseClock(a.time);
-        return { start, end: start + (Number(a.duration) || sched.slotMinutes || 30) };
-      });
-      // If this staff member set explicit times, offer ONLY those; otherwise
-      // generate the usual start→end slots at the chosen interval.
-      const candidates = (Array.isArray(sched.allowedTimes) && sched.allowedTimes.length)
-        ? sched.allowedTimes
-        : generateSlots(sched.startTime, sched.endTime, sched.slotMinutes);
-      candidates
-        .filter(s => { const m = parseClock(s); return !intervals.some(iv => m >= iv.start && m < iv.end); })
-        .forEach(s => allSlots.add(s));
-    });
-
-    const sorted = [...allSlots].sort((a,b) => { const p=t=>{const [tm,ap]=t.split(' ');let[h,m]=tm.split(':').map(Number);if(ap==='PM'&&h!==12)h+=12;if(ap==='AM'&&h===12)h=0;return h*60+m;};return p(a)-p(b); });
-    res.json(sorted);
+    res.json(computeAvailability(db, date, { barberId }));
   } catch(e) { res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -420,120 +355,15 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     const shop = master.get('shops').find({ slug: req.params.shopSlug, active: true }).value();
     if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
     const db = getShopDb(shop.id);
-    const { customerName, customerPhone, customerEmail, barberId, barberName, serviceId, date, time, notes, customFields, inspoPhoto, vehicleSize } = req.body;
-    if (!customerName || !customerPhone || !date || !time) return res.status(400).json({ ok: false, error: 'Missing required fields' });
-
-    // Enforce required custom fields for this vertical (e.g. detail-shop vehicle info).
-    const s0 = db.get('settings').value() || {};
-    const cf = customFields || {};
-    const missing = (s0.customFields || []).filter(f => f.required && !String(cf[f.key] || '').trim());
-    if (missing.length) return res.status(400).json({ ok: false, error: 'Missing required fields: ' + missing.map(f => f.label).join(', ') });
-
-    // Enforce inspiration photo when the shop requires one.
-    const inspo = String(inspoPhoto || '');
-    if (inspoMode(s0, db.get('industry').value()) === 'required' && !inspo)
-      return res.status(400).json({ ok: false, error: 'An inspiration photo is required to book.' });
-
-    // ── Double-booking guard ──────────────────────────────────────────────────
-    // The client only sees available slots, but never trust it: re-validate the
-    // slot here so two people can't grab the same time (and crafted requests
-    // can't book a closed/blocked/past slot). Mirrors the availability logic.
-    if ((db.get('blockedDates').value() || []).some(b => b.date === date))
-      return res.status(409).json({ ok: false, error: 'That date is no longer available for booking.' });
-    const todayMidnight = new Date(); todayMidnight.setHours(0,0,0,0);
-    if (new Date(date + 'T12:00:00') < todayMidnight)
-      return res.status(400).json({ ok: false, error: 'That date has already passed.' });
-    {
-      const dow = new Date(date + 'T12:00:00').getDay();
-      const occ = occupyingStatusKeys(s0);
-      const dayAppts = (db.get('appointments').value() || []).filter(a => a.date === date && occ.includes(a.status));
-      const workingBarbers = (db.get('barbers').value() || []).filter(b =>
-        b.active !== false &&
-        (b.schedule?.workDays || [1,2,3,4,5,6]).includes(dow) &&
-        barberSlotList(b).includes(time));
-      // Overlap test on real minute-intervals, not exact-start equality — so a
-      // requested job that would run into an existing one (or start inside it) is
-      // rejected. Duration is taken server-side from the chosen service.
-      const reqSvc = serviceId ? (db.get('services').value() || []).find(x => x.id === serviceId) : null;
-      const reqStart = parseClock(time);
-      const reqEnd = reqStart + ((reqSvc && Number(reqSvc.duration)) || 30);
-      const overlaps = a => { const aStart = parseClock(a.time); const aEnd = aStart + (Number(a.duration) || 30); return reqStart < aEnd && aStart < reqEnd; };
-      if (barberId) {
-        const b = workingBarbers.find(x => x.id === barberId);
-        if (!b) return res.status(409).json({ ok: false, error: 'That time is no longer available. Please pick another.' });
-        if (dayAppts.some(a => a.barberId === barberId && overlaps(a)))
-          return res.status(409).json({ ok: false, error: 'Sorry, that time was just booked. Please pick another.' });
-      } else {
-        // "Any" staff — make sure the shop still has an open chair across the span.
-        const takenAtTime = dayAppts.filter(overlaps).length;
-        if (!workingBarbers.length || takenAtTime >= workingBarbers.length)
-          return res.status(409).json({ ok: false, error: 'Sorry, that time was just booked. Please pick another.' });
-      }
-    }
-
-    const { getAll, getById, upsert } = shopHelpers(db);
-    const svcFromDb = serviceId ? getAll('services').find(s => s.id === serviceId) : null;
-    // A booking must reference a real service — the price, name, and duration are
-    // all taken from it server-side. Without this, the client could dictate the
-    // price (or book a $0 slot with no service). The booking page always sends one.
-    if (!svcFromDb) return res.status(400).json({ ok: false, error: 'Please choose a service. If you already did, refresh and try again.' });
-    // Price is always resolved server-side (never trust the client's amount).
-    // For detail shops the per-size table wins when the customer picked a size,
-    // and any chosen add-ons are re-priced from the shop's own add-on list.
-    const sizePrice = (svc, key) => (svc && svc.sizePricing && key && svc.sizePricing[key] != null && svc.sizePricing[key] !== '') ? Number(svc.sizePricing[key]) : Number(svc && svc.price) || 0;
-    const selAddonIds = Array.isArray(req.body.addons) ? req.body.addons : [];
-    const chosenAddons = (s0.addons || []).filter(a => selAddonIds.includes(a.id)).map(a => ({ id: a.id, name: a.name, price: Number(a.price) || 0 }));
-    const addonsTotal = chosenAddons.reduce((t, a) => t + a.price, 0);
-    const basePrice = sizePrice(svcFromDb, vehicleSize);
-    const price = basePrice + addonsTotal;
-    const duration = svcFromDb ? Number(svcFromDb.duration) || 45 : 45;
-    // Snapshot material/product cost (service + chosen add-ons) for margin reporting.
-    const addonsCost = (s0.addons || []).filter(a => selAddonIds.includes(a.id)).reduce((t, a) => t + (Number(a.cost) || 0), 0);
-    const cost = Math.round(((Number(svcFromDb.cost) || 0) + addonsCost) * 100) / 100;
-
-    // Build a vehicle record from custom fields (detail shops) for the customer's history.
-    const vehicle = (cf.vehicleYear || cf.vehicleMake || cf.vehicleModel)
-      ? { year: cf.vehicleYear || '', make: cf.vehicleMake || '', model: cf.vehicleModel || '', color: cf.vehicleColor || '' }
-      : null;
-    const _vn = s => String(s || '').trim().toLowerCase();
-    const sameVehicle = (a, b) => a && b && _vn(a.year) === _vn(b.year) && _vn(a.make) === _vn(b.make) && _vn(a.model) === _vn(b.model);
-
-    // Find or create customer
-    const digits = (customerPhone || '').replace(/[^0-9]/g, '');
-    let custId = null;
-    if (digits.length >= 10) {
-      const existing = getAll('customers').find(c => (c.phone || '').replace(/[^0-9]/g, '') === digits);
-      if (existing) {
-        custId = existing.id;
-        if (vehicle && !(existing.vehicles || []).some(v => sameVehicle(v, vehicle))) {
-          existing.vehicles = [...(existing.vehicles || []), vehicle];
-          upsert('customers', existing);
-        }
-      } else {
-        custId = genId('c');
-        upsert('customers', { id: custId, name: customerName, phone: customerPhone, email: customerEmail || '', source: 'booking-page', notes: '', loyaltyPoints: 0, noShows: 0, preferredBarberId: barberId || null, isFleet: false, companyName: '', vehicles: vehicle ? [vehicle] : [], createdAt: today() });
-      }
-    }
-
-    // Deposit status is decided server-side, never taken from the client. A shop
-    // only holds a deposit when it has enabled one AND a payment processor (Stripe
-    // or Square) is connected.
-    const stripeConnected = !!(s0.stripe?.connectAccountId && s0.stripe?.onboardingComplete);
-    const squareConnected = !!(s0.square?.accessToken && s0.square?.locationId) || require('../payments/square').enabled();
-    const needsDeposit = !!(s0.deposit?.enabled && (stripeConnected || squareConnected));
-
-    const apptId = genId('a');
-    const appt = { id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '', barberId: barberId || null, barberName: barberName || null, serviceId: serviceId || null, service: svcFromDb.name, price, cost, duration, date, time, status: needsDeposit ? 'pending-deposit' : 'confirmed', notes: notes || '', customFields: cf, vehicleSize: vehicleSize || null, addons: chosenAddons, inspoPhoto: inspo, source: 'booking-page', createdAt: new Date().toISOString() };
-    upsert('appointments', appt);
-
+    // All validation + the double-book guard + server-authoritative pricing live
+    // in booking.createAppointment (shared with the AI voice receptionist).
+    const result = createAppointment(db, shop, req.body);
+    if (!result.ok) return res.status(result.code || 400).json({ ok: false, error: result.error });
+    master.get('shops').find({ id: shop.id }).assign({ lastActivity: new Date().toISOString() }).write();
     // No confirmation SMS. The platform has no Twilio A2P and the booker isn't the
     // owner (so we can't open their Messages app), so the auto-text is dropped — the
-    // new booking shows up immediately in Appointments and on the Dashboard for the
-    // owner to act on. smsSent stays false for the booking page.
-    const smsSent = false;
-
-    master.get('shops').find({ id: shop.id }).assign({ lastActivity: new Date().toISOString() }).write();
-    res.json({ ok: true, appointmentId: apptId, smsSent });
+    // new booking shows up immediately in Appointments and on the Dashboard.
+    res.json({ ok: true, appointmentId: result.appointmentId, smsSent: false });
   } catch(e) {
     console.error('Booking error:', e.message);
     res.status(500).json({ ok: false, error: 'Booking failed' });

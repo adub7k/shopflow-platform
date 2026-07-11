@@ -175,7 +175,23 @@ const Leads = {
       const when = _msgTimeFull(c.startedAt);
       const vm  = c.voicemail ? mediaBtn(c.id,'voicemail',c.voicemail.durationSec) : '';
       const rec = c.recording ? mediaBtn(c.id,'recording',c.recording.durationSec) : '';
-      const tr = c.transcript ? `<div style="font-size:12px;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px 10px;margin:4px 0 8px;line-height:1.45;"><strong>🎙 Transcript:</strong> ${esc(c.transcript)}</div>` : '';
+      // An AI-answered call carries a structured conversation (voiceAI.turns) and
+      // an outcome — render it as a chat thread with a booked/captured badge.
+      const va = c.voiceAI;
+      let tr;
+      if (va && va.turns && va.turns.length) {
+        const oc = va.outcome;
+        const badge = oc ? `<div style="font-size:11px;font-weight:800;color:var(--green);margin-bottom:6px;">${oc.type==='booked'?`✅ Booked ${esc(oc.service||'appointment')} · ${esc(oc.date||'')} ${esc(oc.time||'')}`:oc.type==='captured'?'📝 Qualified lead captured':'Call ended'}</div>` : '';
+        const thread = va.turns.map(t=>`<div style="margin:3px 0;"><strong style="color:${t.role==='assistant'?'var(--green)':'var(--text)'};">${t.role==='assistant'?'🤖 AI':'📞 Caller'}:</strong> ${esc(t.text)}</div>`).join('');
+        tr = `<div style="font-size:12px;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px 10px;margin:4px 0 8px;line-height:1.5;">${badge}${thread}</div>`;
+      } else {
+        tr = c.transcript ? `<div style="font-size:12px;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px 10px;margin:4px 0 8px;line-height:1.45;"><strong>🎙 Transcript:</strong> ${esc(c.transcript)}</div>` : '';
+      }
+      // AI answered (fallback or always mode) — distinct from a human miss/answer.
+      if (c.aiHandled) {
+        const ocLabel = va&&va.outcome ? (va.outcome.type==='booked'?' · booked' : va.outcome.type==='captured'?' · lead captured' : '') : '';
+        return `<div class="lead-call answered"><span>🤖 AI receptionist answered${ocLabel}</span><span class="lead-call-time">${when}</span></div>${vm}${rec}${tr}`;
+      }
       if (c.missed) return `<div class="lead-call missed"><span>⚠ Missed call${c.autoSmsSent?' · auto-text sent':''}${c.voicemail?' · 🎙 voicemail':''}</span><span class="lead-call-time">${when}</span></div>${vm}${tr}`;
       const dur = c.durationSec ? ` · ${Math.floor(c.durationSec/60)}m ${c.durationSec%60}s` : '';
       return `<div class="lead-call answered"><span>✓ Answered${dur}${c.recording?' · 🎙 recorded':''}</span><span class="lead-call-time">${when}</span></div>${rec}${tr}`;

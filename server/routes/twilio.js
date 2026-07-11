@@ -15,9 +15,10 @@ const router = require('express').Router();
 const twilio = require('twilio');
 const {
   master, getShopDb, shopHelpers, shopFromNumber, buildSms,
-  twilioClient, genId, toE164,
+  twilioClient, genId, toE164, today,
 } = require('../db');
 const { runIntake } = require('../receptionist/intake');
+const voice = require('../receptionist/voice');
 const { notifyNewLead } = require('../email');
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
@@ -79,6 +80,14 @@ router.post('/api/twilio/voice/:shopId', verifyTwilio, (req, res) => {
     startedAt: new Date().toISOString(),
   });
   master.get('shops').find({ id: ctx.shopId }).assign({ lastActivity: new Date().toISOString() }).write();
+
+  // AI receptionist, "always answer" mode: the AI is the front line — hand the
+  // call straight to it instead of dialing the shop. (Fallback mode dials first
+  // and only routes to the AI on a miss; see the complete handler.)
+  if (voice.voiceModeActive(ctx.settings, { missed: false })) {
+    vr.redirect({ method: 'POST' }, `/api/twilio/voice/ai/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`);
+    return res.type('text/xml').send(vr.toString());
+  }
 
   // Ring the real phone. answerOnBridge → caller hears ringing, not silence.
   // The <Number url> whisper plays to the shop before the legs bridge.
@@ -172,6 +181,18 @@ router.post('/api/twilio/voice/complete/:shopId', verifyTwilio, (req, res) => {
   // if A2P + the toggle are on — but NOT when they abandoned the call before we
   // connected ('canceled'/'failed'), and at-most-once across Twilio's retries.
   const smsWorthy = ['no-answer', 'busy', 'completed'].includes(dialStatus);
+
+  // AI receptionist, "fallback" mode: rather than dump the still-present caller
+  // to a static voicemail, hand them to the conversational AI, which qualifies,
+  // quotes, and books/captures the lead — and notifies the owner itself with the
+  // outcome (see receptionist/voice.js). Only when the caller didn't abandon.
+  if (smsWorthy && voice.voiceModeActive(ctx.settings, { missed: true })) {
+    call.aiHandled = true;
+    ctx.h.upsert('calls', call);
+    if (lead) ctx.h.upsert('leads', lead);
+    vr.redirect({ method: 'POST' }, `/api/twilio/voice/ai/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`);
+    return res.type('text/xml').send(vr.toString());
+  }
 
   // Speed-to-lead: email the owner about the missed call (A2P isn't registered,
   // so the caller gets no auto-text — the owner calling back fast is the whole
@@ -280,6 +301,123 @@ router.post('/api/twilio/voice/transcription/:shopId', verifyTwilio, (req, res) 
   // runIntake stores the transcript and (if enabled) writes lead.ai.
   Promise.resolve(runIntake(ctx, callSid, { transcript }))
     .catch(e => console.error('Receptionist intake error:', e.message));
+});
+
+// ── AI Receptionist: live conversational voice (Phase 4b) ───────────────────────
+// Enrich the shop context with the bits the voice engine needs.
+function voiceCtx(ctx) {
+  return { ...ctx, industry: ctx.db.get('industry').value(), today: today() };
+}
+
+// Build a speech <Gather> that speaks `prompt`, then listens for the reply.
+function aiGather(vr, ctx, callSid, prompt) {
+  const cfg = voice.voiceConfig(ctx.settings);
+  const g = vr.gather({
+    input: 'speech',
+    speechTimeout: 'auto',
+    speechModel: 'phone_call',
+    language: 'en-US',
+    action: `/api/twilio/voice/ai/gather/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
+    method: 'POST',
+    actionOnEmptyResult: true,
+  });
+  g.say({ voice: cfg.voice }, prompt);
+}
+
+// Mirror the AI conversation onto call.transcript so the existing Leads
+// transcript UI shows it (mutates only; caller upserts).
+function syncVoiceTranscript(call) {
+  if (!call.voiceAI || !call.voiceAI.turns) return;
+  call.transcript = call.voiceAI.turns.map(t => `${t.role === 'assistant' ? 'AI' : 'Caller'}: ${t.text}`).join('\n');
+  call.transcriptStatus = 'done';
+}
+
+// Speak a closing line and hang up, finalizing the conversation state.
+function endAiCall(vr, ctx, call, res, sayText) {
+  call.voiceAI.endedAt = new Date().toISOString();
+  if (call.voiceAI.status === 'active') call.voiceAI.status = call.voiceAI.outcome ? call.voiceAI.outcome.type : 'ended';
+  syncVoiceTranscript(call);
+  ctx.h.upsert('calls', call);
+  if (sayText) vr.say({ voice: voice.voiceConfig(ctx.settings).voice }, sayText);
+  vr.hangup();
+  return res.type('text/xml').send(vr.toString());
+}
+
+// The classic voicemail path — the ultimate fallback whenever the AI can't run
+// (no key, unknown call). Identical to the <Record> block in the complete handler.
+function voicemailFallback(vr, ctx, callSid, res) {
+  vr.say('Sorry, we could not take your call right now. Please leave a message after the tone, and we will call you right back.');
+  if (ctx && callSid) {
+    vr.record({
+      action: `/api/twilio/voice/voicemail/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
+      method: 'POST', maxLength: 120, playBeep: true, timeout: 5, finishOnKey: '#',
+      transcribe: true, transcribeCallback: `/api/twilio/voice/transcription/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
+    });
+  }
+  vr.say('We did not get a message. Goodbye.');
+  vr.hangup();
+  return res.type('text/xml').send(vr.toString());
+}
+
+// AI answers: greet + open the first listen. Entered by 'always' mode (from the
+// inbound handler) and 'fallback' mode (redirect from complete/ on a miss).
+router.post('/api/twilio/voice/ai/:shopId', verifyTwilio, (req, res) => {
+  const vr = new VoiceResponse();
+  const ctx = shopCtx(req.params.shopId);
+  const callSid = req.query.callSid || req.body.CallSid;
+  if (!ctx || !callSid || !voice.voiceAvailable()) return voicemailFallback(vr, ctx, callSid, res);
+  const call = ctx.h.getById('calls', callSid);
+  if (!call) return voicemailFallback(vr, ctx, callSid, res);
+
+  const cfg = voice.voiceConfig(ctx.settings);
+  call.voiceAI = voice.initState(cfg.mode);
+  call.aiHandled = true;
+  const hello = voice.greeting(ctx);
+  call.voiceAI.turns.push({ role: 'assistant', text: hello, at: new Date().toISOString() });
+  ctx.h.upsert('calls', call);
+  aiGather(vr, ctx, callSid, hello);
+  res.type('text/xml').send(vr.toString());
+});
+
+// AI turn: receive the caller's speech, run one conversational turn, reply.
+router.post('/api/twilio/voice/ai/gather/:shopId', verifyTwilio, async (req, res) => {
+  const vr = new VoiceResponse();
+  const ctx = shopCtx(req.params.shopId);
+  const callSid = req.query.callSid;
+  const speech = req.body.SpeechResult || '';
+  if (!ctx || !callSid) { vr.hangup(); return res.type('text/xml').send(vr.toString()); }
+  const call = ctx.h.getById('calls', callSid);
+  if (!call || !call.voiceAI) return voicemailFallback(vr, ctx, callSid, res);
+
+  const cfg = voice.voiceConfig(ctx.settings);
+  const used = call.voiceAI.turns.filter(t => t.role === 'assistant').length;
+
+  // Silence: reprompt once, then wrap up gracefully.
+  if (!speech.trim()) {
+    call.voiceAI.silences = (call.voiceAI.silences || 0) + 1;
+    if (call.voiceAI.silences >= 2 || used >= cfg.maxTurns) {
+      return endAiCall(vr, ctx, call, res, 'Sorry, I could not hear you. The shop will call you right back. Goodbye!');
+    }
+    ctx.h.upsert('calls', call);
+    aiGather(vr, ctx, callSid, "Sorry, I didn't catch that — could you say that again?");
+    return res.type('text/xml').send(vr.toString());
+  }
+  call.voiceAI.silences = 0;
+
+  const finalTurn = used >= cfg.maxTurns;
+  let result;
+  try {
+    result = await voice.runTurn(voiceCtx(ctx), call, speech, { finalTurn });
+  } catch (e) {
+    console.error('AI gather error:', e.message);
+    result = { say: 'Sorry, something went wrong. The shop will call you right back. Goodbye.', end: true };
+  }
+
+  if (result.end || finalTurn) return endAiCall(vr, ctx, call, res, result.say);
+  syncVoiceTranscript(call);
+  ctx.h.upsert('calls', call);
+  aiGather(vr, ctx, callSid, result.say);
+  res.type('text/xml').send(vr.toString());
 });
 
 // ── Lead upsert (deduped by caller phone) ───────────────────────────────────────
