@@ -336,6 +336,15 @@ function syncVoiceTranscript(call) {
 function endAiCall(vr, ctx, call, res, sayText) {
   call.voiceAI.endedAt = new Date().toISOString();
   if (call.voiceAI.status === 'active') call.voiceAI.status = call.voiceAI.outcome ? call.voiceAI.outcome.type : 'ended';
+  // Never-miss safety net: if the AI ended WITHOUT booking or capturing a lead
+  // (silence, refusal, or a wrap-up), still ping the owner — in fallback mode we
+  // skipped the usual missed-call email to let the AI try, so this is the backstop
+  // that guarantees no call goes unseen. (book/capture already emailed the owner.)
+  if (!call.voiceAI.outcome && !call.voiceAI.ownerNotified) {
+    call.voiceAI.ownerNotified = true;
+    const lead = call.leadId ? ctx.h.getById('leads', call.leadId) : null;
+    notifyNewLead({ shop: ctx.shop, settings: ctx.settings, kind: 'missed-call', lead: lead || { phone: call.from, source: 'call' } });
+  }
   syncVoiceTranscript(call);
   ctx.h.upsert('calls', call);
   if (sayText) vr.say({ voice: voice.voiceConfig(ctx.settings).voice }, sayText);
