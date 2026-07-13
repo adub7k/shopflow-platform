@@ -71,8 +71,10 @@ async function analyzeTranscript(transcript, { shopName, industryLabel, callerPh
     const res = await client.messages.create({
       model: MODEL,
       max_tokens: 700,
-      // effort low + structured JSON: fast, cheap, shape-guaranteed extraction.
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: INTAKE_SCHEMA } },
+      // Structured JSON output — shape-guaranteed extraction. No effort param:
+      // it's Opus/Sonnet-tier only and 400s on claude-haiku-4-5 (a common
+      // RECEPTIONIST_MODEL for cost), while json_schema works on both tiers.
+      output_config: { format: { type: 'json_schema', schema: INTAKE_SCHEMA } },
       system,
       messages: [{ role: 'user', content: user }],
     });

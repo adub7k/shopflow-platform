@@ -352,10 +352,11 @@ async function runTurn(ctx, call, userSpeech, { finalTurn = false } = {}) {
     // Tool loop: let the model call tools, feed results back, until it produces a
     // final spoken reply. Bounded so a misbehaving model can't spin.
     for (let hop = 0; hop < 4; hop++) {
+      // NB: no output_config.effort — the default voice model (claude-haiku-4-5)
+      // rejects the effort parameter with a 400 (effort is Opus/Sonnet-tier only).
+      // Haiku is already fast and has no adaptive thinking, so plain create is right.
       const res = await client.messages.create({
         model: MODEL, max_tokens: 320, system, messages, tools,
-        // Low effort: voice needs speed, and the task is simple turn-taking.
-        output_config: { effort: 'low' },
       });
       const toolUses = (res.content || []).filter(b => b.type === 'tool_use');
       const textBlocks = (res.content || []).filter(b => b.type === 'text');
