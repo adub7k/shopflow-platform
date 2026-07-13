@@ -30,13 +30,33 @@ const VoiceResponse = twilio.twiml.VoiceResponse;
 // signature is REQUIRED. Set TWILIO_VALIDATE_SIGNATURE=false only as an escape
 // hatch when a proxy rewrites the public URL and you must use PUBLIC_URL to fix
 // it. With no token (local dev) there is nothing to validate against, so we skip.
+//
+// Hardened: a signature is accepted if it matches the request URL rebuilt from
+// PUBLIC_URL OR the real request host OR the X-Forwarded-* host. This can only
+// ever ACCEPT more than the old single-base check (never reject something it
+// used to accept), so a mismatched PUBLIC_URL can no longer 403 the whole line
+// (the 6/25 outage). Proven on staging + unit-tested in test/verify-twilio.test.js.
+function twilioSignedUrlCandidates(req) {
+  const seen = new Set();
+  const add = (base) => { if (base) { const u = base.replace(/\/+$/, '') + req.originalUrl; if (!seen.has(u)) seen.add(u); } };
+  if (process.env.PUBLIC_URL) add(process.env.PUBLIC_URL);
+  add(`${req.protocol}://${req.get('host')}`);
+  const xfProto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim();
+  const xfHost  = String(req.headers['x-forwarded-host']  || '').split(',')[0].trim();
+  if (xfProto && xfHost) add(`${xfProto}://${xfHost}`);
+  return [...seen];
+}
 function verifyTwilio(req, res, next) {
   if (!process.env.TWILIO_AUTH_TOKEN || process.env.TWILIO_VALIDATE_SIGNATURE === 'false') return next();
   const sig = req.headers['x-twilio-signature'];
-  const base = process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`;
-  const url = base + req.originalUrl;
-  if (sig && twilio.validateRequest(process.env.TWILIO_AUTH_TOKEN, sig, url, req.body || {})) return next();
-  console.warn('Twilio signature validation failed for', url);
+  const params = req.body || {};
+  const urls = twilioSignedUrlCandidates(req);
+  const ok = !!sig && urls.some(url => {
+    try { return twilio.validateRequest(process.env.TWILIO_AUTH_TOKEN, sig, url, params); }
+    catch (e) { return false; }
+  });
+  if (ok) return next();
+  console.warn('Twilio signature validation failed for', urls.join(' | '));
   return res.status(403).type('text/xml').send('<Response><Reject/></Response>');
 }
 
@@ -452,3 +472,6 @@ function upsertLeadFromCall(ctx, fromRaw, city, state) {
 }
 
 module.exports = router;
+// Exported for unit tests (test/verify-twilio.test.js).
+module.exports.verifyTwilio = verifyTwilio;
+module.exports.twilioSignedUrlCandidates = twilioSignedUrlCandidates;
