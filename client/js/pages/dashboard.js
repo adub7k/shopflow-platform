@@ -14,7 +14,7 @@ function renderOnboarding(settings, barbers) {
     },
     {
       key: 'addBarber',
-      icon: '✂️',
+      icon: '🚗',
       label: 'Add your '+V('staffPlural','barbers').toLowerCase(),
       desc: 'Replace the default '+V('staff','barber').toLowerCase()+' with your real team',
       done: barbers.some(b => b.name && b.name !== V('staff','Barber')+' 1'),
@@ -32,7 +32,7 @@ function renderOnboarding(settings, barbers) {
       key: 'review',
       icon: '⭐',
       label: 'Add your Google review link',
-      desc: 'Sent to clients 48 hours after each visit automatically',
+      desc: 'Use it to ask clients for a review after a visit',
       done: !!(settings.googleReviewLink),
       action: `App.nav('settings')`,
     },
@@ -191,8 +191,8 @@ const Dashboard = {
             '<div class="list-row" style="gap:10px;cursor:pointer;" onclick="' + rowClick + '">' +
               avatarEl(a.customerName, 38) +
               '<div class="list-main">' +
-                '<div class="list-name">' + a.customerName + '</div>' +
-                '<div class="list-sub">' + a.time + ' · ' + a.service + (a.barberName ? ' · ' + a.barberName : '') + '</div>' +
+                '<div class="list-name">' + esc(a.customerName) + '</div>' +
+                '<div class="list-sub">' + esc(a.time) + ' · ' + esc(a.service) + (a.barberName ? ' · ' + esc(a.barberName) : '') + '</div>' +
               '</div>' +
               '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">' +
                 (canComplete ? completeBtn : statusBadge(a.status)) +
@@ -235,8 +235,8 @@ const Dashboard = {
         rev.loyaltyAlerts.slice(0,3).forEach(c => {
           html.push(`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--green-md);cursor:pointer;" onclick="ClientProfile.open('${c.id}')">
             ${avatarEl(c.name,34)}
-            <div style="flex:1;font-size:14px;font-weight:600;color:var(--text);">${c.name}</div>
-            <button class="btn btn-sm btn-green" onclick="event.stopPropagation();Clients.redeemReward('${c.id}','${c.name}')">Redeem</button>
+            <div style="flex:1;font-size:14px;font-weight:600;color:var(--text);">${esc(c.name)}</div>
+            <button class="btn btn-sm btn-green" onclick="event.stopPropagation();Clients.redeemReward('${c.id}','${jsAttr(c.name)}')">Redeem</button>
           </div>`);
         });
         html.push('</div>');

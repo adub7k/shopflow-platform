@@ -8,7 +8,7 @@
 // platform env token (sandbox/MVP only — NOT correct for real per-shop payouts).
 const router = require('express').Router();
 const jwt = require('jsonwebtoken');
-const { master, getShopDb, shopHelpers, JWT_SECRET } = require('../db');
+const { master, getShopDb, shopHelpers, genId, JWT_SECRET } = require('../db');
 const { requireAuth, requireRole } = require('../middleware');
 const sq = require('../payments/square');
 
@@ -74,8 +74,11 @@ function squareConnected(s) { return !!((s.square && s.square.accessToken && s.s
 function fulfillSquareDeposit(shopId, apptId, amountCents) {
   const db = getShopDb(shopId); const h = shopHelpers(db);
   const appt = h.getById('appointments', apptId);
-  if (appt && appt.status === 'pending-deposit') {
-    appt.status = 'confirmed'; appt.depositPaid = true;
+  // Confirm a pending booking, OR just record the deposit on an already-confirmed
+  // appointment (e.g. a deposit link sent from the client profile). Idempotent.
+  if (appt && (appt.status === 'pending-deposit' || !appt.depositPaid)) {
+    if (appt.status === 'pending-deposit') appt.status = 'confirmed';
+    appt.depositPaid = true;
     if (amountCents != null) appt.depositAmount = amountCents / 100;
     h.upsert('appointments', appt);
     return true;
@@ -163,7 +166,9 @@ router.post('/api/public/:shopSlug/square-deposit-session', async (req, res) => 
       description: (s.shopName || '') + ' · ' + appt.date + ' at ' + appt.time,
       amountCents,
       redirectUrl: APP_URL + '/sq/booking-deposit-success?appt=' + appointmentId + '&shop=' + shop.id,
-      idempotencyKey: 'dep-' + appointmentId,
+      // Key by appointment + amount so re-sending the same amount is idempotent,
+      // but a different amount (owner-chosen from the profile) creates a fresh link.
+      idempotencyKey: 'dep-' + appointmentId + '-' + amountCents,
       accessToken: creds.accessToken, locationId: creds.locationId,
     });
     appt.squareOrderId = link.orderId; appt.squarePaymentLinkId = link.id; appt.depositAmount = amountCents / 100;
@@ -189,6 +194,95 @@ router.get('/sq/booking-deposit-success', async (req, res) => {
     }
   } catch (e) { /* best-effort; a webhook will be the authoritative path later */ }
   res.send('<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="font-family:-apple-system,sans-serif;text-align:center;padding:60px 20px;background:#f5f5f7;"><div style="font-size:64px;margin-bottom:20px;">🎉</div><div style="font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:8px;">You\'re booked!</div><div style="font-size:15px;color:#6e6e73;line-height:1.6;margin-bottom:24px;">Your deposit was received and your appointment is confirmed.</div><div style="font-size:13px;color:#aeaeb2;">You can close this tab.</div></body></html>');
+});
+
+// ── PUBLIC: customer deposit (NOT tied to an appointment) ──────────────────────
+// Builds a Square checkout link for an owner-chosen amount and records it on the
+// client (deposits[] + a notes-log entry). The paid status is logged on the
+// client when they return from the success redirect.
+router.post('/api/shop/square/customer-deposit', requireAuth, requireRole('full','technician'), async (req, res) => {
+  try {
+    // Owner/tech-only: derive the shop from the auth token, never from a URL slug,
+    // so nobody can spam deposit links / note entries onto another shop's clients.
+    const shop = master.get('shops').find({ id: req.shopId, active: true }).value();
+    if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
+    const db = getShopDb(shop.id); const s = db.get('settings').value() || {}; const h = shopHelpers(db);
+    const creds = await resolveSquare(db, s);
+    if (!creds) return res.status(400).json({ ok: false, error: 'Square not connected' });
+    const cust = h.getById('customers', req.body.customerId);
+    if (!cust) return res.status(404).json({ ok: false, error: 'Client not found' });
+    const amountCents = Math.round(Number(req.body.amount || s.deposit?.amount || 10) * 100);
+    if (amountCents < 100) return res.status(400).json({ ok: false, error: 'Deposit must be at least $1' });
+    const depId = genId('dep');
+    const link = await sq.createPaymentLink({
+      name: 'Deposit — ' + (s.shopName || 'Detail'),
+      description: (s.shopName || '') + ' deposit',
+      amountCents,
+      redirectUrl: APP_URL + '/sq/customer-deposit-success?cust=' + req.body.customerId + '&shop=' + shop.id + '&dep=' + depId,
+      idempotencyKey: 'cdep-' + depId,
+      accessToken: creds.accessToken, locationId: creds.locationId,
+    });
+    const amt = amountCents / 100, now = new Date().toISOString();
+    cust.deposits = cust.deposits || [];
+    cust.deposits.push({ id: depId, amount: amt, orderId: link.orderId, paymentLinkId: link.id, status: 'sent', sentAt: now });
+    cust.noteLog = cust.noteLog || [];
+    cust.noteLog.unshift({ id: genId('note'), scope: 'customer', text: '💳 Sent a $' + amt + ' deposit link', at: now, by: 'Deposit' });
+    h.upsert('customers', cust);
+    res.json({ ok: true, url: link.url, depositId: depId });
+  } catch (e) {
+    console.error('Square customer-deposit error:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// ── PUBLIC: customer-deposit success — verify paid, then note it on the client ──
+router.get('/sq/customer-deposit-success', async (req, res) => {
+  try {
+    const shopId = req.query.shop, custId = req.query.cust, depId = req.query.dep;
+    if (shopId && custId && depId) {
+      const db = getShopDb(shopId); const h = shopHelpers(db); const s = db.get('settings').value() || {};
+      const cust = h.getById('customers', custId);
+      const dep = cust && (cust.deposits || []).find(d => d.id === depId);
+      const creds = (await resolveSquare(db, s)) || {};
+      if (dep && dep.status !== 'paid' && dep.orderId && await sq.isOrderPaid(dep.orderId, { accessToken: creds.accessToken })) {
+        dep.status = 'paid'; dep.paidAt = new Date().toISOString();
+        cust.noteLog = cust.noteLog || [];
+        cust.noteLog.unshift({ id: genId('note'), scope: 'customer', text: '💳 $' + dep.amount + ' deposit paid', at: dep.paidAt, by: 'Deposit' });
+        h.upsert('customers', cust);
+      }
+    }
+  } catch (e) { /* best-effort; redirect-based until a webhook lands */ }
+  res.send('<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="font-family:-apple-system,sans-serif;text-align:center;padding:60px 20px;background:#f5f5f7;"><div style="font-size:64px;margin-bottom:20px;">✅</div><div style="font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:8px;">Deposit received!</div><div style="font-size:15px;color:#6e6e73;line-height:1.6;margin-bottom:24px;">Thanks — your deposit was received. We\'ll see you soon.</div><div style="font-size:13px;color:#aeaeb2;">You can close this tab.</div></body></html>');
+});
+
+// ── AUTHED: reconcile a client's pending deposits against Square ───────────────
+// The success redirect can be missed (closed tab / PUBLIC_URL mismatch), so the
+// owner app calls this when opening a profile: ask Square whether each "sent"
+// deposit is actually paid, and if so flip it + drop the "paid" note. No webhook
+// needed; this is the authoritative catch-up.
+router.post('/api/shop/square/reconcile-deposits', requireAuth, async (req, res) => {
+  try {
+    const db = getShopDb(req.shopId); const s = db.get('settings').value() || {}; const h = shopHelpers(db);
+    const cust = h.getById('customers', req.body.customerId);
+    if (!cust) return res.status(404).json({ ok: false, error: 'Client not found' });
+    const pending = (cust.deposits || []).filter(d => d.status === 'sent' && d.orderId);
+    if (!pending.length) return res.json({ ok: true, updated: 0, customer: cust });
+    const creds = (await resolveSquare(db, s)) || {};
+    let updated = 0;
+    for (const dep of pending) {
+      if (await sq.isOrderPaid(dep.orderId, { accessToken: creds.accessToken })) {
+        dep.status = 'paid'; dep.paidAt = new Date().toISOString();
+        cust.noteLog = cust.noteLog || [];
+        cust.noteLog.unshift({ id: genId('note'), scope: 'customer', text: '💳 $' + dep.amount + ' deposit paid', at: dep.paidAt, by: 'Deposit' });
+        updated++;
+      }
+    }
+    if (updated) h.upsert('customers', cust);
+    res.json({ ok: true, updated, customer: cust });
+  } catch (e) {
+    console.error('reconcile-deposits error:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
 });
 
 module.exports = router;

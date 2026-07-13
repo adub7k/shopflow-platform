@@ -244,15 +244,19 @@ function computeApptCost(db, appt) {
 
 // ── SMS helpers ───────────────────────────────────────────────────────────────
 const SMS_DEFAULTS = {
-  confirmation: "Hi {name}! Your appointment at {shop} is confirmed for {date} at {time}{barber}. See you then! ✂️",
-  reminder:     "Hi {name}! Reminder: your appointment at {shop} is tomorrow at {time}{barber}. See you then! ✂️",
-  rebook:       "Hey {name}! It's been a few weeks — we'd love to have you back at {shop}. Book your next cut anytime 💈",
+  confirmation: "Hi {name}! Your appointment at {shop} is confirmed for {date} at {time}{barber}. See you then!",
+  reminder:     "Hi {name}! Reminder: your appointment at {shop} is tomorrow at {time}{barber}. See you then!",
+  rebook:       "Hey {name}! It's been a few weeks — we'd love to have you back at {shop}. Book your next visit anytime.",
   missedCall:   "Hi, this is {shop} — sorry we missed your call! How can we help? Reply here or book online anytime.",
   review:       "Hi {name}, thanks for visiting {shop}! We'd love your feedback — leave us a quick review: {link}",
 };
 
 function buildSms(type, vars, settings) {
-  const tpl = (settings.smsTemplates && settings.smsTemplates[type]) || SMS_DEFAULTS[type];
+  // smsTemplates is now a [{id,label,body}] list (owner-managed); tolerate both the
+  // new list shape and the legacy keyed object, falling back to the built-in default.
+  const raw = settings.smsTemplates;
+  const fromList = Array.isArray(raw) ? ((raw.find(t => t && t.id === type) || {}).body || '') : '';
+  const tpl = fromList || (raw && !Array.isArray(raw) && raw[type]) || SMS_DEFAULTS[type];
   return tpl
     .replace(/{name}/g,   vars.name   || 'there')
     .replace(/{shop}/g,   vars.shop   || 'the shop')

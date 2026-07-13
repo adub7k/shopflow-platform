@@ -21,10 +21,82 @@ function _cpDaysAgo(date) { return Math.floor((Date.now() - new Date(date + 'T12
 // Open the device Messages app prefilled with recipient + draft (iPhone sms: deep
 // link — no Twilio/A2P needed; the owner sends from their own number). iOS uses
 // `&body`; we strip the number to digits/+.
-function _cpSms(phone, body) {
+function _cpSms(phone, body, customerId) {
   const tel = String(phone || '').replace(/[^\d+]/g, '');
   if (!tel) { toast('No phone number on file', 'warning'); return; }
   window.location.href = 'sms:' + tel + (body ? '&body=' + encodeURIComponent(body) : '');
+  if (customerId) logClientNote(customerId, 'Texted');
+}
+
+// Append an activity entry to a client's notes — the audit trail for who did what
+// (added / texted / called / …). Fire-and-forget; no-op without an id. The server
+// stamps "by" from the signed-in user.
+function logClientNote(customerId, text) {
+  if (!customerId || !text) return;
+  try { db.customers.log(customerId, text).catch(() => {}); } catch (e) { /* non-fatal */ }
+}
+
+// Open the phone dialer and log the call against the client.
+function _cpCall(phone, customerId) {
+  const tel = String(phone || '').replace(/[^\d+]/g, '');
+  if (!tel) { toast('No phone number on file', 'warning'); return; }
+  if (customerId) logClientNote(customerId, 'Called');
+  window.location.href = 'tel:' + tel;
+}
+
+// ── Shared SMS templates ──────────────────────────────────────────────────────
+// The owner's editable message presets (Settings → Message Templates). Stored as a
+// list of { id, label, body }; merge fields {first}/{name}/{shop}/{date}/{time}/
+// {service}/{link} are filled per-recipient at send time. Used by the Messages
+// composer, the Tasks worklist, and the manual review/reminder prompts. No Twilio:
+// every send is the owner tapping the iPhone sms: deep link (_cpSms).
+const SMS_TEMPLATE_DEFAULTS = [
+  { id: 'confirmation', label: 'Appointment confirmation', body: 'Hi {first}! Your appointment at {shop} is confirmed for {date} at {time}. See you then!' },
+  { id: 'reminder',     label: 'Appointment reminder',     body: 'Hi {first}! Reminder: your appointment at {shop} is on {date} at {time}. See you then!' },
+  { id: 'rebook',       label: 'Time to rebook',           body: "Hi {first}! It's been a while — we'd love to get your vehicle looking fresh again at {shop}. Want to get on the schedule?" },
+  { id: 'review',       label: 'Review request',           body: 'Hi {first}, thanks for visiting {shop}! We\'d love a quick review: {link}' },
+];
+// Human labels for legacy keyed-object templates, so a one-time migration keeps the
+// owner's wording.
+const _SMS_LEGACY_LABELS = { confirmation: 'Appointment confirmation', reminder: 'Appointment reminder', rebook: 'Time to rebook', review: 'Review request', missedCall: 'Missed call' };
+
+// Return the shop's templates as a normalized [{id,label,body}] list. Accepts the
+// new list shape as-is, migrates the legacy keyed object, and falls back to the
+// defaults when nothing is saved.
+function _smsTemplates(explicit) {
+  const raw = (arguments.length ? explicit : (typeof Shop !== 'undefined' && Shop.settings && Shop.settings.smsTemplates)) || null;
+  if (Array.isArray(raw)) {
+    return raw.filter(t => t && (t.label || t.body))
+      .map(t => ({ id: t.id || genId('tpl'), label: t.label || 'Template', body: String(t.body || '') }));
+  }
+  // Legacy keyed object → seed defaults, overlay any saved bodies, append extras.
+  const legacy = (raw && typeof raw === 'object') ? raw : {};
+  const list = SMS_TEMPLATE_DEFAULTS.map(d => ({ ...d, body: (typeof legacy[d.id] === 'string' && legacy[d.id]) ? legacy[d.id] : d.body }));
+  Object.keys(legacy).forEach(k => {
+    if (!list.some(t => t.id === k) && typeof legacy[k] === 'string' && legacy[k]) {
+      list.push({ id: k, label: _SMS_LEGACY_LABELS[k] || k, body: legacy[k] });
+    }
+  });
+  return list;
+}
+// Look up one template body by id, falling back to the matching default.
+function _smsTemplateBody(id) {
+  const found = _smsTemplates().find(t => t.id === id);
+  if (found) return found.body;
+  const def = SMS_TEMPLATE_DEFAULTS.find(t => t.id === id);
+  return def ? def.body : '';
+}
+// Pure merge-field substitution (no formatting — pass already-formatted date/time).
+function _smsFill(body, vars) {
+  const v = vars || {};
+  return String(body || '')
+    .replace(/\{first\}/g,   v.first   || 'there')
+    .replace(/\{name\}/g,    v.name    || 'there')
+    .replace(/\{shop\}/g,    v.shop    || 'us')
+    .replace(/\{date\}/g,    v.date    || '')
+    .replace(/\{time\}/g,    v.time    || '')
+    .replace(/\{service\}/g, v.service || '')
+    .replace(/\{link\}/g,    v.link    || '');
 }
 
 const ClientProfile = {
@@ -51,6 +123,14 @@ const ClientProfile = {
       let changed = false;
       (c.vehicles || []).forEach(v => { if (!v.id) { v.id = genId('veh'); changed = true; } });
       if (changed) { try { await db.customers.save(c); } catch (e) { /* non-fatal */ } }
+      // Catch up any paid-but-unmarked deposits with Square (the success redirect
+      // can be missed) so they show in the notes without waiting on a webhook.
+      if ((c.deposits || []).some(d => d.status === 'sent' && d.orderId) && db.square && db.square.reconcileDeposits) {
+        try {
+          const rec = await db.square.reconcileDeposits(c.id);
+          if (rec && rec.ok && rec.updated && rec.customer) { c.noteLog = rec.customer.noteLog; c.deposits = rec.customer.deposits; }
+        } catch (e) { /* non-fatal */ }
+      }
       this._data = data; this._messages = messages; this._services = services;
       // Make this customer editable from any entry point (Dashboard/Leads open the
       // profile without rendering the Clients list, so Clients._data may be empty).
@@ -236,9 +316,116 @@ const ClientProfile = {
     } catch (e) { toast(e.message || 'Could not record invoice', 'error'); enableBtn(btn); }
   },
 
-  // ── Texting — opens Messages prefilled (no A2P/Twilio needed) ───────────────
-  textPrompt(custId) { _cpSms(this._data.customer.phone, ''); },
-  sendRec(custId, i) { const rec = (this._recs || [])[i]; _cpSms(this._data.customer.phone, rec ? rec.sms : ''); },
+  // ── Texting — pick a template, then open Messages prefilled (no A2P/Twilio) ──
+  // Both entry points open a picker first instead of jumping straight to Messages:
+  //  • textPrompt → generic "Text {name}" (owner's saved templates + blank custom)
+  //  • sendRec    → seeds the picker with the recommendation's tailored follow-up
+  textPrompt(custId) { this._textModal(); },
+  sendRec(custId, i) { const rec = (this._recs || [])[i]; this._textModal(rec ? rec.sms : ''); },
+
+  // Merge-field values for this client (next confirmed appt fills {date}/{time}/{service}).
+  _textVars() {
+    const c = (this._data && this._data.customer) || {};
+    const next = (this._data && this._data.appointments || [])
+      .filter(a => a.status === 'confirmed' && a.date >= today())
+      .sort((a, b) => a.date.localeCompare(b.date))[0];
+    return {
+      first: (c.name || 'there').split(' ')[0], name: c.name || 'there',
+      shop: (Shop.settings && Shop.settings.shopName) || 'us',
+      link: (Shop.settings && Shop.settings.googleReviewLink) || '',
+      date: next ? fmtDateFull(next.date) : '', time: (next && next.time) || '', service: (next && next.service) || '',
+    };
+  },
+
+  _textModal(suggested) {
+    const c = (this._data && this._data.customer) || {};
+    if (!c.phone) { toast('No phone number on file', 'warning'); return; }
+    this._textPhone = c.phone;
+    // First option = the tailored suggestion (when there is one), then the owner's
+    // saved templates, then a blank custom message.
+    const head = suggested ? [{ label: 'Suggested message', body: suggested }] : [];
+    this._textOpts = head.concat(_smsTemplates()).concat([{ label: 'Custom (blank)', body: '' }]);
+    Modal.show(
+      '<div class="modal-title">Text ' + esc(c.name || 'client') + '</div>'
+      + '<div class="form-group"><label class="form-label">Template</label>'
+      +   '<select class="form-input" id="cp-text-tpl" onchange="ClientProfile._fillText()">'
+      +     this._textOpts.map((o, i) => `<option value="${i}">${esc(o.label)}</option>`).join('')
+      +   '</select></div>'
+      + '<div class="form-group"><label class="form-label">Message <span style="font-weight:400;color:var(--muted);">(edit as needed)</span></label>'
+      +   '<textarea class="form-input" id="cp-text-body" rows="4"></textarea></div>'
+      + '<button class="btn btn-green btn-full" onclick="ClientProfile._sendText()">📲 Open in Messages</button>'
+      + '<div class="modal-actions"><button class="btn btn-full" onclick="Modal.close()">Cancel</button></div>'
+    );
+    setTimeout(() => this._fillText(), 0);
+  },
+
+  _fillText() {
+    const i = +(document.getElementById('cp-text-tpl') || {}).value || 0;
+    const o = this._textOpts[i] || { body: '' };
+    const ta = document.getElementById('cp-text-body');
+    if (ta) ta.value = _smsFill(o.body, this._textVars());   // a pre-filled suggestion stays as-is
+  },
+
+  _sendText() {
+    const body = (document.getElementById('cp-text-body') || {}).value || '';
+    Modal.close();
+    _cpSms(this._textPhone, body, this._data && this._data.customer && this._data.customer.id);   // opens Messages + logs to notes
+  },
+
+  // ── Request a deposit ────────────────────────────────────────────────────────
+  // Opens a dialog to set the deposit amount, builds a checkout link (the shop's
+  // connected Square/Stripe) for the client's next upcoming appointment, then opens
+  // Messages prefilled with the link. Pay → confirm reuses the booking-page path
+  // (success redirect records depositPaid). Works whenever a processor is connected
+  // — independent of the "require deposit to book" toggle.
+  _depositCtx: null,
+
+  async requestDeposit(custId) {
+    const c = this._data && this._data.customer;
+    if (!c || !c.phone) { toast('No phone number on file', 'warning'); return; }
+    const slug = (typeof Auth !== 'undefined' && Auth.getShopSlug && Auth.getShopSlug()) || '';
+    let info;
+    try { info = await fetch('/api/public/' + slug + '/info').then(r => r.json()); }
+    catch (e) { toast('Could not load payment settings', 'error'); return; }
+    if (!info || info.depositProvider !== 'square') {
+      toast('Connect Square in Settings to send deposit links', 'warning'); return;
+    }
+    this._depositCtx = { slug, custId, phone: c.phone, name: c.name };
+    const defAmt = (info.deposit && info.deposit.amount) || 50;
+    const quick = [25, 50, 75, 100, 150];
+    Modal.show(
+      '<div class="modal-title">Request deposit</div>'
+      + `<div style="font-size:13px;color:var(--muted);margin:-4px 0 14px;">Text ${esc(c.name)} a link to pay a deposit. It's logged in their notes (and marked paid when they pay).</div>`
+      + '<div class="form-group"><label class="form-label">Deposit amount</label>'
+      +   '<div style="position:relative;"><span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted);">$</span>'
+      +   `<input class="form-input" id="cp-dep-amt" type="number" min="1" value="${defAmt}" style="padding-left:24px;" /></div></div>`
+      + '<div class="form-group"><div style="display:flex;gap:6px;flex-wrap:wrap;">'
+      +   quick.map(a => `<button type="button" class="btn btn-sm" onclick="document.getElementById('cp-dep-amt').value=${a}">$${a}</button>`).join('')
+      +   '</div></div>'
+      + '<button class="btn btn-green btn-full" onclick="ClientProfile._sendDeposit()">📲 Text deposit link</button>'
+      + '<div class="modal-actions"><button class="btn btn-full" onclick="Modal.close()">Cancel</button></div>'
+    );
+  },
+
+  async _sendDeposit() {
+    const ctx = this._depositCtx; if (!ctx) return;
+    const amount = Math.max(1, Math.round(Number(document.getElementById('cp-dep-amt')?.value) || 0));
+    if (!amount) { toast('Enter a deposit amount', 'warning'); return; }
+    toast('Building deposit link…');
+    try {
+      const r = await apiFetch('/square/customer-deposit', {
+        method: 'POST', body: { customerId: ctx.custId, amount },
+      }).catch(e => ({ ok: false, error: e && e.message }));
+      if (!r || !r.ok || !r.url) { toast(r && r.error ? r.error : 'Could not create the deposit link', 'error'); return; }
+      Modal.close();
+      toast('Deposit link ready — logged to notes ✓');
+      const first = (ctx.name || 'there').split(' ')[0];
+      const shop = (Shop.settings && Shop.settings.shopName) || 'us';
+      const body = `Hi ${first}! Here's the link to pay your $${amount} deposit at ${shop}: ${r.url}`;
+      this.open(ctx.custId);     // refresh so the "Sent deposit link" note shows now
+      _cpSms(ctx.phone, body);   // opens Messages prefilled with the deposit link
+    } catch (e) { toast('Could not create the deposit link', 'error'); }
+  },
 };
 
 // ── Retention recommendations (heuristic, from service history) ────────────────
@@ -311,7 +498,7 @@ function _buildProfileHtml(data, services, messages) {
     <div style="flex:1;min-width:0;">
       <div style="font-size:20px;font-weight:800;letter-spacing:-.02em;">${esc(c.name)}${c.isFleet ? ' <span style="font-size:11px;font-weight:700;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:2px 7px;vertical-align:middle;">🚚 Fleet</span>' : ''}</div>
       <div style="font-size:12px;color:var(--muted);margin-top:2px;">
-        ${c.phone ? `<a href="tel:${c.phone}" style="color:var(--muted);text-decoration:none;">${esc(c.phone)}</a>` : 'No phone'}
+        ${c.phone ? `<a href="javascript:void 0" onclick="_cpCall('${jsAttr(c.phone)}','${c.id}')" style="color:var(--muted);text-decoration:none;">${esc(c.phone)}</a>` : 'No phone'}
         ${c.email ? ' · ' + esc(c.email) : ''}
         · Customer since ${fmtDateShort(c.createdAt) || '—'}
         · Last visit ${lastService ? fmtDateShort(lastService.date) : '—'}
@@ -333,8 +520,9 @@ function _buildProfileHtml(data, services, messages) {
     h += `<div class="cp-actions">
       ${qa(`ClientProfile.schedule('${c.id}')`, '📅', 'Schedule')}
       ${qa(`ClientProfile.invoicePrompt('${c.id}')`, '🧾', 'Invoice')}
+      ${qa(`ClientProfile.requestDeposit('${c.id}')`, '💳', 'Deposit')}
       ${qa(`ClientProfile.textPrompt('${c.id}')`, '💬', 'Send Text')}
-      ${c.phone ? qa('', '📞', 'Call', 'tel:' + c.phone) : ''}
+      ${c.phone ? qa(`_cpCall('${jsAttr(c.phone)}','${c.id}')`, '📞', 'Call') : ''}
       ${qa(`ClientProfile.vehiclePrompt('${c.id}')`, '🚗', 'Add Vehicle')}
     </div>`;
   }
@@ -348,7 +536,7 @@ function _buildProfileHtml(data, services, messages) {
     h += `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">`;
     tagList.forEach(t => {
       const on = active.has(t);
-      h += `<span class="cp-tag ${on ? '' : 'off'}" ${write ? `onclick="ClientProfile.toggleTag('${c.id}','${esc(t)}')"` : 'style="cursor:default;"'}>${on ? '✓ ' : ''}${esc(t)}</span>`;
+      h += `<span class="cp-tag ${on ? '' : 'off'}" ${write ? `onclick="ClientProfile.toggleTag('${c.id}','${jsAttr(t)}')"` : 'style="cursor:default;"'}>${on ? '✓ ' : ''}${esc(t)}</span>`;
     });
     h += `</div>`;
   }
@@ -364,7 +552,7 @@ function _buildProfileHtml(data, services, messages) {
     h += `<div style="border:1px dashed var(--border);border-radius:12px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;"><div style="font-size:13px;color:var(--muted);">Not a member</div><button onclick="ClientProfile.enrollPrompt('${c.id}')" style="background:#7c3aed;color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">⭐ Enroll</button></div>`;
   }
   if ((c.noShows || 0) > 0) h += `<div style="background:#fff5f5;border:1px solid #fecaca;border-radius:8px;padding:8px 12px;font-size:12px;color:#dc2626;margin-bottom:14px;">⚠️ ${c.noShows} no-show${c.noShows > 1 ? 's' : ''} on record</div>`;
-  if (data.rewardReady) h += `<div style="background:var(--green-lt);border:1px solid #b3dfbf;border-radius:8px;padding:8px 12px;font-size:12px;color:var(--green);margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">🎉 Loyalty reward ready!${write ? ` <button onclick="Clients.redeemReward('${c.id}','${c.name}')" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">Redeem</button>` : ''}</div>`;
+  if (data.rewardReady) h += `<div style="background:var(--green-lt);border:1px solid #b3dfbf;border-radius:8px;padding:8px 12px;font-size:12px;color:var(--green);margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;">🎉 Loyalty reward ready!${write ? ` <button onclick="Clients.redeemReward('${c.id}','${jsAttr(c.name)}')" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">Redeem</button>` : ''}</div>`;
 
   // ══ TWO-COLUMN DASHBOARD ══
   h += `<div class="cp-grid">`;
@@ -514,7 +702,7 @@ function _buildProfileHtml(data, services, messages) {
   h += `<div class="cp-card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;"><div class="cp-sec" style="margin:0;">Notes</div>${write ? `<button onclick="ClientProfile.notePrompt('${c.id}')" style="background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:12px;font-weight:700;color:var(--text);cursor:pointer;">+ Note</button>` : ''}</div>`;
   const noteLog = (c.noteLog || []).slice();
-  const scopeMeta = { customer: { ic: '👤', label: 'Customer' }, internal: { ic: '🔒', label: 'Internal' }, vehicle: { ic: '🚗', label: 'Vehicle' } };
+  const scopeMeta = { customer: { ic: '👤', label: 'Customer' }, internal: { ic: '🔒', label: 'Internal' }, vehicle: { ic: '🚗', label: 'Vehicle' }, activity: { ic: '⚡', label: 'Activity' } };
   if (c.notes && !noteLog.length) h += `<div style="font-size:13px;color:var(--muted);background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;">${esc(c.notes)}</div>`;
   if (!noteLog.length && !c.notes) {
     h += `<div style="font-size:13px;color:var(--faint);">No notes yet.</div>`;

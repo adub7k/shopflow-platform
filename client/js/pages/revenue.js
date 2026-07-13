@@ -109,6 +109,16 @@ const Revenue = {
         </div>`);
       }
 
+      // ── Deposits collected ──────────────────────────────────────────────────
+      // Shown separately on purpose: deposits are prepayments applied at checkout,
+      // so they're tracked here without inflating the service-based Revenue/Profit.
+      if (data.monthDeposits || data.totalDeposits) {
+        html.push(`<div class="section-header">Deposits Collected</div><div class="card" style="display:flex;justify-content:space-between;align-items:center;">
+          <div><div style="font-size:13px;font-weight:700;">Prepaid by clients</div><div style="font-size:12px;color:var(--muted);">Tracked separately — applied to the balance at checkout.</div></div>
+          <div style="text-align:right;"><div style="font-weight:800;color:var(--green);">${fmtMoney(data.monthDeposits)}</div><div style="font-size:11px;color:var(--muted);">${fmtMoney(data.totalDeposits)} all time</div></div>
+        </div>`);
+      }
+
       // ── By staff ────────────────────────────────────────────────────────────
       if (data.byBarber?.length > 1) {
         html.push('<div class="section-header">Revenue by '+esc(V('staffPlural','Barber'))+'</div><div class="card">');
@@ -131,7 +141,7 @@ const Revenue = {
     let exp = null;
     if (id) { try { exp = (await db.expenses.all()).find(e => e.id === id) || null; } catch(e){} }
     const todayStr = new Date().toISOString().slice(0,10);
-    const opts = this._categories.map(c => `<option value="${c}" ${exp&&exp.category===c?'selected':''}>${c}</option>`).join('');
+    const opts = this._categories.map(c => `<option value="${esc(c)}" ${exp&&exp.category===c?'selected':''}>${esc(c)}</option>`).join('');
     Modal.show(`
       <div class="modal-title">${id?'Edit':'Add'} expense</div>
       <div class="form-group"><label class="form-label">Amount</label>

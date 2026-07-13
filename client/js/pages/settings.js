@@ -7,45 +7,119 @@ const Settings = {
     try{
       const [s,barbers,services,staff]=await Promise.all([db.settings.get(),db.barbers.all(),db.services.all(),db.staff.all().catch(()=>[])]);
       this._barbers=barbers; this._services=services; this._staff=staff; this._addons=s.addons||[]; this._plans=s.membershipPlans||[];
+      this._tpls=_smsTemplates(s.smsTemplates);   // owner-managed message templates (normalized list)
       const html=[];
 
       // Shop info
+      html.push(`<div style="margin:4px 0 10px;font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--muted);">SHOP &amp; ${this._leadMode()?'LEAD FORM':'BOOKING'}</div>`);
       html.push('<div class="section-header">Shop Info</div><div class="card">');
-      html.push(`<div class="form-group"><label class="form-label">Shop Name</label><input class="form-input" id="s-name" value="${s.shopName||''}" /></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Tagline</label><input class="form-input" id="s-tag" value="${s.tagline||''}" /></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="s-phone" type="tel" value="${s.phone||''}" /></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Address</label><input class="form-input" id="s-addr" value="${s.address||''}" /></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Email</label><input class="form-input" id="s-email" type="email" value="${s.email||''}" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Shop Name</label><input class="form-input" id="s-name" value="${esc(s.shopName||'')}" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Tagline</label><input class="form-input" id="s-tag" value="${esc(s.tagline||'')}" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="s-phone" type="tel" value="${esc(s.phone||'')}" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Address</label><input class="form-input" id="s-addr" value="${esc(s.address||'')}" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Email</label><input class="form-input" id="s-email" type="email" value="${esc(s.email||'')}" /></div>`);
+      // Monthly revenue goal drives the dashboard pace line — a redesign (/app2)
+      // feature, so only surface the field there (the v1 dashboard has no chart).
+      if (window.SF_V2) html.push(`<div class="form-group"><label class="form-label">Monthly revenue goal ($)</label><input class="form-input" id="s-revgoal" type="number" min="0" step="100" inputmode="numeric" value="${s.revenueGoal||''}" placeholder="e.g. 15000" /><div style="font-size:11px;color:var(--muted);margin-top:5px;">Shown as a pace line on your dashboard revenue chart. Leave blank to hide it.</div></div>`);
       html.push('</div>');
 
-      // Booking page settings
-      html.push('<div class="section-header">Client Booking Page</div><div class="card">');
+      // Public page settings — the calendar booking page for scheduling verticals,
+      // or the opt-in lead form for quote-first verticals (detail shops). Lead mode
+      // hides the booking-only controls (welcome message, staff picker, inspo photo)
+      // and instead lets the owner pick which services appear on the form.
+      const leadMode = this._leadMode();
+      html.push(`<div class="section-header">${leadMode?'Lead Form':'Client Booking Page'}</div><div class="card">`);
       const shopSlug = Auth.getShopSlug();
       const bookUrl = location.origin+'/book/'+(shopSlug||'');
       html.push(`<div style="background:var(--green-lt);border:1px solid var(--green-md);border-radius:8px;padding:10px 12px;font-size:12px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
-        <span>Your booking link: <strong><a href="${bookUrl}" target="_blank" style="color:var(--green);">${bookUrl}</a></strong></span>
+        <span>Your ${leadMode?'lead form':'booking'} link: <strong><a href="${bookUrl}" target="_blank" style="color:var(--green);">${bookUrl}</a></strong></span>
         <button onclick="navigator.clipboard.writeText('${bookUrl}');toast('Link copied ✓')" style="background:var(--green);color:#fff;border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;">Copy Link</button>
       </div>`);
-      html.push(`<div class="form-group"><label class="form-label">Booking Welcome Message</label><textarea class="form-input" id="s-bmsg" rows="2">${s.bookingMessage||'Book your appointment below!'}</textarea></div>`);
-      html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-benabled" ${s.bookingEnabled!==false?'checked':''} style="margin-right:6px;" /> Booking page enabled</label></div>`);
-      html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-staffpicker" ${s.staffPicker!==false?'checked':''} style="margin-right:6px;" /> Let customers choose their ${esc(V('staff','barber').toLowerCase())} when booking</label></div>`);
-      // Inspiration photo at booking
-      const inspoMode = s.inspoPhoto || 'off';
-      html.push(`<div class="form-group"><label class="form-label">Inspiration Photo</label>
-        <select class="form-input" id="s-inspo">
-          <option value="off"${inspoMode==='off'?' selected':''}>Off — don't ask for a photo</option>
-          <option value="optional"${inspoMode==='optional'?' selected':''}>Optional — clients can attach one</option>
-          <option value="required"${inspoMode==='required'?' selected':''}>Required — must attach to book</option>
-        </select>
-        <div style="font-size:11px;color:var(--muted);margin-top:6px;">Let clients send a reference photo when they book, so you know the look before they arrive.</div>
+      if (leadMode) {
+        html.push(`<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Visitors tell you their name, phone, vehicle, and what they're interested in — then you text them a quote. In ads, add <strong>?utm_source=facebook</strong> (or google, etc.) to the link to track where leads come from.</div>`);
+        html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-benabled" ${s.bookingEnabled!==false?'checked':''} style="margin-right:6px;" /> Lead form enabled</label></div>`);
+        html.push(`<div class="form-group"><label class="form-label">Page style</label>
+          <select class="form-input" id="s-leadtpl">
+            <option value="classic"${(s.leadPageTemplate||'classic')!=='premium'?' selected':''}>Classic — light, compact quote form</option>
+            <option value="premium"${s.leadPageTemplate==='premium'?' selected':''}>Premium — dark long-form landing page (benefits, FAQ, comparison)</option>
+          </select>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;">Premium is built for paid ad traffic — it sells the service before asking for contact info. Same link, same leads either way.</div></div>`);
+        html.push(`<div class="form-group"><label class="form-label">Public phone <span style="font-weight:400;color:var(--faint);">(optional)</span></label><input class="form-input" id="s-publicphone" type="tel" value="${esc(s.publicPhone||'')}" placeholder="(505) 555-0100" /><div style="font-size:11px;color:var(--muted);margin-top:6px;">Shown as a click-to-call option after someone requests an estimate (Premium page). Use your tracking number if you have one — leave blank to hide.</div></div>`);
+        html.push(`<div class="form-group"><label class="form-label">Meta Pixel ID <span style="font-weight:400;color:var(--faint);">(optional)</span></label><input class="form-input" id="s-metapixel" value="${esc(s.metaPixelId||'')}" placeholder="e.g. 1234567890123456" inputmode="numeric" /><div style="font-size:11px;color:var(--muted);margin-top:6px;">From Meta Events Manager. Lets Facebook/Instagram ads optimize for people who actually submit the form — fires PageView on load and a Lead event on submit.</div></div>`);
+        // "Services considering" options: free-standing labels, deliberately NOT
+        // wired to the real service catalog — they exist to put the visitor in a
+        // buying mindframe and tell the owner what to quote. Edit freely here;
+        // nothing else (bookings, pricing, revenue) is affected.
+        this._leadOpts = (Array.isArray(s.leadFormOptions) && s.leadFormOptions.length)
+          ? [...s.leadFormOptions]
+          : services.map(sv=>sv.name);
+        html.push(`<div class="form-group" style="margin-bottom:0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;"><label class="form-label" style="margin:0;">Options on the form</label><button class="btn btn-sm btn-green" onclick="Settings.addLeadOpt()">+ Add</button></div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">What visitors can say they're interested in. Just labels — no prices, not tied to your service menu. Remember to hit Save below.</div>
+          <div id="lf-opts">${this._leadOpts.map((o,i)=>this._leadOptRow(o,i)).join('')}</div>
+        </div>`);
+      } else {
+        html.push(`<div class="form-group"><label class="form-label">Booking Welcome Message</label><textarea class="form-input" id="s-bmsg" rows="2">${esc(s.bookingMessage||'Book your appointment below!')}</textarea></div>`);
+        html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-benabled" ${s.bookingEnabled!==false?'checked':''} style="margin-right:6px;" /> Booking page enabled</label></div>`);
+        html.push(`<div class="form-group"><label class="form-label"><input type="checkbox" id="s-staffpicker" ${s.staffPicker!==false?'checked':''} style="margin-right:6px;" /> Let customers choose their ${esc(V('staff','barber').toLowerCase())} when booking</label></div>`);
+        // Inspiration photo at booking (scheduling verticals only)
+        const inspoMode = s.inspoPhoto || 'off';
+        html.push(`<div class="form-group"><label class="form-label">Inspiration Photo</label>
+          <select class="form-input" id="s-inspo">
+            <option value="off"${inspoMode==='off'?' selected':''}>Off — don't ask for a photo</option>
+            <option value="optional"${inspoMode==='optional'?' selected':''}>Optional — clients can attach one</option>
+            <option value="required"${inspoMode==='required'?' selected':''}>Required — must attach to book</option>
+          </select>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;">Let clients send a reference photo when they book, so you know the look before they arrive.</div>
+        </div>`);
+      }
+      html.push('</div>');
+
+      // AI Receptionist — auto-analyze voicemail transcripts into lead intake.
+      // The per-shop opt-in read by server/receptionist/intake.js; analysis also
+      // needs ANTHROPIC_API_KEY set in the server environment.
+      html.push('<div class="section-header">AI Receptionist</div><div class="card">');
+      html.push(`<div class="form-group" style="margin-bottom:0;"><label class="form-label"><input type="checkbox" id="s-aireceptionist" ${s.aiReceptionist&&s.aiReceptionist.enabled?'checked':''} style="margin-right:6px;" /> Auto-analyze voicemails with AI</label>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;">When a missed call leaves a voicemail, AI reads the transcript and rates the lead (hot / warm / cold), summarizes what they want, and suggests a reply — shown on the lead and used by the Response Center to prioritize your queue. You can always run it manually from any lead with "Analyze with AI".</div>
       </div>`);
+      html.push('</div>');
+
+      // AI Phone Receptionist — live conversational voice (Phase 4b). The AI
+      // actually answers the call, quotes from the menu, and books or captures a
+      // qualified lead. Config read by server/receptionist/voice.js.
+      const va = s.voiceAI || {};
+      const vaMode = ['off','fallback','always'].includes(va.mode) ? va.mode : 'off';
+      const voices = [['Polly.Joanna-Neural','Joanna — warm female'],['Polly.Danielle-Neural','Danielle — female'],['Polly.Matthew-Neural','Matthew — warm male'],['Polly.Stephen-Neural','Stephen — male']];
+      html.push('<div class="section-header">AI Phone Receptionist</div><div class="card">');
+      html.push(`
+        <div class="form-group">
+          <label class="form-label">When should the AI answer the phone?</label>
+          <select id="s-voiceai-mode" class="form-input">
+            <option value="off" ${vaMode==='off'?'selected':''}>Off — never answer</option>
+            <option value="fallback" ${vaMode==='fallback'?'selected':''}>Missed calls only (recommended)</option>
+            <option value="always" ${vaMode==='always'?'selected':''}>Every call</option>
+          </select>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;">The AI has a real conversation with the caller, quotes from your service menu, and captures a qualified lead (or books the appointment, for calendar shops) — then texts/emails you the outcome. <strong>Missed calls only</strong> rings your phone first and lets the AI step in just when you can't pick up.</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Greeting <span style="color:var(--faint);font-weight:400;">(optional)</span></label>
+          <input id="s-voiceai-greeting" class="form-input" maxlength="240" placeholder="Thanks for calling ${esc(s.shopName||'us')}! How can I help you today?" value="${esc(va.greeting||'')}" />
+        </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label class="form-label">Voice</label>
+          <select id="s-voiceai-voice" class="form-input">
+            ${voices.map(([v,label])=>`<option value="${v}" ${(va.voice||'Polly.Joanna-Neural')===v?'selected':''}>${label}</option>`).join('')}
+          </select>
+        </div>
+        <div style="font-size:11px;color:var(--muted);">Requires an AI key configured on the server (the same one that powers voicemail analysis). Each answered call costs a few cents.</div>
+      `);
       html.push('</div>');
 
       // Work Gallery — showcased at the top of the booking page
       const gallery = Array.isArray(s.gallery) ? s.gallery : [];
       html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Work Gallery</span><button class="btn btn-sm btn-green" onclick="Settings.galleryPick()">+ Add Photo</button></div>');
       html.push('<div class="card">');
-      html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:'+(gallery.length?'12px':'0')+';">Showcase your best work on your booking page. Photos appear at the top for clients to browse.</div>');
+      html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:'+(gallery.length?'12px':'0')+';">Showcase your best work on your '+(leadMode?'lead form':'booking page')+'. Photos appear at the top for '+(leadMode?'visitors':'clients')+' to browse.</div>');
       if (gallery.length) {
         html.push('<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">');
         gallery.forEach(g=>{
@@ -59,36 +133,41 @@ const Settings = {
       html.push('</div>');
       html.push('<input type="file" id="s-gallery-file" accept="image/*" style="display:none;" onchange="Settings.galleryUpload(this)" />');
 
-      // Barbers (labelled per industry vocabulary)
-      html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>'+esc(V('staffPlural','Barbers'))+'</span><button class="btn btn-sm btn-green" onclick="Settings.openBarber(null)">+ Add</button></div>');
-      barbers.forEach(b=>{
-        html.push(`<div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;border-left:4px solid ${b.color||'var(--green)}'};">
-          <div style="width:40px;height:40px;border-radius:50%;background:${b.color||'var(--green)'}22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:${b.color||'var(--green)'};">${initials(b.name)}</div>
-          <div style="flex:1;"><div style="font-size:14px;font-weight:700;">${b.name}</div><div style="font-size:12px;color:var(--muted);">${esc(V('station','Chair'))} ${b.chair}${b.bio?' · '+b.bio:''}</div></div>
-          <button class="btn btn-sm" onclick="Settings.openBarber('${b.id}')">Edit</button>
-        </div>`);
-      });
-
-      // Staff & Access (multi-user roles)
-      const roleLabels={full:'Full Access',technician:V('staff','Technician'),viewonly:'View Only'};
+      // Team — one place for everyone. A member can have a login (role) and/or be
+      // assignable to appointments (a linked, color-coded booking record). Logins =
+      // accounts; bookable providers = barber records linked by barber.accountId.
+      const roleLabels={full:'Full Access',technician:'Technician',viewonly:'View Only'};
       const roleColors={full:'#16a34a',technician:'#2563eb',viewonly:'#6e6e73'};
-      html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Staff &amp; Access</span><button class="btn btn-sm btn-green" onclick="Settings.openStaff(null)">+ Add</button></div>');
-      html.push('<div style="font-size:12px;color:var(--muted);margin:-6px 0 10px;">Each staff member logs in with their own email and password. Full Access sees everything · '+esc(V('staff','Technician'))+' sees appointments &amp; clients (no revenue or settings) · View Only sees the calendar.</div>');
-      staff.forEach(u=>{
-        html.push(`<div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
-          <div style="width:40px;height:40px;border-radius:50%;background:${roleColors[u.role]||'#6e6e73'}22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:${roleColors[u.role]||'#6e6e73'};">${initials(u.name||u.email)}</div>
-          <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;">${esc(u.name||'—')}${u.isOwner?' <span style="font-size:10px;color:var(--faint);font-weight:600;">(owner)</span>':''}</div><div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(u.email)}</div></div>
-          <span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:${roleColors[u.role]||'#6e6e73'}1a;color:${roleColors[u.role]||'#6e6e73'};white-space:nowrap;">${roleLabels[u.role]||u.role}</span>
-          <button class="btn btn-sm" onclick="Settings.openStaff('${u.id}')">Edit</button>
+      // Build a unified roster: every login, plus any bookable provider with no login.
+      const team=[];
+      staff.forEach(u=>team.push({ account:u, barber:barbers.find(b=>b.accountId===u.id)||null }));
+      barbers.filter(b=>!staff.some(u=>u.id===b.accountId)).forEach(b=>team.push({ account:null, barber:b }));
+      html.push('<div style="margin:26px 0 10px;border-top:1px solid var(--line);padding-top:16px;font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--muted);">TEAM</div>');
+      html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Team</span><button class="btn btn-sm btn-green" onclick="Settings.openTeam(\'\',\'\')">+ Add</button></div>');
+      html.push('<div style="font-size:12px;color:var(--muted);margin:-6px 0 10px;">Add the people who work with you. Give them a login (Full Access sees everything · Technician sees jobs &amp; clients, no money or settings · View Only sees the calendar) and/or make them assignable to appointments.</div>');
+      team.forEach(m=>{
+        const u=m.account, b=m.barber;
+        const name=(u&&u.name)||(b&&b.name)||'—';
+        const accent=(b&&b.color)||roleColors[u&&u.role]||'#6e6e73';
+        const sub=u?u.email:'No login';
+        const chips=[];
+        if(u) chips.push(`<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:${roleColors[u.role]||'#6e6e73'}1a;color:${roleColors[u.role]||'#6e6e73'};white-space:nowrap;">${esc(roleLabels[u.role]||u.role)}</span>`);
+        if(b) chips.push(`<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:${b.color||'#16a34a'}1a;color:${b.color||'#16a34a'};white-space:nowrap;">● Bookable</span>`);
+        html.push(`<div class="card" style="display:flex;align-items:center;gap:12px;margin-bottom:8px;border-left:4px solid ${accent};">
+          <div style="width:40px;height:40px;border-radius:50%;background:${accent}22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:${accent};">${initials(name)}</div>
+          <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;">${esc(name)}${u&&u.isOwner?' <span style="font-size:10px;color:var(--faint);font-weight:600;">(owner)</span>':''}</div><div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(sub)}</div></div>
+          <div style="display:flex;gap:5px;flex:none;align-items:center;">${chips.join('')}</div>
+          <button class="btn btn-sm" onclick="Settings.openTeam('${u?u.id:''}','${b?b.id:''}')">Edit</button>
         </div>`);
       });
 
       // Services
+      html.push('<div style="margin:26px 0 10px;border-top:1px solid var(--line);padding-top:16px;font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--muted);">SERVICES &amp; PRICING</div>');
       html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Services</span><button class="btn btn-sm btn-green" onclick="Settings.openService(null)">+ Add</button></div>');
       html.push('<div class="list-card">');
       services.forEach(s=>{
         const bySize = s.sizePricing && Object.keys(s.sizePricing).length;
-        html.push(`<div class="list-row"><div class="list-main"><div class="list-name">${s.name}</div><div class="list-sub">${s.category} · ${s.duration} min${bySize?' · by size':''}</div></div><div style="font-weight:700;color:var(--green);margin-right:8px;">${bySize?'from ':''}${fmtMoney(s.price)}</div><button class="btn btn-sm" onclick="Settings.openService('${s.id}')">Edit</button></div>`);
+        html.push(`<div class="list-row"><div class="list-main"><div class="list-name">${esc(s.name)}</div><div class="list-sub">${esc(s.category)} · ${s.duration} min${bySize?' · by size':''}</div></div><div style="font-weight:700;color:var(--green);margin-right:8px;">${bySize?'from ':''}${fmtMoney(s.price)}</div><button class="btn btn-sm" onclick="Settings.openService('${s.id}')">Edit</button></div>`);
       });
       html.push('</div>');
 
@@ -121,7 +200,7 @@ const Settings = {
       // Loyalty
       html.push('<div class="section-header">Loyalty Program</div><div class="card">');
       html.push(`<div class="form-group"><label class="form-label">Visits for free service</label><input class="form-input" id="s-lvis" type="number" value="${s.loyalty?.visitsForReward||10}" /></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Reward description</label><input class="form-input" id="s-lrew" value="${s.loyalty?.rewardDescription||'One free haircut'}" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Reward description</label><input class="form-input" id="s-lrew" value="${esc(s.loyalty?.rewardDescription||'One free service')}" /></div>`);
       html.push('</div>');
 
       // Sales Tax — applied to service subtotals at checkout + on estimates
@@ -134,69 +213,52 @@ const Settings = {
       html.push('</div>');
       html.push('</div>');
 
-      // SMS — status + customizable templates
-      html.push('<div class="section-header">SMS Messaging</div><div class="card">');
-      const smsActive = s.twilioConfigured;
-      html.push(`<div style="display:flex;align-items:center;gap:10px;padding:4px 0 14px;">
-        <div style="width:10px;height:10px;border-radius:50%;background:${smsActive?'#16a34a':'#d1d5db'};flex-shrink:0;"></div>
-        <div>
-          <div style="font-size:14px;font-weight:600;color:var(--text);">${smsActive?'SMS Active':'SMS Not Yet Active'}</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px;">${smsActive?'Reminders and confirmations are firing automatically.':'Managed by ShopFlow. Contact support to activate.'}</div>
-        </div>
-      </div>
-      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin-bottom:8px;">CUSTOMIZE YOUR MESSAGES</div>
-      <div style="font-size:11px;color:var(--faint);margin-bottom:12px;">Variables you can use: <code style="background:var(--off);padding:1px 5px;border-radius:4px;">{name}</code> <code style="background:var(--off);padding:1px 5px;border-radius:4px;">{shop}</code> <code style="background:var(--off);padding:1px 5px;border-radius:4px;">{date}</code> <code style="background:var(--off);padding:1px 5px;border-radius:4px;">{time}</code> <code style="background:var(--off);padding:1px 5px;border-radius:4px;">{barber}</code></div>`);
-      const tpl = s.smsTemplates || {};
-      const defConfirm = "Hi {name}! Your appointment at {shop} is confirmed for {date} at {time}{barber}. See you then! ✂️";
-      const defReminder = "Hi {name}! Reminder: your appointment at {shop} is tomorrow at {time}{barber}. See you then! ✂️";
-      const defRebook   = "Hey {name}! It's been a few weeks — we'd love to have you back at {shop}. Book your next cut anytime 💈";
-      html.push(`<div class="form-group"><label class="form-label">Booking Confirmation</label><textarea class="form-input" id="s-tpl-confirm" rows="2" placeholder="${defConfirm}">${tpl.confirmation||''}</textarea></div>`);
-      html.push(`<div class="form-group"><label class="form-label">24-Hour Reminder</label><textarea class="form-input" id="s-tpl-reminder" rows="2" placeholder="${defReminder}">${tpl.reminder||''}</textarea></div>`);
+      // Message templates — owner-managed presets sent via the iPhone Messages
+      // deep link (no Twilio/A2P). Used by Messages, the Tasks worklist, and the
+      // review prompt.
+      html.push('<div style="margin:26px 0 10px;border-top:1px solid var(--line);padding-top:16px;font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--muted);">MESSAGING &amp; CALLS</div>');
+      html.push('<div class="section-header">Message Templates</div><div class="card">');
+      html.push(`<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Create the texts you send from Messages, the Tasks worklist, and the review prompt. They open in your phone's Messages app prefilled — edit before sending. Tap a field below a message to insert it.</div>`);
+      html.push(`<div id="s-tpl-list">${this._renderTemplateList()}</div>`);
+      html.push(`<button class="btn btn-sm" onclick="Settings.addTemplate()">+ Add template</button>`);
       const rebookDays = s.rebookInterval || 21;
-      html.push(`<div class="form-group"><label class="form-label">Rebook Nudge — Days Since Last Visit</label><div style="display:flex;align-items:center;gap:10px;"><input class="form-input" id="s-rebook-days" type="number" min="7" max="90" value="${rebookDays}" style="width:90px;" /><span style="font-size:13px;color:var(--muted);">days after last visit</span></div></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Rebook Nudge Message</label><textarea class="form-input" id="s-tpl-rebook" rows="2" placeholder="${defRebook}">${tpl.rebook||''}</textarea></div>`);
-      html.push(`<div style="font-size:11px;color:var(--faint);">Leave message blank to use the default shown as placeholder.</div>`);
+      html.push('<div style="height:1px;background:var(--line);margin:16px 0;"></div>');
+      html.push(`<div class="form-group" style="margin-bottom:0;"><label class="form-label">Rebook reminder window</label><div style="display:flex;align-items:center;gap:10px;"><input class="form-input" id="s-rebook-days" type="number" min="7" max="90" value="${rebookDays}" style="width:90px;" /><span style="font-size:13px;color:var(--muted);">days after last visit → shows in Tasks</span></div></div>`);
       html.push('</div>');
 
       // Call tracking
-      const ct = s.callTracking || { enabled: true };
-      const defMissed = "Hi, this is {shop} — sorry we missed your call! How can we help? Reply here or book online anytime.";
       html.push('<div class="section-header">Call Tracking</div><div class="card">');
       if (s.trackingNumber) {
-        html.push(`<div style="display:flex;align-items:center;gap:10px;background:var(--green-lt);border:1px solid var(--green-md);border-radius:10px;padding:12px;margin-bottom:14px;"><span style="font-size:18px;">📞</span><div><div style="font-size:13px;font-weight:700;color:var(--green);">Tracking number: ${s.trackingNumber}</div><div style="font-size:12px;color:var(--muted);margin-top:1px;">Calls forward to your shop phone. Inbound calls appear under Leads.</div></div></div>`);
+        html.push(`<div style="display:flex;align-items:center;gap:10px;background:var(--green-lt);border:1px solid var(--green-md);border-radius:10px;padding:12px;margin-bottom:14px;"><span style="font-size:18px;">📞</span><div><div style="font-size:13px;font-weight:700;color:var(--green);">Tracking number: ${esc(s.trackingNumber)}</div><div style="font-size:12px;color:var(--muted);margin-top:1px;">Calls forward to your shop phone. Inbound calls appear under Leads.</div></div></div>`);
       } else {
         html.push(`<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Your call-tracking number is managed by ShopFlow. Contact support to activate it for this shop.</div>`);
       }
-      html.push(`<div class="form-group"><label class="toggle-row" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span><span class="form-label" style="display:block;">Auto-text missed callers</span><span style="font-size:12px;color:var(--muted);">Instantly send a text when a call goes unanswered.</span></span><input type="checkbox" id="s-ct-enabled" ${ct.enabled!==false?'checked':''} style="width:20px;height:20px;flex-shrink:0;" /></label></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Missed-Call Auto-Text</label><textarea class="form-input" id="s-tpl-missed" rows="2" placeholder="${defMissed}">${tpl.missedCall||''}</textarea></div>`);
+      html.push(`<div style="font-size:12px;color:var(--muted);">Missed calls are logged as leads — follow up with one tap from the <b>Tasks</b> worklist. Texts open in your Messages app; ShopFlow never auto-texts on your behalf.</div>`);
+      html.push('</div>');
 
-      // AI receptionist (default OFF). Greeter asks callers what they need and tags
-      // the lead; voicemail summaries enrich the lead from the transcript.
-      const air = s.aiReceptionist || {};
-      const greeterPrompt = (air.greeter && air.greeter.prompt) || '';
-      html.push('<div style="height:1px;background:var(--line);margin:14px 0;"></div>');
-      html.push(`<div class="form-group"><label class="toggle-row" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span><span class="form-label" style="display:block;">AI receptionist greeting</span><span style="font-size:12px;color:var(--muted);">Greets callers, asks what they need, tags the lead, then forwards.</span></span><input type="checkbox" id="s-air-greeter" ${air.greeter&&air.greeter.enabled?'checked':''} style="width:20px;height:20px;flex-shrink:0;" /></label></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Custom greeting (optional)</label><textarea class="form-input" id="s-air-prompt" rows="2" placeholder="Thanks for calling ${esc(s.shopName||'us')}! Are you calling about… (leave blank to auto-build from your services)">${esc(greeterPrompt)}</textarea></div>`);
-      html.push(`<div class="form-group"><label class="toggle-row" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span><span class="form-label" style="display:block;">AI voicemail summaries</span><span style="font-size:12px;color:var(--muted);">Summarize each voicemail into the lead automatically.</span></span><input type="checkbox" id="s-air-enabled" ${air.enabled?'checked':''} style="width:20px;height:20px;flex-shrink:0;" /></label></div>`);
-      html.push('<div style="font-size:11px;color:var(--muted);">Both require an ANTHROPIC_API_KEY on the server.</div>');
+      // Phone notifications (web push via the installed PWA)
+      html.push('<div class="section-header">Phone Notifications</div><div class="card">');
+      html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Get an instant notification on this phone when a new website lead comes in — free, no texting fees. Requires ShopFlow installed to your home screen (iPhone: iOS 16.4+).</div>');
+      html.push('<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-primary" style="flex:1;min-width:150px;" onclick="Settings.enablePush(this)">🔔 Enable notifications</button><button class="btn" style="flex:1;min-width:150px;" onclick="Settings.testPush(this)">Test notifications</button></div>');
       html.push('</div>');
 
       // Google Reviews
       html.push('<div class="section-header">Google Reviews</div><div class="card">');
-      html.push(`<div class="form-group"><label class="form-label">Google Review Link</label><input class="form-input" id="s-grev" value="${s.googleReviewLink||''}" placeholder="https://g.page/r/..." /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Google Review Link</label><input class="form-input" id="s-grev" value="${esc(s.googleReviewLink||'')}" placeholder="https://g.page/r/..." /></div>`);
       html.push('</div>');
 
       // Email (fallback when Twilio not set up)
       html.push('<div class="section-header">Email Confirmations</div><div class="card">');
       html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Optional — sends booking confirmation emails when SMS is not configured. Use Gmail with an App Password.</div>');
-      html.push(`<div class="form-group"><label class="form-label">SMTP Host</label><input class="form-input" id="s-ehost" value="${s.emailSmtp?.host||''}" placeholder="smtp.gmail.com" /></div>`);
-      html.push(`<div class="form-group"><label class="form-label">Email Address</label><input class="form-input" id="s-euser" type="email" value="${s.emailSmtp?.user||''}" placeholder="yourshop@gmail.com" /></div>`);
-      html.push(`<div class="form-group"><label class="form-label">App Password</label><input class="form-input" id="s-epass" type="password" value="${s.emailSmtp?.pass||''}" placeholder="Gmail App Password" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">SMTP Host</label><input class="form-input" id="s-ehost" value="${esc(s.emailSmtp?.host||'')}" placeholder="smtp.gmail.com" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">Email Address</label><input class="form-input" id="s-euser" type="email" value="${esc(s.emailSmtp?.user||'')}" placeholder="yourshop@gmail.com" /></div>`);
+      html.push(`<div class="form-group"><label class="form-label">App Password</label><input class="form-input" id="s-epass" type="password" value="${esc(s.emailSmtp?.pass||'')}" placeholder="Gmail App Password" /></div>`);
       html.push('</div>');
 
       // Blocked Dates
       let blockedDates = [];
       try { blockedDates = await db.blockedDates.all(); } catch(e) {}
+      html.push('<div style="margin:26px 0 10px;border-top:1px solid var(--line);padding-top:16px;font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--muted);">BOOKING RULES &amp; PAYMENTS</div>');
       html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Blocked Booking Dates</span><button class="btn btn-sm btn-danger" onclick="Settings.openBlockDate()">+ Block Date</button></div>');
       if (!blockedDates.length) {
         html.push('<div class="card"><div style="font-size:13px;color:var(--faint);text-align:center;padding:12px 0;">No dates blocked — booking is open every working day</div></div>');
@@ -205,7 +267,7 @@ const Settings = {
         blockedDates.sort((a,b)=>a.date.localeCompare(b.date)).forEach(bd=>{
           const dt = new Date(bd.date+'T12:00:00');
           const label = dt.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});
-          html.push('<div class="list-row"><div class="list-main"><div class="list-name">'+label+'</div><div class="list-sub">'+(bd.reason||'No reason given')+'</div></div><button class="btn btn-sm btn-danger" onclick="Settings.unblockDate(\'' + bd.date + '\')">Unblock</button></div>');
+          html.push('<div class="list-row"><div class="list-main"><div class="list-name">'+label+'</div><div class="list-sub">'+esc(bd.reason||'No reason given')+'</div></div><button class="btn btn-sm btn-danger" onclick="Settings.unblockDate(\'' + bd.date + '\')">Unblock</button></div>');
         });
         html.push('</div>');
       }
@@ -224,7 +286,7 @@ const Settings = {
       // Square (primary)
       if (squareStatus.connected) {
         html.push('<div style="display:flex;align-items:center;justify-content:space-between;background:var(--green-lt);border:1px solid var(--green-md);border-radius:8px;padding:12px 14px;margin-bottom:10px;">');
-        html.push('<div><div style="font-size:13px;font-weight:700;color:var(--green);">✓ Square Connected</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+(squareStatus.locationName||'Account active')+'</div></div>');
+        html.push('<div><div style="font-size:13px;font-weight:700;color:var(--green);">✓ Square Connected</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+esc(squareStatus.locationName||'Account active')+'</div></div>');
         html.push('<button class="btn btn-sm btn-danger" onclick="Settings.disconnectSquare()">Disconnect</button>');
         html.push('</div>');
       } else {
@@ -235,7 +297,7 @@ const Settings = {
       // Stripe (legacy — still supported)
       if (stripeStatus.connected) {
         html.push('<div style="display:flex;align-items:center;justify-content:space-between;background:var(--green-lt);border:1px solid var(--green-md);border-radius:8px;padding:12px 14px;margin-bottom:14px;">');
-        html.push('<div><div style="font-size:13px;font-weight:700;color:var(--green);">✓ Stripe Connected</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+(stripeStatus.email||'Account active')+'</div></div>');
+        html.push('<div><div style="font-size:13px;font-weight:700;color:var(--green);">✓ Stripe Connected</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">'+esc(stripeStatus.email||'Account active')+'</div></div>');
         html.push('<button class="btn btn-sm btn-danger" onclick="Settings.disconnectStripe()">Disconnect</button>');
         html.push('</div>');
       }
@@ -247,7 +309,7 @@ const Settings = {
         html.push('<div class="form-group"><label class="form-label">Deposit amount</label><div style="position:relative;"><div style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-weight:700;color:var(--muted);">$</div><input class="form-input" id="s-dep-amount" type="number" value="'+(deposit.amount||10)+'" min="1" max="100" style="padding-left:24px;" /></div></div>');
         html.push('<div class="form-group"><label class="form-label">Quick amounts</label><div style="display:flex;gap:6px;"><button class="btn btn-sm" onclick="document.getElementById(\'s-dep-amount\').value=5">$5</button><button class="btn btn-sm" onclick="document.getElementById(\'s-dep-amount\').value=10">$10</button><button class="btn btn-sm" onclick="document.getElementById(\'s-dep-amount\').value=15">$15</button><button class="btn btn-sm" onclick="document.getElementById(\'s-dep-amount\').value=20">$20</button><button class="btn btn-sm" onclick="document.getElementById(\'s-dep-amount\').value=25">$25</button></div></div>');
         html.push('</div>');
-        html.push('<div class="form-group"><label class="form-label">Deposit message shown to client</label><input class="form-input" id="s-dep-msg" value="'+(deposit.message||'A deposit is required to secure your appointment.')+'" /></div>');
+        html.push('<div class="form-group"><label class="form-label">Deposit message shown to client</label><input class="form-input" id="s-dep-msg" value="'+esc(deposit.message||'A deposit is required to secure your appointment.')+'" /></div>');
       }
       html.push('</div>');
 
@@ -256,8 +318,20 @@ const Settings = {
     }catch(e){el.innerHTML='<div class="card"><p style="color:var(--muted)">Could not load settings</p></div>';}
   },
 
-  openBarber(id) {
-    const b=id?this._barbers.find(x=>x.id===id):null;
+  // Unified Team member modal: login (email/password/role) + an optional "bookable"
+  // section (color + schedule) that maps to a linked booking record. Pass the
+  // account id and/or the barber id (either may be empty for a new member).
+  openTeam(accountId, barberId) {
+    const u = accountId ? this._staff.find(x=>x.id===accountId) : null;
+    const b = barberId ? this._barbers.find(x=>x.id===barberId) : (u ? this._barbers.find(x=>x.accountId===u.id) : null);
+    const isOwner = !!(u && u.isOwner);
+    const bookable = !!b;
+    const name = (u&&u.name)||(b&&b.name)||'';
+    const roles = [
+      ['full','Full Access — sees everything'],
+      ['technician','Technician — jobs & clients only'],
+      ['viewonly','View Only — calendar only'],
+    ];
     const sched=b?.schedule||{workDays:[1,2,3,4,5,6],startTime:'9:00 AM',endTime:'6:00 PM',slotMinutes:30};
     const colors=['#16a34a','#2563eb','#d97706','#7c3aed','#dc2626','#0891b2','#be185d'];
     const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -269,63 +343,74 @@ const Settings = {
     const allowed=Array.isArray(sched.allowedTimes)?sched.allowedTimes:[];
     const customOn=allowed.length>0;
     Modal.show(`
-      <div class="modal-title">${b?'Edit '+esc(V('staff','Barber')):'Add '+esc(V('staff','Barber'))}</div>
-      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fb-name" value="${b?.name||''}" placeholder="e.g. Chris" /></div>
-      <div class="form-row">
-        <div class="form-group"><label class="form-label">${esc(V('station','Chair'))} #</label><input class="form-input" id="fb-chair" type="number" value="${b?.chair||this._barbers.length+1}" min="1" /></div>
-        <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="fb-phone" type="tel" value="${b?.phone||''}" /></div>
-      </div>
-      <div class="form-group"><label class="form-label">Bio / specialty</label><input class="form-input" id="fb-bio" value="${b?.bio||''}" placeholder="e.g. Fades and designs" /></div>
-      <div class="form-group"><label class="form-label">Color</label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          ${colors.map(c=>`<div onclick="document.getElementById('fb-col').value='${c}';document.querySelectorAll('.bc').forEach(x=>x.style.outline='none');this.style.outline='3px solid #000';" class="bc" style="width:30px;height:30px;border-radius:50%;background:${c};cursor:pointer;outline:${b?.color===c?'3px solid #000':'none'};outline-offset:2px;"></div>`).join('')}
-        </div>
-        <input type="hidden" id="fb-col" value="${b?.color||colors[0]}" />
-      </div>
+      <div class="modal-title">${(u||b)?'Edit team member':'Add team member'}</div>
+      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fu-name" value="${esc(name)}" placeholder="e.g. Marcus Reyes" /></div>
 
-      <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:14px;">
-        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;">📅 Booking Schedule</div>
-        <div class="form-group">
-          <label class="form-label">Working Days</label>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">${dayBtns}</div>
-          <input type="hidden" id="fb-workdays" value="${JSON.stringify(sched.workDays||[1,2,3,4,5,6])}" />
+      <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em;margin:6px 0 8px;">LOGIN</div>
+      <div class="form-group"><label class="form-label">Email${u?'':' <span style="font-weight:400;color:var(--faint);">(optional — leave blank for no login)</span>'}</label><input class="form-input" id="fu-email" type="email" value="${esc(u?.email||'')}" placeholder="them@email.com" /></div>
+      <div class="form-group"><label class="form-label">Password ${u?'<span style="font-weight:400;color:var(--faint);">(leave blank to keep current)</span>':'<span style="font-weight:400;color:var(--faint);">(needed for a login)</span>'}</label><input class="form-input" id="fu-pass" type="password" placeholder="At least 6 characters" autocomplete="new-password" /></div>
+      ${isOwner
+        ? '<input type="hidden" id="fu-role" value="full" /><div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Owner account — always Full Access.</div>'
+        : `<div class="form-group"><label class="form-label">Role</label><select class="form-input" id="fu-role">${roles.map(([v,l])=>`<option value="${v}"${(u?.role||'technician')===v?' selected':''}>${esc(l)}</option>`).join('')}</select></div>`}
+
+      <div class="form-group" style="margin-top:6px;"><label class="toggle-row" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span><span class="form-label" style="display:block;">Assignable to appointments</span><span style="font-size:12px;color:var(--muted);">Show them as a bookable provider with their own color.</span></span><input type="checkbox" id="fu-bookable" ${bookable?'checked':''} onchange="Settings._toggleBookable()" style="width:20px;height:20px;flex-shrink:0;" /></label></div>
+
+      <div id="team-booking" style="${bookable?'':'display:none;'}">
+        <div class="form-group"><label class="form-label">Color</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${colors.map(c=>`<div onclick="document.getElementById('fb-col').value='${c}';document.querySelectorAll('.bc').forEach(x=>x.style.outline='none');this.style.outline='3px solid #000';" class="bc" style="width:30px;height:30px;border-radius:50%;background:${c};cursor:pointer;outline:${(b&&b.color===c)?'3px solid #000':'none'};outline-offset:2px;"></div>`).join('')}
+          </div>
+          <input type="hidden" id="fb-col" value="${(b&&b.color)||colors[0]}" />
         </div>
-        <div class="form-group">
-          <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-            <input type="checkbox" id="fb-customtimes" ${customOn?'checked':''} onchange="Settings._toggleCustomTimes()" style="width:auto;margin:0;" />
-            Only offer specific times
-          </label>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px;">Take bookings at set times only — e.g. 10:00 AM &amp; 2:00 PM — instead of every slot in a range.</div>
-        </div>
-        <div id="fb-range-fields" style="${customOn?'display:none;':''}">
-          <div class="form-row">
-            <div class="form-group"><label class="form-label">Start Time</label><select class="form-input" id="fb-start">${startOpts}</select></div>
-            <div class="form-group"><label class="form-label">End Time</label><select class="form-input" id="fb-end">${endOpts}</select></div>
+        <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:14px;">
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;">📅 Booking Schedule</div>
+          <div class="form-group">
+            <label class="form-label">Working Days</label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">${dayBtns}</div>
+            <input type="hidden" id="fb-workdays" value="${JSON.stringify(sched.workDays||[1,2,3,4,5,6])}" />
           </div>
           <div class="form-group">
-            <label class="form-label">Slot Duration</label>
-            <select class="form-input" id="fb-slot">
-              ${[15,20,30,45,60].map(m=>`<option value="${m}"${sched.slotMinutes===m?' selected':''}>${m} minutes</option>`).join('')}
-            </select>
+            <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="fb-customtimes" ${customOn?'checked':''} onchange="Settings._toggleCustomTimes()" style="width:auto;margin:0;" />
+              Only offer specific times
+            </label>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">Take bookings at set times only — e.g. 10:00 AM &amp; 2:00 PM — instead of every slot in a range.</div>
           </div>
-        </div>
-        <div id="fb-customtimes-wrap" style="${customOn?'':'display:none;'}">
-          <label class="form-label">Available times</label>
-          <div id="fb-times-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
-          <div style="display:flex;gap:8px;">
-            <select class="form-input" id="fb-time-pick" style="flex:1;">${pickOpts}</select>
-            <button type="button" class="btn" onclick="Settings._addTime()">+ Add</button>
+          <div id="fb-range-fields" style="${customOn?'display:none;':''}">
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">Start Time</label><select class="form-input" id="fb-start">${startOpts}</select></div>
+              <div class="form-group"><label class="form-label">End Time</label><select class="form-input" id="fb-end">${endOpts}</select></div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Slot Duration</label>
+              <select class="form-input" id="fb-slot">
+                ${[15,20,30,45,60].map(m=>`<option value="${m}"${sched.slotMinutes===m?' selected':''}>${m} minutes</option>`).join('')}
+              </select>
+            </div>
           </div>
-          <input type="hidden" id="fb-allowedtimes" value='${JSON.stringify(allowed)}' />
+          <div id="fb-customtimes-wrap" style="${customOn?'':'display:none;'}">
+            <label class="form-label">Available times</label>
+            <div id="fb-times-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
+            <div style="display:flex;gap:8px;">
+              <select class="form-input" id="fb-time-pick" style="flex:1;">${pickOpts}</select>
+              <button type="button" class="btn" onclick="Settings._addTime()">+ Add</button>
+            </div>
+            <input type="hidden" id="fb-allowedtimes" value='${JSON.stringify(allowed)}' />
+          </div>
         </div>
       </div>
 
       <div class="modal-actions">
-        ${b?`<button class="btn btn-danger btn-full" onclick="Settings.deleteBarber('${b.id}')">Remove ${esc(V('staff','Barber'))}</button>`:''}
-        <button id="fb-btn" class="btn btn-primary btn-full" onclick="Settings.saveBarber('${b?.id||''}')">Save</button>
+        ${((u&&!isOwner)||b)?`<button class="btn btn-danger btn-full" onclick="Settings.removeTeam('${u?u.id:''}','${b?b.id:''}')">Remove</button>`:''}
+        <button id="fu-btn" class="btn btn-primary btn-full" onclick="Settings.saveTeam('${u?u.id:''}','${b?b.id:''}')">Save</button>
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
       </div>`);
-    setTimeout(()=>{document.getElementById('fb-name')?.focus();Settings._renderTimeChips();},150);
+    setTimeout(()=>{document.getElementById('fu-name')?.focus();Settings._renderTimeChips();},150);
+  },
+
+  _toggleBookable() {
+    const on=document.getElementById('fu-bookable')?.checked;
+    const w=document.getElementById('team-booking'); if(w)w.style.display=on?'':'none';
   },
 
   _toggleCustomTimes() {
@@ -362,95 +447,76 @@ const Settings = {
     el.value = JSON.stringify(days.sort());
   },
 
-  async saveBarber(id) {
-    const name=document.getElementById('fb-name')?.value.trim();
-    if(!name){toast('Enter a name','warning');return;}
-    const btn=document.getElementById('fb-btn'); disableBtn(btn);
-    const schedule={
-      workDays: JSON.parse(document.getElementById('fb-workdays')?.value||'[1,2,3,4,5,6]'),
-      startTime: document.getElementById('fb-start')?.value||'9:00 AM',
-      endTime:   document.getElementById('fb-end')?.value||'6:00 PM',
-      slotMinutes: parseInt(document.getElementById('fb-slot')?.value)||30,
-    };
-    // Specific-times mode: offer ONLY the listed times on working days.
-    if (document.getElementById('fb-customtimes')?.checked) {
-      const times = this._getTimes();
-      if (!times.length) { toast('Add at least one time, or turn off specific times','warning'); enableBtn(btn); return; }
-      schedule.allowedTimes = times;
-    }
-    try{
-      await db.barbers.save({
-        id:id||genId('b'),
-        name,
-        chair:parseInt(document.getElementById('fb-chair')?.value)||1,
-        phone:document.getElementById('fb-phone')?.value.trim()||'',
-        bio:document.getElementById('fb-bio')?.value.trim()||'',
-        color:document.getElementById('fb-col')?.value||'#16a34a',
-        active:true,
-        schedule,
-        joinedAt:id?(this._barbers.find(b=>b.id===id)?.joinedAt||today()):today()
-      });
-      Modal.close(); toast(id?'Updated ✓':V('staff','Barber')+' added ✓'); this.render();
-    }catch(e){toast('Could not save','error');enableBtn(btn);}
-  },
-
-  async deleteBarber(id) {
-    if(!confirm('Remove this '+V('staff','barber').toLowerCase()+'?'))return;
-    await db.barbers.delete(id); Modal.close(); this.render(); toast('Removed');
-  },
-
-  // ── Staff & Access ──────────────────────────────────────────────────────────
-  openStaff(id) {
-    const u = id ? this._staff.find(x=>x.id===id) : null;
-    const isOwner = !!u?.isOwner;
-    const roles = [
-      ['full','Full Access — sees everything'],
-      ['technician', V('staff','Technician')+' — appointments & clients only'],
-      ['viewonly','View Only — calendar only'],
-    ];
-    Modal.show(`
-      <div class="modal-title">${u?'Edit Staff':'Add Staff'}</div>
-      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fu-name" value="${esc(u?.name||'')}" placeholder="e.g. Marcus Reyes" /></div>
-      <div class="form-group"><label class="form-label">Email *</label><input class="form-input" id="fu-email" type="email" value="${esc(u?.email||'')}" placeholder="them@email.com" /></div>
-      <div class="form-group"><label class="form-label">Password ${u?'<span style="font-weight:400;color:var(--faint);">(leave blank to keep current)</span>':'*'}</label><input class="form-input" id="fu-pass" type="password" placeholder="At least 6 characters" autocomplete="new-password" /></div>
-      ${isOwner
-        ? '<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">This is the owner account — it always has Full Access.</div>'
-        : `<div class="form-group"><label class="form-label">Role</label><select class="form-input" id="fu-role">${roles.map(([v,l])=>`<option value="${v}"${u?.role===v?' selected':''}>${esc(l)}</option>`).join('')}</select></div>`}
-      <div class="modal-actions">
-        ${u&&!isOwner?`<button class="btn btn-danger btn-full" onclick="Settings.deleteStaff('${u.id}')">Remove Staff</button>`:''}
-        <button id="fu-btn" class="btn btn-primary btn-full" onclick="Settings.saveStaff('${u?.id||''}')">Save</button>
-        <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
-      </div>`);
-    setTimeout(()=>document.getElementById('fu-name')?.focus(),150);
-  },
-
-  async saveStaff(id) {
+  async saveTeam(accountId, barberId) {
     const name  = document.getElementById('fu-name')?.value.trim();
     const email = document.getElementById('fu-email')?.value.trim();
     const pass  = document.getElementById('fu-pass')?.value||'';
     const role  = document.getElementById('fu-role')?.value||'technician';
-    if(!name){toast('Enter a name','warning');return;}
-    if(!email){toast('Enter an email','warning');return;}
-    if(!id && pass.length<6){toast('Set a password of 6+ characters','warning');return;}
+    const bookable = !!document.getElementById('fu-bookable')?.checked;
+    if(!name){ toast('Enter a name','warning'); return; }
+    const wantLogin = !!email || !!accountId;
+    if(!wantLogin && !bookable){ toast('Add a login (email) or make them assignable to appointments','warning'); return; }
+    if(wantLogin && !email){ toast('Enter an email for the login','warning'); return; }
+    if(wantLogin && !accountId && pass.length<6){ toast('Set a password of 6+ characters for the login','warning'); return; }
     const btn=document.getElementById('fu-btn'); disableBtn(btn);
     try{
-      const body={name,email,role}; if(id)body.id=id; if(pass)body.password=pass;
-      await db.staff.save(body);
-      Modal.close(); toast(id?'Updated ✓':'Staff added ✓'); this.render();
-    }catch(e){toast(e.message||'Could not save','error');enableBtn(btn);}
+      let acctId = accountId;
+      if(wantLogin){
+        const body={name,email,role}; if(accountId)body.id=accountId; if(pass)body.password=pass;
+        const r = await db.staff.save(body); acctId = accountId || (r&&r.id);
+      }
+      if(bookable){
+        const schedule={
+          workDays: JSON.parse(document.getElementById('fb-workdays')?.value||'[1,2,3,4,5,6]'),
+          startTime: document.getElementById('fb-start')?.value||'9:00 AM',
+          endTime:   document.getElementById('fb-end')?.value||'6:00 PM',
+          slotMinutes: parseInt(document.getElementById('fb-slot')?.value)||30,
+        };
+        if(document.getElementById('fb-customtimes')?.checked){
+          const times=this._getTimes();
+          if(!times.length){ toast('Add at least one time, or turn off specific times','warning'); enableBtn(btn); return; }
+          schedule.allowedTimes=times;
+        }
+        const existing = barberId ? this._barbers.find(b=>b.id===barberId) : null;
+        await db.barbers.save({
+          id: barberId||genId('b'),
+          name,
+          color: document.getElementById('fb-col')?.value||'#16a34a',
+          chair: existing?.chair || (this._barbers.length+1),
+          phone: existing?.phone || '',
+          bio:   existing?.bio || '',
+          active: true,
+          accountId: acctId || null,
+          schedule,
+          joinedAt: existing?.joinedAt || today(),
+        });
+      } else if(barberId){
+        await db.barbers.delete(barberId);   // was bookable, now off → drop booking record
+      }
+      Modal.close(); toast((accountId||barberId)?'Updated ✓':'Team member added ✓'); this.render();
+    }catch(e){ toast(e.message||'Could not save','error'); enableBtn(btn); }
   },
 
-  async deleteStaff(id) {
-    if(!confirm('Remove this staff member? They will no longer be able to log in.'))return;
-    try{ await db.staff.delete(id); Modal.close(); toast('Removed'); this.render(); }
-    catch(e){ toast(e.message||'Could not remove','error'); }
+  async removeTeam(accountId, barberId) {
+    if(!confirm('Remove this team member? Any login will stop working.'))return;
+    try{
+      if(accountId) await db.staff.delete(accountId);
+      if(barberId)  await db.barbers.delete(barberId);
+      Modal.close(); toast('Removed'); this.render();
+    }catch(e){ toast(e.message||'Could not remove','error'); }
+  },
+
+  // Shops whose public /book page is the lead-capture form (quote-first verticals).
+  _leadMode(){
+    const st=Shop.settings||{};
+    return (st.bookingMode || (st.industry==='detail'?'leads':'booking'))==='leads';
   },
 
   openService(id) {
     const s=id?this._services.find(x=>x.id===id):null;
     Modal.show(`
       <div class="modal-title">${s?'Edit Service':'Add Service'}</div>
-      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fs-name" value="${s?.name||''}" placeholder="e.g. Fade" /></div>
+      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fs-name" value="${esc(s?.name||'')}" placeholder="e.g. Fade" /></div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Price</label><input class="form-input" id="fs-price" type="number" value="${s?.price||35}" /></div>
         <div class="form-group"><label class="form-label">Duration (min)</label><input class="form-input" id="fs-dur" type="number" value="${s?.duration||45}" /></div>
@@ -467,7 +533,7 @@ const Settings = {
       </div>`:''}
       <div class="form-group"><label class="form-label">Category</label>
         <select class="form-input" id="fs-cat">
-          ${(()=>{ const base=(Shop.serviceCategories&&Shop.serviceCategories.length?Shop.serviceCategories:['cut','beard','combo','color','design','other']); const cats=(s?.category&&!base.includes(s.category))?[s.category,...base]:base; return cats.map(c=>`<option value="${c}"${s?.category===c?' selected':''}>${c}</option>`).join(''); })()}
+          ${(()=>{ const base=(Shop.serviceCategories&&Shop.serviceCategories.length?Shop.serviceCategories:['cut','beard','combo','color','design','other']); const cats=(s?.category&&!base.includes(s.category))?[s.category,...base]:base; return cats.map(c=>`<option value="${esc(c)}"${s?.category===c?' selected':''}>${esc(c)}</option>`).join(''); })()}
         </select>
       </div>
       <div class="modal-actions">
@@ -481,6 +547,29 @@ const Settings = {
   _toggleSizePricing(){
     const on=document.getElementById('fs-size-on')?.checked;
     const rows=document.getElementById('fs-size-rows'); if(rows)rows.style.display=on?'grid':'none';
+  },
+
+  // Lead-form "options" editor (Settings → Lead Form card). Plain labels held in
+  // this._leadOpts; persisted as settings.leadFormOptions by the main Save button.
+  _leadOptRow(val,i){
+    return `<div style="display:flex;gap:8px;margin-bottom:7px;" data-lfopt>
+      <input class="form-input lf-opt" value="${esc(val)}" placeholder="e.g. Ceramic Coating" style="flex:1;" />
+      <button class="btn btn-sm" onclick="Settings.removeLeadOpt(this)" title="Remove" style="color:var(--red);flex-shrink:0;">×</button>
+    </div>`;
+  },
+  _syncLeadOpts(){
+    const box=document.getElementById('lf-opts'); if(!box) return;
+    this._leadOpts=[...box.querySelectorAll('.lf-opt')].map(inp=>inp.value);
+  },
+  addLeadOpt(){
+    this._syncLeadOpts();
+    const box=document.getElementById('lf-opts'); if(!box) return;
+    box.insertAdjacentHTML('beforeend', this._leadOptRow('', this._leadOpts.length));
+    const inputs=box.querySelectorAll('.lf-opt'); inputs[inputs.length-1]?.focus();
+  },
+  removeLeadOpt(btn){
+    btn.closest('[data-lfopt]')?.remove();
+    this._syncLeadOpts();
   },
 
   openAddon(id){
@@ -585,6 +674,45 @@ const Settings = {
     await db.services.delete(id); Modal.close(); this.render(); toast('Deleted');
   },
 
+  // ── Phone notifications (web push via the PWA) ──
+  // enablePushNotifications lives in js/pwa-push-client.js; /api/push/* is
+  // JWT-gated, so both buttons send the same bearer token as apiFetch.
+  async enablePush(btn) {
+    const orig = btn.textContent; btn.disabled = true; btn.textContent = 'Enabling…';
+    try {
+      // Pre-flight: if the server has no VAPID keys, say so instead of letting
+      // the subscribe helper choke on the missing key (503 → undefined).
+      const chk = await fetch('/api/push/vapid-public-key', {
+        headers: { 'Authorization': 'Bearer ' + Auth.getToken() },
+      });
+      if (!chk.ok) {
+        toast(chk.status === 503
+          ? 'Push isn\'t configured on the server yet (VAPID keys missing in Railway).'
+          : 'Could not reach the push service (' + chk.status + ').', 'warning');
+      } else {
+        const ok = await enablePushNotifications(localStorage.getItem('sf_shopId'), Auth.getName() || 'owner');
+        if (ok) toast('Notifications enabled on this device ✓');
+        else toast('Notifications were not enabled — check the browser permission.', 'warning');
+      }
+    } catch(e) { toast(e.message || 'Could not enable notifications', 'error'); }
+    btn.disabled = false; btn.textContent = orig;
+  },
+  async testPush(btn) {
+    const orig = btn.textContent; btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      const r = await fetch('/api/push/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + Auth.getToken() },
+        body: JSON.stringify({ tenant_id: localStorage.getItem('sf_shopId') }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (j.sent) toast(`Test sent to ${j.sent} device${j.sent !== 1 ? 's' : ''} ✓`);
+      else if (j.error === 'not configured') toast('Push is not configured on the server (VAPID keys).', 'warning');
+      else toast('No devices enabled yet — tap "Enable notifications" first.', 'warning');
+    } catch(e) { toast(e.message || 'Could not send test', 'error'); }
+    btn.disabled = false; btn.textContent = orig;
+  },
+
   async connectStripe() {
     const btn = document.getElementById('stripe-connect-btn'); if(btn){btn.textContent='Connecting...';btn.disabled=true;}
     try {
@@ -648,18 +776,28 @@ const Settings = {
   },
 
   async save() {
-    const data={shopName:document.getElementById('s-name')?.value.trim(),tagline:document.getElementById('s-tag')?.value.trim(),phone:document.getElementById('s-phone')?.value.trim(),address:document.getElementById('s-addr')?.value.trim(),email:document.getElementById('s-email')?.value.trim(),bookingMessage:document.getElementById('s-bmsg')?.value.trim(),bookingEnabled:document.getElementById('s-benabled')?.checked!==false,staffPicker:document.getElementById('s-staffpicker')?.checked!==false};
-    const lv=document.getElementById('s-lvis')?.value; if(lv)data.loyalty={visitsForReward:parseInt(lv),rewardDescription:document.getElementById('s-lrew')?.value.trim()||'One free haircut'};
-    // SMS templates (empty string = use server default)
-    const tc=document.getElementById('s-tpl-confirm')?.value.trim();
-    const tr=document.getElementById('s-tpl-reminder')?.value.trim();
-    const tk=document.getElementById('s-tpl-rebook')?.value.trim();
-    const tm=document.getElementById('s-tpl-missed')?.value.trim();
-    data.smsTemplates={ confirmation:tc||'', reminder:tr||'', rebook:tk||'', missedCall:tm||'' };
-    data.callTracking={ enabled: document.getElementById('s-ct-enabled')?.checked!==false };
-    data.aiReceptionist={ enabled: document.getElementById('s-air-enabled')?.checked===true, greeter:{ enabled: document.getElementById('s-air-greeter')?.checked===true, prompt: document.getElementById('s-air-prompt')?.value.trim()||'' } };
+    const data={shopName:document.getElementById('s-name')?.value.trim(),tagline:document.getElementById('s-tag')?.value.trim(),phone:document.getElementById('s-phone')?.value.trim(),address:document.getElementById('s-addr')?.value.trim(),email:document.getElementById('s-email')?.value.trim(),bookingEnabled:document.getElementById('s-benabled')?.checked!==false};
+    // Booking-only fields aren't rendered in lead mode — only save what's on screen,
+    // so a lead-mode save never clobbers the shop's stored booking config.
+    const bmsg=document.getElementById('s-bmsg'); if(bmsg)data.bookingMessage=bmsg.value.trim();
+    const spk=document.getElementById('s-staffpicker'); if(spk)data.staffPicker=spk.checked;
+    // Lead-form options (lead-mode shops): plain labels, empties dropped.
+    if(document.getElementById('lf-opts')){ this._syncLeadOpts(); data.leadFormOptions=this._leadOpts.map(o=>o.trim()).filter(Boolean); }
+    const mp=document.getElementById('s-metapixel'); if(mp)data.metaPixelId=mp.value.trim();
+    const tpl=document.getElementById('s-leadtpl'); if(tpl)data.leadPageTemplate=tpl.value;
+    const pp=document.getElementById('s-publicphone'); if(pp)data.publicPhone=pp.value.trim();
+    const ar=document.getElementById('s-aireceptionist'); if(ar)data.aiReceptionist={enabled:ar.checked};
+    const vam=document.getElementById('s-voiceai-mode'); if(vam){ data.voiceAI={ mode:vam.value, greeting:(document.getElementById('s-voiceai-greeting')?.value||'').trim(), voice:document.getElementById('s-voiceai-voice')?.value||'Polly.Joanna-Neural' }; }
+    const lv=document.getElementById('s-lvis')?.value; if(lv)data.loyalty={visitsForReward:parseInt(lv),rewardDescription:document.getElementById('s-lrew')?.value.trim()||'One free service'};
+    // Message templates: owner-managed [{id,label,body}] list (drops empty rows).
+    this._syncTemplates();
+    data.smsTemplates=(this._tpls||[]).filter(t=>(t.label||'').trim()||(t.body||'').trim())
+      .map(t=>({ id:t.id||genId('tpl'), label:(t.label||'Template').trim(), body:(t.body||'').trim() }));
     const rd=parseInt(document.getElementById('s-rebook-days')?.value)||21;
     data.rebookInterval=Math.min(90,Math.max(7,rd));
+    // Monthly revenue goal → dashboard pace line. Blank clears it (stored 0).
+    const rgEl=document.getElementById('s-revgoal');
+    if(rgEl){ const rg=parseFloat(rgEl.value); data.revenueGoal=(!isNaN(rg)&&rg>0)?Math.round(rg):0; }
     const gr=document.getElementById('s-grev')?.value.trim(); if(gr)data.googleReviewLink=gr;
     const ehost=document.getElementById('s-ehost')?.value.trim();
     const euser=document.getElementById('s-euser')?.value.trim();
@@ -674,8 +812,72 @@ const Settings = {
     data.tax={ enabled:document.getElementById('s-tax-enabled')?.checked||false, rate:parseFloat(document.getElementById('s-tax-rate')?.value)||0, label:document.getElementById('s-tax-label')?.value.trim()||'Sales Tax' };
     Shop.tax=data.tax; // keep checkout + estimate math in sync without a reload
     await db.settings.save(data);
+    // Keep templates live for Messages/Tasks/review prompts without a reload.
+    if (Shop.settings) Shop.settings.smsTemplates = data.smsTemplates;
+    if (Shop.settings) Shop.settings.googleReviewLink = (gr || Shop.settings.googleReviewLink || '');
+    this._tpls = _smsTemplates(data.smsTemplates);
     const title=document.getElementById('topbar-title'); if(title)title.textContent=data.shopName||'ShopFlow';
     toast('Settings saved ✓');
+  },
+
+  // ── Message-template manager ──────────────────────────────────────────────────
+  MERGE_FIELDS: ['{first}','{name}','{shop}','{date}','{time}','{service}','{link}'],
+
+  // Render the editable list of templates into #s-tpl-list.
+  _renderTemplateList() {
+    const tpls = this._tpls || [];
+    if (!tpls.length) {
+      return '<div style="font-size:12px;color:var(--faint);padding:6px 0 12px;">No templates yet — add one to get started.</div>';
+    }
+    return tpls.map((t,i) => {
+      const chips = this.MERGE_FIELDS.map(f =>
+        `<button type="button" class="btn btn-xs" style="padding:2px 7px;font-size:11px;" onclick="Settings._insertVar(${i},'${f}')">${f}</button>`
+      ).join(' ');
+      return '<div class="card" style="padding:12px;margin-bottom:10px;background:var(--off,#f9fafb);">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+        +   '<label class="form-label" style="margin:0;">Template name</label>'
+        +   `<button class="btn btn-sm btn-danger" style="padding:2px 10px;" onclick="Settings.delTemplate(${i})" title="Delete template">✕</button>`
+        + '</div>'
+        + `<input class="form-input" id="s-tpl-label-${i}" value="${esc(t.label||'')}" placeholder="e.g. Appointment reminder" style="margin-bottom:10px;" />`
+        + `<label class="form-label">Message</label>`
+        + `<textarea class="form-input" id="s-tpl-body-${i}" rows="3" placeholder="Type your message…" style="margin-bottom:6px;">${esc(t.body||'')}</textarea>`
+        + `<div style="display:flex;flex-wrap:wrap;gap:5px;">${chips}</div>`
+        + '</div>';
+    }).join('');
+  },
+
+  // Read the live inputs back into this._tpls so add/delete/save don't lose edits.
+  _syncTemplates() {
+    (this._tpls || []).forEach((t,i) => {
+      const l = document.getElementById('s-tpl-label-'+i); if (l) t.label = l.value;
+      const b = document.getElementById('s-tpl-body-'+i);  if (b) t.body  = b.value;
+    });
+  },
+
+  _repaintTemplates() {
+    const host = document.getElementById('s-tpl-list');
+    if (host) host.innerHTML = this._renderTemplateList();
+  },
+
+  addTemplate() {
+    this._syncTemplates();
+    (this._tpls = this._tpls || []).push({ id: genId('tpl'), label: '', body: '' });
+    this._repaintTemplates();
+  },
+
+  delTemplate(i) {
+    this._syncTemplates();
+    (this._tpls || []).splice(i, 1);
+    this._repaintTemplates();
+  },
+
+  // Insert a merge field at the cursor in a template's body textarea.
+  _insertVar(i, token) {
+    const ta = document.getElementById('s-tpl-body-'+i); if (!ta) return;
+    const start = ta.selectionStart ?? ta.value.length, end = ta.selectionEnd ?? ta.value.length;
+    ta.value = ta.value.slice(0, start) + token + ta.value.slice(end);
+    const pos = start + token.length; ta.focus(); ta.setSelectionRange(pos, pos);
+    if (this._tpls && this._tpls[i]) this._tpls[i].body = ta.value;
   },
 
   // ── Work gallery ────────────────────────────────────────────────────────────

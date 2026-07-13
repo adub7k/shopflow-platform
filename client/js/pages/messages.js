@@ -62,7 +62,7 @@ const Messages = {
       const isOut = last.direction === 'outbound';
       const preview = (isOut ? 'You: ' : '') + (last.body || '').slice(0, 60) + ((last.body||'').length > 60 ? '…' : '');
       const timeStr = last.sentAt ? _msgTime(last.sentAt) : '';
-      return `<div class="msg-inbox-row" onclick="Messages.openThread('${t.customerId}','${esc(t.customerName)}','${esc(t.customerPhone||'')}')">
+      return `<div class="msg-inbox-row" onclick="Messages.openThread('${t.customerId}','${jsAttr(t.customerName)}','${jsAttr(t.customerPhone||'')}')">
         ${avatarEl(t.customerName, 42)}
         <div style="flex:1;min-width:0;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
@@ -113,7 +113,7 @@ const Messages = {
             <div class="msg-thread-name">${esc(thread.customerName)}</div>
             ${thread.customerPhone ? `<div class="msg-thread-phone">${esc(thread.customerPhone)}</div>` : ''}
           </div>
-          ${thread.customerPhone ? `<a href="tel:${thread.customerPhone}" style="color:var(--green);font-size:20px;text-decoration:none;padding:4px;">📞</a>` : ''}
+          ${thread.customerPhone ? `<a href="javascript:void 0" onclick="_cpCall('${jsAttr(thread.customerPhone)}','${jsAttr(thread.customerId||'')}')" style="color:var(--green);font-size:20px;text-decoration:none;padding:4px;">📞</a>` : ''}
         </div>
         <div class="msg-bubbles" id="msg-bubbles-scroll">${bubbles}</div>
         <div class="msg-compose">
@@ -140,23 +140,13 @@ const Messages = {
     const input = document.getElementById('msg-compose-input');
     const body  = input?.value.trim();
     if (!body || !this._currentThread) return;
-    const { customerId, customerName, customerPhone } = this._currentThread;
+    const { customerPhone, customerId } = this._currentThread;
     if (!customerPhone) { toast('No phone number for this client', 'error'); return; }
 
-    const btn = document.getElementById('msg-send-btn');
-    if (btn) btn.disabled = true;
-    input.value = '';
-    input.style.height = 'auto';
-
-    try {
-      const res = await db.sms.send({ to: customerPhone, body, customerId, customerName });
-      if (!res.ok) throw new Error(res.error || 'SMS failed');
-      await this._renderThread(document.getElementById('page-messages'), this._currentThread);
-    } catch(e) {
-      toast(e.message || 'Could not send message', 'error');
-      input.value = body; // restore text on failure
-      if (btn) btn.disabled = false;
-    }
+    // Manual send: open the owner's Messages app prefilled (iPhone sms: deep link).
+    // No Twilio/A2P — the owner sends from their own number, so we don't clear the
+    // draft or append a server-side bubble. Logs to the client's notes.
+    _cpSms(customerPhone, body, customerId);
   },
 
   closeThread() {
@@ -211,17 +201,10 @@ const Messages = {
     }, 100);
   },
 
-  // The shop's editable presets (Settings → SMS templates) with detail-friendly
-  // fallbacks, plus a blank custom option.
+  // The shop's editable presets (Settings → Message Templates), plus a blank custom
+  // option. _smsTemplates() is the shared list (client-profile.js).
   _templates() {
-    const t = (Shop.settings && Shop.settings.smsTemplates) || {};
-    return [
-      { label: 'Appointment confirmation', body: t.confirmation || 'Hi {first}! Your appointment at {shop} is confirmed for {date} at {time}. See you then!' },
-      { label: 'Reminder',                 body: t.reminder     || 'Hi {first}! Reminder: your appointment at {shop} is on {date} at {time}. See you then!' },
-      { label: 'Time to rebook',           body: t.rebook       || "Hi {first}! It's been a while — we'd love to get your vehicle looking fresh again at {shop}. Want to get on the schedule?" },
-      { label: 'Review request',           body: t.review       || 'Hi {first}, thanks for visiting {shop}! We\'d love a quick review: {link}' },
-      { label: 'Custom (blank)',           body: '' },
-    ];
+    return _smsTemplates().concat([{ id: '_blank', label: 'Custom (blank)', body: '' }]);
   },
 
   _fillCompose() {
@@ -229,7 +212,8 @@ const Messages = {
     const tpl = Messages._templates()[i] || { body: '' };
     const c = Messages._compose.target || {};
     const a = Messages._compose.appt || {};
-    const vars = {
+    const ta = document.getElementById('compose-body');
+    if (ta) ta.value = _smsFill(tpl.body, {
       name:  c.name || 'there',
       first: (c.name || 'there').split(' ')[0],
       shop:  (Shop.settings && Shop.settings.shopName) || 'us',
@@ -237,11 +221,7 @@ const Messages = {
       time:  a.time || '',
       service: a.service || '',
       link:  (Shop.settings && Shop.settings.googleReviewLink) || '',
-    };
-    const ta = document.getElementById('compose-body');
-    if (ta) ta.value = String(tpl.body || '')
-      .replace(/\{first\}/g, vars.first).replace(/\{name\}/g, vars.name).replace(/\{shop\}/g, vars.shop)
-      .replace(/\{date\}/g, vars.date).replace(/\{time\}/g, vars.time).replace(/\{service\}/g, vars.service).replace(/\{link\}/g, vars.link);
+    });
   },
 
   _sendCompose() {
@@ -249,7 +229,7 @@ const Messages = {
     if (!c || !c.phone) { toast('No phone number for this client', 'error'); return; }
     const body = (document.getElementById('compose-body') || {}).value || '';
     Modal.close();
-    _cpSms(c.phone, body);   // opens iPhone Messages prefilled
+    _cpSms(c.phone, body, c.id);   // opens iPhone Messages prefilled; logs to notes
   },
 
   updateBadge(threads) {

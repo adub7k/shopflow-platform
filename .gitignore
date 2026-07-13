@@ -1,4 +1,7 @@
-# Customer-uploaded images live on the Railway volume in production — never commit them
+# Tenant databases + customer-uploaded images live on the Railway volume in
+# production — NEVER commit them (they contain password hashes and customer PII).
+data/master.json
+data/shops/
 data/uploads/
 
 # Local tooling / OS cruft
@@ -10,3 +13,5 @@ node_modules/
 .env
 .env.*
 *.local.env
+# …but the placeholder template is safe to commit
+!.env.example

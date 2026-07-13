@@ -36,6 +36,7 @@ const Reviews = {
       // Ask recent clients (completed, has phone, not yet reviewed)
       const done = (appts||[]).filter(a=>a.status==='done' && a.customerPhone && !a.reviewId)
         .sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,6);
+      this._recent = {}; done.forEach(a=>{ this._recent[a.id]=a; });   // so request() can build the text
       if (done.length) {
         html.push('<div class="section-header">Ask Recent Clients</div><div class="list-card">');
         done.forEach(a=>{
@@ -75,8 +76,23 @@ const Reviews = {
   async feature(id){ try{ await db.reviews.feature(id); this.render(); }catch(e){ toast('Could not update','error'); } },
   async remove(id){ if(!confirm('Delete this review? This cannot be undone.'))return; try{ await db.reviews.remove(id); toast('Review deleted'); this.render(); }catch(e){ toast('Could not delete','error'); } },
   async request(id, btn){
-    if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
-    try{ await db.reviews.request(id); toast('Review request sent ✓'); if(btn){ btn.textContent='Sent ✓'; btn.classList.remove('btn-green'); } }
-    catch(e){ toast(e.message||'Could not send','error'); if(btn){ btn.disabled=false; btn.textContent='Text request'; } }
+    const a = (this._recent||{})[id];
+    if(!a || !a.customerPhone){ toast('No phone number on file','warning'); return; }
+    // Manual review request: open the owner's Messages prefilled from the review
+    // template (no Twilio/A2P). The {link} points at this shop's review page tied to
+    // the visit, so the rating lands back in-app.
+    const slug = (typeof Auth!=='undefined' && Auth.getShopSlug && Auth.getShopSlug()) || '';
+    const link = location.origin + '/review/' + slug + (slug?('?a='+a.id):'');
+    const body = _smsFill(_smsTemplateBody('review'), {
+      first: (a.customerName||'there').split(' ')[0],
+      name:  a.customerName || 'there',
+      shop:  (Shop.settings && Shop.settings.shopName) || 'us',
+      link,
+    });
+    _cpSms(a.customerPhone, body);
+    // Persist the "requested" flag (mark-only — the server no longer texts).
+    try{ await db.reviews.request(id); a.reviewRequestedAt=new Date().toISOString();
+      if(btn){ btn.textContent='Sent ✓'; btn.classList.remove('btn-green'); } }
+    catch(e){ /* deep link already opened; flag will catch up on next request */ }
   },
 };

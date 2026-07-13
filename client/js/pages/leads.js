@@ -1,30 +1,8 @@
-// ── Leads (inbound call tracking) ─────────────────────────────────────────────
-// Populated by the call-screening webhooks: every inbound call to the shop's
-// tracking number becomes a lead here, with its call history and a one-tap
-// text-back / convert-to-client flow.
-
-// The service a caller asked about — set live by the AI receptionist greeting
-// (lead.interest), falling back to what the voicemail AI extracted (lead.ai).
-// "Something else" is treated as no concrete interest.
-function _leadInterest(l) {
-  const lbl = l && l.interest && l.interest.label;
-  if (lbl && lbl !== 'Something else') return lbl;
-  const svc = l && l.ai && l.ai.serviceNeeded;
-  return svc || '';
-}
-
-// Lead temperature (hot/warm/cold). The voicemail AI's richer transcript rating
-// (lead.ai) wins when present; otherwise the live receptionist's rating
-// (lead.interest). '' when neither rated it.
-function _leadQuality(l) {
-  return (l && l.ai && l.ai.quality) || (l && l.interest && l.interest.quality) || '';
-}
-function _leadQualityBadge(q) {
-  const map = { hot: { bg: '#fef2f2', fg: '#dc2626', icon: '🔥', label: 'Hot' }, warm: { bg: '#fffbeb', fg: '#d97706', icon: '🟡', label: 'Warm' }, cold: { bg: '#f3f4f6', fg: '#6b7280', icon: '🧊', label: 'Cold' } };
-  const m = map[q]; if (!m) return '';
-  return `<span style="display:inline-flex;align-items:center;gap:4px;background:${m.bg};color:${m.fg};font-weight:700;font-size:11px;padding:2px 8px;border-radius:20px;white-space:nowrap;">${m.icon} ${m.label}</span>`;
-}
-
+// ── Leads (inbound calls + web lead form) ─────────────────────────────────────
+// Populated two ways: the call-screening webhooks (every inbound call to the
+// shop's tracking number) and the public lead-capture form at /book/<slug>.
+// Web leads carry ad attribution (source = utm_source, e.g. 'facebook'), so the
+// breakdown up top shows exactly which channel each lead came from.
 const Leads = {
   _leads: [],
   _filter: 'all',
@@ -34,6 +12,73 @@ const Leads = {
     contacted: { label: 'Contacted', bg: '#fef3c7',          fg: '#92400e',      dot: '#d97706' },
     booked:    { label: 'Booked',    bg: 'var(--green-lt)',  fg: 'var(--green)', dot: '#16a34a' },
     closed:    { label: 'Closed',    bg: '#f3f4f6',          fg: '#6b7280',      dot: '#9ca3af' },
+  },
+
+  // Display meta for a lead source. Known channels get an icon; anything else
+  // (a custom utm_source) is shown as typed, capitalized.
+  _sourceMeta(src) {
+    const known = {
+      call:      { icon: '📞', label: 'Phone call' },
+      website:   { icon: '🌐', label: 'Website' },
+      facebook:  { icon: '📘', label: 'Facebook' },
+      instagram: { icon: '📸', label: 'Instagram' },
+      google:    { icon: '🔍', label: 'Google' },
+      tiktok:    { icon: '🎵', label: 'TikTok' },
+      nextdoor:  { icon: '🏘', label: 'Nextdoor' },
+      yelp:      { icon: '⭐', label: 'Yelp' },
+    };
+    const s = String(src || 'call').toLowerCase();
+    return known[s] || { icon: '🔗', label: s.charAt(0).toUpperCase() + s.slice(1) };
+  },
+
+  // Overall conversion stats: how many leads become booked jobs. The 30-day
+  // window is the ad-spend read; all-time rides along as the subtitle.
+  _convStats() {
+    const all = this._leads; if (!all.length) return '';
+    const isBooked = l => l.status === 'booked';
+    const last30 = all.filter(l => (Date.now() - new Date(l.createdAt || l.firstContactAt || 0)) < 30 * 86400000);
+    const b30 = last30.filter(isBooked).length, bAll = all.filter(isBooked).length;
+    const pct = (n, d) => d ? Math.round(n / d * 100) : 0;
+    const r30 = pct(b30, last30.length), rAll = pct(bAll, all.length);
+    const stat = (label, value, sub, fg) => `<div class="card" style="flex:1;min-width:105px;margin:0;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">${label}</div>
+      <div style="font-size:22px;font-weight:800;letter-spacing:-.03em;color:${fg || 'var(--text)'};margin-top:3px;">${value}</div>
+      <div style="font-size:11px;color:var(--faint);margin-top:2px;">${sub}</div>
+    </div>`;
+    return `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+      ${stat('Leads', last30.length, `30 days · ${all.length} all-time`)}
+      ${stat('Booked', b30, `30 days · ${bAll} all-time`)}
+      ${stat('Conversion', r30 + '%', `30 days · ${rAll}% all-time`, r30 >= 25 ? 'var(--green)' : (r30 >= 10 ? '#d97706' : (last30.length ? '#dc2626' : 'var(--text)')))}
+    </div>`;
+  },
+
+  // Leads by source: total + booked per channel, best-converting first.
+  // This is the read on ad spend — "Facebook sent 12, 4 booked".
+  _sourceBreakdown() {
+    if (!this._leads.length) return '';
+    const bySrc = {};
+    this._leads.forEach(l => {
+      const k = String(l.source || 'call').toLowerCase();
+      bySrc[k] = bySrc[k] || { total: 0, booked: 0 };
+      bySrc[k].total++;
+      if (l.status === 'booked') bySrc[k].booked++;
+    });
+    const keys = Object.keys(bySrc);
+    if (keys.length < 2 && keys[0] === 'call') return ''; // calls-only shops: nothing to compare yet
+    const max = Math.max(...keys.map(k => bySrc[k].total));
+    const rows = keys.sort((a,b) => bySrc[b].total - bySrc[a].total).map(k => {
+      const m = this._sourceMeta(k), d = bySrc[k];
+      const pct = d.total ? Math.round(d.booked / d.total * 100) : 0;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;">
+        <div style="width:110px;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0;">${m.icon} ${esc(m.label)}</div>
+        <div style="flex:1;height:8px;background:var(--off);border-radius:99px;overflow:hidden;"><div style="width:${Math.max(4, Math.round(d.total/max*100))}%;height:100%;background:var(--green);border-radius:99px;"></div></div>
+        <div style="font-size:12px;color:var(--muted);white-space:nowrap;flex-shrink:0;"><strong style="color:var(--text);">${d.total}</strong> lead${d.total!==1?'s':''} · ${d.booked} booked${d.booked?` (${pct}%)`:''}</div>
+      </div>`;
+    }).join('');
+    return `<div class="card" style="margin-bottom:12px;">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px;">Leads by source</div>
+      ${rows}
+    </div>`;
   },
 
   async render() {
@@ -57,34 +102,52 @@ const Leads = {
       </div>
     </div>`;
 
+    // Shareable lead-form link — this is the URL that goes in ads. Tag ad links
+    // with ?utm_source=... so the source breakdown can attribute them.
+    const slug = (Shop.settings && Shop.settings.shopSlug) || '';
+    const leadUrl = slug ? location.origin + '/book/' + slug : '';
+    const linkBanner = leadUrl ? `<div class="lead-banner" style="margin-top:8px;">
+      <span style="font-size:18px;">🔗</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:700;color:var(--text);">Your lead form</div>
+        <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(leadUrl)} — in ads, add <strong>?utm_source=facebook</strong> (or google, etc.) to track where leads come from.</div>
+      </div>
+      <button class="btn" style="flex-shrink:0;font-size:12px;padding:7px 12px;" onclick="navigator.clipboard.writeText('${esc(leadUrl)}');toast('Link copied ✓')">Copy</button>
+    </div>` : '';
+
     const shown = this._filter==='all' ? this._leads : this._leads.filter(l => l.status===this._filter);
 
+    const stats = this._convStats();
+    const breakdown = this._sourceBreakdown();
+
     if (!shown.length) {
-      el.innerHTML = banner + filters + `<div class="card"><div class="empty-state">
+      el.innerHTML = banner + linkBanner + stats + breakdown + filters + `<div class="card"><div class="empty-state">
         <div class="empty-icon">📞</div>
         <div class="empty-text">No ${this._filter==='all'?'':this._filter+' '}leads yet</div>
-        <div style="font-size:12px;color:var(--faint);margin-top:6px;">Inbound calls will show up here automatically.</div>
+        <div style="font-size:12px;color:var(--faint);margin-top:6px;">Inbound calls and lead-form submissions show up here automatically.</div>
       </div></div>`;
       return;
     }
 
     const rows = shown.map(l => {
       const m = this._statusMeta[l.status] || this._statusMeta.new;
+      const sm = this._sourceMeta(l.source);
       const name = l.name || l.phone || 'Unknown caller';
       const lastCall = (l.calls||[])[0];
+      const when = (lastCall && lastCall.startedAt) || l.lastContactAt;
       const missedBadge = (l.missedCount||0) > 0 ? `<span class="lead-missed">⚠ ${l.missedCount} missed</span>` : '';
-      const sub = [l.phone, l.location].filter(Boolean).join(' · ');
+      const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model].filter(Boolean).join(' ') : '';
+      const sub = [veh || l.location, (l.servicesInterested||[]).join(', ') || l.phone].filter(Boolean).join(' · ');
       return `<div class="msg-inbox-row" onclick="Leads.open('${l.id}')">
-        ${avatarEl(l.name || '☎', 42)}
+        ${avatarEl(l.name || sm.icon, 42)}
         <div style="flex:1;min-width:0;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
             <div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</div>
-            <div style="font-size:11px;color:var(--faint);white-space:nowrap;flex-shrink:0;">${lastCall?_msgTime(lastCall.startedAt):''}</div>
+            <div style="font-size:11px;color:var(--faint);white-space:nowrap;flex-shrink:0;">${when?_msgTime(when):''}</div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:3px;">
             <span class="lead-badge" style="background:${m.bg};color:${m.fg};">${m.label}</span>
-            ${_leadQualityBadge(_leadQuality(l))}
-            ${_leadInterest(l)?`<span class="lead-badge" style="background:var(--green-lt);color:var(--green);">🎯 ${esc(_leadInterest(l))}</span>`:''}
+            <span class="lead-badge" style="background:var(--off);color:var(--muted);">${sm.icon} ${esc(sm.label)}</span>
             ${missedBadge}
             <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">${esc(sub)}</div>
           </div>
@@ -92,7 +155,7 @@ const Leads = {
       </div>`;
     }).join('');
 
-    el.innerHTML = banner + filters + `<div class="list-card">${rows}</div>`;
+    el.innerHTML = banner + linkBanner + stats + breakdown + filters + `<div class="list-card">${rows}</div>`;
   },
 
   setFilter(f) { this._filter = f; this.render(); },
@@ -112,15 +175,42 @@ const Leads = {
       const when = _msgTimeFull(c.startedAt);
       const vm  = c.voicemail ? mediaBtn(c.id,'voicemail',c.voicemail.durationSec) : '';
       const rec = c.recording ? mediaBtn(c.id,'recording',c.recording.durationSec) : '';
-      const tr = c.transcript ? `<div style="font-size:12px;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px 10px;margin:4px 0 8px;line-height:1.45;"><strong>🎙 Transcript:</strong> ${esc(c.transcript)}</div>` : '';
+      // An AI-answered call carries a structured conversation (voiceAI.turns) and
+      // an outcome — render it as a chat thread with a booked/captured badge.
+      const va = c.voiceAI;
+      let tr;
+      if (va && va.turns && va.turns.length) {
+        const oc = va.outcome;
+        const badge = oc ? `<div style="font-size:11px;font-weight:800;color:var(--green);margin-bottom:6px;">${oc.type==='booked'?`✅ Booked ${esc(oc.service||'appointment')} · ${esc(oc.date||'')} ${esc(oc.time||'')}`:oc.type==='captured'?'📝 Qualified lead captured':'Call ended'}</div>` : '';
+        const thread = va.turns.map(t=>`<div style="margin:3px 0;"><strong style="color:${t.role==='assistant'?'var(--green)':'var(--text)'};">${t.role==='assistant'?'🤖 AI':'📞 Caller'}:</strong> ${esc(t.text)}</div>`).join('');
+        tr = `<div style="font-size:12px;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px 10px;margin:4px 0 8px;line-height:1.5;">${badge}${thread}</div>`;
+      } else {
+        tr = c.transcript ? `<div style="font-size:12px;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px 10px;margin:4px 0 8px;line-height:1.45;"><strong>🎙 Transcript:</strong> ${esc(c.transcript)}</div>` : '';
+      }
+      // AI answered (fallback or always mode) — distinct from a human miss/answer.
+      if (c.aiHandled) {
+        const ocLabel = va&&va.outcome ? (va.outcome.type==='booked'?' · booked' : va.outcome.type==='captured'?' · lead captured' : '') : '';
+        return `<div class="lead-call answered"><span>🤖 AI receptionist answered${ocLabel}</span><span class="lead-call-time">${when}</span></div>${vm}${rec}${tr}`;
+      }
       if (c.missed) return `<div class="lead-call missed"><span>⚠ Missed call${c.autoSmsSent?' · auto-text sent':''}${c.voicemail?' · 🎙 voicemail':''}</span><span class="lead-call-time">${when}</span></div>${vm}${tr}`;
       const dur = c.durationSec ? ` · ${Math.floor(c.durationSec/60)}m ${c.durationSec%60}s` : '';
       return `<div class="lead-call answered"><span>✓ Answered${dur}${c.recording?' · 🎙 recorded':''}</span><span class="lead-call-time">${when}</span></div>${rec}${tr}`;
     }).join('') || `<div style="font-size:12px;color:var(--faint);padding:6px 0;">No calls logged.</div>`;
 
+    // Web-lead extras: where the lead came from (channel + campaign), the
+    // vehicle they told us about, and the services they checked on the form.
+    const sm = this._sourceMeta(l.source);
+    const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model, l.vehicle.color].filter(Boolean).join(' ') : '';
+    const infoRow = (k, v) => v ? `<div style="display:flex;gap:10px;padding:5px 0;font-size:13px;"><span style="width:86px;color:var(--muted);flex-shrink:0;">${k}</span><span style="font-weight:600;color:var(--text);">${esc(v)}</span></div>` : '';
+    const detailCard = `
+      ${infoRow('Source', sm.icon + ' ' + sm.label + (l.utm && l.utm.campaign ? ' · ' + l.utm.campaign : ''))}
+      ${infoRow('Vehicle', veh)}
+      ${infoRow('Interested in', (l.servicesInterested||[]).join(', '))}
+      ${l.email ? `<div style="display:flex;gap:10px;padding:5px 0;font-size:13px;"><span style="width:86px;color:var(--muted);flex-shrink:0;">Email</span><a href="mailto:${esc(l.email)}" style="font-weight:600;color:var(--green);text-decoration:none;">${esc(l.email)}</a></div>` : ''}`;
+
     Modal.show(`
       <div class="modal-title" style="display:flex;align-items:center;gap:10px;">
-        ${avatarEl(l.name || '☎', 38)}
+        ${avatarEl(l.name || sm.icon, 38)}
         <div style="flex:1;min-width:0;">
           <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</div>
           ${l.phone?`<a href="tel:${esc(l.phone)}" style="font-size:12px;font-weight:500;color:var(--green);text-decoration:none;">${esc(l.phone)} ↗</a>`:''}
@@ -128,6 +218,8 @@ const Leads = {
       </div>
 
       ${this._aiCard(l)}
+
+      ${detailCard.trim()?`<div class="form-group" style="background:var(--off);border-radius:10px;padding:8px 12px;">${detailCard}</div>`:''}
 
       <div class="form-group">
         <label class="form-label">Name</label>
@@ -236,17 +328,19 @@ const Leads = {
     } catch(e) { toast(e.message || 'Could not save', 'error'); }
   },
 
-  async sendSms(id) {
+  sendSms(id) {
     const input = document.getElementById('lead-sms');
     const body = input?.value.trim();
     if (!body) return;
-    input.value = '';
-    try {
-      const res = await db.leads.sms(id, body);
-      if (!res.ok) throw new Error(res.error || 'SMS failed');
-      toast('Message sent ✓');
-      const l = this._leads.find(x => x.id === id); if (l && l.status === 'new') l.status = 'contacted';
-    } catch(e) { toast(e.message || 'Could not send', 'error'); if (input) input.value = body; }
+    const l = this._leads.find(x => x.id === id);
+    if (!l || !l.phone) { toast('No phone number on file', 'warning'); return; }
+    // Manual send via the iPhone Messages deep link (no Twilio/A2P).
+    _cpSms(l.phone, body);
+    // Texting a new lead counts as the first touch → move it to "contacted".
+    if (l.status === 'new') {
+      l.status = 'contacted';
+      db.leads.update(id, { status: 'contacted' }).catch(() => {});
+    }
   },
 
   async convert(id) {

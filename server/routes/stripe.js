@@ -17,8 +17,11 @@ const APP_URL = process.env.APP_URL || 'https://shopflowio.up.railway.app';
 function fulfillBookingDeposit(shopId, apptId, session) {
   const db = getShopDb(shopId); const h = shopHelpers(db);
   const appt = h.getById('appointments', apptId);
-  if (appt && appt.status === 'pending-deposit') {
-    appt.status = 'confirmed'; appt.depositPaid = true;
+  // Confirm a pending booking, OR just record the deposit on an already-confirmed
+  // appointment (e.g. a deposit link sent from the client profile). Idempotent.
+  if (appt && (appt.status === 'pending-deposit' || !appt.depositPaid)) {
+    if (appt.status === 'pending-deposit') appt.status = 'confirmed';
+    appt.depositPaid = true;
     appt.depositAmount = session.amount_total / 100; appt.depositSessionId = session.id;
     h.upsert('appointments', appt);
   }

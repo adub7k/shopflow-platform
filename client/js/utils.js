@@ -31,7 +31,18 @@ const statusBadge = (s) => { const m={confirmed:'badge-green',done:'badge-blue',
 const disableBtn = (btn) => { if(btn){btn.disabled=true;btn._txt=btn.innerHTML;btn.innerHTML='<span style="opacity:.5">Saving...</span>';} };
 const enableBtn  = (btn) => { if(btn){btn.disabled=false;btn.innerHTML=btn._txt||btn.innerHTML;} };
 
-const esc = (s) => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+// HTML-escape for text content and double-quoted attribute values.
+const esc = (s) => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+
+// Escape for a value placed inside a SINGLE-QUOTED JS string that itself lives in
+// a double-quoted HTML attribute, e.g. onclick="Fn('${jsAttr(x)}')". Plain esc()
+// is NOT safe here: the browser HTML-decodes the attribute before the JS parser
+// runs, so an esc()'d apostrophe (&#39;) turns back into ' and breaks out of the
+// string. Backslash-escape the JS metacharacters first, then HTML-encode the
+// attribute-breaking chars. Prefer passing IDs only; use this for any free text.
+const jsAttr = (s) => String(s==null?'':s)
+  .replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\r/g,'\\r').replace(/\n/g,'\\n')
+  .replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
 // Read an image File and return a downscaled JPEG data URL (keeps phone photos
 // well under the server's 5MB upload limit). Used by gallery + job photos.

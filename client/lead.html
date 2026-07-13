@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<title>Get a Quote</title>
+<style>
+/* ShopFlow design tokens — shared with book.html */
+:root{
+  --accent:#16a34a; --accent-2:#22c55e; --accent-ink:#ffffff;
+  --accent-tint:rgba(22,163,74,.10); --accent-glow:rgba(22,163,74,.32);
+  --ink:#0f1115; --ink-2:#3b3f48; --muted:#6b7280; --faint:#9aa0ab;
+  --bg:#f5f6f8; --surface:#ffffff; --line:#e8eaee;
+  --r-2xl:30px; --r-xl:22px; --r-lg:18px; --r-md:13px; --r-pill:999px;
+  --sh-sm:0 1px 3px rgba(15,17,21,.06);
+  --sh-md:0 6px 22px rgba(15,17,21,.08);
+  --sh-lg:0 18px 50px rgba(15,17,21,.16);
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;}
+body{background:var(--bg);font-family:var(--font);color:var(--ink);-webkit-font-smoothing:antialiased;line-height:1.45;}
+img{max-width:100%;display:block;}
+
+#loading{position:fixed;inset:0;background:var(--surface);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:200;transition:opacity .35s;}
+#loading.fade{opacity:0;pointer-events:none;}
+.spinner{width:34px;height:34px;border:3px solid var(--accent-tint);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.shell{max-width:540px;margin:0 auto;min-height:100%;}
+
+/* Hero */
+.hero{background:linear-gradient(150deg,var(--accent),var(--accent-2));color:var(--accent-ink);padding:50px 24px 42px;text-align:center;position:relative;border-radius:0 0 var(--r-2xl) var(--r-2xl);overflow:hidden;}
+.hero::after{content:'';position:absolute;top:-60%;right:-30%;width:80%;height:160%;background:radial-gradient(circle,rgba(255,255,255,.18),transparent 60%);pointer-events:none;}
+.hero-avatar{width:72px;height:72px;border-radius:20px;background:var(--surface);color:var(--accent);font-size:28px;font-weight:900;letter-spacing:-.04em;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;box-shadow:var(--sh-lg);position:relative;z-index:1;overflow:hidden;}
+.hero-name{font-size:27px;font-weight:900;letter-spacing:-.045em;position:relative;z-index:1;}
+.hero-tag{font-size:14.5px;opacity:.92;margin-top:5px;font-weight:500;position:relative;z-index:1;}
+.hero-pitch{font-size:16px;font-weight:750;margin-top:16px;position:relative;z-index:1;letter-spacing:-.01em;}
+.hero-sub{font-size:13px;opacity:.82;margin-top:6px;line-height:1.55;max-width:330px;margin-left:auto;margin-right:auto;position:relative;z-index:1;}
+
+/* Content */
+.content{padding:8px 0 40px;}
+.block{padding:24px 22px 4px;}
+.block-eyebrow{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);}
+.block-head{display:flex;align-items:center;gap:11px;margin-bottom:14px;}
+
+/* Gallery + reviews (social proof) */
+.gallery-row{display:flex;gap:12px;overflow-x:auto;padding:2px 22px 6px;margin:0 -22px;scrollbar-width:none;}
+.gallery-row::-webkit-scrollbar{display:none;}
+.gallery-item{flex-shrink:0;width:140px;height:175px;border-radius:var(--r-lg);overflow:hidden;background:var(--line);box-shadow:var(--sh-md);cursor:pointer;position:relative;}
+.gallery-item img{width:100%;height:100%;object-fit:cover;}
+.gallery-cap{position:absolute;left:0;right:0;bottom:0;padding:18px 12px 9px;font-size:12px;font-weight:600;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.55));}
+.rev-row{display:flex;gap:12px;overflow-x:auto;padding:2px 22px 6px;margin:0 -22px;scrollbar-width:none;}
+.rev-row::-webkit-scrollbar{display:none;}
+.rev-card{flex-shrink:0;width:264px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px 17px;box-shadow:var(--sh-sm);}
+.rev-stars{color:#f6b900;font-size:15px;letter-spacing:2px;}
+.rev-text{font-size:13.5px;line-height:1.5;margin:8px 0;color:var(--ink-2);}
+.rev-name{font-size:12px;font-weight:700;color:var(--muted);}
+
+/* Form card */
+.form-card{background:var(--surface);border-radius:var(--r-xl);box-shadow:var(--sh-md);padding:24px 20px;margin:0 16px;}
+.form-title{font-size:20px;font-weight:850;letter-spacing:-.03em;margin-bottom:4px;}
+.form-sub{font-size:13.5px;color:var(--muted);margin-bottom:18px;}
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--muted);margin-bottom:7px;text-transform:uppercase;}
+.field input,.field textarea{width:100%;padding:14px 15px;border:2px solid var(--line);border-radius:var(--r-md);font-size:16px;font-family:var(--font);background:var(--surface);color:var(--ink);outline:none;transition:border-color .15s;-webkit-appearance:none;}
+.field input:focus,.field textarea:focus{border-color:var(--accent);}
+.field input::placeholder,.field textarea::placeholder{color:var(--faint);}
+.field textarea{min-height:76px;resize:none;line-height:1.5;}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.hp{position:absolute;left:-9999px;top:-9999px;height:0;width:0;overflow:hidden;}
+
+/* Services considering */
+.svc-lbl{font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--muted);margin:4px 0 8px;text-transform:uppercase;}
+.svc-opt{display:flex;align-items:center;gap:11px;padding:12px 14px;border:2px solid var(--line);background:var(--surface);border-radius:var(--r-md);margin-bottom:8px;cursor:pointer;transition:border-color .12s,background .12s;}
+.svc-opt.on{border-color:var(--accent);background:var(--accent-tint);}
+.svc-opt input{width:19px;height:19px;accent-color:var(--accent);flex-shrink:0;}
+.svc-opt .nm{flex:1;font-size:14.5px;font-weight:650;}
+.svc-opt .pr{font-size:14px;font-weight:800;color:var(--accent);white-space:nowrap;}
+
+/* CTA + trust */
+.cta-btn{width:100%;border:none;border-radius:var(--r-pill);background:linear-gradient(135deg,var(--accent),var(--accent-2));color:var(--accent-ink);font-family:var(--font);font-size:17px;font-weight:800;letter-spacing:-.01em;padding:17px 28px;cursor:pointer;box-shadow:0 8px 22px var(--accent-glow);transition:opacity .15s,transform .08s;margin-top:6px;}
+.cta-btn:active{transform:scale(.98);}
+.cta-btn:disabled{opacity:.55;cursor:not-allowed;}
+.trust{text-align:center;font-size:12px;color:var(--faint);margin-top:12px;line-height:1.5;}
+.consent{text-align:center;font-size:10.5px;color:var(--faint);opacity:.8;margin-top:10px;line-height:1.55;}
+.consent a{color:var(--faint);text-decoration:underline;}
+
+.err{background:#fef2f2;border:1.5px solid #fecaca;border-radius:var(--r-md);padding:12px 16px;font-size:13px;color:#dc2626;margin-bottom:14px;display:none;line-height:1.5;font-weight:600;}
+
+/* Confirmation / closed */
+.center-screen{max-width:540px;margin:0 auto;padding:64px 24px 48px;text-align:center;display:none;}
+.conf-ic{font-size:74px;animation:pop .45s cubic-bezier(.18,.89,.32,1.28);margin-bottom:18px;}
+@keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+.conf-title{font-size:27px;font-weight:900;letter-spacing:-.04em;margin-bottom:8px;}
+.conf-sub{font-size:15px;color:var(--muted);line-height:1.6;margin-bottom:26px;}
+.closed-ic{font-size:60px;margin-bottom:18px;}
+
+#lightbox{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:300;display:none;align-items:center;justify-content:center;padding:24px;}
+#lightbox img{max-width:100%;max-height:100%;border-radius:var(--r-md);}
+</style>
+</head>
+<body>
+
+<div id="loading"><div class="spinner"></div></div>
+
+<div id="closed" class="center-screen">
+  <div class="closed-ic">🗓️</div>
+  <div class="conf-title">Not Available</div>
+  <div class="conf-sub">This page is currently turned off.<br>Please reach out to the shop directly.</div>
+</div>
+
+<div id="confirmed" class="center-screen">
+  <div class="conf-ic">✅</div>
+  <div class="conf-title">Request received!</div>
+  <div class="conf-sub" id="conf-sub"></div>
+</div>
+
+<div id="app" class="shell" style="display:none;">
+  <header class="hero">
+    <div class="hero-avatar" id="sh-av"></div>
+    <h1 class="hero-name" id="sh-name"></h1>
+    <div class="hero-tag" id="sh-tag"></div>
+    <div class="hero-pitch">Get a fast, free quote</div>
+    <div class="hero-sub" id="sh-msg">Tell us about your vehicle and we'll text you back with pricing — usually within the hour.</div>
+  </header>
+
+  <div class="content">
+    <!-- Social proof -->
+    <section class="block" id="gallery-sec" style="display:none;">
+      <div class="block-head"><span class="block-eyebrow" id="gallery-eyebrow">Our work</span></div>
+      <div class="gallery-row" id="gallery-row"></div>
+    </section>
+    <section class="block" id="reviews-sec" style="display:none;">
+      <div class="block-head"><span class="block-eyebrow" id="reviews-eyebrow">Reviews</span></div>
+      <div class="rev-row" id="reviews-row"></div>
+    </section>
+
+    <!-- Opt-in form -->
+    <section class="block">
+      <div class="form-card">
+        <div class="form-title" id="form-title">Get your quote</div>
+        <div class="form-sub">Takes about 30 seconds. No obligation.</div>
+        <div class="err" id="err"></div>
+
+        <div class="field"><label>Full name</label><input id="f-name" type="text" placeholder="e.g. Jordan Rivera" autocomplete="name" /></div>
+        <div class="field"><label>Phone number</label><input id="f-phone" type="tel" placeholder="(505) 555-0100" autocomplete="tel" inputmode="tel" /></div>
+        <div class="field"><label>Email (optional)</label><input id="f-email" type="email" placeholder="you@email.com" autocomplete="email" /></div>
+        <!-- Honeypot: bots fill this, humans never see it -->
+        <div class="hp" aria-hidden="true"><label>Website</label><input id="f-website" type="text" tabindex="-1" autocomplete="off" /></div>
+
+        <div id="custom-fields" class="field-row" style="margin-bottom:14px;"></div>
+
+        <div id="svc-sec" style="display:none;">
+          <div class="svc-lbl">Services you're considering</div>
+          <div id="svc-list"></div>
+        </div>
+
+        <div class="field" style="margin-top:12px;"><label>Anything else? (optional)</label><textarea id="f-notes" placeholder="Pet hair, stains, how soon you need it..."></textarea></div>
+
+        <button class="cta-btn" id="cta-btn" onclick="L.submit()">Get My Free Quote →</button>
+        <div class="trust" id="trust-line">📱 We'll text you — no spam, no sales calls.</div>
+        <!-- A2P 10DLC consent disclosure — TCR vetting checks the opt-in page for
+             exactly this language (consent, frequency, rates, STOP/HELP, policy links). -->
+        <div class="consent">By submitting this form, you agree to receive text messages from <span id="consent-shop">us</span> about your quote and appointments. Message frequency varies. Msg &amp; data rates may apply. Reply STOP to opt out or HELP for help. <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a> &middot; <a href="/terms.html" target="_blank" rel="noopener">Terms</a></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div id="lightbox" onclick="this.style.display='none'"><img id="lightbox-img" alt="" /></div>
+
+<script>
+const L = {
+  slug:'', shop:null, fields:[], options:[], selected:{},
+  utm:{}, referrer:'',
+
+  async init(){
+    this.slug = location.pathname.replace(/^\/book\/?/,'').split('/')[0].split('?')[0];
+    if(!this.slug){ return this.closed(); }
+
+    // Ad attribution: utm_* tags arrive on the ad's landing URL; capture them
+    // now (plus the referrer) so they ride along with the form submit.
+    const q = new URLSearchParams(location.search);
+    ['source','medium','campaign','term','content'].forEach(k=>{
+      const v = q.get('utm_'+k); if(v) this.utm[k]=v;
+    });
+    this.referrer = document.referrer || '';
+
+    try{
+      const info = await fetch('/api/public/'+this.slug+'/info').then(r=>r.json());
+      if(!info.shopName || info.bookingEnabled===false){ return this.closed(); }
+      this.shop=info; this.fields=info.customFields||[]; this.options=info.leadFormOptions||[];
+      this._pixel(info.metaPixelId);
+      this._accent(info.accentColor||'#16a34a');
+      this._header(info);
+      this._gallery();
+      this._reviews();
+      this._customFields();
+      this._svcs();
+      document.getElementById('app').style.display='';
+      const ld=document.getElementById('loading'); ld.classList.add('fade'); setTimeout(()=>ld.style.display='none',360);
+    }catch(e){ this.closed(); }
+  },
+
+  // Meta Pixel — only when the shop has entered a pixel ID in Settings. Fires
+  // PageView on load; the submit handler fires the Lead event, which is what
+  // lets Meta optimize ad delivery for real form-fills instead of clicks.
+  _pixel(id){
+    if(!id || window.fbq) return;
+    try{
+      !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
+      fbq('init', String(id));
+      fbq('track', 'PageView');
+    }catch(e){ /* pixel is best-effort — never break the form */ }
+  },
+
+  _accent(hex){
+    const r=document.documentElement.style;
+    r.setProperty('--accent',hex);
+    r.setProperty('--accent-2',lighten(hex,.14));
+    r.setProperty('--accent-tint',hex2rgba(hex,.10));
+    r.setProperty('--accent-glow',hex2rgba(hex,.32));
+  },
+
+  _header(i){
+    const av=document.getElementById('sh-av');
+    av.textContent=i.shopName.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+    document.getElementById('sh-name').textContent=i.shopName;
+    document.getElementById('sh-tag').textContent=i.tagline||'';
+    document.getElementById('consent-shop').textContent=i.shopName;
+    document.title='Get a Quote — '+i.shopName;
+  },
+
+  _gallery(){
+    const g=this.shop.gallery||[]; if(!g.length) return;
+    document.getElementById('gallery-eyebrow').textContent='Our work · '+this.shop.shopName;
+    document.getElementById('gallery-row').innerHTML=g.map(x=>
+      `<div class="gallery-item" onclick="L.lightbox('${es(x.url)}')"><img src="${es2(x.url)}" loading="lazy" alt="${es2(x.caption||'Work sample')}"/>${x.caption?`<div class="gallery-cap">${es2(x.caption)}</div>`:''}</div>`
+    ).join('');
+    document.getElementById('gallery-sec').style.display='';
+  },
+
+  _reviews(){
+    const fr=this.shop.featuredReviews||[]; const st=this.shop.reviewStats;
+    if(!fr.length) return;
+    const star=n=>'★★★★★'.slice(0,n)+'☆☆☆☆☆'.slice(0,5-n);
+    document.getElementById('reviews-eyebrow').textContent = st ? ('★ '+st.avg.toFixed(1)+' · '+st.count+' review'+(st.count!==1?'s':'')) : 'What clients say';
+    document.getElementById('reviews-row').innerHTML=fr.map(r=>
+      `<div class="rev-card"><div class="rev-stars">${star(r.rating)}</div>${r.comment?`<div class="rev-text">“${es2(r.comment)}”</div>`:''}<div class="rev-name">${es2(r.name||'Anonymous')}${r.service?' · '+es2(r.service):''}</div></div>`
+    ).join('');
+    document.getElementById('reviews-sec').style.display='';
+  },
+
+  _customFields(){
+    document.getElementById('custom-fields').innerHTML=this.fields.map(f=>`<div class="field" style="margin-bottom:0;">
+      <label>${es2(f.label)}${f.required?'':' (opt.)'}</label>
+      <input id="cf-${es2(f.key)}" type="${f.type==='number'?'tel':'text'}" placeholder="${es2(f.label)}" />
+    </div>`).join('');
+  },
+
+  _svcs(){
+    // Plain owner-written labels, no prices — the checkboxes exist to get the
+    // visitor thinking about what they want; the shop prices it in the quote.
+    if(!this.options.length) return;
+    document.getElementById('svc-sec').style.display='';
+    document.getElementById('svc-list').innerHTML=this.options.map((o,i)=>
+      `<label class="svc-opt" id="so-${i}"><input type="checkbox" onchange="L.toggle(${i})" /><span class="nm">${es2(o)}</span></label>`
+    ).join('');
+  },
+
+  toggle(i){
+    this.selected[i]=!this.selected[i];
+    document.getElementById('so-'+i)?.classList.toggle('on',!!this.selected[i]);
+  },
+
+  async submit(){
+    const name=document.getElementById('f-name').value.trim();
+    const phone=document.getElementById('f-phone').value.trim();
+    if(!name) return this._fail('Please enter your name.','f-name');
+    if(phone.replace(/\D/g,'').length<10) return this._fail('Please enter a valid phone number.','f-phone');
+    const cf={};
+    for(const f of this.fields){
+      const v=(document.getElementById('cf-'+f.key)?.value||'').trim();
+      if(f.required && !v) return this._fail('Please enter '+f.label+'.','cf-'+f.key);
+      cf[f.key]=v;
+    }
+    const btn=document.getElementById('cta-btn'); btn.disabled=true; btn.textContent='Sending…';
+    try{
+      const res=await fetch('/api/public/'+this.slug+'/lead',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          name, phone,
+          email:document.getElementById('f-email').value.trim(),
+          website:document.getElementById('f-website').value,
+          customFields:cf,
+          services:this.options.filter((o,i)=>this.selected[i]),
+          notes:document.getElementById('f-notes').value.trim(),
+          utm:this.utm, referrer:this.referrer,
+        })}).then(r=>r.json());
+      if(!res.ok){ this.err(res.error||'Something went wrong. Please try again.'); btn.disabled=false; btn.textContent='Get My Free Quote →'; return; }
+      if(window.fbq){ try{ fbq('track','Lead'); }catch(e){} }
+      document.getElementById('app').style.display='none';
+      document.getElementById('conf-sub').textContent=(this.shop.shopName||'The shop')+' will text you back with your quote shortly — keep an eye on your messages!';
+      document.getElementById('confirmed').style.display='block';
+      window.scrollTo({top:0,behavior:'smooth'});
+    }catch(e){ this.err('Something went wrong. Please try again.'); btn.disabled=false; btn.textContent='Get My Free Quote →'; }
+  },
+
+  _fail(msg,focusId){
+    this.err(msg);
+    const el=document.getElementById(focusId);
+    if(el){ el.scrollIntoView({behavior:'smooth',block:'center'}); setTimeout(()=>el.focus(),300); }
+  },
+  err(msg){ const e=document.getElementById('err'); e.textContent=msg||''; e.style.display=msg?'block':'none'; if(msg)e.scrollIntoView({behavior:'smooth',block:'center'}); },
+  lightbox(url){ document.getElementById('lightbox-img').src=url; document.getElementById('lightbox').style.display='flex'; },
+  closed(){ document.getElementById('loading').style.display='none'; document.getElementById('closed').style.display='block'; },
+};
+
+function es(s){ return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function es2(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function hex2rgba(hex,a){ const n=parseInt(hex.slice(1),16); return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`; }
+function lighten(hex,amt){ const n=parseInt(hex.slice(1),16); const r=Math.min(255,(n>>16&255)+Math.round(255*amt)),g=Math.min(255,(n>>8&255)+Math.round(255*amt)),b=Math.min(255,(n&255)+Math.round(255*amt)); return '#'+(1<<24|r<<16|g<<8|b).toString(16).slice(1); }
+
+L.init();
+</script>
+</body>
+</html>

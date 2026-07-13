@@ -19,9 +19,9 @@ const Appointments = {
       const dt = new Date(this._selected+'T12:00:00');
       const monthLabel = dt.toLocaleDateString('en-US',{month:'long',year:'numeric'});
       html.push(`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <button class="btn btn-sm" onclick="Appointments.changeMonth(-1)">&#8249;</button>
+        <button class="btn btn-sm" onclick="Appointments._navStep(-1)" title="${this._view==='week'?'Previous week':'Previous month'}">&#8249;</button>
         <div style="font-size:15px;font-weight:700;">${monthLabel}</div>
-        <button class="btn btn-sm" onclick="Appointments.changeMonth(1)">&#8250;</button>
+        <button class="btn btn-sm" onclick="Appointments._navStep(1)" title="${this._view==='week'?'Next week':'Next month'}">&#8250;</button>
       </div>`);
 
       // View toggle
@@ -38,7 +38,12 @@ const Appointments = {
       }
 
       // Add button (hidden for view-only role)
-      html.push(`<div class="section-header"><span>Appointments — ${fmtDateFull(this._selected)}</span>${canWrite()?'<button class="btn btn-sm btn-green" onclick="Appointments.openForm(null)">+ Add</button>':''}</div>`);
+      html.push(`<div class="section-header" style="display:flex;align-items:center;gap:8px;">
+        <button class="btn btn-sm" onclick="Appointments.changeDay(-1)" title="Previous day">&#8249;</button>
+        <span style="flex:1;text-align:center;">${fmtDateFull(this._selected)}</span>
+        <button class="btn btn-sm" onclick="Appointments.changeDay(1)" title="Next day">&#8250;</button>
+        ${canWrite()?'<button class="btn btn-sm btn-green" onclick="Appointments.openForm(null)">+ Add</button>':''}
+      </div>`);
 
       // Day's appointments
       const dayAppts = this._data.filter(a=>a.date===this._selected).sort((a,b)=>a.time.localeCompare(b.time));
@@ -52,8 +57,8 @@ const Appointments = {
             <div style="width:3px;min-height:44px;background:${barber?.color||'#ccc'};border-radius:2px;flex-shrink:0;"></div>
             ${avatarEl(a.customerName,38)}
             <div class="list-main">
-              <div class="list-name" ${a.customerId&&canSeeClients()?`onclick="event.stopPropagation();ClientProfile.open('${a.customerId}')" style="cursor:pointer;color:var(--text);"`:''}">${a.customerName}</div>
-              <div class="list-sub">${a.time} · ${a.service}${barber?' · '+barber.name:''}</div>
+              <div class="list-name" ${a.customerId&&canSeeClients()?`onclick="event.stopPropagation();ClientProfile.open('${a.customerId}')" style="cursor:pointer;color:var(--text);"`:''}">${esc(a.customerName)}</div>
+              <div class="list-sub">${a.time} · ${esc(a.service)}${barber?' · '+esc(barber.name):''}</div>
             </div>
             <div class="list-right">${statusBadge(a.status)}<div style="font-size:12px;color:var(--muted);margin-top:3px;">${fmtMoney(a.price)}</div></div>
           </div>`);
@@ -134,8 +139,8 @@ const Appointments = {
           <div style="width:52px;font-size:11px;color:var(--muted);font-weight:600;flex-shrink:0;">${a.time}</div>
           ${avatarEl(a.customerName,32)}
           <div style="flex:1;min-width:0;">
-            <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${a.customerId&&canSeeClients()?'cursor:pointer;':''}" onclick="event.stopPropagation();${a.customerId&&canSeeClients()?`ClientProfile.open('${a.customerId}')`:''}">${a.customerName}</div>
-            <div style="font-size:11px;color:var(--muted);">${a.service}${barber?' · '+barber.name:''}</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${a.customerId&&canSeeClients()?'cursor:pointer;':''}" onclick="event.stopPropagation();${a.customerId&&canSeeClients()?`ClientProfile.open('${a.customerId}')`:''}">${esc(a.customerName)}</div>
+            <div style="font-size:11px;color:var(--muted);">${esc(a.service)}${barber?' · '+esc(barber.name):''}</div>
           </div>
           ${statusBadge(a.status)}
         </div>`;
@@ -145,32 +150,64 @@ const Appointments = {
     return html;
   },
 
+  _ymd(dt){ return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`; },
+
+  // Nav arrows step by the granularity of the current view: a day in day view, a
+  // week in week view, a month in month view — so paging never overshoots what's
+  // on screen. (v1 has month/week; the v2 redesign adds a day view.)
+  _navStep(delta){
+    if (this._view==='day') this.changeDay(delta);
+    else if (this._view==='week') this.changeDay(delta*7);
+    else this.changeMonth(delta);
+  },
+
+  changeDay(delta) {
+    const dt=new Date(this._selected+'T12:00:00');
+    dt.setDate(dt.getDate()+delta);
+    this._selected=this._ymd(dt);
+    this.render();
+  },
+
   changeMonth(delta) {
     const dt=new Date(this._selected+'T12:00:00');
+    const d=dt.getDate();
+    dt.setDate(1);                 // pin to the 1st first so a short target month can't overflow
     dt.setMonth(dt.getMonth()+delta);
-    this._selected=dt.toISOString().split('T')[0];
+    const last=new Date(dt.getFullYear(),dt.getMonth()+1,0).getDate();
+    dt.setDate(Math.min(d,last));  // keep the day, clamped to the target month's length
+    this._selected=this._ymd(dt);
     this.render();
   },
 
   openForm(id) {
     const a = id ? this._data.find(x=>x.id===id) : null;
-    const barberOpts = this._barbers.map(b=>`<option value="${b.id}|${b.name}"${a?.barberId===b.id?' selected':''}>${b.name}</option>`).join('');
-    const svcOpts = this._services.map(s=>`<option value="${s.id}|${s.name}|${s.price}"${a?.serviceId===s.id?' selected':''}>${s.name} — ${fmtMoney(s.price)}</option>`).join('');
+    const barberOpts = this._barbers.map(b=>`<option value="${b.id}|${esc(b.name)}"${a?.barberId===b.id?' selected':''}>${esc(b.name)}</option>`).join('');
+    // Service options show the name only — no price, to avoid confusion at booking
+    // (the actual price still fills the Price field below via _recalcPrice).
+    const svcOpts = this._services.map(s=>`<option value="${s.id}|${esc(s.name)}|${s.price}"${a?.serviceId===s.id?' selected':''}>${esc(s.name)}</option>`).join('');
+    // "Custom service" lets the owner book an off-menu job: a free-text label plus a
+    // price they set by hand. Auto-selected when editing an appt whose service isn't
+    // (or is no longer) in the catalog.
+    const isCustomSvc = !!a && !this._services.some(s=>s.id===a.serviceId);
+    const customOpt = `<option value="__custom__"${isCustomSvc?' selected':''}>✏️ Custom service…</option>`;
     Modal.show(`
       <div class="modal-title">${a?'Edit Appointment':'New Appointment'}</div>
       <div class="form-group"><label class="form-label">Client *</label>
-        <div class="autocomplete-wrap"><input class="form-input" id="fa-name" value="${a?.customerName||''}" placeholder="Search or type name..." /><div class="autocomplete-list" id="fa-list"></div></div>
+        <div class="autocomplete-wrap"><input class="form-input" id="fa-name" value="${esc(a?.customerName||'')}" placeholder="Search or type name..." /><div class="autocomplete-list" id="fa-list"></div></div>
         <input type="hidden" id="fa-cid" value="${a?.customerId||''}" />
-        <input type="hidden" id="fa-phone" value="${a?.customerPhone||''}" />
+        <input type="hidden" id="fa-phone" value="${esc(a?.customerPhone||'')}" />
         <input type="hidden" id="fa-quote-id" value="" />
       </div>
       <div class="form-row">
         <div class="form-group"><label class="form-label">Service</label>
-          <select class="form-input" id="fa-svc" onchange="Appointments._svcChange()">${svcOpts}</select>
+          <select class="form-input" id="fa-svc" onchange="Appointments._svcChange()">${svcOpts}${customOpt}</select>
         </div>
         <div class="form-group"><label class="form-label">Price</label>
-          <input class="form-input" id="fa-price" type="number" value="${a?.price||35}" />
+          <input class="form-input" id="fa-price" type="number" value="${a?.price||35}" oninput="Appointments._priceEdited=true" />
         </div>
+      </div>
+      <div class="form-group" id="fa-svc-custom-row" style="display:${isCustomSvc?'block':'none'};"><label class="form-label">What service?</label>
+        <input class="form-input" id="fa-svc-custom" value="${isCustomSvc?esc(a?.service||''):''}" placeholder="Describe the service (e.g. Headlight restoration)" />
       </div>
       ${(Shop.sizes||[]).length?`<div class="form-group"><label class="form-label">Vehicle size</label>
         <select class="form-input" id="fa-size" onchange="Appointments._recalcPrice()">${Shop.sizes.map(sz=>`<option value="${esc(sz.key)}"${a?.vehicleSize===sz.key?' selected':''}>${esc(sz.label)}</option>`).join('')}</select>
@@ -200,7 +237,10 @@ const Appointments = {
       </div>`);
     setTimeout(()=>{
       makeAutocomplete('fa-name','fa-list',(id,name,phone)=>{document.getElementById('fa-name').value=name;document.getElementById('fa-cid').value=id;document.getElementById('fa-phone').value=phone||'';});
-      // For a new appointment, sync price to the preselected service + size.
+      // New appt: auto-price from the preselected service + size. Editing an existing
+      // appt: treat the saved price as owner-set so a size/add-on tweak won't wipe it
+      // (only picking a new service resets it). A manual edit locks it either way.
+      Appointments._priceEdited = !!a;
       if(!a) Appointments._recalcPrice();
     },150);
   },
@@ -357,11 +397,26 @@ const Appointments = {
     } catch(e) { toast('Could not update status','error'); }
   },
 
-  _svcChange() { this._recalcPrice(); },
+  // Picking a different service resets to that service's price; a manual edit to
+  // the Price field afterward locks it again.
+  _svcChange() {
+    const custom = (document.getElementById('fa-svc')?.value||'')==='__custom__';
+    const row=document.getElementById('fa-svc-custom-row'); if(row) row.style.display=custom?'block':'none';
+    if(custom){
+      // Off-menu job: no catalog price to pull, so leave the Price field for the owner
+      // to set and stop _recalcPrice from clobbering it.
+      this._priceEdited=true;
+      document.getElementById('fa-svc-custom')?.focus();
+    } else {
+      this._priceEdited=false; this._recalcPrice();
+    }
+  },
 
   // Set the price field to the total: the selected service (size-adjusted for
-  // detail shops) plus any checked add-ons. Falls back to the flat price.
+  // detail shops) plus any checked add-ons. Falls back to the flat price. Skips
+  // when the owner has typed their own price so size/add-on changes don't wipe it.
   _recalcPrice() {
+    if (this._priceEdited) return;
     const svcId=(document.getElementById('fa-svc')?.value||'').split('|')[0];
     const svc=this._services.find(s=>s.id===svcId); if(!svc)return;
     const sizeKey=document.getElementById('fa-size')?.value||'';
@@ -392,7 +447,14 @@ const Appointments = {
     const name=document.getElementById('fa-name')?.value.trim();
     if(!name){toast('Please enter a client name','warning');return;}
     const svcVal=document.getElementById('fa-svc')?.value||'';
-    const[svcId,svcName]=svcVal.split('|');
+    let svcId, svcName;
+    if(svcVal==='__custom__'){
+      svcId=null;
+      svcName=(document.getElementById('fa-svc-custom')?.value||'').trim();
+      if(!svcName){ toast('Describe the custom service','warning'); return; }
+    } else {
+      [svcId,svcName]=svcVal.split('|');
+    }
     const barberVal=document.getElementById('fa-barber')?.value||'';
     const[barberId,barberName]=barberVal.split('|');
     const timeVal=document.getElementById('fa-time')?.value||'10:00';
@@ -440,14 +502,14 @@ const Appointments = {
     Modal.show(`
       <div class="modal-title">📅 Appointment</div>
       <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:16px;">
-        <div style="font-size:16px;font-weight:700;${a.customerId?'cursor:pointer;color:var(--green);':''}" onclick="${a.customerId?`Modal.close();ClientProfile.open('${a.customerId}')`:''}">${a.customerName}${a.customerId?' ↗':''}</div>
-        <div style="font-size:13px;color:var(--muted);margin-top:4px;">${a.service} · ${fmtDateFull(a.date)} at ${a.time}</div>
-        ${barber?`<div style="font-size:13px;color:var(--muted);">with ${barber.name}</div>`:''}
+        <div style="font-size:16px;font-weight:700;${a.customerId?'cursor:pointer;color:var(--green);':''}" onclick="${a.customerId?`Modal.close();ClientProfile.open('${a.customerId}')`:''}">${esc(a.customerName)}${a.customerId?' ↗':''}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px;">${esc(a.service)} · ${fmtDateFull(a.date)} at ${a.time}</div>
+        ${barber?`<div style="font-size:13px;color:var(--muted);">with ${esc(barber.name)}</div>`:''}
         <div style="margin-top:8px;">${statusBadge(a.status)} <span style="font-weight:700;color:var(--green);margin-left:8px;">${fmtMoney(a.price)}</span>${a.vehicleSize?`<span style="font-size:12px;color:var(--muted);margin-left:8px;">${esc((Shop.sizes.find(z=>z.key===a.vehicleSize)||{}).label||a.vehicleSize)}</span>`:''}</div>
         ${(a.addons&&a.addons.length)?`<div style="font-size:12px;color:var(--muted);margin-top:6px;">＋ ${a.addons.map(x=>esc(x.name)+' ('+fmtMoney(x.price)+')').join(' · ')}</div>`:''}
         ${this._customFieldsDetail(a)}
         ${a.notes?`<div style="font-size:13px;color:var(--muted);margin-top:8px;">${esc(a.notes)}</div>`:''}
-        ${a.customerPhone?`<div style="font-size:13px;color:var(--muted);margin-top:4px;">📱 ${a.customerPhone}</div>`:''}
+        ${a.customerPhone?`<div style="font-size:13px;color:var(--muted);margin-top:4px;">📱 ${esc(a.customerPhone)}</div>`:''}
         ${a.inspoPhoto?`<div style="margin-top:10px;">
           <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:6px;">📸 INSPO PHOTO</div>
           <img src="${esc(a.inspoPhoto)}" onclick="window.open('${esc(a.inspoPhoto)}','_blank')" style="width:100%;max-height:300px;object-fit:cover;border-radius:10px;cursor:zoom-in;" />
@@ -477,8 +539,8 @@ const Appointments = {
     try { const st = await db.stripe.status(); stripeConnected = st.connected; } catch(e) {}
 
     Modal.show(`
-      <div class="modal-title">💈 Checkout</div>
-      <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">${a.customerName} · ${a.service}</div>
+      <div class="modal-title">🧾 Checkout</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">${esc(a.customerName)} · ${esc(a.service)}</div>
       <div class="form-group">
         <label class="form-label">Amount</label>
         <div style="position:relative;">
@@ -569,7 +631,7 @@ const Appointments = {
     Modal.show(`
       <div class="modal-title">💳 Card Payment</div>
       <div style="font-size:22px;font-weight:800;color:var(--green);text-align:center;margin-bottom:4px;">${fmtMoney(total)}</div>
-      <div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:20px;">for ${name}</div>
+      <div style="font-size:12px;color:var(--muted);text-align:center;margin-bottom:20px;">for ${esc(name)}</div>
       <div id="card-status" style="text-align:center;padding:16px 0;">
         <div style="font-size:13px;color:var(--muted);">Generating payment link...</div>
       </div>
@@ -593,7 +655,7 @@ const Appointments = {
           <input class="form-input" id="pay-link-input" readonly style="font-size:11px;flex:1;" onclick="this.select()" />
           <button class="btn btn-sm" onclick="navigator.clipboard.writeText(Appointments._co.url);toast('Link copied ✓')">Copy</button>
         </div>
-        ${hasPhone ? `<button class="btn btn-green btn-full" id="send-link-btn" onclick="Appointments._textPayLink()">📱 Text to ${phone}</button>` : ''}
+        ${hasPhone ? `<button class="btn btn-green btn-full" id="send-link-btn" onclick="Appointments._textPayLink()">📱 Text to ${esc(phone)}</button>` : ''}
         <div style="margin-top:10px;">
           <button class="btn btn-full" id="verify-btn" onclick="Appointments._verifyPayment(this)">✓ Check Payment</button>
         </div>`;
@@ -603,16 +665,15 @@ const Appointments = {
     } catch(e) { toast('Could not create payment link — check Stripe settings','error'); }
   },
 
-  async _textPayLink() {
+  _textPayLink() {
     const { phone, name, url } = Appointments._co;
-    const btn = document.getElementById('send-link-btn'); if(btn){btn.disabled=true;btn.textContent='Sending...';}
-    const firstName = name.split(' ')[0];
+    if (!phone) { toast('No phone number on file', 'warning'); return; }
+    const firstName = (name || '').split(' ')[0];
     const msg = `Hi ${firstName}! Here's your payment link for today's visit: ${url}`;
-    try {
-      await db.sms.send({ to: phone, body: msg, customerName: name });
-      if(btn){btn.textContent='✓ Sent!';btn.style.background='var(--green)';}
-      toast('Payment link sent via text ✓');
-    } catch(e) { toast('Could not send text','error'); if(btn){btn.disabled=false;btn.textContent='📱 Text to '+phone;} }
+    // Manual send via the iPhone Messages deep link (no Twilio/A2P).
+    _cpSms(phone, msg);
+    const btn = document.getElementById('send-link-btn');
+    if (btn) { btn.textContent = '✓ Opened in Messages'; btn.style.background = 'var(--green)'; }
   },
 
   async _verifyPayment(btn) {

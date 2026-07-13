@@ -26,6 +26,8 @@ router.get('/api/shop/settings', requireAuth, shopRoute(async (req, res, db) => 
   // fallback — a shop only ever shows a number explicitly assigned to it, so one
   // tenant never sees another tenant's (e.g. the platform default) number.
   s.trackingNumber = shopOwnNumber(req.shopId);
+  // Public slug (read-only) so the UI can show shareable /book/<slug> links.
+  s.shopSlug = (master.get('shops').find({ id: req.shopId }).value() || {}).slug || '';
   if (!s.callTracking) s.callTracking = { enabled: true };
   // Surface the resolved industry so the frontend can mount industry-specific
   // navigation/modules (the profile lives outside `settings`, on the shop DB root).
@@ -85,23 +87,14 @@ router.delete('/api/shop/reviews/:id', requireAuth, requireRole('full'), shopRou
   res.json({ ok: true });
 }));
 // Text a client a link to leave a review (uses the shop's SMS line).
+// Mark-only: the owner sends the review text manually from their own phone (iPhone
+// sms: deep link, no Twilio/A2P). This endpoint just records that the request went
+// out so the UI can show "Sent ✓" and the review automation won't double-prompt.
 router.post('/api/shop/reviews/request', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const a = h.getById('appointments', req.body.appointmentId);
   if (!a) return res.status(404).json({ ok: false, error: 'Appointment not found' });
-  const phone = (a.customerPhone || '').replace(/\D/g, '');
-  if (phone.length < 10) return res.status(400).json({ ok: false, error: 'No phone number on file for this client' });
-  const from = shopFromNumber(req.shopId);
-  if (!twilioClient || !from) return res.status(400).json({ ok: false, error: 'SMS is not active for this shop yet' });
-  const s = db.get('settings').value() || {};
-  const shopRow = master.get('shops').find({ id: req.shopId }).value();
-  const base = process.env.PUBLIC_BASE_URL || (req.protocol + '://' + req.get('host'));
-  const link = `${base}/review/${shopRow.slug}?a=${a.id}`;
-  const body = `Hi ${(a.customerName||'there').split(' ')[0]}! Thanks for visiting ${s.shopName||'us'}. How did we do? Leave a quick review: ${link}`;
-  try {
-    await twilioClient.messages.create({ from, to: '+1' + phone, body });
-    a.reviewRequestedAt = new Date().toISOString(); h.upsert('appointments', a);
-    res.json({ ok: true });
-  } catch(e) { res.status(500).json({ ok: false, error: 'Could not send the text' }); }
+  a.reviewRequestedAt = new Date().toISOString(); h.upsert('appointments', a);
+  res.json({ ok: true });
 }));
 
 // ── PROTECTED: Staff / users (owner only) ─────────────────────────────────────
@@ -216,6 +209,18 @@ router.delete('/api/shop/customers/:id', requireAuth, requireRole('full','techni
 }));
 router.post('/api/shop/customers/:id/redeem', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const c = h.getById('customers', req.params.id); if(c){c.loyaltyPoints=0;h.upsert('customers',c);} res.json({ ok: true });
+}));
+// Activity log: append an entry (added / texted / called / …) to a client's notes.
+router.post('/api/shop/customers/:id/log', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  const c = h.getById('customers', req.params.id);
+  if (!c) return res.status(404).json({ ok: false, error: 'Client not found' });
+  const text = String(req.body.text || '').trim().slice(0, 200);
+  if (text) {
+    c.noteLog = c.noteLog || [];
+    c.noteLog.unshift({ id: genId('note'), scope: 'activity', text, at: new Date().toISOString(), by: String(req.body.by || '').slice(0, 60) });
+    h.upsert('customers', c);
+  }
+  res.json({ ok: true });
 }));
 
 // ── Memberships — recurring wash-club / maintenance plans ─────────────────────
@@ -556,6 +561,12 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
   const monthNet   = round2(monthGross - monthOpEx);
   const totalNet   = round2(totalGross - totalOpEx);
 
+  // Deposits collected (standalone, profile-requested). Tracked as their own
+  // stream so the P&L stays service-based; bucketed by when they were paid.
+  const paidDeposits = customers.flatMap(c => (c.deposits || []).filter(d => d.status === 'paid'));
+  const totalDeposits = round2(paidDeposits.reduce((s, d) => s + Number(d.amount || 0), 0));
+  const monthDeposits = round2(paidDeposits.filter(d => monthOf(d.paidAt) === curMonth).reduce((s, d) => s + Number(d.amount || 0), 0));
+
   res.json({
     mrr, activeMembers: activeMembers.length,
     totalRevenue, monthRevenue,
@@ -573,6 +584,7 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
     hasExpenses: expenses.length > 0,
     monthTaxCollected: round2(thisMonth.reduce((s,a)=>s+Number(a.taxAmount||0),0)),
     totalTaxCollected: round2(done.reduce((s,a)=>s+Number(a.taxAmount||0),0)),
+    monthDeposits, totalDeposits,
     monthJobs: thisMonth.length,
     avgTicket: thisMonth.length?Math.round(thisMonth.reduce((s,a)=>s+Number(a.price||0),0)/thisMonth.length):0,
     byBarber: Object.values(byBarber).sort((a,b)=>b.revenue-a.revenue),
@@ -661,11 +673,14 @@ router.post('/api/shop/sms/send', requireAuth, requireRole('full','technician'),
 // List leads, newest contact first, each with its call log attached.
 router.get('/api/shop/leads', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const calls = h.getAll('calls');
-  const leads = h.getAll('leads').map(l => ({
+  // Website-intake leads (routes/website-leads.router.js) may carry a base64
+  // photo — never ship it in the list payload.
+  const leads = h.getAll('leads').map(({ photo, ...l }) => ({
     ...l,
+    has_photo: !!photo,
     calls: calls.filter(c => c.leadId === l.id).sort((a,b) => new Date(b.startedAt) - new Date(a.startedAt)),
   }));
-  leads.sort((a,b) => new Date(b.lastContactAt||0) - new Date(a.lastContactAt||0));
+  leads.sort((a,b) => new Date(b.lastContactAt || b.updated_at || b.created_at || 0) - new Date(a.lastContactAt || a.updated_at || a.created_at || 0));
   res.json(leads);
 }));
 
@@ -676,7 +691,28 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   const { name, status, notes } = req.body;
   if (name   !== undefined) lead.name = String(name).slice(0,80);
   if (notes  !== undefined) lead.notes = String(notes).slice(0,2000);
-  if (status !== undefined && ['new','contacted','booked','closed'].includes(status)) lead.status = status;
+  if (status !== undefined && ['new','contacted','booked','closed'].includes(status)) {
+    if (lead.channel === 'website') {
+      // Website-intake leads run the Response Center's richer status machine
+      // (routes/website-leads.router.js). Map the kanban's four statuses onto
+      // it and stamp the same first-response fields its endpoints stamp, so
+      // both views stay coherent whichever one the owner works from.
+      const mapped = { new:'NEW_LEAD', contacted:'CONTACTED', booked:'APPOINTMENT_SET', closed:'LOST' }[status];
+      if (lead.status === 'NEW_LEAD' && mapped !== 'NEW_LEAD' && !lead.first_response_at) {
+        lead.first_response_at = new Date().toISOString();
+        lead.response_time_seconds = Math.max(0, Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 1000));
+        if (lead.contact_status === 'UNCONTACTED') lead.contact_status = 'ATTEMPTED';
+      }
+      lead.status = mapped;
+      lead.updated_at = new Date().toISOString();
+    } else {
+      // Speed-to-lead metric: the first move off 'new' is the shop's first
+      // response (owner texted via the sms: deep link or called back, then set
+      // the status). Stamped once, server-side, so response times are durable.
+      if (lead.status === 'new' && status !== 'new' && !lead.firstResponseAt) lead.firstResponseAt = new Date().toISOString();
+      lead.status = status;
+    }
+  }
   h.upsert('leads', lead);
   res.json({ ok:true, lead });
 }));
@@ -697,9 +733,9 @@ router.post('/api/shop/leads/:id/convert', requireAuth, requireRole('full','tech
     cust = h.getAll('customers').find(c => String(c.phone||'').replace(/\D/g,'') === digits && digits);
   }
   if (!cust) {
-    cust = { id: genId('c'), name: lead.name || lead.phone, phone: lead.phone, email: '', source: 'call',
+    cust = { id: genId('c'), name: lead.name || lead.phone, phone: lead.phone, email: lead.email || '', source: lead.source || 'call',
              notes: lead.notes || '', loyaltyPoints: 0, noShows: 0, preferredBarberId: null,
-             isFleet: false, companyName: '', vehicles: [], createdAt: today() };
+             isFleet: false, companyName: '', vehicles: lead.vehicle ? [lead.vehicle] : [], createdAt: today() };
     h.upsert('customers', cust);
   }
   lead.customerId = cust.id;
@@ -723,6 +759,17 @@ router.post('/api/shop/leads/:id/sms', requireAuth, requireRole('full','technici
     h.upsert('conversations', { id: genId('msg'), customerId: lead.customerId || null, leadId: lead.id,
       customerName: lead.name || lead.phone, type:'sms', direction:'outbound', body, sentAt:new Date().toISOString(), read:true });
     if (lead.status === 'new') { lead.status = 'contacted'; }
+    if (lead.channel === 'website' && lead.status === 'NEW_LEAD') {
+      // Website-intake lead: advance its own status machine + response stamps.
+      lead.status = 'CONTACTED';
+      if (!lead.first_response_at) {
+        lead.first_response_at = new Date().toISOString();
+        lead.response_time_seconds = Math.max(0, Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 1000));
+      }
+      if (lead.contact_status === 'UNCONTACTED') lead.contact_status = 'ATTEMPTED';
+      lead.updated_at = new Date().toISOString();
+    }
+    if (!lead.firstResponseAt) lead.firstResponseAt = new Date().toISOString();
     lead.lastContactAt = new Date().toISOString();
     h.upsert('leads', lead);
     res.json({ ok:true });
@@ -769,11 +816,15 @@ router.delete('/api/shop/blocked-dates/:date', requireAuth, requireRole('full'),
   db.get('blockedDates').remove({ date:req.params.date }).write(); res.json({ ok: true });
 }));
 
-// ── PROTECTED: Deposit ────────────────────────────────────────────────────────
-router.post('/api/shop/deposit/confirm', requireAuth, shopRoute(async (req, res, db, h) => {
+// ── PROTECTED: Deposit (owner only) ───────────────────────────────────────────
+// Manual/owner-side mark that a deposit was collected out-of-band. Owner-only:
+// this flips an appointment to confirmed and records a deposit amount, so it must
+// never be reachable by technician/viewonly roles. (Automated deposit capture goes
+// through the verified Stripe/Square return + webhook paths, not this route.)
+router.post('/api/shop/deposit/confirm', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   const { appointmentId, paymentIntentId, amount } = req.body;
   const a = h.getById('appointments', appointmentId); if(!a) return res.status(404).json({ ok:false });
-  a.depositPaid=true; a.depositAmount=amount; a.depositPaymentId=paymentIntentId; a.status='confirmed';
+  a.depositPaid=true; a.depositAmount=Number(amount) || 0; a.depositPaymentId=paymentIntentId; a.status='confirmed';
   h.upsert('appointments',a); res.json({ ok: true });
 }));
 
