@@ -15,11 +15,21 @@
   Leads.render = async function () {
     const el = document.getElementById('page-leads'); if (!el) return;
     el.classList.add('v2-wide');
-    try { this._leads = await db.leads.all(); } catch (e) { this._leads = []; }
+    // Keep the last good leads on a failed refresh, and remember the error so we
+    // can tell the owner instead of silently showing an empty board (a 403 or a
+    // network blip otherwise looks exactly like "no calls are logging").
+    let loadError = null;
+    try { this._leads = await db.leads.all(); }
+    catch (e) { loadError = (e && e.message) || 'Could not load leads'; this._leads = this._leads || []; }
     const leads = this._leads || [];
 
+    // A lead whose status isn't one of the four board columns (legacy or
+    // website state-machine values) must still be visible — fold it into "new"
+    // for placement so it never silently disappears the way it did before.
+    const colOf = (l) => ORDER.includes(l.status) ? l.status : 'new';
+
     const counts = {}; ORDER.forEach(s => counts[s] = 0);
-    leads.forEach(l => { if (counts[l.status] === undefined) counts[l.status] = 0; counts[l.status]++; });
+    leads.forEach(l => { counts[colOf(l)]++; });
     const total = leads.length;
     const booked = leads.filter(l => l.status === 'booked').length;
     const conv = total ? Math.round(booked / total * 100) : 0;
@@ -37,26 +47,41 @@
       <div class="metric-card"><div class="metric-label">Booked</div><div class="metric-value green">${booked}</div><div class="metric-sub">${conv}% of all leads</div></div>
       <div class="metric-card"><div class="metric-label">Missed calls</div><div class="metric-value">${missed}</div><div class="metric-sub">across all leads</div></div></div>`);
 
+    if (loadError) html.push(`<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--red,#e5534b);border-radius:10px;padding:10px 12px;margin-bottom:12px;color:var(--muted);font-size:13px;">⚠ Couldn't refresh leads (${esc(loadError)}). Showing the last loaded set — reload to try again.</div>`);
+
     html.push('<div class="v2-board">');
     for (const st of ORDER) {
       const m = this._statusMeta[st];
-      const cards = leads.filter(l => l.status === st)
+      const cards = leads.filter(l => colOf(l) === st)
         .sort((a, b) => new Date(b.lastContactAt || b.createdAt || 0) - new Date(a.lastContactAt || a.createdAt || 0));
       html.push(`<div class="v2-bcol" data-status="${st}"><div class="v2-bh">
         <div class="bt">${m ? m.label : st} <span class="n">${cards.length}</span></div>
         <div class="bv">${COL_HINT[st] || ''}</div></div><div class="v2-bcards">`);
       cards.forEach(l => {
-        const sm = this._sourceMeta(l.source);
-        const name = l.name || l.phone || 'Unknown caller';
-        const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model].filter(Boolean).join(' ') : '';
-        const sub = [veh || l.location, (l.servicesInterested || []).join(', ') || l.phone].filter(Boolean).join(' · ');
-        const when = l.lastContactAt || l.createdAt;
-        html.push(`<div class="v2-lead" draggable="true" data-id="${l.id}" onclick="Leads.open('${l.id}')">
-          <div class="ln">${esc(name)}</div>
-          <div class="ls">${esc(sub || '—')}</div>
-          <div class="lf"><span class="v2-src">${sm.icon} ${esc(sm.label)}</span>
-            ${(l.missedCount || 0) > 0 ? `<span class="lead-missed">⚠ ${l.missedCount} missed</span>` : ''}
-            <span style="margin-left:auto;font-size:10.5px;color:var(--faint);">${when ? _msgTime(when) : ''}</span></div></div>`);
+        // Guard every card: one malformed lead (e.g. a stray string where an
+        // array is expected) must never throw and blank the entire board.
+        try {
+          const sm = this._sourceMeta(l.source);
+          const name = l.name || l.phone || 'Unknown caller';
+          const veh = (l.vehicle && typeof l.vehicle === 'object')
+            ? [l.vehicle.year, l.vehicle.make, l.vehicle.model].filter(Boolean).join(' ')
+            : (typeof l.vehicle === 'string' ? l.vehicle : '');
+          const services = Array.isArray(l.servicesInterested) ? l.servicesInterested.join(', ')
+            : (l.servicesInterested ? String(l.servicesInterested) : '');
+          const sub = [veh || l.location, services || l.phone].filter(Boolean).join(' · ');
+          const when = l.lastContactAt || l.createdAt;
+          html.push(`<div class="v2-lead" draggable="true" data-id="${l.id}" onclick="Leads.open('${l.id}')">
+            <div class="ln">${esc(name)}</div>
+            <div class="ls">${esc(sub || '—')}</div>
+            <div class="lf"><span class="v2-src">${sm.icon} ${esc(sm.label)}</span>
+              ${(l.missedCount || 0) > 0 ? `<span class="lead-missed">⚠ ${l.missedCount} missed</span>` : ''}
+              <span style="margin-left:auto;font-size:10.5px;color:var(--faint);">${when ? _msgTime(when) : ''}</span></div></div>`);
+        } catch (err) {
+          console.error('Lead card render failed for', l && l.id, err);
+          html.push(`<div class="v2-lead" draggable="true" data-id="${l && l.id || ''}" onclick="Leads.open('${l && l.id || ''}')">
+            <div class="ln">${esc((l && (l.name || l.phone)) || 'Lead')}</div>
+            <div class="ls" style="color:var(--faint);">Tap to view</div></div>`);
+        }
       });
       if (!cards.length) html.push(`<div style="text-align:center;font-size:11.5px;color:var(--faint);padding:14px 6px;">Empty</div>`);
       html.push('</div></div>');
