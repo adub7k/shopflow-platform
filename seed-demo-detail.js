@@ -46,19 +46,26 @@ function seedDemoDetail({ force = true } = {}) {
     name: 'Owner', role: 'full', createdAt: new Date().toISOString(), plan: 'shop', active: true,
   }).write();
   master.get('shops').push({
-    id: shopId, accountId, shopName: 'Demo Detail Shop', slug: SLUG, email: EMAIL,
+    id: shopId, accountId, shopName: 'Demo Auto Studio', slug: SLUG, email: EMAIL,
     phone: '(555) 010-0000', plan: 'shop', industry: 'detail', active: true,
     createdAt: new Date().toISOString(), lastActivity: new Date().toISOString(),
   }).write();
 
   // ── Initialize from the detail profile, then layer on demo config ───────────
   const db = getShopDb(shopId);
-  initShopDb(db, { shopName: 'Demo Detail Shop', email: EMAIL, phone: '(555) 010-0000', industry: 'detail' });
+  initShopDb(db, { shopName: 'Demo Auto Studio', email: EMAIL, phone: '(555) 010-0000', industry: 'detail' });
   const h = shopHelpers(db);
 
   db.get('settings').assign({
-    tagline: 'Professional auto detailing.',
-    bookingMessage: 'Book your detail below — we’ll take it from here.',
+    tagline: 'Window tint • paint protection • ceramic coatings • detailing.',
+    bookingMessage: 'Tell us what you need — tint, PPF, ceramic, or a detail — and we’ll take it from here.',
+    // AI phone receptionist ON by default for the demo, with a greeting that names
+    // the shop's main services so callers hear the full menu up front. The bot then
+    // quotes/qualifies/captures from settings.services (seeded below).
+    voiceAI: {
+      mode: 'always',
+      greeting: 'Thanks for calling Demo Auto Studio! We do window tint, paint protection film, ceramic coatings, and full auto detailing. How can I help you today?',
+    },
     addons: [
       { id: 'ad1', name: 'Pet Hair Removal',       price: 40 },
       { id: 'ad2', name: 'Odor / Ozone Treatment', price: 50 },
@@ -77,6 +84,19 @@ function seedDemoDetail({ force = true } = {}) {
   const setSize = (name, sp) => { const s = services.find(x => x.name === name); if (s) { s.sizePricing = sp; s.price = sp.sedan; h.upsert('services', s); } };
   setSize('Full Detail',     { sedan: 250, suv: 300, truck: 350 });
   setSize('Ceramic Coating', { sedan: 600, suv: 750, truck: 900 });
+
+  // ── Window tint + paint protection film (this shop's main sells) ────────────
+  // The detail profile seeds detailing + ceramic; add tint and PPF so the AI
+  // receptionist offers the full menu (it quotes from settings.services, size-aware).
+  // NOTE: placeholder prices — replace with the real shop's numbers.
+  [
+    { name: 'Window Tint — Full Vehicle',         category: 'tint', price: 250,  duration: 180, sizePricing: { sedan: 250,  suv: 300,  truck: 300 } },
+    { name: 'Window Tint — Front Two Windows',    category: 'tint', price: 99,   duration: 45 },
+    { name: 'Ceramic Window Tint — Full Vehicle', category: 'tint', price: 450,  duration: 210, sizePricing: { sedan: 450,  suv: 550,  truck: 600 } },
+    { name: 'Tint Removal',                       category: 'tint', price: 120,  duration: 90 },
+    { name: 'PPF — Full Front',                   category: 'ppf',  price: 900,  duration: 360, sizePricing: { sedan: 900,  suv: 1100, truck: 1200 } },
+    { name: 'PPF — Full Body',                    category: 'ppf',  price: 3500, duration: 600, sizePricing: { sedan: 3500, suv: 4500, truck: 5000 } },
+  ].forEach(s => h.upsert('services', { id: genId('s'), cost: 0, image: '', description: '', ...s }));
 
   // ── Technicians (generic) ───────────────────────────────────────────────────
   const techs = [
