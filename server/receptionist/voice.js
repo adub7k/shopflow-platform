@@ -52,6 +52,12 @@ function voiceConfig(settings) {
     greeting: (v.greeting || '').trim(),
     canBook: v.canBook !== false, // calendar shops book live unless turned off
     maxTurns: Number(v.maxTurns) > 0 ? Number(v.maxTurns) : DEFAULT_MAX_TURNS,
+    // Latency knobs. speechTimeout = seconds of silence before Twilio decides the
+    // caller is done — a fixed 1s feels like a real back-and-forth; 'auto' is
+    // Twilio's smart endpointing but adds ~1-2s of dead air. Bump toward 2 if it
+    // clips slow talkers. speechModel 'phone_call' is tuned for telephony audio.
+    speechTimeout: v.speechTimeout != null && String(v.speechTimeout).trim() ? String(v.speechTimeout) : '1',
+    speechModel: v.speechModel || 'phone_call',
   };
 }
 // True when the AI should answer THIS situation. `missed` = the shop didn't pick

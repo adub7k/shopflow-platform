@@ -299,6 +299,13 @@ table.v2-table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:68
 .v2-chip.on{background:var(--text);color:#fff;border-color:var(--text);}
 .v2-chip .n{font-size:11px;opacity:.7;font-variant-numeric:tabular-nums;}
 
+/* Segmented view toggle (Leads: List / Pipeline) */
+.v2-segwrap{display:inline-flex;border:1px solid var(--border-md);border-radius:8px;overflow:hidden;}
+.v2-seg{height:31px;padding:0 14px;font-size:12.5px;font-weight:600;color:var(--muted);background:var(--surface);border:none;cursor:pointer;font-family:var(--font);}
+.v2-seg + .v2-seg{border-left:1px solid var(--border-md);}
+.v2-seg:hover{color:var(--text);}
+.v2-seg.on{background:var(--text);color:#fff;}
+
 /* v2 pipeline board */
 .v2-board{display:flex;gap:12px;overflow-x:auto;padding-bottom:12px;align-items:flex-start;}
 .v2-bcol{width:230px;flex-shrink:0;background:var(--surface2);border:1px solid var(--border);border-radius:10px;}

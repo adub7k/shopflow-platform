@@ -111,6 +111,13 @@ const Settings = {
             ${voices.map(([v,label])=>`<option value="${v}" ${(va.voice||'Polly.Joanna-Neural')===v?'selected':''}>${label}</option>`).join('')}
           </select>
         </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label class="form-label">Conversation pace</label>
+          <select id="s-voiceai-pace" class="form-input">
+            ${[['1','Snappy — replies fast (may clip slow talkers)'],['1.5','Balanced'],['2.5','Relaxed — waits longer before replying'],['auto','Auto (Twilio decides — slowest)']].map(([v,label])=>`<option value="${v}" ${String(va.speechTimeout||'1')===v?'selected':''}>${label}</option>`).join('')}
+          </select>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;">How long the AI waits after you stop talking before it replies. Snappy feels most like a real conversation; bump it up if it cuts callers off.</div>
+        </div>
         <div style="font-size:11px;color:var(--muted);">Requires an AI key configured on the server (the same one that powers voicemail analysis). Each answered call costs a few cents.</div>
       `);
       html.push('</div>');
@@ -787,7 +794,7 @@ const Settings = {
     const tpl=document.getElementById('s-leadtpl'); if(tpl)data.leadPageTemplate=tpl.value;
     const pp=document.getElementById('s-publicphone'); if(pp)data.publicPhone=pp.value.trim();
     const ar=document.getElementById('s-aireceptionist'); if(ar)data.aiReceptionist={enabled:ar.checked};
-    const vam=document.getElementById('s-voiceai-mode'); if(vam){ data.voiceAI={ mode:vam.value, greeting:(document.getElementById('s-voiceai-greeting')?.value||'').trim(), voice:document.getElementById('s-voiceai-voice')?.value||'Polly.Joanna-Neural' }; }
+    const vam=document.getElementById('s-voiceai-mode'); if(vam){ data.voiceAI={ mode:vam.value, greeting:(document.getElementById('s-voiceai-greeting')?.value||'').trim(), voice:document.getElementById('s-voiceai-voice')?.value||'Polly.Joanna-Neural', speechTimeout:document.getElementById('s-voiceai-pace')?.value||'1' }; }
     const lv=document.getElementById('s-lvis')?.value; if(lv)data.loyalty={visitsForReward:parseInt(lv),rewardDescription:document.getElementById('s-lrew')?.value.trim()||'One free service'};
     // Message templates: owner-managed [{id,label,body}] list (drops empty rows).
     this._syncTemplates();

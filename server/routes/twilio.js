@@ -330,12 +330,14 @@ function voiceCtx(ctx) {
 }
 
 // Build a speech <Gather> that speaks `prompt`, then listens for the reply.
+// The caller can talk over the prompt (speech Gather listens during playback),
+// and speechTimeout/speechModel are per-shop tunable for conversational pacing.
 function aiGather(vr, ctx, callSid, prompt) {
   const cfg = voice.voiceConfig(ctx.settings);
   const g = vr.gather({
     input: 'speech',
-    speechTimeout: 'auto',
-    speechModel: 'phone_call',
+    speechTimeout: cfg.speechTimeout,   // fixed short pause → snappy turn-taking
+    speechModel: cfg.speechModel,
     language: 'en-US',
     action: `/api/twilio/voice/ai/gather/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
     method: 'POST',
