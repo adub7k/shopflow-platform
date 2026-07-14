@@ -1,0 +1,109 @@
+// Smoke test for the ConversationRelay engine (receptionist/relay.js).
+// Run: node test/relay-smoke.test.js   (exits non-zero on any failure)
+//
+// No Twilio, no real websocket, no API key: a stubbed streaming Anthropic client
+// drives one relay turn against an in-memory shop, so we can verify the plumbing —
+// text tokens streamed out, server-authoritative capture executed, {type:'end'}
+// sent — plus the <Connect><ConversationRelay> TwiML shape.
+process.env.ANTHROPIC_API_KEY = 'test-key';
+process.env.PUBLIC_URL = 'https://staging.example.com';
+
+const low = require('lowdb');
+const Memory = require('lowdb/adapters/Memory');
+const { shopHelpers } = require('../server/db');
+const voice = require('../server/receptionist/voice');
+const relay = require('../server/receptionist/relay');
+
+let failures = 0;
+function check(name, cond, detail) { if (!cond) { failures++; console.log(`FAIL  ${name}${detail ? `  (${detail})` : ''}`); } else console.log(`PASS  ${name}`); }
+function eq(name, a, b) { check(name, JSON.stringify(a) === JSON.stringify(b), `got ${JSON.stringify(a)}, expected ${JSON.stringify(b)}`); }
+
+function detailShop() {
+  const db = low(new Memory());
+  db.defaults({
+    industry: 'detail',
+    settings: {
+      shopName: 'Demo Auto Studio',
+      customFields: [{ key: 'vehicleYear', label: 'Year', type: 'text', required: true }, { key: 'vehicleMake', label: 'Make', type: 'text', required: true }, { key: 'vehicleModel', label: 'Model', type: 'text', required: true }],
+      deposit: { enabled: false },
+      voiceAI: { mode: 'always', engine: 'relay', voice: '', relayTtsProvider: 'ElevenLabs' },
+    },
+    services: [
+      { id: 's1', name: 'Ceramic Window Tint — Full Vehicle', category: 'tint', price: 450, duration: 210, cost: 0, sizePricing: { sedan: 450, suv: 550, truck: 600 } },
+    ],
+    barbers: [{ id: 'b1', name: 'Bay 1', active: true, schedule: { workDays: [0, 1, 2, 3, 4, 5, 6], startTime: '9:00 AM', endTime: '6:00 PM', slotMinutes: 30 } }],
+    appointments: [], customers: [], leads: [{ id: 'lead1', name: '', phone: '+15551234567', source: 'call', status: 'new' }],
+    blockedDates: [],
+  }).write();
+  return db;
+}
+
+// Stub Anthropic streaming client: one .messages.stream() call per script step.
+// Each step emits text deltas (via the 'text' listener) then resolves finalMessage
+// with content blocks — mirroring the real SDK's MessageStream surface.
+function streamStub(script) {
+  let i = 0;
+  return { messages: { stream() {
+    const step = script[i++] || { text: [], content: [{ type: 'text', text: '' }] };
+    const listeners = {};
+    const s = {
+      on(ev, cb) { listeners[ev] = cb; return s; },
+      async finalMessage() { for (const d of (step.text || [])) if (listeners.text) listeners.text(d); return { content: step.content }; },
+      abort() {},
+    };
+    return s;
+  } } };
+}
+
+function fakeWs() {
+  const sent = [];
+  return { readyState: 1, sent, send(s) { sent.push(JSON.parse(s)); }, on() {}, close() {} };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('— relay TwiML —');
+(() => {
+  const db = detailShop();
+  const ctx = { shopId: 'shop1', db, h: shopHelpers(db), settings: db.get('settings').value(), shop: { id: 'shop1', slug: 'demo-detail', shopName: 'Demo Auto Studio' }, shopName: 'Demo Auto Studio', industry: 'detail', today: '2026-07-14' };
+  const xml = relay.connectTwiml(ctx, 'CA123');
+  check('TwiML: <ConversationRelay> with wss url', /<ConversationRelay url="wss:\/\/staging\.example\.com\/api\/twilio\/voice\/relay/.test(xml), xml);
+  check('TwiML: signed token in url', xml.includes(`t=${relay.relayToken('CA123')}`));
+  check('TwiML: welcomeGreeting + ttsProvider + interruptible', /welcomeGreeting="Thanks for calling Demo Auto Studio/.test(xml) && /ttsProvider="ElevenLabs"/.test(xml) && /interruptible="speech"/.test(xml), xml);
+  check('TwiML: & in url is XML-escaped', xml.includes('&amp;callSid='));
+  eq('relayToken is deterministic', relay.relayToken('CA123'), relay.relayToken('CA123'));
+  check('relayToken differs per callSid', relay.relayToken('CA123') !== relay.relayToken('CA999'));
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n— relay turn: stream tokens → capture → end —');
+(async () => {
+  const db = detailShop();
+  const ctx = { shopId: 'shop1', db, h: shopHelpers(db), settings: db.get('settings').value(), shop: { id: 'shop1', slug: 'demo-detail', shopName: 'Demo Auto Studio' }, shopName: 'Demo Auto Studio', industry: 'detail', today: '2026-07-14' };
+  const ws = fakeWs();
+  const call = { id: 'CA123', from: '+15551234567', leadId: 'lead1', voiceAI: voice.initState('relay') };
+  call.voiceAI.turns.push({ role: 'assistant', text: voice.greeting(ctx), at: 't0' });
+  const session = { ws, ctx, call, cfg: voice.voiceConfig(ctx.settings), messages: [], busy: false, ended: false, gen: 0, stream: null };
+
+  voice.__setTestClient(streamStub([{
+    text: ['So that\'s a ceramic tint on the 2021 Highlander — ', 'I\'ll text you shortly. '],
+    content: [
+      { type: 'text', text: 'So that\'s a ceramic tint on the 2021 Highlander — I\'ll text you shortly. ' },
+      { type: 'tool_use', id: 'tu1', name: 'capture_lead', input: { customerName: 'John', callbackNumber: null, serviceNeeded: 'Ceramic Window Tint', vehicle: '2021 Toyota Highlander', vehicleSize: 'suv', quotedPrice: 550, budget: null, preferredTime: 'Saturday', quality: 'hot', summary: 'Ceramic tint on a 2021 Highlander, Saturday.', followUp: 'Text a Saturday slot + $550 quote.', closingLine: "You're all set, John — thanks for calling!" } },
+    ],
+  }]));
+
+  await relay.__test.handlePrompt(session, 'Yes that is right');
+
+  const textMsgs = ws.sent.filter(m => m.type === 'text');
+  check('streamed text tokens out (last:false)', textMsgs.some(m => m.last === false && /ceramic tint/.test(m.token)), JSON.stringify(textMsgs.map(m => m.token)));
+  check('spoke the closing line', textMsgs.some(m => /all set, John/.test(m.token)));
+  check('finalized the TTS turn (empty token, last:true)', textMsgs.some(m => m.token === '' && m.last === true));
+  check('sent {type:"end"} to hang up', ws.sent.some(m => m.type === 'end'), JSON.stringify(ws.sent.map(m => m.type)));
+
+  const lead = db.get('leads').find({ id: 'lead1' }).value();
+  check('capture wrote lead.ai (server-authoritative, reused from voice.js)', lead.ai && lead.ai.quality === 'hot' && lead.ai.source === 'voice', JSON.stringify(lead.ai));
+  eq('outcome recorded on the call', call.voiceAI.outcome.type, 'captured');
+  check('no appointment created (quote-first)', db.get('appointments').value().length === 0);
+})();
+
+setTimeout(() => { console.log(`\n${failures === 0 ? '✓ ALL PASSED' : `✗ ${failures} FAILED`}`); process.exit(failures === 0 ? 0 : 1); }, 100);

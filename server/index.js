@@ -1,5 +1,6 @@
 // ── ShopFlow Platform — entry point ──────────────────────────────────────────
 const express   = require('express');
+const http      = require('http');
 const cors      = require('cors');
 const rateLimit = require('express-rate-limit');
 const path      = require('path');
@@ -217,5 +218,9 @@ if (process.env.TWILIO_FROM_NUMBER && process.env.TWILIO_FROM_SHOP) {
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => console.log(`ShopFlow Platform on port ${PORT}`));
+// Wrap Express in an http.Server so the AI receptionist's ConversationRelay
+// websocket can share the same port (Railway exposes a single port).
+const server = http.createServer(app);
+require('./receptionist/relay').attach(server);
+server.listen(PORT, () => console.log(`ShopFlow Platform on port ${PORT}`));
 setTimeout(runScheduler, 30000);

@@ -19,6 +19,7 @@ const {
 } = require('../db');
 const { runIntake } = require('../receptionist/intake');
 const voice = require('../receptionist/voice');
+const relay = require('../receptionist/relay');
 const { notifyNewLead } = require('../email');
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
@@ -403,6 +404,16 @@ router.post('/api/twilio/voice/ai/:shopId', verifyTwilio, (req, res) => {
   const cfg = voice.voiceConfig(ctx.settings);
   call.voiceAI = voice.initState(cfg.mode);
   call.aiHandled = true;
+
+  // ConversationRelay (streaming) engine: hand the live media stream to our
+  // websocket instead of the turn-by-turn <Gather> loop. Greeting is spoken by
+  // Twilio from the <ConversationRelay welcomeGreeting> in the returned TwiML.
+  if (cfg.engine === 'relay' && relay.available()) {
+    ctx.h.upsert('calls', call);
+    return res.type('text/xml').send(relay.connectTwiml(ctx, callSid));
+  }
+
+  // Gather engine (default): greet, then open the first listen.
   const hello = voice.greeting(ctx);
   call.voiceAI.turns.push({ role: 'assistant', text: hello, at: new Date().toISOString() });
   ctx.h.upsert('calls', call);

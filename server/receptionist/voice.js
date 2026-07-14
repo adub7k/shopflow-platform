@@ -52,6 +52,11 @@ function voiceConfig(settings) {
     greeting: (v.greeting || '').trim(),
     canBook: v.canBook !== false, // calendar shops book live unless turned off
     maxTurns: Number(v.maxTurns) > 0 ? Number(v.maxTurns) : DEFAULT_MAX_TURNS,
+    // Engine: 'gather' = turn-by-turn <Gather> (default, works everywhere);
+    // 'relay' = ConversationRelay streaming (sub-second, barge-in, premium TTS).
+    engine: v.engine === 'relay' ? 'relay' : 'gather',
+    relayTtsProvider: v.relayTtsProvider || 'ElevenLabs', // ConversationRelay TTS vendor
+    relayVoice: (v.relayVoice || '').trim(),              // '' = provider default voice
     // Latency knobs. speechTimeout = seconds of silence before Twilio decides the
     // caller is done — a fixed 1s feels like a real back-and-forth; 'auto' is
     // Twilio's smart endpointing but adds ~1-2s of dead air. Bump toward 2 if it
@@ -430,4 +435,8 @@ function initState(mode) {
 module.exports = {
   MODEL, voiceAvailable, voiceConfig, voiceModeActive, isQuoteFirst,
   buildSystemPrompt, toolsFor, runTurn, greeting, initState, __setTestClient,
+  // Exported so the ConversationRelay engine (receptionist/relay.js) reuses the
+  // exact same client, system prompt, tools, and server-authoritative tool
+  // execution — the transport differs, the brain does not.
+  getClient, runTool,
 };
