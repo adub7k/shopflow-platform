@@ -65,7 +65,8 @@ function seedDemoDetail({ force = true } = {}) {
     voiceAI: {
       mode: 'always',
       greeting: 'Thanks for calling Demo Auto Studio! We do window tint, paint protection film, ceramic coatings, and full auto detailing. How can I help you today?',
-      speechTimeout: '1', // snappy turn-taking (seconds of silence before the AI replies)
+      voice: 'Polly.Joanna-Generative', // most human-like TTS (Amazon Polly generative)
+      speechTimeout: '1',               // snappy turn-taking (seconds of silence before the AI replies)
     },
     addons: [
       { id: 'ad1', name: 'Pet Hair Removal',       price: 40 },

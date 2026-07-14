@@ -89,7 +89,18 @@ const Settings = {
       // qualified lead. Config read by server/receptionist/voice.js.
       const va = s.voiceAI || {};
       const vaMode = ['off','fallback','always'].includes(va.mode) ? va.mode : 'off';
-      const voices = [['Polly.Joanna-Neural','Joanna — warm female'],['Polly.Danielle-Neural','Danielle — female'],['Polly.Matthew-Neural','Matthew — warm male'],['Polly.Stephen-Neural','Stephen — male']];
+      // Generative voices are the most human-like (Amazon Polly generative engine,
+      // Twilio public beta — may need enabling in the Twilio console). Neural is a
+      // half-step down but synthesizes a touch faster. Owner picks quality vs speed.
+      const voices = [
+        ['Polly.Joanna-Generative','Joanna — warm female (Generative · most natural)'],
+        ['Polly.Ruth-Generative','Ruth — warm female (Generative)'],
+        ['Polly.Matthew-Generative','Matthew — warm male (Generative)'],
+        ['Polly.Stephen-Generative','Stephen — male (Generative)'],
+        ['Polly.Danielle-Generative','Danielle — female (Generative)'],
+        ['Polly.Joanna-Neural','Joanna — female (Neural · faster)'],
+        ['Polly.Matthew-Neural','Matthew — male (Neural · faster)'],
+      ];
       html.push('<div class="section-header">AI Phone Receptionist</div><div class="card">');
       html.push(`
         <div class="form-group">
