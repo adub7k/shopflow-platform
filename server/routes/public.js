@@ -339,12 +339,20 @@ router.post('/api/public/:shopSlug/lead', async (req, res) => {
     // pretend success so they don't adapt, and log nothing.
     if (String(req.body.website || '').trim()) return res.json({ ok: true });
 
-    const name  = String(req.body.name || '').trim().slice(0, 80);
+    let name  = String(req.body.name || '').trim().slice(0, 80);
     const phone = String(req.body.phone || '').trim().slice(0, 25);
     const email = String(req.body.email || '').trim().slice(0, 120);
     const notes = String(req.body.notes || '').trim().slice(0, 1000);
     const digits = phone.replace(/\D/g, '');
-    if (!name || digits.length < 10) return res.status(400).json({ ok: false, error: 'Please enter your name and a valid phone number.' });
+    // Integration/test leads (skipRequiredCustomFields:true, e.g. Meta via Make)
+    // are never rejected for missing fields — a blank one still comes through,
+    // labeled "Test Lead" so it's identifiable in the Leads list. The website
+    // form doesn't send the flag, so it still requires a real name + phone.
+    if (req.body.skipRequiredCustomFields) {
+      if (!name) name = 'Test Lead';
+    } else if (!name || digits.length < 10) {
+      return res.status(400).json({ ok: false, error: 'Please enter your name and a valid phone number.' });
+    }
 
     const { db, shop } = ctx;
     const h = shopHelpers(db);
