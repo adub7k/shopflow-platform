@@ -351,10 +351,16 @@ router.post('/api/public/:shopSlug/lead', async (req, res) => {
     const s = db.get('settings').value() || {};
 
     // Enforce required custom fields (vehicle year/make/model/color for detail).
+    // Server-to-server integrations (e.g. Meta lead-ad forms via Make/Zapier) can't
+    // collect these, so they opt out with skipRequiredCustomFields:true and the lead
+    // is still accepted — name + phone above remain mandatory. The website form never
+    // sends this flag, so its required-field enforcement is unchanged.
     const cf = req.body.customFields || {};
     Object.keys(cf).forEach(k => { cf[k] = String(cf[k] || '').trim().slice(0, 80); });
-    const missing = (s.customFields || []).filter(f => f.required && !String(cf[f.key] || '').trim());
-    if (missing.length) return res.status(400).json({ ok: false, error: 'Missing required fields: ' + missing.map(f => f.label).join(', ') });
+    if (!req.body.skipRequiredCustomFields) {
+      const missing = (s.customFields || []).filter(f => f.required && !String(cf[f.key] || '').trim());
+      if (missing.length) return res.status(400).json({ ok: false, error: 'Missing required fields: ' + missing.map(f => f.label).join(', ') });
+    }
     const vehicle = (cf.vehicleYear || cf.vehicleMake || cf.vehicleModel)
       ? { year: cf.vehicleYear || '', make: cf.vehicleMake || '', model: cf.vehicleModel || '', color: cf.vehicleColor || '' }
       : null;
