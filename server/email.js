@@ -105,6 +105,34 @@ function notifyNewLead({ shop, settings, lead, kind }) {
   }
 }
 
+// Send a one-off test email so an owner can verify alerts land in their inbox
+// from Settings, without waiting for a real lead. Unlike notifyNewLead (fire-
+// and-forget), this AWAITS the send and returns a plain result the UI can show,
+// so the exact reason surfaces in the browser instead of only the server log.
+//   { ok:true, to } on success
+//   { ok:false, reason } if SMTP isn't configured, there's no recipient, or the
+//   provider rejects the send (bad app password, etc.)
+async function sendTest({ to }) {
+  const t = mailer();
+  if (!t) return { ok: false, reason: 'Email is not set up on the server yet (missing SMTP_HOST / SMTP_USER / SMTP_PASS).' };
+  if (!to) return { ok: false, reason: 'No alert email is set — enter one above and try again.' };
+  try {
+    await t.sendMail({
+      from: process.env.SMTP_FROM || `"ShopFlow" <${process.env.SMTP_USER}>`,
+      to,
+      subject: '✅ ShopFlow test — new-lead alerts are working',
+      html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;">
+        <h2 style="color:#16a34a;margin:0 0 6px;">You're all set ✅</h2>
+        <p style="color:#374151;margin:0 0 12px;">This is a test from your ShopFlow settings. If you're reading it, new-lead and missed-call alerts will arrive at <b>${esc(to)}</b>.</p>
+        <p style="color:#9ca3af;font-size:11px;margin-top:20px;">Powered by ShopFlow</p>
+      </div>`,
+    });
+    return { ok: true, to };
+  } catch (e) {
+    return { ok: false, reason: e.message || 'The email provider rejected the message.' };
+  }
+}
+
 // mailer is exported for server/integrations.js so the website-leads modules
 // share the same SMTP transport + config-gating as the owner notifications.
-module.exports = { notifyNewLead, mailer };
+module.exports = { notifyNewLead, mailer, sendTest };

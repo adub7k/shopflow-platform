@@ -211,6 +211,17 @@ const Settings = {
       html.push('<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-primary" style="flex:1;min-width:150px;" onclick="Settings.enablePush(this)">🔔 Enable notifications</button><button class="btn" style="flex:1;min-width:150px;" onclick="Settings.testPush(this)">Test notifications</button></div>');
       html.push('</div>');
 
+      // Email alerts (new leads / missed calls). The address here is the recipient
+      // the server reads (settings.notificationEmail); blank falls back to the
+      // shop's signup email. The Test button saves it, then sends a real email and
+      // reports success/failure inline so the owner can verify it themselves.
+      html.push('<div class="section-header">Email Alerts (New Leads)</div><div class="card">');
+      html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">We email this address the instant a new lead comes in or a call is missed — with a tap-to-call button. Leave blank to use your shop signup email.</div>');
+      html.push(`<div class="form-group"><label class="form-label">Alert email</label><input class="form-input" id="s-notifemail" type="email" value="${esc(s.notificationEmail||'')}" placeholder="you@example.com" /></div>`);
+      html.push('<button class="btn btn-primary" style="width:100%;" onclick="Settings.testLeadEmail(this)">Save &amp; send test email</button>');
+      html.push('<div id="s-notif-result" style="font-size:12.5px;margin-top:10px;line-height:1.4;"></div>');
+      html.push('</div>');
+
       // Google Reviews
       html.push('<div class="section-header">Google Reviews</div><div class="card">');
       html.push(`<div class="form-group"><label class="form-label">Google Review Link</label><input class="form-input" id="s-grev" value="${esc(s.googleReviewLink||'')}" placeholder="https://g.page/r/..." /></div>`);
@@ -767,6 +778,7 @@ const Settings = {
     const rgEl=document.getElementById('s-revgoal');
     if(rgEl){ const rg=parseFloat(rgEl.value); data.revenueGoal=(!isNaN(rg)&&rg>0)?Math.round(rg):0; }
     const gr=document.getElementById('s-grev')?.value.trim(); if(gr)data.googleReviewLink=gr;
+    const ne=document.getElementById('s-notifemail'); if(ne)data.notificationEmail=ne.value.trim();
     const ehost=document.getElementById('s-ehost')?.value.trim();
     const euser=document.getElementById('s-euser')?.value.trim();
     const epass=document.getElementById('s-epass')?.value;
@@ -786,6 +798,23 @@ const Settings = {
     this._tpls = _smsTemplates(data.smsTemplates);
     const title=document.getElementById('topbar-title'); if(title)title.textContent=data.shopName||'ShopFlow';
     toast('Settings saved ✓');
+  },
+
+  // Save the alert email and send a real test to it, showing the result inline so
+  // the owner can confirm delivery (or see the exact failure) without leaving Settings.
+  async testLeadEmail(btn) {
+    const el=document.getElementById('s-notifemail');
+    const out=document.getElementById('s-notif-result');
+    const email=(el?.value||'').trim();
+    if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ if(out){out.style.color='#dc2626';out.textContent='❌ That doesn’t look like a valid email address.';} return; }
+    const orig=btn.textContent; btn.disabled=true; btn.textContent='Sending…';
+    if(out){ out.style.color='var(--muted)'; out.textContent='Sending test email…'; }
+    try{
+      const r=await db.settings.testEmail(email);
+      if(r&&r.ok){ if(out){out.style.color='var(--green)';out.innerHTML='✅ Sent to <b>'+esc(r.to||email)+'</b>. Check that inbox (and spam) in the next minute.';} toast('Test email sent ✓'); }
+      else { if(out){out.style.color='#dc2626';out.textContent='❌ '+((r&&r.reason)||'Could not send the test email.');} }
+    }catch(e){ if(out){out.style.color='#dc2626';out.textContent='❌ '+(e.message||'Request failed.');} }
+    finally{ btn.disabled=false; btn.textContent=orig; }
   },
 
   // ── Message-template manager ──────────────────────────────────────────────────

@@ -51,7 +51,7 @@ async function apiFetch(path, opts={}) {
 }
 
 const db = {
-  settings:      { get: () => apiFetch('/settings'), save: (s) => apiFetch('/settings', {method:'POST',body:s}) },
+  settings:      { get: () => apiFetch('/settings'), save: (s) => apiFetch('/settings', {method:'POST',body:s}), testEmail: (email) => apiFetch('/test-lead-email', {method:'POST',body:{email}}) },
   barbers:       { all: () => apiFetch('/barbers'), save: (b) => apiFetch('/barbers',{method:'POST',body:b}), delete: (id) => apiFetch('/barbers/'+id,{method:'DELETE'}), saveSchedule: (id,s) => apiFetch('/barbers/'+id+'/schedule',{method:'POST',body:s}) },
   services:      { all: () => apiFetch('/services'), save: (s) => apiFetch('/services',{method:'POST',body:s}), delete: (id) => apiFetch('/services/'+id,{method:'DELETE'}) },
   customers:     { all: () => apiFetch('/customers'), search: (q) => apiFetch('/customers/search?q='+encodeURIComponent(q)), get: (id) => apiFetch('/customers/'+id), save: (c) => apiFetch('/customers',{method:'POST',body:c}), delete: (id) => apiFetch('/customers/'+id,{method:'DELETE'}), redeem: (id) => apiFetch('/customers/'+id+'/redeem',{method:'POST'}), log: (id,text) => apiFetch('/customers/'+id+'/log',{method:'POST',body:{text,by:(typeof Auth!=='undefined'&&Auth.getName&&Auth.getName())||''}}),
