@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl } = require('../db');
 const { resolveProfile } = require('../industries');
 const { notifyNewLead } = require('../email');
+const { sendPush } = require('../push-instance');
 
 // Resolve a shop's inspo-photo mode: explicit per-shop setting wins, else the
 // industry default ('required' for nail studios, 'off' elsewhere).
@@ -421,6 +422,19 @@ router.post('/api/public/:shopSlug/lead', async (req, res) => {
     // texts back from there. Speed-to-lead is covered by an email ping to the
     // owner instead (fire-and-forget — a mail failure never breaks the submit).
     notifyNewLead({ shop, settings: s, lead, kind: existing ? 'form-repeat' : 'form' });
+
+    // Mobile push to the owner's phone (free, instant) — mirrors the email above.
+    // EVERY non-call lead source lands here (website form + Meta/Make via
+    // skipRequiredCustomFields), so this is the one place that guarantees a push
+    // for all of them. Phone-call leads are notified separately (routes/twilio.js).
+    const veh = lead.vehicle && [lead.vehicle.year, lead.vehicle.make, lead.vehicle.model].filter(Boolean).join(' ');
+    sendPush(shop.id, {
+      title: `🔔 New lead — ${lead.name || lead.phone || 'website'}`,
+      body: [lead.phone, veh, (lead.servicesInterested || []).join(', '), lead.source && `via ${lead.source}`]
+        .filter(Boolean).join(' · '),
+      url: '/leads',
+      tag: `lead-${lead.id}`,
+    }).catch(e => console.error('Lead push failed:', e.message));
     res.json({ ok: true });
   } catch(e) {
     console.error('Lead capture error:', e.message);

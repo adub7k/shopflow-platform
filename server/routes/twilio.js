@@ -184,6 +184,26 @@ router.post('/api/twilio/voice/complete/:shopId', verifyTwilio, (req, res) => {
       lead: lead || { phone: call.from, source: 'call' },
       kind: 'missed-call',
     });
+
+    // Speed-to-lead reminder: 5 min after the miss, push the owner IF the lead
+    // still hasn't been connected. We drop a job on the shared automations queue
+    // (same lowdb file the engine ticks over every 60s) instead of a setTimeout,
+    // so it survives restarts and auto-cancels once the caller is reached — see
+    // routes/automations.js ('missed_call_nudge' / cancel_if 'call_returned').
+    // Guarded by the at-most-once flag above so Twilio's webhook retries on the
+    // same CallSid don't stack duplicate reminders.
+    if (lead) {
+      ctx.h.upsert('automation_queue', {
+        id: genId('job'),
+        tenant_id: ctx.shopId,
+        lead_id: lead.id,
+        type: 'missed_call_nudge',
+        cancel_if: 'call_returned',
+        run_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        status: 'pending',
+        created_at: new Date().toISOString(),
+      });
+    }
   }
   if (smsWorthy && callTrackingOn(ctx.settings) && !call.autoSmsSent) {
     const fromNum = shopFromNumber(ctx.shopId);
