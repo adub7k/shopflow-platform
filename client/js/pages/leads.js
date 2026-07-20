@@ -268,9 +268,13 @@ const Leads = {
     const a = l.ai; if (!a) return '';
     const tags = [];
     if (a.serviceNeeded) tags.push(['Service', esc(a.serviceNeeded)]);
-    if (a.budget != null) tags.push(['Budget', fmtMoney(a.budget)]);
+    // Budget shows in the price-sensitive banner instead when flagged (no dupe).
+    if (a.budget != null && !a.priceSensitive) tags.push(['Budget', fmtMoney(a.budget)]);
     if (a.desiredDate) tags.push(['When', esc(a.desiredDate)]);
     const grid = tags.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin:9px 0 0;">${tags.map(t=>`<span style="font-size:12px;background:var(--surface2);border-radius:6px;padding:3px 8px;"><strong>${t[0]}:</strong> ${t[1]}</span>`).join('')}</div>` : '';
+    // Price-sensitive: they balked at the quote — surface it loudly so the owner
+    // calls back fast with room to close (quoted vs. what they'd pay).
+    const price = a.priceSensitive ? `<div style="display:flex;align-items:center;gap:6px;background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;border-radius:8px;padding:7px 10px;margin-top:9px;font-size:12px;font-weight:700;">💸 Price-sensitive${a.quotedPrice!=null?` · quoted ${fmtMoney(a.quotedPrice)}`:''}${a.budget!=null?` · wants ${fmtMoney(a.budget)}`:''} — call to close</div>` : '';
     const fu = a.followUp ? `<div style="display:flex;align-items:center;gap:8px;margin-top:10px;"><div style="flex:1;font-size:12px;color:var(--muted);line-height:1.45;"><strong>Suggested follow-up:</strong> ${esc(a.followUp)}</div><button class="btn btn-sm btn-green" style="flex-shrink:0;" onclick="Leads.useFollowUp('${l.id}')">Use</button></div>` : '';
     return `<div class="card" style="border:1px solid var(--green-md);background:var(--green-lt);margin-bottom:14px;">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
@@ -278,7 +282,7 @@ const Leads = {
         ${this._qualityChip(a.quality)}
       </div>
       <div style="font-size:14px;line-height:1.5;margin-top:8px;color:var(--text);">${esc(a.summary)}</div>
-      ${grid}${fu}
+      ${price}${grid}${fu}
     </div>`;
   },
   useFollowUp(id) {

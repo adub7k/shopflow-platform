@@ -155,6 +155,7 @@ function buildSystemPrompt(ctx, cfg) {
     '- Only quote prices that appear in the SERVICE MENU below, and quote by vehicle size when the service is size-priced. Never invent, estimate, or negotiate a price for anything not listed.',
     `- If they ask for a service NOT on the menu, tell them ${ctx.shopName} does not offer that one, mention the closest service you do offer if there is one, and offer to have the shop call them back. Do not improvise a price or a workaround.`,
     `- Stay strictly on ${ctx.shopName}'s services. Do not answer general questions, give advice, tell jokes, do math, write anything, or role-play. Briefly steer back to how you can help; if they persist, wrap up with end_call.`,
+    '- PRICE PUSHBACK (too expensive / wants a discount / comparing quotes): do NOT lose them. First acknowledge it warmly and briefly restate the value. If a lower-priced option on the menu genuinely fits what they want, offer that real option. If they still hesitate, ask what they were hoping to spend, and tell them the shop will call to work something out. Then capture_lead with priceSensitive=true and their number in "budget". NEVER invent a discount, agree to a lower price, negotiate a specific deal, or promise the shop will match it — you only set the callback up; the shop decides pricing.',
     '- ALWAYS read the key details back and get a "yes" BEFORE calling capture_lead or book_appointment. People mishear on the phone — a wrong name, number, or vehicle makes the whole lead useless. If they correct you, fix it and read it back again.',
     '- The callback number is the number they are calling from unless they give a different one; if they give a different one, pass it as callbackNumber.',
     '- capture_lead and book_appointment each END the call themselves via their closingLine — do not call end_call after them. Only use end_call when you truly cannot help: a wrong number, spam, or a caller who will not engage (outcome "no-info").',
@@ -190,14 +191,15 @@ function toolsFor(quoteFirst, cfg) {
         vehicle: { type: ['string', 'null'], description: 'Vehicle as "year make model color" if relevant, else null.' },
         vehicleSize: { type: ['string', 'null'], enum: ['sedan', 'suv', 'truck', null], description: 'Rough vehicle size class if relevant, else null.' },
         quotedPrice: { type: ['number', 'null'], description: 'The rough price you quoted them from the menu, or null.' },
-        budget: { type: ['number', 'null'], description: 'Their stated budget in dollars, or null.' },
+        priceSensitive: { type: 'boolean', description: 'true if they pushed back on price (too expensive, wanted a discount, or comparing quotes).' },
+        budget: { type: ['number', 'null'], description: 'What they were hoping to spend, in dollars — their counteroffer if they pushed back on price. Null if not stated.' },
         preferredTime: { type: ['string', 'null'], description: 'When they want to come in, as they said it (free text), or null.' },
         quality: { type: 'string', enum: ['hot', 'warm', 'cold'], description: 'hot = ready to book; warm = interested; cold = vague/price-shopping/wrong number.' },
         summary: { type: 'string', description: 'One or two sentence summary of the call for the shop owner.' },
         followUp: { type: 'string', description: 'One concrete next step for the shop (e.g. a text to send).' },
         closingLine: { type: 'string', description: 'A short, warm closing line to say after saving — confirm the shop will text or call shortly to lock in the time and exact price. This ends the call.' },
       },
-      required: ['customerName', 'callbackNumber', 'serviceNeeded', 'vehicle', 'vehicleSize', 'quotedPrice', 'budget', 'preferredTime', 'quality', 'summary', 'followUp', 'closingLine'],
+      required: ['customerName', 'callbackNumber', 'serviceNeeded', 'vehicle', 'vehicleSize', 'quotedPrice', 'priceSensitive', 'budget', 'preferredTime', 'quality', 'summary', 'followUp', 'closingLine'],
     },
   };
   const endCall = {
@@ -320,6 +322,7 @@ function execCaptureLead(ctx, call, args) {
       quality: args.quality || 'warm',
       followUp: args.followUp || '',
       quotedPrice: args.quotedPrice != null ? args.quotedPrice : null,
+      priceSensitive: !!args.priceSensitive,
       model: MODEL, generatedAt: now, source: 'voice',
     };
     ctx.h.upsert('leads', lead);
