@@ -370,7 +370,8 @@ function endAiCall(vr, ctx, call, res, sayText) {
   }
   syncVoiceTranscript(call);
   ctx.h.upsert('calls', call);
-  if (sayText) vr.say({ voice: voice.voiceConfig(ctx.settings).voice }, sayText);
+  // Always speak a closing line before hanging up — never an abrupt cut-off.
+  vr.say({ voice: voice.voiceConfig(ctx.settings).voice }, sayText || voice.FAREWELL);
   vr.hangup();
   return res.type('text/xml').send(vr.toString());
 }

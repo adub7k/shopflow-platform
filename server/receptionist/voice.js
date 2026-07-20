@@ -24,6 +24,9 @@ const { notifyNewLead } = require('../email');
 const MODEL = process.env.VOICE_AI_MODEL || 'claude-haiku-4-5';
 const DEFAULT_VOICE = 'Polly.Joanna-Neural';
 const DEFAULT_MAX_TURNS = 12;
+// A warm default goodbye — spoken whenever a call ends without the model giving
+// its own closingLine, so the caller never gets an abrupt hangup mid-air.
+const FAREWELL = "You're all set — thanks so much for calling! We'll be in touch shortly. Take care and have a great day!";
 
 let _client = null;
 function getClient() {
@@ -132,16 +135,18 @@ function buildSystemPrompt(ctx, cfg) {
         'so DO NOT promise a specific appointment slot.',
         'BEFORE you save, read the key details back in one short sentence to confirm — their name, the callback',
         'number (say the last four digits of the number they are calling from, unless they gave a different one),',
-        'the service, and the vehicle year, make and model — and wait for a yes. Once they confirm, call',
-        'capture_lead with everything plus a warm closingLine telling them the shop will text or call shortly to',
-        'lock in a time and exact price. capture_lead ends the call — do NOT also call end_call.',
+        'the service, and the vehicle year, make and model. Read it back and then STOP — do NOT call any tool in',
+        'that same reply; just wait for them to say yes. ONLY after they confirm, call capture_lead, and ALWAYS',
+        'include a warm closingLine that says goodbye — e.g. tell them the shop will text or call shortly to lock',
+        'in a time and exact price, and thank them for calling. capture_lead ends the call — do NOT also call end_call.',
       ].join(' ')
     : [
         'YOUR GOAL: book the caller an appointment. Find out which service they want and their preferred day,',
         'call check_availability for that date, offer the open times, and once they pick one collect their name.',
         'BEFORE you book, read the service, date, time, their name, and the callback number (last four digits of',
-        'the number they are calling from, unless they gave a different one) back in one short sentence and wait',
-        'for a yes. Then call book_appointment with a warm closingLine confirming it — book_appointment ends the',
+        'the number they are calling from, unless they gave a different one) back in one short sentence, then STOP',
+        'and wait for a yes — do NOT call any tool in that same reply. ONLY after they confirm, call',
+        'book_appointment with a warm closingLine that confirms it and says goodbye — book_appointment ends the',
         'call. If nothing fits, read the details back and capture_lead instead (it also ends the call).',
       ].join(' ');
 
@@ -405,7 +410,9 @@ async function runTurn(ctx, call, userSpeech, { finalTurn = false } = {}) {
         else if (tu.name === 'book_appointment' && out && out.booked) { endedOutcome = { outcome: 'booked' }; if (a.closingLine) sayText = a.closingLine; }
       }
       messages.push({ role: 'user', content: results });
-      if (endedOutcome) { if (!sayText && text) sayText = text; break; }
+      // Never let the read-back line double as the goodbye — a terminal turn ends
+      // with the model's closingLine, or a warm default (set below), not "…correct?".
+      if (endedOutcome) break;
       // else loop again so the model can speak about the tool result
     }
   } catch (e) {
@@ -413,7 +420,7 @@ async function runTurn(ctx, call, userSpeech, { finalTurn = false } = {}) {
     return { say: "I'm sorry, something went wrong. The shop will call you right back. Goodbye!", end: true, error: true };
   }
 
-  if (!sayText) sayText = endedOutcome ? 'Thanks so much. Goodbye!' : "Sorry, could you say that again?";
+  if (!sayText) sayText = endedOutcome ? FAREWELL : "Sorry, could you say that again?";
   state.turns.push({ role: 'assistant', text: sayText, at: new Date().toISOString() });
   if (endedOutcome) state.status = state.outcome ? state.outcome.type : (endedOutcome.outcome || 'ended');
 
@@ -438,5 +445,5 @@ module.exports = {
   // Exported so the ConversationRelay engine (receptionist/relay.js) reuses the
   // exact same client, system prompt, tools, and server-authoritative tool
   // execution — the transport differs, the brain does not.
-  getClient, runTool,
+  getClient, runTool, FAREWELL,
 };

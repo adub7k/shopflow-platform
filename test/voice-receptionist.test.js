@@ -230,6 +230,23 @@ console.log('\n— simulated call: barbershop, live booking —');
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
+console.log('\n— goodbye guarantee —');
+(async () => {
+  const db = detailShop();
+  const ctx = ctxFor(db, 'shopdetail');
+  const call = { id: 'callg', from: '+15551234567', leadId: 'lead1', voiceAI: voice.initState('always') };
+  call.voiceAI.turns.push({ role: 'assistant', text: voice.greeting(ctx), at: 't0' });
+  // Model captures the lead but forgets the closingLine (empty) — the call must
+  // still end with a warm goodbye, never an abrupt hangup.
+  voice.__setTestClient(stubClient([
+    { tool: 'capture_lead', input: { customerName: 'Ann', callbackNumber: null, serviceNeeded: 'Full Detail', vehicle: '2019 Honda Civic', vehicleSize: 'sedan', quotedPrice: 250, budget: null, preferredTime: 'Friday', quality: 'warm', summary: 'x', followUp: 'y', closingLine: '' } },
+  ]));
+  const t = await voice.runTurn(ctx, call, 'yes');
+  check('goodbye: empty closingLine still ends with a warm farewell', t.end === true && /thanks so much for calling/i.test(t.say), JSON.stringify(t.say));
+  check('goodbye: not an abrupt/empty hangup', !!t.say && t.say.length > 10);
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
 setTimeout(() => {
   console.log(`\n${failures === 0 ? '✓ ALL PASSED' : `✗ ${failures} FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);

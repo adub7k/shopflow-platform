@@ -144,6 +144,7 @@ async function handlePrompt(session, promptText) {
   const used = call.voiceAI.turns.filter(t => t.role === 'assistant').length;
   let ended = null;
   let spoken = '';
+  let closed = false; // did a terminal tool already speak a goodbye?
 
   try {
     for (let hop = 0; hop < 4; hop++) {
@@ -164,9 +165,9 @@ async function handlePrompt(session, promptText) {
         const out = voice.runTool(ctx, call, tu.name, a);
         results.push({ type: 'tool_result', tool_use_id: tu.id, content: JSON.stringify(out) });
         // Terminal tools speak their closing line and end the call (see voice.js).
-        if (tu.name === 'end_call') { ended = a; if (a.farewell) { spoken += a.farewell; speak(session, a.farewell, false); } }
-        else if (tu.name === 'capture_lead') { ended = { outcome: 'captured' }; if (a.closingLine) { spoken += a.closingLine; speak(session, a.closingLine, false); } }
-        else if (tu.name === 'book_appointment' && out && out.booked) { ended = { outcome: 'booked' }; if (a.closingLine) { spoken += a.closingLine; speak(session, a.closingLine, false); } }
+        if (tu.name === 'end_call') { ended = a; if (a.farewell) { spoken += a.farewell; speak(session, a.farewell, false); closed = true; } }
+        else if (tu.name === 'capture_lead') { ended = { outcome: 'captured' }; if (a.closingLine) { spoken += a.closingLine; speak(session, a.closingLine, false); closed = true; } }
+        else if (tu.name === 'book_appointment' && out && out.booked) { ended = { outcome: 'booked' }; if (a.closingLine) { spoken += a.closingLine; speak(session, a.closingLine, false); closed = true; } }
       }
       session.messages.push({ role: 'user', content: results });
       if (ended) break;
@@ -180,6 +181,8 @@ async function handlePrompt(session, promptText) {
     return endSession(session, 'error');
   }
 
+  // Guarantee a warm goodbye if the call is ending and the model didn't give one.
+  if (ended && !closed) { speak(session, voice.FAREWELL, false); spoken += ' ' + voice.FAREWELL; }
   speak(session, '', true);                              // finalize this TTS turn
   if (spoken.trim()) call.voiceAI.turns.push({ role: 'assistant', text: spoken.trim(), at: new Date().toISOString() });
   syncTranscript(call);
