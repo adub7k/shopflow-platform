@@ -60,6 +60,13 @@ function voiceConfig(settings) {
     engine: v.engine === 'relay' ? 'relay' : 'gather',
     relayTtsProvider: v.relayTtsProvider || 'ElevenLabs', // ConversationRelay TTS vendor
     relayVoice: (v.relayVoice || '').trim(),              // '' = provider default voice
+    // Noise control. Gather: drop transcripts below minConfidence (noise/breaths
+    // come back low-confidence). Relay: interruptSensitivity 'low' means only
+    // confident, sustained speech interrupts the AI (not a cough); ignoreBackchannel
+    // filters "yeah/uh-huh". Defaults tuned to NOT react to every stray sound.
+    minConfidence: Number.isFinite(Number(v.minConfidence)) ? Number(v.minConfidence) : 0.4,
+    relayInterruptSensitivity: ['high', 'medium', 'low'].includes(v.relayInterruptSensitivity) ? v.relayInterruptSensitivity : 'low',
+    relayIgnoreBackchannel: v.relayIgnoreBackchannel !== false,
     // Latency knobs. speechTimeout = seconds of silence before Twilio decides the
     // caller is done — a fixed 1s feels like a real back-and-forth; 'auto' is
     // Twilio's smart endpointing but adds ~1-2s of dead air. Bump toward 2 if it

@@ -428,6 +428,7 @@ router.post('/api/twilio/voice/ai/gather/:shopId', verifyTwilio, async (req, res
   const ctx = shopCtx(req.params.shopId);
   const callSid = req.query.callSid;
   const speech = req.body.SpeechResult || '';
+  const confidence = parseFloat(req.body.Confidence);
   if (!ctx || !callSid) { vr.hangup(); return res.type('text/xml').send(vr.toString()); }
   const call = ctx.h.getById('calls', callSid);
   if (!call || !call.voiceAI) return voicemailFallback(vr, ctx, callSid, res);
@@ -435,8 +436,11 @@ router.post('/api/twilio/voice/ai/gather/:shopId', verifyTwilio, async (req, res
   const cfg = voice.voiceConfig(ctx.settings);
   const used = call.voiceAI.turns.filter(t => t.role === 'assistant').length;
 
-  // Silence: reprompt once, then wrap up gracefully.
-  if (!speech.trim()) {
+  // Treat silence OR a low-confidence transcript as "didn't hear you". Background
+  // noise, breaths, and filler come back as low-confidence speech; without this
+  // the AI answers every stray sound. Reprompt once, then wrap up gracefully.
+  const noise = Number.isFinite(confidence) && confidence < cfg.minConfidence;
+  if (!speech.trim() || noise) {
     call.voiceAI.silences = (call.voiceAI.silences || 0) + 1;
     if (call.voiceAI.silences >= 2 || used >= cfg.maxTurns) {
       return endAiCall(vr, ctx, call, res, 'Sorry, I could not hear you. The shop will call you right back. Goodbye!');

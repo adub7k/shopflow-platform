@@ -69,6 +69,7 @@ console.log('— relay TwiML —');
   check('TwiML: <ConversationRelay> with wss url', /<ConversationRelay url="wss:\/\/staging\.example\.com\/api\/twilio\/voice\/relay/.test(xml), xml);
   check('TwiML: signed token in url', xml.includes(`t=${relay.relayToken('CA123')}`));
   check('TwiML: welcomeGreeting + ttsProvider + interruptible', /welcomeGreeting="Thanks for calling Demo Auto Studio/.test(xml) && /ttsProvider="ElevenLabs"/.test(xml) && /interruptible="speech"/.test(xml), xml);
+  check('TwiML: noise controls (interruptSensitivity=low + ignoreBackchannel=true)', /interruptSensitivity="low"/.test(xml) && /ignoreBackchannel="true"/.test(xml), xml);
   check('TwiML: & in url is XML-escaped', xml.includes('&amp;callSid='));
   eq('relayToken is deterministic', relay.relayToken('CA123'), relay.relayToken('CA123'));
   check('relayToken differs per callSid', relay.relayToken('CA123') !== relay.relayToken('CA999'));

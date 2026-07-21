@@ -45,6 +45,8 @@ function connectTwiml(ctx, callSid) {
     + ` welcomeGreeting="${escapeXml(voice.greeting(ctx))}"`
     + ` ttsProvider="${escapeXml(cfg.relayTtsProvider)}"${voiceAttr}`
     + ' interruptible="speech" reportInputDuringAgentSpeech="none"'
+    + ` interruptSensitivity="${escapeXml(cfg.relayInterruptSensitivity)}"`
+    + ` ignoreBackchannel="${cfg.relayIgnoreBackchannel ? 'true' : 'false'}"`
     + '/></Connect></Response>';
 }
 

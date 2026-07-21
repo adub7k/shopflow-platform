@@ -138,6 +138,8 @@ console.log('\n— voice helpers —');
 (() => {
   const cfg = voice.voiceConfig({ voiceAI: { mode: 'fallback', greeting: '  Hi!  ', maxTurns: 8 } });
   eq('voiceConfig parses mode/greeting/maxTurns/voice', [cfg.mode, cfg.greeting, cfg.maxTurns, cfg.voice], ['fallback', 'Hi!', 8, 'Polly.Joanna-Neural']);
+  const nd = voice.voiceConfig({});
+  eq('voiceConfig noise defaults (minConfidence/interruptSensitivity/backchannel)', [nd.minConfidence, nd.relayInterruptSensitivity, nd.relayIgnoreBackchannel], [0.4, 'low', true]);
   eq('voiceConfig defaults to off', voice.voiceConfig({}).mode, 'off');
 
   eq('mode off → never active', voice.voiceModeActive({ voiceAI: { mode: 'off' } }, { missed: true }), false);
