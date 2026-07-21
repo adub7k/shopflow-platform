@@ -436,10 +436,14 @@ router.post('/api/twilio/voice/ai/gather/:shopId', verifyTwilio, async (req, res
   const cfg = voice.voiceConfig(ctx.settings);
   const used = call.voiceAI.turns.filter(t => t.role === 'assistant').length;
 
-  // Treat silence OR a low-confidence transcript as "didn't hear you". Background
-  // noise, breaths, and filler come back as low-confidence speech; without this
-  // the AI answers every stray sound. Reprompt once, then wrap up gracefully.
-  const noise = Number.isFinite(confidence) && confidence < cfg.minConfidence;
+  // Treat silence OR noise as "didn't hear you". Background sounds, breaths, and
+  // filler come back either as low-confidence speech OR as a bare filler token —
+  // without this the AI answers every stray sound. The filler list is confidence-
+  // independent (Twilio's phone-model confidence isn't always reliable) and holds
+  // only pure non-words, so real answers like "yes"/"no"/"yeah" are never dropped.
+  const cleaned = speech.trim().toLowerCase().replace(/[^a-z]/g, '');
+  const isFiller = ['uh', 'um', 'umm', 'uhh', 'hmm', 'hm', 'mm', 'mhm', 'er', 'ah', 'huh', 'oh'].includes(cleaned);
+  const noise = isFiller || (Number.isFinite(confidence) && confidence < cfg.minConfidence);
   if (!speech.trim() || noise) {
     call.voiceAI.silences = (call.voiceAI.silences || 0) + 1;
     if (call.voiceAI.silences >= 2 || used >= cfg.maxTurns) {
