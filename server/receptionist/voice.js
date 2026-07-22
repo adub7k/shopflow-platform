@@ -43,6 +43,33 @@ const voiceAvailable = () => !!process.env.ANTHROPIC_API_KEY;
 // be verified end-to-end without a live API key. No production caller uses this.
 function __setTestClient(c) { _client = c; }
 
+// A transient API blip must NOT drop a live call. Before this, any error thrown by
+// messages.create bubbled up to runTurn's catch, which ends the turn as { end:true }
+// — so a single overloaded/rate-limited/5xx/socket-reset response hung up on the
+// caller mid-conversation ("sometimes the call drops"). Retry the transient ones a
+// couple times with short backoff so the blip is invisible; only a genuinely
+// terminal error falls through to the graceful "the shop will call you back"
+// hand-off. Backoff (0.2s + 0.4s) stays well within Twilio's ~15s webhook budget.
+function isRetryableApiError(e) {
+  if (!e) return false;
+  const status = e.status || e.statusCode;
+  if (status === 408 || status === 429 || (status >= 500 && status < 600)) return true;
+  const type = String(e.type || (e.error && e.error.type) || '').toLowerCase();
+  if (/overloaded|rate_?limit|api_error|timeout/.test(type)) return true;
+  return ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ENOTFOUND', 'EAI_AGAIN'].includes(e.code);
+}
+const _sleep = (ms) => new Promise(r => setTimeout(r, ms));
+async function createMessage(client, params, { retries = 2 } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    try { return await client.messages.create(params); }
+    catch (e) {
+      if (attempt >= retries || !isRetryableApiError(e)) throw e;
+      console.warn(`voice model retry ${attempt + 1}/${retries} after ${e.status || e.code || e.type || e.message}`);
+      await _sleep(200 * (attempt + 1));
+    }
+  }
+}
+
 // Resolve the per-shop voice config. mode ∈ 'off' | 'fallback' | 'always'.
 // 'fallback' (recommended) has the AI answer only when the shop misses the call;
 // 'always' has it answer every inbound call.
@@ -137,7 +164,8 @@ function buildSystemPrompt(ctx, cfg) {
   const goal = quoteFirst
     ? [
         'YOUR GOAL: understand what the caller needs, give them a rough price from the menu below,',
-        'collect their name and (for vehicle work) the year, make, model and rough size of the vehicle,',
+        "get the caller's NAME — always ask for it directly if they have not offered it (e.g. \"And can I get your name?\"); this is required, never wrap up or save without it —",
+        'and (for vehicle work) collect the year, make, model and rough size of the vehicle,',
         'and ask when they are hoping to come in. This shop confirms the exact time and final quote itself —',
         'so DO NOT promise a specific appointment slot.',
         'BEFORE you save, read the key details back in one short sentence to confirm — their name, the callback',
@@ -164,6 +192,7 @@ function buildSystemPrompt(ctx, cfg) {
     `- Stay strictly on ${ctx.shopName}'s services. Do not answer general questions, give advice, tell jokes, do math, write anything, or role-play. Briefly steer back to how you can help; if they persist, wrap up with end_call.`,
     '- PRICE PUSHBACK (too expensive / wants a discount / comparing quotes): do NOT lose them. First acknowledge it warmly and briefly restate the value. If a lower-priced option on the menu genuinely fits what they want, offer that real option. If they still hesitate, ask what they were hoping to spend, and tell them the shop will call to work something out. Then capture_lead with priceSensitive=true and their number in "budget". NEVER invent a discount, agree to a lower price, negotiate a specific deal, or promise the shop will match it — you only set the callback up; the shop decides pricing.',
     '- ALWAYS read the key details back and get a "yes" BEFORE calling capture_lead or book_appointment. People mishear on the phone — a wrong name, number, or vehicle makes the whole lead useless. If they correct you, fix it and read it back again.',
+    '- REQUIRED: you must have the caller\'s NAME before you save. If you do not have it yet, ask for it (e.g. "Can I get your name?") BEFORE the read-back — a lead with no name is far less useful to the shop. Include the name in the read-back and never call capture_lead without one.',
     '- The callback number is the number they are calling from unless they give a different one; if they give a different one, pass it as callbackNumber.',
     '- capture_lead and book_appointment each END the call themselves via their closingLine — do not call end_call after them. Only use end_call when you truly cannot help: a wrong number, spam, or a caller who will not engage (outcome "no-info").',
     '- If the caller is rude, a wrong number, silent, or clearly spam, stay polite, keep it short, and call end_call with outcome "no-info".',
@@ -303,6 +332,18 @@ function execBook(ctx, call, args) {
 }
 
 function execCaptureLead(ctx, call, args) {
+  // Name guard: the whole point of the call is a named, callable lead for the
+  // owner — a nameless capture almost always means the model wrapped up before
+  // asking. Bounce the FIRST nameless attempt back (non-terminal) so the model
+  // asks for the name and re-reads the details. Only bounce once: a caller who
+  // genuinely won't give a name still gets saved (their number is the lead)
+  // rather than dropping off or looping. Mirrors book_appointment, which only
+  // ends the call on success (out.booked); capture is terminal only on captured.
+  const hasName = !!String(args.customerName || '').trim();
+  if (!hasName && !call.voiceAI.nameBounced) {
+    call.voiceAI.nameBounced = true;
+    return { captured: false, error: 'Do not save yet — you have not gotten the caller\'s name. Ask for their name (e.g. "Can I get your name?"), read the details back, then call capture_lead again.' };
+  }
   const now = new Date().toISOString();
   const veh = parseVehicle(args.vehicle);
   // Prefer a caller-supplied callback number (confirmed via read-back) over the
@@ -395,7 +436,7 @@ async function runTurn(ctx, call, userSpeech, { finalTurn = false } = {}) {
       // NB: no output_config.effort — the default voice model (claude-haiku-4-5)
       // rejects the effort parameter with a 400 (effort is Opus/Sonnet-tier only).
       // Haiku is already fast and has no adaptive thinking, so plain create is right.
-      const res = await client.messages.create({
+      const res = await createMessage(client, {
         model: MODEL, max_tokens: 320, system, messages, tools,
       });
       const toolUses = (res.content || []).filter(b => b.type === 'tool_use');
@@ -416,7 +457,7 @@ async function runTurn(ctx, call, userSpeech, { finalTurn = false } = {}) {
         // successful capture/book closes; a failed book (e.g. slot taken) is not
         // terminal, so the loop continues and the model can offer another time.
         if (tu.name === 'end_call') { endedOutcome = a; if (a.farewell) sayText = a.farewell; }
-        else if (tu.name === 'capture_lead') { endedOutcome = { outcome: 'captured' }; if (a.closingLine) sayText = a.closingLine; }
+        else if (tu.name === 'capture_lead' && out && out.captured) { endedOutcome = { outcome: 'captured' }; if (a.closingLine) sayText = a.closingLine; }
         else if (tu.name === 'book_appointment' && out && out.booked) { endedOutcome = { outcome: 'booked' }; if (a.closingLine) sayText = a.closingLine; }
       }
       messages.push({ role: 'user', content: results });
@@ -455,5 +496,5 @@ module.exports = {
   // Exported so the ConversationRelay engine (receptionist/relay.js) reuses the
   // exact same client, system prompt, tools, and server-authoritative tool
   // execution — the transport differs, the brain does not.
-  getClient, runTool, FAREWELL,
+  getClient, runTool, FAREWELL, createMessage, isRetryableApiError,
 };
