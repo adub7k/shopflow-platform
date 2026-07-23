@@ -173,6 +173,27 @@
         avgPrev > 0 ? `<span class="${avgTicket >= avgPrev ? 'v2-up' : 'v2-down'}">${avgTicket >= avgPrev ? '↑' : '↓'} ${fmtMoney(Math.abs(avgTicket - avgPrev))}</span> vs last month` : 'per completed job', 'revenue'));
       html.push('</div>');
 
+      // Revenue Recovered by the AI receptionist — a dedicated hero strip (not a
+      // 7th metric card, which would orphan in the fixed 6-col grid). Shown only
+      // once the AI has produced something (realized revenue or an open quoted
+      // lead), so shops not using it never see a permanent $0 card.
+      if (showRev && ((rev.aiRecoveredTotal || 0) > 0 || (rev.aiPipelineOpen || 0) > 0)) {
+        const jobs = rev.aiRecoveredJobs || 0;
+        const monthPart = (rev.aiRecoveredMonth || 0) > 0 ? ` · ${fmtMoney(rev.aiRecoveredMonth)} this month` : '';
+        const pipe = (rev.aiPipelineOpen || 0) > 0
+          ? `<div class="rc-pipe"><div class="metric-value" style="font-size:21px;">${fmtMoney(rev.aiPipelineOpen)}</div><div class="metric-sub">in open AI quotes${rev.aiPipelineCount ? ' · ' + rev.aiPipelineCount + ' lead' + (rev.aiPipelineCount !== 1 ? 's' : '') : ''}</div></div>`
+          : '';
+        html.push(`<div class="v2-card" style="border-left:3px solid var(--green-deep);cursor:pointer;" onclick="App.nav('leads')">
+          <div class="rc-strip">
+            <div class="rc-main">
+              <div class="metric-label">🤖 Revenue Recovered <span style="color:var(--muted);font-weight:400;">· via AI receptionist</span></div>
+              <div class="metric-value green" style="font-size:27px;">${fmtMoney(rev.aiRecoveredTotal || 0)}</div>
+              <div class="metric-sub">${jobs} job${jobs !== 1 ? 's' : ''} the AI booked or captured${monthPart}</div>
+            </div>
+            ${pipe}
+          </div></div>`);
+      }
+
       html.push('<div class="v2-dgrid"><div class="v2-col">');
 
       if (showRev) {

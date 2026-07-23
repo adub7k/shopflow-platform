@@ -586,8 +586,49 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
   const totalDeposits = round2(paidDeposits.reduce((s, d) => s + Number(d.amount || 0), 0));
   const monthDeposits = round2(paidDeposits.filter(d => monthOf(d.paidAt) === curMonth).reduce((s, d) => s + Number(d.amount || 0), 0));
 
+  // ── Revenue Recovered (AI receptionist) ────────────────────────────────────
+  // Money the AI voice receptionist brought in on calls the shop would otherwise
+  // have missed. Two sources, deduped by appointment id:
+  //   • AI booked the job live (calendar shops)  → appt.source === 'ai-voice'.
+  //   • AI captured a quoted lead (quote-first)   → the owner later closed it into
+  //     a completed job for that caller. We attribute a done appointment to the AI
+  //     when it belongs to an AI-captured lead (matched by customerId or phone)
+  //     and is dated on/after the AI captured them.
+  // Realized = price of those done appointments. Pipeline = quoted price on
+  // AI-captured leads still open (not yet realized) — potential, shown separately.
+  const onlyDigits = s => String(s || '').replace(/\D/g, '');
+  const last10 = s => onlyDigits(s).slice(-10);
+  const quoteOf = l => Number(l.ai && l.ai.quotedPrice != null ? l.ai.quotedPrice : (l.ai && l.ai.budget));
+  const aiLeads = h.getAll('leads').filter(l => l.ai && l.ai.source === 'voice');
+  const aiCustCap = new Map();   // customerId → capture date (YYYY-MM-DD)
+  const aiPhoneCap = new Map();  // last-10 phone → capture date
+  aiLeads.forEach(l => {
+    const cap = String(l.ai.generatedAt || l.createdAt || '').slice(0, 10);
+    if (l.customerId) aiCustCap.set(l.customerId, cap);
+    const ph = last10(l.phone); if (ph.length === 10) aiPhoneCap.set(ph, cap);
+  });
+  const aiDone = done.filter(a => {
+    if (a.source === 'ai-voice') return true;             // AI booked it directly
+    const cap = (a.customerId && aiCustCap.get(a.customerId)) || aiPhoneCap.get(last10(a.customerPhone));
+    return !!cap && String(a.date || '') >= cap;          // AI-captured lead, later closed
+  });
+  const aiDoneMonth = aiDone.filter(a => a.date >= ms);
+  const realizedCust = new Set(aiDone.map(a => a.customerId).filter(Boolean));
+  const realizedPhone = new Set(aiDone.map(a => last10(a.customerPhone)).filter(p => p.length === 10));
+  const aiPipeline = aiLeads.filter(l => {
+    if (!(quoteOf(l) > 0)) return false;
+    const ph = last10(l.phone);
+    return !((l.customerId && realizedCust.has(l.customerId)) || (ph.length === 10 && realizedPhone.has(ph)));
+  });
+
   res.json({
     mrr, activeMembers: activeMembers.length,
+    aiRecoveredTotal: round2(aiDone.reduce((s, a) => s + Number(a.price || 0), 0)),
+    aiRecoveredMonth: round2(aiDoneMonth.reduce((s, a) => s + Number(a.price || 0), 0)),
+    aiRecoveredJobs: aiDone.length,
+    aiRecoveredJobsMonth: aiDoneMonth.length,
+    aiPipelineOpen: round2(aiPipeline.reduce((s, l) => s + (quoteOf(l) || 0), 0)),
+    aiPipelineCount: aiPipeline.length,
     totalRevenue, monthRevenue,
     totalCost: round2(totalCost), monthCost: round2(monthCost),
     monthGrossProfit: monthGross, totalGrossProfit: totalGross,
