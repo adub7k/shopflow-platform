@@ -62,9 +62,11 @@ module.exports = function websiteLeadsRouter({ getShopDb, sendSms, sendEmailAler
     const db = req.shopDb;
     const b = req.body;
 
-    // Minimal server-side validation (site proxy already validated hard)
-    if (!b.name || !b.phone || !b.service_requested) {
-      return res.status(422).json({ error: 'Missing required fields' });
+    // Minimal server-side validation. Only name + phone are hard-required
+    // (Meta Instant Forms may not collect a service question); any other
+    // answers ride along in `message`/`notes` and are preserved below.
+    if (!b.name || !b.phone) {
+      return res.status(422).json({ error: 'Missing required fields: name and phone' });
     }
 
     const now = new Date().toISOString();
@@ -84,11 +86,13 @@ module.exports = function websiteLeadsRouter({ getShopDb, sendSms, sendEmailAler
       vehicle_color: String(b.vehicle_color || ''),
 
       // request
-      service_requested: String(b.service_requested),
+      service_requested: String(b.service_requested || ''),
       tint_type: String(b.tint_type || ''),
       customer_goal: String(b.customer_goal || ''),
       timeline: String(b.timeline || ''),
-      message: String(b.message || '').slice(0, 2000),
+      // free-text catch-all: accepts `message` or `notes`, so any extra
+      // Meta form answers can be dumped here without being dropped.
+      message: String(b.message || b.notes || '').slice(0, 2000),
       // Photos: lowdb is JSON on disk — a few base64 photos are fine,
       // but move to object storage (S3/Cloudinary) before this scales.
       photo: typeof b.photo === 'string' && b.photo.startsWith('data:image/') ? b.photo : '',

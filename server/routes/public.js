@@ -4,10 +4,12 @@ const { v4: uuidv4 } = require('uuid');
 const { master, getShopDb, shopHelpers, shopRoute, genId, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl } = require('../db');
 const { resolveProfile } = require('../industries');
 const { notifyNewLead } = require('../email');
+const { sendPush } = require('../push-instance');
 // Booking core (single source of truth): the menu, open-slot availability, and
 // the create-appointment path (double-book guard + price resolution) live in
 // ../booking so the public page and the AI voice receptionist share one
-// implementation. inspoMode is re-exported from there.
+// implementation. inspoMode is re-exported from there. (The inline slot helpers
+// that used to live here now live in ../booking — do not re-add them.)
 const { computeAvailability, createAppointment, inspoMode } = require('../booking');
 
 // ── PUBLIC: Industry list (for the signup business-type picker) ──────────────
@@ -274,22 +276,36 @@ router.post('/api/public/:shopSlug/lead', async (req, res) => {
     // pretend success so they don't adapt, and log nothing.
     if (String(req.body.website || '').trim()) return res.json({ ok: true });
 
-    const name  = String(req.body.name || '').trim().slice(0, 80);
+    let name  = String(req.body.name || '').trim().slice(0, 80);
     const phone = String(req.body.phone || '').trim().slice(0, 25);
     const email = String(req.body.email || '').trim().slice(0, 120);
     const notes = String(req.body.notes || '').trim().slice(0, 1000);
     const digits = phone.replace(/\D/g, '');
-    if (!name || digits.length < 10) return res.status(400).json({ ok: false, error: 'Please enter your name and a valid phone number.' });
+    // Integration/test leads (skipRequiredCustomFields:true, e.g. Meta via Make)
+    // are never rejected for missing fields — a blank one still comes through,
+    // labeled "Test Lead" so it's identifiable in the Leads list. The website
+    // form doesn't send the flag, so it still requires a real name + phone.
+    if (req.body.skipRequiredCustomFields) {
+      if (!name) name = 'Test Lead';
+    } else if (!name || digits.length < 10) {
+      return res.status(400).json({ ok: false, error: 'Please enter your name and a valid phone number.' });
+    }
 
     const { db, shop } = ctx;
     const h = shopHelpers(db);
     const s = db.get('settings').value() || {};
 
     // Enforce required custom fields (vehicle year/make/model/color for detail).
+    // Server-to-server integrations (e.g. Meta lead-ad forms via Make/Zapier) can't
+    // collect these, so they opt out with skipRequiredCustomFields:true and the lead
+    // is still accepted — name + phone above remain mandatory. The website form never
+    // sends this flag, so its required-field enforcement is unchanged.
     const cf = req.body.customFields || {};
     Object.keys(cf).forEach(k => { cf[k] = String(cf[k] || '').trim().slice(0, 80); });
-    const missing = (s.customFields || []).filter(f => f.required && !String(cf[f.key] || '').trim());
-    if (missing.length) return res.status(400).json({ ok: false, error: 'Missing required fields: ' + missing.map(f => f.label).join(', ') });
+    if (!req.body.skipRequiredCustomFields) {
+      const missing = (s.customFields || []).filter(f => f.required && !String(cf[f.key] || '').trim());
+      if (missing.length) return res.status(400).json({ ok: false, error: 'Missing required fields: ' + missing.map(f => f.label).join(', ') });
+    }
     const vehicle = (cf.vehicleYear || cf.vehicleMake || cf.vehicleModel)
       ? { year: cf.vehicleYear || '', make: cf.vehicleMake || '', model: cf.vehicleModel || '', color: cf.vehicleColor || '' }
       : null;
@@ -342,6 +358,19 @@ router.post('/api/public/:shopSlug/lead', async (req, res) => {
     // texts back from there. Speed-to-lead is covered by an email ping to the
     // owner instead (fire-and-forget — a mail failure never breaks the submit).
     notifyNewLead({ shop, settings: s, lead, kind: existing ? 'form-repeat' : 'form' });
+
+    // Mobile push to the owner's phone (free, instant) — mirrors the email above.
+    // EVERY non-call lead source lands here (website form + Meta/Make via
+    // skipRequiredCustomFields), so this is the one place that guarantees a push
+    // for all of them. Phone-call leads are notified separately (routes/twilio.js).
+    const veh = lead.vehicle && [lead.vehicle.year, lead.vehicle.make, lead.vehicle.model].filter(Boolean).join(' ');
+    sendPush(shop.id, {
+      title: `🔔 New lead — ${lead.name || lead.phone || 'website'}`,
+      body: [lead.phone, veh, (lead.servicesInterested || []).join(', '), lead.source && `via ${lead.source}`]
+        .filter(Boolean).join(' · '),
+      url: '/leads',
+      tag: `lead-${lead.id}`,
+    }).catch(e => console.error('Lead push failed:', e.message));
     res.json({ ok: true });
   } catch(e) {
     console.error('Lead capture error:', e.message);

@@ -5,7 +5,7 @@
 // This file adapts the app's real lowdb-v1 + Twilio + nodemailer stack to those
 // signatures. Adapt the app to the modules here — never edit the modules.
 const { master, getShopDb: getShopDbRaw, shopFromNumber, twilioClient, toE164 } = require('./db');
-const { mailer } = require('./email');
+const { deliver } = require('./email');
 
 function findShop(tenantId) {
   return master.get('shops').find({ id: String(tenantId || '') }).value() || null;
@@ -63,15 +63,12 @@ function ownerEmail(tenantId) {
 // Plain-text: the modules compose their own message bodies.
 async function sendEmail(tenantId, subject, body, toEmail) {
   const to = String(toEmail || ownerEmail(tenantId)).trim();
-  const t = mailer();
-  if (!t || !to) {
-    console.log(`[integrations] email ${!t ? 'not sent (SMTP not configured)' : 'skipped (no recipient)'} tenant=${tenantId} subject="${subject}"`);
+  if (!to) {
+    console.log(`[integrations] email skipped (no recipient) tenant=${tenantId} subject="${subject}"`);
     return;
   }
-  await t.sendMail({
-    from: process.env.SMTP_FROM || `"ShopFlow" <${process.env.SMTP_USER}>`,
-    to, subject, text: body,
-  });
+  const r = await deliver({ to, subject, text: body });
+  if (!r.ok) console.log(`[integrations] email not sent tenant=${tenantId} subject="${subject}" — ${r.reason}`);
 }
 
 const sendEmailAlert = (tenantId, subject, body) => sendEmail(tenantId, subject, body);

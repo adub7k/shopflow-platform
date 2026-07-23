@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const { requireAuth, requireRole } = require('../middleware');
+const { sendTest } = require('../email');
 const { resolveProfile } = require('../industries');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, shopOwnNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, deleteUpload, computeTax, computeApptCost } = require('../db');
 
@@ -44,6 +45,24 @@ router.post('/api/shop/settings', requireAuth, requireRole('full'), shopRoute(as
   // Update shop name in master if changed
   if (req.body.shopName) master.get('shops').find({ id: req.shopId }).assign({ shopName: req.body.shopName }).write();
   res.json({ ok: true });
+}));
+
+// ── PROTECTED: Send a test new-lead alert email (owner only) ───────────────────
+// Lets the owner confirm from Settings that lead alerts reach their inbox. If a
+// valid address is passed it's saved as settings.notificationEmail (the alert
+// recipient the code actually reads) first, then a test is sent to whatever the
+// recipient resolves to (that override → the shop's signup email). Awaits the
+// send and returns the outcome so the exact failure reason shows in the browser.
+router.post('/api/shop/test-lead-email', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
+  const email = String(req.body.email || '').trim().slice(0, 120);
+  if (email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    db.get('settings').assign({ notificationEmail: email }).write();
+  }
+  const s = db.get('settings').value() || {};
+  const shop = master.get('shops').find({ id: req.shopId }).value() || {};
+  const to = String(s.notificationEmail || shop.email || '').trim();
+  const result = await sendTest({ to });
+  res.json(result);
 }));
 
 // ── PROTECTED: Work gallery (owner only) ──────────────────────────────────────

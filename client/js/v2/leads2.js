@@ -50,6 +50,56 @@
     return bits.join(' · ');
   }
 
+  // ── Lead-source split: phone vs Meta ads ──────────────────────────────────
+  // Phone leads (from the call-tracking agency) and Meta ad leads (Facebook /
+  // Instagram, run by a separate agency) are two distinct sources. The owner
+  // wants each channel's numbers on their own so they can judge each agency.
+  // Meta leads arrive via the public lead endpoint with source = utm_source, so
+  // they land as one of these values.
+  const META_SOURCES = ['facebook', 'instagram', 'meta', 'fb', 'ig'];
+  const isPhoneLead = (l) => String(l.source || 'call').toLowerCase() === 'call';
+  const isMetaLead  = (l) => META_SOURCES.includes(String(l.source || '').toLowerCase());
+
+  // Leads / Booked / Conversion for a subset. 30-day window is the ad-spend read;
+  // all-time rides along in the subtitle.
+  function channelStats(subset) {
+    const isBooked = (l) => colOf(l) === 'booked';
+    const last30 = subset.filter(l => (Date.now() - new Date(l.createdAt || l.firstContactAt || 0)) < 30 * 86400000);
+    const b30 = last30.filter(isBooked).length, bAll = subset.filter(isBooked).length;
+    const conv = last30.length ? Math.round(b30 / last30.length * 100) : 0;
+    return { n30: last30.length, nAll: subset.length, b30, bAll, conv };
+  }
+
+  // A single channel card, styled to match the v2 metric grid.
+  function channelCard(icon, title, agency, s) {
+    const convCls = s.conv >= 25 ? 'green' : '';
+    const cell = (value, label, cls) => `<div style="flex:1;min-width:56px;">
+        <div class="metric-value${cls ? ' ' + cls : ''}" style="font-size:22px;">${value}</div>
+        <div class="metric-sub">${label}</div>
+      </div>`;
+    return `<div class="metric-card">
+      <div class="metric-label">${icon} ${title}</div>
+      <div style="display:flex;gap:14px;margin-top:8px;">
+        ${cell(s.n30, `leads · ${s.nAll} all-time`)}
+        ${cell(s.b30, `booked · ${s.bAll} all`)}
+        ${cell(s.conv + '%', 'conversion', convCls)}
+      </div>
+      <div class="metric-sub" style="margin-top:8px;">${agency}</div>
+    </div>`;
+  }
+
+  // Top-of-page channel comparison. Rendered on both list and pipeline views so
+  // the phone-vs-Meta read is always the first thing the owner sees.
+  function channelMetrics(leads) {
+    if (!leads.length) return '';
+    const phone = channelStats(leads.filter(isPhoneLead));
+    const meta  = channelStats(leads.filter(isMetaLead));
+    return `<div class="v2-mgrid" style="grid-template-columns:repeat(2,1fr);margin-bottom:14px;">
+      ${channelCard('📞', 'Phone leads', 'Call-tracking agency', phone)}
+      ${channelCard('📱', 'Meta ads', 'Facebook / Instagram agency', meta)}
+    </div>`;
+  }
+
   Leads.render = async function () {
     const el = document.getElementById('page-leads'); if (!el) return;
     el.classList.add('v2-wide');
@@ -74,6 +124,9 @@
       <button class="btn" onclick="App.nav('response')">Response Center${counts.new ? ' (' + counts.new + ')' : ''}</button></div>`);
 
     if (loadError) html.push(`<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--red,#e5534b);border-radius:10px;padding:10px 12px;margin-bottom:12px;color:var(--muted);font-size:13px;">⚠ Couldn't refresh leads (${esc(loadError)}). Showing the last loaded set — reload to try again.</div>`);
+
+    // Phone-vs-Meta channel split, above both views.
+    html.push(channelMetrics(leads));
 
     if (this._view2 === 'pipeline') { renderPipeline.call(this, html, leads, counts); el.innerHTML = html.join(''); wireDnD(); return; }
     renderList.call(this, html, leads, counts);

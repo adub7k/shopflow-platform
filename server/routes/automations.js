@@ -145,6 +145,13 @@ module.exports = function createAutomations({ getShopDb, getAllTenantIds, sendSm
   function shouldCancel(job, lead) {
     switch (job.cancel_if) {
       case 'contacted': return lead.first_response_at !== null || lead.status !== 'NEW_LEAD';
+      // Missed-call nudge (enqueued by routes/twilio.js) is moot once the shop
+      // connected with the caller. Call leads use the CRM's original lead shape:
+      // answering a later call stamps firstResponseAt + flips status off 'new',
+      // and a manual status change in the CRM also moves it off 'new'. (Outbound
+      // owner→lead calls aren't tracked, so those won't cancel it — the reminder
+      // simply fires either way, which is the safe direction for speed-to-lead.)
+      case 'call_returned': return !!lead.firstResponseAt || (!!lead.status && lead.status !== 'new');
       case 'appointment_gone': return lead.appointment_status !== 'SCHEDULED';
       case 'upsell_accepted':
         return (lead.upsells || []).some((u) => u.status === 'accepted');
@@ -153,6 +160,23 @@ module.exports = function createAutomations({ getShopDb, getAllTenantIds, sendSm
   }
 
   async function execute(tenantId, db, job, lead) {
+    // Missed-call speed-to-lead reminder (enqueued by routes/twilio.js). Call
+    // leads use the CRM's original lead shape — NOT the website-leads NEW_LEAD
+    // shape the templates + fill() below assume — so build the push straight from
+    // the lead instead of running it through fill().
+    if (job.type === 'missed_call_nudge') {
+      if (typeof sendPush !== 'function') return;
+      const who = lead.name || lead.phone || 'A caller';
+      const mins = Math.max(1, Math.round((Date.now() - new Date(job.created_at).getTime()) / MIN));
+      await sendPush(tenantId, {
+        title: '⏱️ Missed call — call them back',
+        body: `${who}${lead.name && lead.phone ? ` (${lead.phone})` : ''} called ${mins} min ago and still hasn't been reached. Fast callbacks win the job.`,
+        url: '/leads',
+        tag: `missed-${lead.id}`,
+      });
+      return;
+    }
+
     const settings = db.data.site_settings || {};
     const templates = { ...DEFAULT_TEMPLATES, ...(settings.automation_templates || {}) };
     const msg = fill(templates[job.type] || '', lead, settings);

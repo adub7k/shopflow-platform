@@ -88,10 +88,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     // role-based hiding to the (static) bottom nav and land on the first allowed page.
     if (typeof NavRegistry !== 'undefined') NavRegistry.render();
     applyRoleNav();
-    // Push-notification deep link: sw-push.js opens /response-center?lead=… —
-    // the server serves the app shell there, so land on the Response Center.
+    // Push-notification deep links: sw-push.js opens /response-center (website
+    // leads) or /leads (public/Meta leads + missed-call reminders). The server
+    // serves the app shell at both, so land on the matching page.
     const wantsResponse = location.pathname.startsWith('/response-center') && canSee('response');
-    await App.nav(wantsResponse ? 'response' : (canSee('dashboard') ? 'dashboard' : allowedPages()[0]));
+    const wantsLeads = location.pathname.startsWith('/leads') && canSee('leads');
+    await App.nav(
+      wantsResponse ? 'response'
+      : wantsLeads ? 'leads'
+      : (canSee('dashboard') ? 'dashboard' : allowedPages()[0])
+    );
 
     // Load unread badge in background
     db.conversations.all().then(threads => Messages.updateBadge(threads)).catch(()=>{});

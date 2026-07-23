@@ -12,6 +12,12 @@
 //   mailbox (SendGrid 'apikey', SES IAM name). Falls back to SMTP_USER.
 // Recipient: settings.notificationEmail (per-shop override) → shop.email (the
 // signup/login email on the master shop record).
+// Delivery channel: Resend's HTTPS API is preferred because many hosts (e.g.
+// Railway's non-Pro plans) block outbound SMTP ports, which makes nodemailer
+// time out. Resend goes over 443, so it works everywhere. Set:
+//   RESEND_API_KEY  — enables the API path
+//   RESEND_FROM     — verified-domain sender, e.g. 'MAD Detailing <leads@shopflowtech.com>'
+// With no RESEND_API_KEY it falls back to the SMTP_* path below.
 const nodemailer = require('nodemailer');
 
 let transporter = null; // null = not built yet, false = SMTP not configured
@@ -23,6 +29,10 @@ function mailer() {
     ? nodemailer.createTransport({
         host: SMTP_HOST, port, secure: port === 465,
         auth: { user: SMTP_USER, pass: SMTP_PASS },
+        // Fail fast instead of nodemailer's ~2-min defaults: a blocked port or
+        // bad host would otherwise hang the request (and the "Send test" button)
+        // indefinitely. 12s is plenty for a healthy connect + STARTTLS + auth.
+        connectionTimeout: 12000, greetingTimeout: 12000, socketTimeout: 15000,
       })
     : false;
   if (!transporter) console.log('Owner email: SMTP_* not set — notifications disabled');
@@ -41,13 +51,48 @@ function telHref(raw) {
   return 'tel:' + (d.length === 10 ? '+1' + d : '+' + d);
 }
 
+// Deliver one email over whichever channel is configured — Resend's HTTPS API
+// first (survives SMTP-blocked hosts), else SMTP via nodemailer. Never throws;
+// returns { ok:true } or { ok:false, reason } so callers can log or surface it.
+async function deliver({ to, subject, html, text }) {
+  if (!to) return { ok: false, reason: 'No recipient email set.' };
+  const from = process.env.RESEND_FROM
+    || process.env.SMTP_FROM
+    || (process.env.SMTP_USER ? `"ShopFlow" <${process.env.SMTP_USER}>` : 'ShopFlow <onboarding@resend.dev>');
+
+  // Preferred: Resend HTTPS API (port 443 — unaffected by SMTP egress blocks).
+  if (process.env.RESEND_API_KEY) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from, to, subject, html, text }),
+      });
+      if (res.ok) return { ok: true };
+      let detail = '';
+      try { const j = await res.json(); detail = j.message || j.name || ''; } catch (_) {}
+      return { ok: false, reason: `Resend rejected the email (${res.status}${detail ? ': ' + detail : ''}).` };
+    } catch (e) {
+      return { ok: false, reason: e.message || 'Could not reach the email service.' };
+    }
+  }
+
+  // Fallback: SMTP via nodemailer.
+  const t = mailer();
+  if (!t) return { ok: false, reason: 'Email is not set up on the server yet (set RESEND_API_KEY, or SMTP_HOST/USER/PASS).' };
+  try {
+    await t.sendMail({ from, to, subject, html, text });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, reason: e.message || 'The email provider rejected the message.' };
+  }
+}
+
 // kind: 'form' (new form lead) | 'form-repeat' (existing lead re-submitted)
 //       | 'missed-call'
 // Fire-and-forget: never throws, never blocks the caller's response.
 function notifyNewLead({ shop, settings, lead, kind }) {
   try {
-    const t = mailer();
-    if (!t) return;
     const to = String((settings || {}).notificationEmail || (shop || {}).email || '').trim();
     if (!to) return;
 
@@ -79,8 +124,7 @@ function notifyNewLead({ shop, settings, lead, kind }) {
       ? 'You missed a call — they may still be shopping around. Call back now.'
       : 'Someone just asked for a quote. Leads answered in 5 minutes book far more often.';
 
-    t.sendMail({
-      from: process.env.SMTP_FROM || `"ShopFlow" <${process.env.SMTP_USER}>`,
+    deliver({
       to,
       subject,
       html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;">
@@ -97,14 +141,34 @@ function notifyNewLead({ shop, settings, lead, kind }) {
         <p style="color:#9ca3af;font-size:11px;margin-top:20px;">Powered by ShopFlow</p>
       </div>`,
     }).then(
-      () => console.log(`Owner email sent (${kind}) →`, to),
-      (e) => console.error('Owner email failed:', e.message),
+      (r) => r.ok ? console.log(`Owner email sent (${kind}) →`, to) : console.error('Owner email failed:', r.reason),
     );
   } catch (e) {
     console.error('Owner email error:', e.message);
   }
 }
 
-// mailer is exported for server/integrations.js so the website-leads modules
-// share the same SMTP transport + config-gating as the owner notifications.
-module.exports = { notifyNewLead, mailer };
+// Send a one-off test email so an owner can verify alerts land in their inbox
+// from Settings, without waiting for a real lead. Unlike notifyNewLead (fire-
+// and-forget), this AWAITS the send and returns a plain result the UI can show,
+// so the exact reason surfaces in the browser instead of only the server log.
+//   { ok:true, to } on success
+//   { ok:false, reason } if SMTP isn't configured, there's no recipient, or the
+//   provider rejects the send (bad app password, etc.)
+async function sendTest({ to }) {
+  if (!to) return { ok: false, reason: 'No alert email is set — enter one above and try again.' };
+  const r = await deliver({
+    to,
+    subject: '✅ ShopFlow test — new-lead alerts are working',
+    html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;">
+      <h2 style="color:#16a34a;margin:0 0 6px;">You're all set ✅</h2>
+      <p style="color:#374151;margin:0 0 12px;">This is a test from your ShopFlow settings. If you're reading it, new-lead and missed-call alerts will arrive at <b>${esc(to)}</b>.</p>
+      <p style="color:#9ca3af;font-size:11px;margin-top:20px;">Powered by ShopFlow</p>
+    </div>`,
+  });
+  return r.ok ? { ok: true, to } : r;
+}
+
+// deliver/mailer are exported so server/integrations.js (website-leads modules)
+// shares the same channel selection + config-gating as the owner notifications.
+module.exports = { notifyNewLead, mailer, sendTest, deliver };
