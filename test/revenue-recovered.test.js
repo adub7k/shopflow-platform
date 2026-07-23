@@ -41,6 +41,16 @@ db.set('leads', [
   { id: 'lOpen',    phone: '+15550000009',                   status: 'contacted', ai: { source: 'voice', quotedPrice: 400, quality: 'warm', generatedAt: past } }, // open pipeline $400
   { id: 'lNoQuote', phone: '+15550000010',                   status: 'contacted', ai: { source: 'voice', quotedPrice: null, budget: null,   generatedAt: past } }, // no quote → ignored
 ]).write();
+db.set('calls', [
+  // answered + engaged (caller spoke) + captured
+  { id: 'k1', voiceAI: { turns: [{ role: 'assistant', text: 'hi' }, { role: 'user', text: 'I need a detail' }], outcome: { type: 'captured' } } },
+  // answered + engaged + booked
+  { id: 'k2', voiceAI: { turns: [{ role: 'assistant', text: 'hi' }, { role: 'user', text: 'book me' }], outcome: { type: 'booked' } } },
+  // answered but hung up on the greeting (no user turn) → not engaged, no outcome
+  { id: 'k3', voiceAI: { turns: [{ role: 'assistant', text: 'hi' }], outcome: null } },
+  // a plain non-AI call (no voiceAI) → excluded from the funnel entirely
+  { id: 'k4', from: '+15551112222', missed: true },
+]).write();
 
 const app = express();
 app.use(express.json());
@@ -57,6 +67,12 @@ const server = app.listen(0, async () => {
     eq('aiPipelineOpen = 400 (open quote only)', j.aiPipelineOpen, 400);
     eq('aiPipelineCount = 1', j.aiPipelineCount, 1);
     eq('non-AI job still counts in overall totalRevenue (300+200+999)', j.totalRevenue, 1499);
+    // Scorecard funnel (from the call log; k4 has no voiceAI so it's excluded)
+    eq('funnel: answered = 3', j.aiReceptionist.answered, 3);
+    eq('funnel: engaged = 2 (k3 hung up on greeting)', j.aiReceptionist.engaged, 2);
+    eq('funnel: captured = 1', j.aiReceptionist.captured, 1);
+    eq('funnel: booked = 1', j.aiReceptionist.booked, 1);
+    eq('funnel: quotedTotal = 200+400 (nulls ignored)', j.aiReceptionist.quotedTotal, 600);
   } catch (e) { failures++; console.log('FAIL  threw', e.message); }
   server.close();
   try { fs.rmSync(process.env.DATA_DIR, { recursive: true, force: true }); } catch (e) { /* best effort */ }

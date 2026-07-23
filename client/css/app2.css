@@ -233,18 +233,11 @@ body.sidebar-open #sidebar-backdrop{display:block;}
 .v2-ai-row .tx .why{display:block;font-size:11px;color:var(--faint);margin-top:1px;}
 .v2-up{color:var(--green-deep);font-size:11.5px;font-weight:600;}
 .v2-down{color:var(--red);font-size:11.5px;font-weight:600;}
-/* AI "Revenue Recovered" strip: realized figure + a right-aligned pipeline stat.
-   On phones the pipeline wraps to full width, left-aligned under the figure with
-   a divider, so the two numbers never sit misaligned mid-card. */
-.rc-strip{display:flex;align-items:center;gap:16px;padding:14px 16px;flex-wrap:wrap;}
-.rc-strip .rc-main{flex:1;min-width:200px;}
-.rc-strip .rc-pipe{min-width:120px;text-align:right;}
 @media(max-width:1000px){.v2-mgrid{grid-template-columns:repeat(3,1fr);}.v2-dgrid{grid-template-columns:1fr;}}
 @media(max-width:640px){
   /* !important beats the inline grid-template-columns some pages set (4-up/3-up)
      so every metric row is a comfortable 2-up on phones. */
   .v2-mgrid{grid-template-columns:1fr 1fr!important;gap:9px;}
-  .rc-strip .rc-pipe{width:100%;text-align:left;border-top:1px solid var(--border);padding-top:10px;}
   .v2-pagehd{gap:8px 10px;}
   .v2-pagehd .sub{width:100%;order:3;}
   /* Clients table: drop min-width and hide secondary columns so the money

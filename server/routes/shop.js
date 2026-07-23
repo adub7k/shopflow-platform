@@ -621,7 +621,22 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
     return !((l.customerId && realizedCust.has(l.customerId)) || (ph.length === 10 && realizedPhone.has(ph)));
   });
 
+  // AI receptionist funnel (scorecard): answered → engaged → captured/booked, from
+  // the call log. A call has voiceAI state once the AI answered it; "engaged" means
+  // the caller actually spoke (≥1 user turn, i.e. didn't hang up on the greeting);
+  // outcome.type records how the AI ended it.
+  const aiCalls = h.getAll('calls').filter(c => c && c.voiceAI);
+  const outcomeType = c => (c.voiceAI.outcome && c.voiceAI.outcome.type) || null;
+  const aiReceptionist = {
+    answered: aiCalls.length,
+    engaged:  aiCalls.filter(c => (c.voiceAI.turns || []).some(t => t.role === 'user')).length,
+    captured: aiCalls.filter(c => outcomeType(c) === 'captured').length,
+    booked:   aiCalls.filter(c => outcomeType(c) === 'booked').length,
+    quotedTotal: round2(aiLeads.reduce((s, l) => s + (quoteOf(l) > 0 ? quoteOf(l) : 0), 0)),
+  };
+
   res.json({
+    aiReceptionist,
     mrr, activeMembers: activeMembers.length,
     aiRecoveredTotal: round2(aiDone.reduce((s, a) => s + Number(a.price || 0), 0)),
     aiRecoveredMonth: round2(aiDoneMonth.reduce((s, a) => s + Number(a.price || 0), 0)),

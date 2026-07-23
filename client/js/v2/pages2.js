@@ -285,6 +285,37 @@
           <span class="num" style="font-size:13px;font-variant-numeric:tabular-nums;${opts.strong ? 'font-weight:700;' : ''}${opts.color ? 'color:' + opts.color + ';' : ''}">${amt}</span></div>`;
       };
 
+      // AI Receptionist: revenue recovered + conversion funnel. Full-width card
+      // above the P&L grid; only shown once the AI has answered a call or produced
+      // revenue/pipeline, so non-users don't see an empty section.
+      const ai = data.aiReceptionist || {};
+      const rec = data.aiRecoveredTotal || 0, pipe = data.aiPipelineOpen || 0;
+      if ((ai.answered || 0) > 0 || rec > 0 || pipe > 0) {
+        const answered = ai.answered || 0, engaged = ai.engaged || 0, won = (ai.captured || 0) + (ai.booked || 0);
+        const pctOf = (n, d) => d > 0 ? Math.round(n / d * 100) : 0;
+        // Label + count on top, full-width bar below — stays readable at any width
+        // (a single inline row squished the bar to nothing on phones).
+        const frow = (label, count, sub) => `<div style="margin-bottom:9px;">
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px;">
+            <span style="color:var(--muted);">${label}</span>
+            <span class="num" style="font-weight:650;font-variant-numeric:tabular-nums;">${count}${sub ? ` <span style="color:var(--faint);font-weight:500;">${sub}</span>` : ''}</span></div>
+          <div class="bar-bg"><div class="bar-fill" style="width:${pctOf(count, answered)}%;background:var(--green);"></div></div></div>`;
+        const stat = (label, value, sub, green) => `<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:600;">${label}</div>
+          <div style="font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;${green ? 'color:var(--green-deep);' : ''}">${value}</div>
+          <div style="font-size:11.5px;color:var(--faint);">${sub}</div></div>`;
+        html.push(`<div class="v2-card"><div class="v2-chd"><div class="t">🤖 AI Receptionist</div><span class="sub">revenue recovered &amp; call conversion</span></div>
+          <div style="padding:14px 16px;">
+            <div style="display:flex;gap:32px;flex-wrap:wrap;margin-bottom:14px;">
+              ${stat('Revenue recovered', fmtMoney(rec), `${data.aiRecoveredJobs || 0} job${data.aiRecoveredJobs === 1 ? '' : 's'} · ${fmtMoney(data.aiRecoveredMonth || 0)} this month`, true)}
+              ${stat('In pipeline', fmtMoney(pipe), `${data.aiPipelineCount || 0} open quote${data.aiPipelineCount === 1 ? '' : 's'}`, false)}
+            </div>
+            ${frow('Calls answered', answered, '')}
+            ${frow('Talked to the assistant', engaged, answered ? `· ${pctOf(engaged, answered)}%` : '')}
+            ${frow('Lead captured or booked', won, engaged ? `· ${pctOf(won, engaged)}% of talkers` : '')}
+            <div style="font-size:11px;color:var(--faint);margin-top:9px;">Recovered = money from AI-driven jobs that closed. Pipeline = quoted leads not yet won.${ai.quotedTotal ? ` ${fmtMoney(ai.quotedTotal)} quoted in total.` : ''}</div>
+          </div></div>`);
+      }
+
       html.push('<div class="v2-dgrid"><div class="v2-col">');
       html.push(`<div class="v2-card"><div class="v2-chd"><div class="t">Profit &amp; loss</div><span class="sub">this month</span></div><div style="padding:6px 16px 10px;">
         ${line('Revenue', data.monthRevenue, { strong: true, color: 'var(--text)' })}
