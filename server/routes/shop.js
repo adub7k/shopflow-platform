@@ -84,6 +84,32 @@ router.delete('/api/shop/gallery/:id', requireAuth, requireRole('full'), shopRou
   res.json({ ok: true });
 }));
 
+// ── PROTECTED: Website photos (single named slots, owner only) ────────────────
+// settings.siteImages is a map { [slot]: url } that lets the owner override the
+// marketing website's fixed stock photos (hero + per-service tiles) one at a
+// time. Distinct from settings.gallery (a list) and settings.heroImage (this
+// platform's own booking-page background). Unknown slots are rejected so the map
+// can't be polluted with arbitrary keys.
+const SITE_IMAGE_SLOTS = ['hero', 'service_tint', 'service_ceramic', 'service_ppf', 'service_detail'];
+router.post('/api/shop/site-image', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
+  try {
+    const key = String(req.body.key || '');
+    if (!SITE_IMAGE_SLOTS.includes(key)) return res.status(400).json({ ok: false, error: 'Unknown image slot' });
+    const url = saveImageDataUrl(req.shopId, 'site-' + key, req.body.image);
+    const siteImages = { ...(db.get('settings.siteImages').value() || {}) };
+    if (siteImages[key]) deleteUpload(siteImages[key]); // replace the previous file, don't orphan it
+    siteImages[key] = url;
+    db.get('settings').assign({ siteImages }).write();
+    res.json({ ok: true, key, url });
+  } catch(e) { res.status(400).json({ ok: false, error: e.message || 'Upload failed' }); }
+}));
+router.delete('/api/shop/site-image/:key', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
+  const key = String(req.params.key || '');
+  const siteImages = { ...(db.get('settings.siteImages').value() || {}) };
+  if (siteImages[key]) { deleteUpload(siteImages[key]); delete siteImages[key]; db.get('settings').assign({ siteImages }).write(); }
+  res.json({ ok: true });
+}));
+
 // ── PROTECTED: Reviews ────────────────────────────────────────────────────────
 router.get('/api/shop/reviews', requireAuth, shopRoute(async (req, res, db) => {
   const reviews = db.get('reviews').value() || [];

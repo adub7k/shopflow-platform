@@ -29,6 +29,28 @@ function occupyingStatusKeys(settings){
   return occ.length ? occ : ['confirmed','in-progress'];
 }
 
+// ── Per-date availability overrides ───────────────────────────────────────────
+// When settings.availabilityMode === 'perDate', the shop hand-picks the open
+// times for individual dates (stored in the `dateSlots` collection as
+// [{ date, times:[...] }]); a date with no override is closed, and the count of
+// opened times is that day's client cap — for low-volume shops like a solo nail
+// tech taking 1–2 a day. In the default 'schedule' mode these overrides are
+// INERT (weekly schedule + blocked dates only), so switching back restores normal
+// all-day booking with no leftover caps (the saved openings are preserved).
+function availabilityMode(db){ return ((db.get('settings').value()||{}).availabilityMode === 'perDate') ? 'perDate' : 'schedule'; }
+function dateOverride(db, date){ return (db.get('dateSlots').value() || []).find(d => d.date === date) || null; }
+// The open start-times a staff member offers on a specific date.
+function slotListForDate(db, b, date){
+  if (availabilityMode(db) !== 'perDate') return barberSlotList(b);   // weekly schedule
+  const ov = dateOverride(db, date);
+  return ov && Array.isArray(ov.times) ? ov.times : [];              // opened date, else closed
+}
+// Whether a staff member is potentially working on a date.
+function worksOnDate(db, b, date, dow){
+  if (availabilityMode(db) !== 'perDate') return (b.schedule?.workDays || [1,2,3,4,5,6]).includes(dow);
+  return !!dateOverride(db, date);   // perDate: only hand-opened dates are working days
+}
+
 // ── PUBLIC: Industry list (for the signup business-type picker) ──────────────
 router.get('/api/industries', (req, res) => {
   const { INDUSTRIES } = require('../industries');
@@ -97,6 +119,13 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
     // Same for add-ons: expose id/name/price to the booking page, never `cost`.
     const publicAddons = (s.addons || []).map(a => ({ id: a.id, name: a.name, price: a.price }));
     const blockedDates = db.get('blockedDates').value().map(b => b.date);
+    // Availability model. In perDate mode only the shop's hand-opened dates are
+    // bookable (openDates); weekly-schedule mode ignores per-date openings.
+    const availMode = s.availabilityMode === 'perDate' ? 'perDate' : 'schedule';
+    const todayStr = new Date().toISOString().split('T')[0];
+    const openDates = availMode === 'perDate'
+      ? (db.get('dateSlots').value() || []).filter(o => Array.isArray(o.times) && o.times.length && o.date >= todayStr).map(o => o.date)
+      : [];
     const stripeConnected = !!(s.stripe?.connectAccountId && s.stripe?.onboardingComplete);
     // Square is "connected" if the shop has its own token (OAuth) or the platform
     // env token is configured (sandbox/MVP fallback). Square takes precedence on
@@ -111,6 +140,9 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
       bookingEnabled: s.bookingEnabled !== false,
       bookingMessage: s.bookingMessage || 'Book your appointment below!',
       accentColor: s.accentColor || '#16a34a',
+      // Custom booking-page background image (empty = accent gradient).
+      heroImage: s.heroImage || '',
+      availabilityMode: availMode, openDates,
       barbers, services, blockedDates,
       // Industry profile bits the booking page needs to render correctly.
       vocab: s.vocab || null,
@@ -137,6 +169,9 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
       // Inspiration photo + work gallery
       inspo: inspoMode(s, db.get('industry').value()),
       gallery: s.gallery || [],
+      // Owner overrides for the marketing site's fixed stock photos (hero +
+      // service tiles), keyed by slot. Empty = the site keeps its defaults.
+      siteImages: s.siteImages || {},
       // Featured reviews (social proof) + overall rating
       featuredReviews: (db.get('reviews').value() || []).filter(r => r.featured).slice(0, 8)
         .map(r => ({ rating: r.rating, comment: r.comment, name: r.name, service: r.service, createdAt: r.createdAt })),
@@ -283,46 +318,36 @@ router.get('/api/public/:shopSlug/availability', (req, res) => {
     const now = new Date(); now.setHours(0,0,0,0);
     if (new Date(date + 'T12:00:00') < now) return res.json([]);
 
-    function generateSlots(start, end, step) {
-      const parse = t => { const [time,ap]=t.split(' '); let [h,m]=time.split(':').map(Number); if(ap==='PM'&&h!==12)h+=12; if(ap==='AM'&&h===12)h=0; return h*60+m; };
-      const format = mins => { const h=Math.floor(mins/60),m=mins%60,ap=h>=12?'PM':'AM',h12=h%12||12; return `${h12}:${String(m).padStart(2,'0')} ${ap}`; };
-      const slots = [];
-      for (let t = parse(start); t < parse(end); t += step) slots.push(format(t));
-      return slots;
-    }
-
     const barbers = db.get('barbers').value().filter(b => b.active !== false);
     const dow = new Date(date + 'T12:00:00').getDay();
     let working = barberId ? barbers.filter(b => b.id === barberId) : barbers;
-    working = working.filter(b => (b.schedule?.workDays || [1,2,3,4,5,6]).includes(dow));
+    working = working.filter(b => worksOnDate(db, b, date, dow));
     if (!working.length) return res.json([]);
 
     const settings = db.get('settings').value() || {};
     const occupying = (settings.statuses || []).filter(s => s.occupiesSlot).map(s => s.key);
     const occupies = occupying.length ? occupying : ['confirmed', 'in-progress'];
     const appts = db.get('appointments').value().filter(a => a.date === date && occupies.includes(a.status));
-    const allSlots = new Set();
-    working.forEach(b => {
-      const sched = b.schedule || { startTime:'9:00 AM', endTime:'6:00 PM', slotMinutes:30 };
-      // Occupied minute-intervals for this staff member. A booked job blocks its
-      // whole [start, start+duration) span, not just its start slot — otherwise a
-      // 180-min detail job leaves every following 30-min slot bookable (overbook).
-      const intervals = appts.filter(a => a.barberId === b.id).map(a => {
-        const start = parseClock(a.time);
-        return { start, end: start + (Number(a.duration) || sched.slotMinutes || 30) };
-      });
-      // If this staff member set explicit times, offer ONLY those; otherwise
-      // generate the usual start→end slots at the chosen interval.
-      const candidates = (Array.isArray(sched.allowedTimes) && sched.allowedTimes.length)
-        ? sched.allowedTimes
-        : generateSlots(sched.startTime, sched.endTime, sched.slotMinutes);
-      candidates
-        .filter(s => { const m = parseClock(s); return !intervals.some(iv => m >= iv.start && m < iv.end); })
-        .forEach(s => allSlots.add(s));
-    });
+    const workingIds = new Set(working.map(b => b.id));
 
-    const sorted = [...allSlots].sort((a,b) => { const p=t=>{const [tm,ap]=t.split(' ');let[h,m]=tm.split(':').map(Number);if(ap==='PM'&&h!==12)h+=12;if(ap==='AM'&&h===12)h=0;return h*60+m;};return p(a)-p(b); });
-    res.json(sorted);
+    // Capacity model: a start time is open while fewer jobs occupy it than there
+    // are working staff offering it. A booked job blocks its whole [start,
+    // start+duration) span. An UNASSIGNED job (barberId null — an "any tech"
+    // booking, manual entry, or AI-voice booking) consumes shared capacity, so it
+    // still closes the slot for a solo shop and can never be silently double-booked.
+    const times = new Set();
+    working.forEach(b => slotListForDate(db, b, date).forEach(t => times.add(t)));
+    const open = [...times].filter(t => {
+      const m = parseClock(t);
+      const capacity = working.filter(b => slotListForDate(db, b, date).includes(t)).length;
+      const taken = appts.filter(a => {
+        if (a.barberId && !workingIds.has(a.barberId)) return false; // other staff's job
+        const start = parseClock(a.time), end = start + (Number(a.duration) || 30);
+        return m >= start && m < end;
+      }).length;
+      return taken < capacity;
+    });
+    res.json(open.sort((a,b) => parseClock(a) - parseClock(b)));
   } catch(e) { res.status(500).json({ error: 'Server error' }); }
 });
 
@@ -471,14 +496,19 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     const todayMidnight = new Date(); todayMidnight.setHours(0,0,0,0);
     if (new Date(date + 'T12:00:00') < todayMidnight)
       return res.status(400).json({ ok: false, error: 'That date has already passed.' });
+    // Resolved staff for the appointment: an "any tech" (no barberId) booking is
+    // pinned to a concrete free staff member below, so every appointment carries a
+    // real barberId and reliably occupies its slot afterward.
+    let resolvedBarberId = barberId || null;
+    let resolvedBarberName = barberName || null;
     {
       const dow = new Date(date + 'T12:00:00').getDay();
       const occ = occupyingStatusKeys(s0);
       const dayAppts = (db.get('appointments').value() || []).filter(a => a.date === date && occ.includes(a.status));
       const workingBarbers = (db.get('barbers').value() || []).filter(b =>
         b.active !== false &&
-        (b.schedule?.workDays || [1,2,3,4,5,6]).includes(dow) &&
-        barberSlotList(b).includes(time));
+        worksOnDate(db, b, date, dow) &&
+        slotListForDate(db, b, date).includes(time));
       // Overlap test on real minute-intervals, not exact-start equality — so a
       // requested job that would run into an existing one (or start inside it) is
       // rejected. Duration is taken server-side from the chosen service.
@@ -486,16 +516,22 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
       const reqStart = parseClock(time);
       const reqEnd = reqStart + ((reqSvc && Number(reqSvc.duration)) || 30);
       const overlaps = a => { const aStart = parseClock(a.time); const aEnd = aStart + (Number(a.duration) || 30); return reqStart < aEnd && aStart < reqEnd; };
+      // Total jobs already occupying this time (assigned or unassigned) vs. capacity.
+      const takenAtTime = dayAppts.filter(overlaps).length;
       if (barberId) {
         const b = workingBarbers.find(x => x.id === barberId);
         if (!b) return res.status(409).json({ ok: false, error: 'That time is no longer available. Please pick another.' });
-        if (dayAppts.some(a => a.barberId === barberId && overlaps(a)))
+        // Reject if this staff member is taken, or if the slot's shared capacity is
+        // already full (covers an unassigned "any tech" job holding the last spot).
+        if (dayAppts.some(a => a.barberId === barberId && overlaps(a)) || takenAtTime >= workingBarbers.length)
           return res.status(409).json({ ok: false, error: 'Sorry, that time was just booked. Please pick another.' });
       } else {
         // "Any" staff — make sure the shop still has an open chair across the span.
-        const takenAtTime = dayAppts.filter(overlaps).length;
         if (!workingBarbers.length || takenAtTime >= workingBarbers.length)
           return res.status(409).json({ ok: false, error: 'Sorry, that time was just booked. Please pick another.' });
+        // Pin to the first staff member with no overlapping job of their own.
+        const freeBarber = workingBarbers.find(b => !dayAppts.some(a => a.barberId === b.id && overlaps(a)));
+        if (freeBarber) { resolvedBarberId = freeBarber.id; resolvedBarberName = freeBarber.name; }
       }
     }
 
@@ -551,7 +587,7 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     const needsDeposit = !!(s0.deposit?.enabled && (stripeConnected || squareConnected));
 
     const apptId = genId('a');
-    const appt = { id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '', barberId: barberId || null, barberName: barberName || null, serviceId: serviceId || null, service: svcFromDb.name, price, cost, duration, date, time, status: needsDeposit ? 'pending-deposit' : 'confirmed', notes: notes || '', customFields: cf, vehicleSize: vehicleSize || null, addons: chosenAddons, inspoPhoto: inspo, source: 'booking-page', createdAt: new Date().toISOString() };
+    const appt = { id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '', barberId: resolvedBarberId, barberName: resolvedBarberName, serviceId: serviceId || null, service: svcFromDb.name, price, cost, duration, date, time, status: needsDeposit ? 'pending-deposit' : 'confirmed', notes: notes || '', customFields: cf, vehicleSize: vehicleSize || null, addons: chosenAddons, inspoPhoto: inspo, source: 'booking-page', createdAt: new Date().toISOString() };
     upsert('appointments', appt);
 
     // No confirmation SMS. The platform has no Twilio A2P and the booker isn't the
