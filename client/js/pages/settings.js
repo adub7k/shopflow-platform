@@ -159,6 +159,41 @@ const Settings = {
       html.push('</div>');
       html.push('<input type="file" id="s-gallery-file" accept="image/*" style="display:none;" onchange="Settings.galleryUpload(this)" />');
 
+      // Website Photos — override the marketing site's fixed stock photos one at
+      // a time (hero + service tiles). Distinct from the Work Gallery list above,
+      // which is a scrolling set; these are single named slots. Only the auto
+      // verticals ship an external marketing site with these slots, so keep the
+      // section out of other tenants' settings (barbershops, cleaners, …).
+      if (s.industry === 'detail' || s.industry === 'tint') {
+      const siteImages = (s.siteImages && typeof s.siteImages === 'object') ? s.siteImages : {};
+      const SITE_SLOTS = [
+        { key:'hero',            label:'Homepage hero background' },
+        { key:'service_tint',    label:'Window Tint photo' },
+        { key:'service_ceramic', label:'Ceramic Coating photo' },
+        { key:'service_ppf',     label:'Paint Protection Film photo' },
+        { key:'service_detail',  label:'Auto Detailing photo' },
+      ];
+      html.push('<div class="section-header">Website Photos</div>');
+      html.push('<div class="card">');
+      html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Swap the main photos on your website one at a time. A slot on “Default” keeps the built-in stock photo. Changes go live on your site within a minute — no rebuild needed.</div>');
+      html.push('<div style="display:flex;flex-direction:column;gap:12px;">');
+      SITE_SLOTS.forEach(slot=>{
+        const url = siteImages[slot.key];
+        const thumb = url
+          ? `<img src="${esc(url)}" style="width:66px;height:50px;object-fit:cover;border-radius:8px;flex-shrink:0;" />`
+          : `<div style="width:66px;height:50px;border-radius:8px;flex-shrink:0;background:var(--off);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);">Default</div>`;
+        html.push(`<div style="display:flex;align-items:center;gap:12px;">
+          ${thumb}
+          <div style="flex:1;min-width:0;font-size:13px;font-weight:600;">${esc(slot.label)}</div>
+          <button class="btn btn-sm" onclick="Settings.siteImagePick('${slot.key}')">${url?'Replace':'Change'}</button>
+          ${url?`<button onclick="Settings.siteImageReset('${slot.key}')" title="Revert to the built-in default" style="border:none;background:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;">Reset</button>`:''}
+        </div>`);
+      });
+      html.push('</div>');
+      html.push('</div>');
+      html.push('<input type="file" id="s-siteimg-file" accept="image/*" style="display:none;" onchange="Settings.siteImageUpload(this)" />');
+      } // end Website Photos (auto verticals only)
+
       // Team — one place for everyone. A member can have a login (role) and/or be
       // assignable to appointments (a linked, color-coded booking record). Logins =
       // accounts; bookable providers = barber records linked by barber.accountId.
@@ -952,6 +987,26 @@ const Settings = {
     if(!confirm('Remove this photo from your gallery?')) return;
     try{ await db.gallery.remove(id); toast('Removed'); this.render(); }
     catch(e){ toast('Could not remove','error'); }
+  },
+
+  // ── Website photos (single-slot overrides) ──────────────────────────────────
+  siteImagePick(key){ this._siteImgKey=key; document.getElementById('s-siteimg-file')?.click(); },
+  async siteImageUpload(input){
+    const file=input.files&&input.files[0]; const key=this._siteImgKey; if(!file||!key) return;
+    input.value='';
+    try{
+      toast('Uploading photo…');
+      // The hero is a full-width backdrop, so keep it higher-res than the tiles.
+      const dataUrl=await Settings._downscale(file, key==='hero'?2000:1400, .82);
+      await db.siteImage.set(key,dataUrl);
+      toast('Website photo updated ✓');
+      this.render();
+    }catch(e){ toast(e.message||'Upload failed','error'); }
+  },
+  async siteImageReset(key){
+    if(!confirm('Revert this photo to the built-in default?')) return;
+    try{ await db.siteImage.reset(key); toast('Reset to default'); this.render(); }
+    catch(e){ toast('Could not reset','error'); }
   },
   _downscale(file,maxDim,quality){
     return new Promise((resolve,reject)=>{
