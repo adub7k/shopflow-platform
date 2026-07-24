@@ -110,6 +110,39 @@ router.delete('/api/shop/site-image/:key', requireAuth, requireRole('full'), sho
   res.json({ ok: true });
 }));
 
+// ── PROTECTED: Website team roster (owner only) ──────────────────────────────
+// settings.siteTeam is a list [{id,name,title,bio,photo}] rendered as the
+// marketing site's "Meet the Team". One POST handles create + edit (a new photo
+// replaces and cleans up the old file); DELETE removes the member and its photo.
+router.post('/api/shop/site-team', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
+  try {
+    const name = String(req.body.name || '').trim().slice(0, 80);
+    if (!name) return res.status(400).json({ ok: false, error: 'Name is required' });
+    const title = String(req.body.title || '').trim().slice(0, 80);
+    const bio = String(req.body.bio || '').trim().slice(0, 400);
+    const list = [...(db.get('settings.siteTeam').value() || [])];
+    const id = String(req.body.id || '');
+    const idx = id ? list.findIndex(m => m.id === id) : -1;
+    let photo = idx >= 0 ? (list[idx].photo || '') : '';
+    if (req.body.image) {                          // a new photo was picked
+      const url = saveImageDataUrl(req.shopId, 'team', req.body.image);
+      if (photo) deleteUpload(photo);              // don't orphan the previous one
+      photo = url;
+    }
+    const member = { id: idx >= 0 ? list[idx].id : genId('tm'), name, title, bio, photo };
+    if (idx >= 0) list[idx] = member; else list.push(member);
+    db.get('settings').assign({ siteTeam: list }).write();
+    res.json({ ok: true, member, team: list });
+  } catch(e) { res.status(400).json({ ok: false, error: e.message || 'Save failed' }); }
+}));
+router.delete('/api/shop/site-team/:id', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
+  const list = db.get('settings.siteTeam').value() || [];
+  const member = list.find(m => m.id === req.params.id);
+  if (member && member.photo) deleteUpload(member.photo);
+  db.get('settings').assign({ siteTeam: list.filter(m => m.id !== req.params.id) }).write();
+  res.json({ ok: true });
+}));
+
 // ── PROTECTED: Reviews ────────────────────────────────────────────────────────
 router.get('/api/shop/reviews', requireAuth, shopRoute(async (req, res, db) => {
   const reviews = db.get('reviews').value() || [];

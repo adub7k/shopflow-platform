@@ -155,6 +155,8 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
       // Owner overrides for the marketing site's fixed stock photos (hero +
       // service tiles), keyed by slot. Empty = the site keeps its defaults.
       siteImages: s.siteImages || {},
+      // Public "Meet the Team" roster for the marketing site.
+      siteTeam: (s.siteTeam || []).map(m => ({ id: m.id, name: m.name, title: m.title || '', bio: m.bio || '', photo: m.photo || '' })),
       // Featured reviews (social proof) + overall rating
       featuredReviews: (db.get('reviews').value() || []).filter(r => r.featured).slice(0, 8)
         .map(r => ({ rating: r.rating, comment: r.comment, name: r.name, service: r.service, createdAt: r.createdAt })),
