@@ -73,6 +73,8 @@ console.log('— relay TwiML —');
   check('TwiML: & in url is XML-escaped', xml.includes('&amp;callSid='));
   check('TwiML: ElevenLabs voice id in voice attr', xml.includes('voice="s3TPKV1kjDlVtZbl4Ksh"'), xml);
   check('TwiML: elevenlabsTextNormalization on for ElevenLabs', /elevenlabsTextNormalization="on"/.test(xml), xml);
+  check('TwiML: STT hints include shop vocabulary (fixes garbled words)', /hints="[^"]*(ceramic|tint)[^"]*"/i.test(xml), xml);
+  check('TwiML: transcriptionLanguage set', /transcriptionLanguage="en-US"/.test(xml), xml);
   eq('relayToken is deterministic', relay.relayToken('CA123'), relay.relayToken('CA123'));
   check('relayToken differs per callSid', relay.relayToken('CA123') !== relay.relayToken('CA999'));
   // Availability gate: relay needs BOTH an API key and PUBLIC_URL (the wss base).

@@ -145,6 +145,18 @@ function businessHours(db) {
   return `${range}, ${s.startTime || '9:00 AM'} to ${s.endTime || '6:00 PM'}`;
 }
 
+// Speech-recognition hints: bias the STT toward the shop's actual vocabulary so
+// domain words survive a phone line (callers get "ceramic", not "Syringe"; "full
+// vehicle", not "old vehicle"). Built from the shop's own service + add-on names
+// plus core industry terms and vehicle sizes. Used by BOTH engines — the gather
+// <Gather hints> and ConversationRelay's hints attribute.
+function speechHints(ctx) {
+  const menu = getMenu(ctx.db);
+  const names = [...menu.services.map(s => s.name), ...menu.addons.map(a => a.name)];
+  const base = ['window tint', 'ceramic coating', 'ceramic', 'tint', 'paint protection film', 'PPF', 'full vehicle', 'front windows', 'windshield', 'detail', 'sedan', 'SUV', 'truck'];
+  return [...new Set([...names, ...base].map(s => String(s || '').trim()).filter(Boolean))].join(', ');
+}
+
 function buildSystemPrompt(ctx, cfg) {
   const profile = resolveProfile(ctx.industry);
   const menu = getMenu(ctx.db);
@@ -497,5 +509,5 @@ module.exports = {
   // Exported so the ConversationRelay engine (receptionist/relay.js) reuses the
   // exact same client, system prompt, tools, and server-authoritative tool
   // execution — the transport differs, the brain does not.
-  getClient, runTool, FAREWELL, createMessage, isRetryableApiError,
+  getClient, runTool, FAREWELL, createMessage, isRetryableApiError, speechHints,
 };

@@ -42,6 +42,10 @@ function connectTwiml(ctx, callSid) {
   const cfg = voice.voiceConfig(ctx.settings);
   const url = `${wsBase()}${RELAY_PATH}?shopId=${encodeURIComponent(ctx.shopId)}&callSid=${encodeURIComponent(callSid)}&t=${relayToken(callSid)}`;
   const voiceAttr = cfg.relayVoice ? ` voice="${escapeXml(cfg.relayVoice)}"` : '';
+  // Bias the transcriber toward the shop's real vocabulary — without this, phone
+  // audio garbles industry words ("ceramic"→"Syringe", "tint"→"windowton").
+  const hints = voice.speechHints(ctx);
+  const hintsAttr = hints ? ` hints="${escapeXml(hints)}"` : '';
   return '<?xml version="1.0" encoding="UTF-8"?>'
     + '<Response><Connect>'
     + `<ConversationRelay url="${escapeXml(url)}"`
@@ -53,6 +57,8 @@ function connectTwiml(ctx, callSid) {
     + ' interruptible="speech" reportInputDuringAgentSpeech="none"'
     + ` interruptSensitivity="${escapeXml(cfg.relayInterruptSensitivity)}"`
     + ` ignoreBackchannel="${cfg.relayIgnoreBackchannel ? 'true' : 'false'}"`
+    + hintsAttr
+    + ' transcriptionLanguage="en-US"'
     + '/></Connect></Response>';
 }
 
