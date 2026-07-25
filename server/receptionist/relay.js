@@ -17,8 +17,11 @@ const voice = require('./voice');
 const RELAY_PATH = '/api/twilio/voice/relay';
 const MAX_TURNS = 16;
 
-// Available when a key is configured (same gate as the rest of the receptionist).
-const available = () => voice.voiceAvailable();
+// Available only when a key is configured AND PUBLIC_URL is set — the streaming
+// engine hands Twilio a wss:// URL built from PUBLIC_URL, so with none the socket
+// has no reachable address. Gating here means the AI handler cleanly falls back to
+// the gather engine instead of returning TwiML that dead-ends the call.
+const available = () => voice.voiceAvailable() && !!wsBase();
 
 // ── Handshake auth ────────────────────────────────────────────────────────────
 // The websocket is public (Twilio dials it), so we sign the callSid into the wss
@@ -44,6 +47,9 @@ function connectTwiml(ctx, callSid) {
     + `<ConversationRelay url="${escapeXml(url)}"`
     + ` welcomeGreeting="${escapeXml(voice.greeting(ctx))}"`
     + ` ttsProvider="${escapeXml(cfg.relayTtsProvider)}"${voiceAttr}`
+    // ElevenLabs: normalize numbers/prices/units so "$250" is spoken "two hundred
+    // fifty dollars", not "dollar two five zero" — matters for a shop quoting prices.
+    + (cfg.relayTtsProvider === 'ElevenLabs' ? ' elevenlabsTextNormalization="on"' : '')
     + ' interruptible="speech" reportInputDuringAgentSpeech="none"'
     + ` interruptSensitivity="${escapeXml(cfg.relayInterruptSensitivity)}"`
     + ` ignoreBackchannel="${cfg.relayIgnoreBackchannel ? 'true' : 'false'}"`
