@@ -70,6 +70,8 @@ const db = {
   square:        { status: () => apiFetch('/square/connect/status'), onboard: () => apiFetch('/square/connect/onboard',{method:'POST'}), disconnect: () => apiFetch('/square/connect/disconnect',{method:'POST'}), reconcileDeposits: (customerId) => apiFetch('/square/reconcile-deposits',{method:'POST',body:{customerId}}) },
   staff:         { all: () => apiFetch('/staff'), save: (u) => apiFetch('/staff',{method:'POST',body:u}), delete: (id) => apiFetch('/staff/'+id,{method:'DELETE'}) },
   gallery:       { add: (image,caption) => apiFetch('/gallery',{method:'POST',body:{image,caption}}), remove: (id) => apiFetch('/gallery/'+id,{method:'DELETE'}) },
+  siteImage:     { set: (key,image) => apiFetch('/site-image',{method:'POST',body:{key,image}}), reset: (key) => apiFetch('/site-image/'+key,{method:'DELETE'}) },
+  siteTeam:      { save: (m) => apiFetch('/site-team',{method:'POST',body:m}), remove: (id) => apiFetch('/site-team/'+id,{method:'DELETE'}) },
   reviews:       { all: () => apiFetch('/reviews'), feature: (id) => apiFetch('/reviews/'+id+'/feature',{method:'POST'}), remove: (id) => apiFetch('/reviews/'+id,{method:'DELETE'}), request: (appointmentId) => apiFetch('/reviews/request',{method:'POST',body:{appointmentId}}) },
   quotes:        { all: () => apiFetch('/quotes'), get: (id) => apiFetch('/quotes/'+id), save: (q) => apiFetch('/quotes',{method:'POST',body:q}), delete: (id) => apiFetch('/quotes/'+id,{method:'DELETE'}), send: (id) => apiFetch('/quotes/'+id+'/send',{method:'POST'}) },
   // ── Cleaning module (industry extension) ──

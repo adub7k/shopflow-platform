@@ -7,6 +7,7 @@ const Settings = {
     try{
       const [s,barbers,services,staff]=await Promise.all([db.settings.get(),db.barbers.all(),db.services.all(),db.staff.all().catch(()=>[])]);
       this._barbers=barbers; this._services=services; this._staff=staff; this._addons=s.addons||[]; this._plans=s.membershipPlans||[];
+      this._siteTeam=s.siteTeam||[];   // public "Meet the Team" roster (website)
       this._tpls=_smsTemplates(s.smsTemplates);   // owner-managed message templates (normalized list)
       const html=[];
 
@@ -158,6 +159,69 @@ const Settings = {
       }
       html.push('</div>');
       html.push('<input type="file" id="s-gallery-file" accept="image/*" style="display:none;" onchange="Settings.galleryUpload(this)" />');
+
+      // Website Photos — override the marketing site's fixed stock photos one at
+      // a time (hero + service tiles). Distinct from the Work Gallery list above,
+      // which is a scrolling set; these are single named slots. Only the auto
+      // verticals ship an external marketing site with these slots, so keep the
+      // section out of other tenants' settings (barbershops, cleaners, …).
+      if (s.industry === 'detail' || s.industry === 'tint') {
+      const siteImages = (s.siteImages && typeof s.siteImages === 'object') ? s.siteImages : {};
+      const SITE_SLOTS = [
+        { key:'hero',            label:'Homepage hero background' },
+        { key:'service_tint',    label:'Window Tint photo' },
+        { key:'service_ceramic', label:'Ceramic Coating photo' },
+        { key:'service_ppf',     label:'Paint Protection Film photo' },
+        { key:'service_detail',  label:'Auto Detailing photo' },
+      ];
+      html.push('<div class="section-header">Website Photos</div>');
+      html.push('<div class="card">');
+      html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Swap the main photos on your website one at a time. A slot on “Default” keeps the built-in stock photo. Changes go live on your site within a minute — no rebuild needed.</div>');
+      html.push('<div style="display:flex;flex-direction:column;gap:12px;">');
+      SITE_SLOTS.forEach(slot=>{
+        const url = siteImages[slot.key];
+        const thumb = url
+          ? `<img src="${esc(url)}" style="width:66px;height:50px;object-fit:cover;border-radius:8px;flex-shrink:0;" />`
+          : `<div style="width:66px;height:50px;border-radius:8px;flex-shrink:0;background:var(--off);display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--muted);">Default</div>`;
+        html.push(`<div style="display:flex;align-items:center;gap:12px;">
+          ${thumb}
+          <div style="flex:1;min-width:0;font-size:13px;font-weight:600;">${esc(slot.label)}</div>
+          <button class="btn btn-sm" onclick="Settings.siteImagePick('${slot.key}')">${url?'Replace':'Change'}</button>
+          ${url?`<button onclick="Settings.siteImageReset('${slot.key}')" title="Revert to the built-in default" style="border:none;background:none;color:var(--muted);font-size:12px;text-decoration:underline;cursor:pointer;">Reset</button>`:''}
+        </div>`);
+      });
+      html.push('</div>');
+      html.push('</div>');
+      html.push('<input type="file" id="s-siteimg-file" accept="image/*" style="display:none;" onchange="Settings.siteImageUpload(this)" />');
+      } // end Website Photos (auto verticals only)
+
+      // Meet the Team — public staff roster for the marketing site (name, role,
+      // optional photo + bio). Owner-curated and separate from the internal Team
+      // below (logins / bookable providers). Auto verticals only.
+      if (s.industry === 'detail' || s.industry === 'tint') {
+      const siteTeam = Array.isArray(s.siteTeam) ? s.siteTeam : [];
+      html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Meet the Team</span><button class="btn btn-sm btn-green" onclick="Settings.openTeamMember(\'\')">+ Add Member</button></div>');
+      html.push('<div class="card">');
+      html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:'+(siteTeam.length?'12px':'0')+';">Introduce your crew on the website\'s About page. Add a name, role, and an optional photo + short bio. Appears on your site within a minute — no rebuild.</div>');
+      if (siteTeam.length) {
+        html.push('<div style="display:flex;flex-direction:column;gap:10px;">');
+        siteTeam.forEach(m=>{
+          const av = m.photo
+            ? `<img src="${esc(m.photo)}" style="width:44px;height:44px;border-radius:50%;object-fit:cover;flex-shrink:0;" />`
+            : `<div style="width:44px;height:44px;border-radius:50%;flex-shrink:0;background:#475569;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;">${esc((m.name||'?').charAt(0).toUpperCase())}</div>`;
+          html.push(`<div style="display:flex;align-items:center;gap:12px;">
+            ${av}
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:14px;font-weight:600;">${esc(m.name||'')}</div>
+              <div style="font-size:12px;color:var(--muted);">${esc(m.title||'')}</div>
+            </div>
+            <button class="btn btn-sm" onclick="Settings.openTeamMember('${m.id}')">Edit</button>
+          </div>`);
+        });
+        html.push('</div>');
+      }
+      html.push('</div>');
+      } // end Meet the Team (auto verticals only)
 
       // Team — one place for everyone. A member can have a login (role) and/or be
       // assignable to appointments (a linked, color-coded booking record). Logins =
@@ -951,6 +1015,89 @@ const Settings = {
   async galleryRemove(id){
     if(!confirm('Remove this photo from your gallery?')) return;
     try{ await db.gallery.remove(id); toast('Removed'); this.render(); }
+    catch(e){ toast('Could not remove','error'); }
+  },
+
+  // ── Website photos (single-slot overrides) ──────────────────────────────────
+  siteImagePick(key){ this._siteImgKey=key; document.getElementById('s-siteimg-file')?.click(); },
+  async siteImageUpload(input){
+    const file=input.files&&input.files[0]; const key=this._siteImgKey; if(!file||!key) return;
+    input.value='';
+    try{
+      toast('Uploading photo…');
+      // The hero is a full-width backdrop, so keep it higher-res than the tiles.
+      const dataUrl=await Settings._downscale(file, key==='hero'?2000:1400, .82);
+      await db.siteImage.set(key,dataUrl);
+      toast('Website photo updated ✓');
+      this.render();
+    }catch(e){ toast(e.message||'Upload failed','error'); }
+  },
+  async siteImageReset(key){
+    if(!confirm('Revert this photo to the built-in default?')) return;
+    try{ await db.siteImage.reset(key); toast('Reset to default'); this.render(); }
+    catch(e){ toast('Could not reset','error'); }
+  },
+
+  // ── Website "Meet the Team" ─────────────────────────────────────────────────
+  openTeamMember(id){
+    const m = id ? (this._siteTeam||[]).find(x=>x.id===id) : null;
+    this._teamPhotoPending = null; // reset any prior pick
+    const initial = esc((m?.name||'?').charAt(0).toUpperCase() || '?');
+    const avatar = (m && m.photo)
+      ? `<img id="ftm-prev" src="${esc(m.photo)}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;" />`
+      : `<div id="ftm-prev" style="width:72px;height:72px;border-radius:50%;background:#475569;color:#fff;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:600;">${initial}</div>`;
+    Modal.show(`
+      <div class="modal-title">${m?'Edit Team Member':'Add Team Member'}</div>
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
+        <div id="ftm-prev-wrap">${avatar}</div>
+        <div>
+          <button class="btn btn-sm" onclick="document.getElementById('ftm-file').click()">${(m&&m.photo)?'Change photo':'Add photo'}</button>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">Optional. Square photos look best.</div>
+        </div>
+      </div>
+      <input type="file" id="ftm-file" accept="image/*" style="display:none;" onchange="Settings.teamPhotoChange(this)" />
+      <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="ftm-name" value="${esc(m?.name||'')}" placeholder="e.g. Angelo Martinez" /></div>
+      <div class="form-group"><label class="form-label">Role / title</label><input class="form-input" id="ftm-title" value="${esc(m?.title||'')}" placeholder="e.g. Owner & Lead Installer" /></div>
+      <div class="form-group"><label class="form-label">Short bio <span style="font-weight:400;color:var(--faint);">(optional)</span></label><textarea class="form-input" id="ftm-bio" rows="3" placeholder="A sentence or two about them.">${esc(m?.bio||'')}</textarea></div>
+      <div class="modal-actions">
+        ${m?`<button class="btn btn-danger btn-full" onclick="Settings.deleteTeamMember('${m.id}')">Delete</button>`:''}
+        <button id="ftm-btn" class="btn btn-primary btn-full" onclick="Settings.saveTeamMember('${m?.id||''}')">Save</button>
+        <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
+      </div>`);
+    setTimeout(()=>document.getElementById('ftm-name')?.focus(),150);
+  },
+  async teamPhotoChange(input){
+    const file=input.files&&input.files[0]; if(!file) return;
+    input.value='';
+    try{
+      const dataUrl=await Settings._downscale(file, 800, .82);
+      this._teamPhotoPending = dataUrl;
+      const prev=document.getElementById('ftm-prev');
+      if(prev){
+        const img=document.createElement('img');
+        img.id='ftm-prev'; img.src=dataUrl;
+        img.style.cssText='width:72px;height:72px;border-radius:50%;object-fit:cover;';
+        prev.replaceWith(img);
+      }
+    }catch(e){ toast(e.message||'Could not read image','error'); }
+  },
+  async saveTeamMember(id){
+    const name=document.getElementById('ftm-name')?.value.trim();
+    if(!name){toast('Enter a name','warning');return;}
+    const title=document.getElementById('ftm-title')?.value.trim()||'';
+    const bio=document.getElementById('ftm-bio')?.value.trim()||'';
+    const btn=document.getElementById('ftm-btn'); disableBtn(btn);
+    const body={ id, name, title, bio };
+    if(this._teamPhotoPending) body.image=this._teamPhotoPending;
+    try{
+      await db.siteTeam.save(body);
+      this._teamPhotoPending=null;
+      Modal.close(); toast(id?'Updated ✓':'Team member added ✓'); this.render();
+    }catch(e){ toast(e.message||'Could not save','error'); enableBtn(btn); }
+  },
+  async deleteTeamMember(id){
+    if(!confirm('Remove this team member from the website?'))return;
+    try{ await db.siteTeam.remove(id); Modal.close(); toast('Removed'); this.render(); }
     catch(e){ toast('Could not remove','error'); }
   },
   _downscale(file,maxDim,quality){

@@ -84,6 +84,65 @@ router.delete('/api/shop/gallery/:id', requireAuth, requireRole('full'), shopRou
   res.json({ ok: true });
 }));
 
+// ── PROTECTED: Website photos (single named slots, owner only) ────────────────
+// settings.siteImages is a map { [slot]: url } that lets the owner override the
+// marketing website's fixed stock photos (hero + per-service tiles) one at a
+// time. Distinct from settings.gallery (a list) and settings.heroImage (this
+// platform's own booking-page background). Unknown slots are rejected so the map
+// can't be polluted with arbitrary keys.
+const SITE_IMAGE_SLOTS = ['hero', 'service_tint', 'service_ceramic', 'service_ppf', 'service_detail'];
+router.post('/api/shop/site-image', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
+  try {
+    const key = String(req.body.key || '');
+    if (!SITE_IMAGE_SLOTS.includes(key)) return res.status(400).json({ ok: false, error: 'Unknown image slot' });
+    const url = saveImageDataUrl(req.shopId, 'site-' + key, req.body.image);
+    const siteImages = { ...(db.get('settings.siteImages').value() || {}) };
+    if (siteImages[key]) deleteUpload(siteImages[key]); // replace the previous file, don't orphan it
+    siteImages[key] = url;
+    db.get('settings').assign({ siteImages }).write();
+    res.json({ ok: true, key, url });
+  } catch(e) { res.status(400).json({ ok: false, error: e.message || 'Upload failed' }); }
+}));
+router.delete('/api/shop/site-image/:key', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
+  const key = String(req.params.key || '');
+  const siteImages = { ...(db.get('settings.siteImages').value() || {}) };
+  if (siteImages[key]) { deleteUpload(siteImages[key]); delete siteImages[key]; db.get('settings').assign({ siteImages }).write(); }
+  res.json({ ok: true });
+}));
+
+// ── PROTECTED: Website team roster (owner only) ──────────────────────────────
+// settings.siteTeam is a list [{id,name,title,bio,photo}] rendered as the
+// marketing site's "Meet the Team". One POST handles create + edit (a new photo
+// replaces and cleans up the old file); DELETE removes the member and its photo.
+router.post('/api/shop/site-team', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
+  try {
+    const name = String(req.body.name || '').trim().slice(0, 80);
+    if (!name) return res.status(400).json({ ok: false, error: 'Name is required' });
+    const title = String(req.body.title || '').trim().slice(0, 80);
+    const bio = String(req.body.bio || '').trim().slice(0, 400);
+    const list = [...(db.get('settings.siteTeam').value() || [])];
+    const id = String(req.body.id || '');
+    const idx = id ? list.findIndex(m => m.id === id) : -1;
+    let photo = idx >= 0 ? (list[idx].photo || '') : '';
+    if (req.body.image) {                          // a new photo was picked
+      const url = saveImageDataUrl(req.shopId, 'team', req.body.image);
+      if (photo) deleteUpload(photo);              // don't orphan the previous one
+      photo = url;
+    }
+    const member = { id: idx >= 0 ? list[idx].id : genId('tm'), name, title, bio, photo };
+    if (idx >= 0) list[idx] = member; else list.push(member);
+    db.get('settings').assign({ siteTeam: list }).write();
+    res.json({ ok: true, member, team: list });
+  } catch(e) { res.status(400).json({ ok: false, error: e.message || 'Save failed' }); }
+}));
+router.delete('/api/shop/site-team/:id', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
+  const list = db.get('settings.siteTeam').value() || [];
+  const member = list.find(m => m.id === req.params.id);
+  if (member && member.photo) deleteUpload(member.photo);
+  db.get('settings').assign({ siteTeam: list.filter(m => m.id !== req.params.id) }).write();
+  res.json({ ok: true });
+}));
+
 // ── PROTECTED: Reviews ────────────────────────────────────────────────────────
 router.get('/api/shop/reviews', requireAuth, shopRoute(async (req, res, db) => {
   const reviews = db.get('reviews').value() || [];

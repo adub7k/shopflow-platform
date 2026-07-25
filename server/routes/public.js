@@ -12,6 +12,28 @@ const { sendPush } = require('../push-instance');
 // that used to live here now live in ../booking — do not re-add them.)
 const { computeAvailability, createAppointment, inspoMode } = require('../booking');
 
+// ── Per-date availability overrides ───────────────────────────────────────────
+// When settings.availabilityMode === 'perDate', the shop hand-picks the open
+// times for individual dates (stored in the `dateSlots` collection as
+// [{ date, times:[...] }]); a date with no override is closed, and the count of
+// opened times is that day's client cap — for low-volume shops like a solo nail
+// tech taking 1–2 a day. In the default 'schedule' mode these overrides are
+// INERT (weekly schedule + blocked dates only), so switching back restores normal
+// all-day booking with no leftover caps (the saved openings are preserved).
+function availabilityMode(db){ return ((db.get('settings').value()||{}).availabilityMode === 'perDate') ? 'perDate' : 'schedule'; }
+function dateOverride(db, date){ return (db.get('dateSlots').value() || []).find(d => d.date === date) || null; }
+// The open start-times a staff member offers on a specific date.
+function slotListForDate(db, b, date){
+  if (availabilityMode(db) !== 'perDate') return barberSlotList(b);   // weekly schedule
+  const ov = dateOverride(db, date);
+  return ov && Array.isArray(ov.times) ? ov.times : [];              // opened date, else closed
+}
+// Whether a staff member is potentially working on a date.
+function worksOnDate(db, b, date, dow){
+  if (availabilityMode(db) !== 'perDate') return (b.schedule?.workDays || [1,2,3,4,5,6]).includes(dow);
+  return !!dateOverride(db, date);   // perDate: only hand-opened dates are working days
+}
+
 // ── PUBLIC: Industry list (for the signup business-type picker) ──────────────
 router.get('/api/industries', (req, res) => {
   const { INDUSTRIES } = require('../industries');
@@ -80,6 +102,13 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
     // Same for add-ons: expose id/name/price to the booking page, never `cost`.
     const publicAddons = (s.addons || []).map(a => ({ id: a.id, name: a.name, price: a.price }));
     const blockedDates = db.get('blockedDates').value().map(b => b.date);
+    // Availability model. In perDate mode only the shop's hand-opened dates are
+    // bookable (openDates); weekly-schedule mode ignores per-date openings.
+    const availMode = s.availabilityMode === 'perDate' ? 'perDate' : 'schedule';
+    const todayStr = new Date().toISOString().split('T')[0];
+    const openDates = availMode === 'perDate'
+      ? (db.get('dateSlots').value() || []).filter(o => Array.isArray(o.times) && o.times.length && o.date >= todayStr).map(o => o.date)
+      : [];
     const stripeConnected = !!(s.stripe?.connectAccountId && s.stripe?.onboardingComplete);
     // Square is "connected" if the shop has its own token (OAuth) or the platform
     // env token is configured (sandbox/MVP fallback). Square takes precedence on
@@ -94,6 +123,9 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
       bookingEnabled: s.bookingEnabled !== false,
       bookingMessage: s.bookingMessage || 'Book your appointment below!',
       accentColor: s.accentColor || '#16a34a',
+      // Custom booking-page background image (empty = accent gradient).
+      heroImage: s.heroImage || '',
+      availabilityMode: availMode, openDates,
       barbers, services, blockedDates,
       // Industry profile bits the booking page needs to render correctly.
       vocab: s.vocab || null,
@@ -120,6 +152,11 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
       // Inspiration photo + work gallery
       inspo: inspoMode(s, db.get('industry').value()),
       gallery: s.gallery || [],
+      // Owner overrides for the marketing site's fixed stock photos (hero +
+      // service tiles), keyed by slot. Empty = the site keeps its defaults.
+      siteImages: s.siteImages || {},
+      // Public "Meet the Team" roster for the marketing site.
+      siteTeam: (s.siteTeam || []).map(m => ({ id: m.id, name: m.name, title: m.title || '', bio: m.bio || '', photo: m.photo || '' })),
       // Featured reviews (social proof) + overall rating
       featuredReviews: (db.get('reviews').value() || []).filter(r => r.featured).slice(0, 8)
         .map(r => ({ rating: r.rating, comment: r.comment, name: r.name, service: r.service, createdAt: r.createdAt })),
