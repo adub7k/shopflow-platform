@@ -31,10 +31,22 @@ function relayToken(callSid) { return crypto.createHmac('sha256', relaySecret())
 
 // ── TwiML ─────────────────────────────────────────────────────────────────────
 const escapeXml = (s) => String(s == null ? '' : s).replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]));
+// The wss origin ConversationRelay dials back on, derived from PUBLIC_URL.
+// Hardened: we only want scheme://host — but PUBLIC_URL gets set wrong in the
+// wild (a bare host with no scheme, or the whole Twilio webhook path pasted in).
+// Both produced a malformed url → Twilio error 64102 "not a valid URI" and a dead
+// call. So parse it, keep ONLY the origin, drop any path, and force secure wss
+// (ws for http). Returns '' only when PUBLIC_URL is truly empty/unparseable, in
+// which case available() falls the call back to the gather engine.
 function wsBase() {
-  const base = (process.env.PUBLIC_URL || '').replace(/\/+$/, '');
-  if (base) return base.replace(/^https/, 'wss').replace(/^http:/, 'ws:');
-  return ''; // PUBLIC_URL must be set in any real (non-local) deploy
+  let raw = (process.env.PUBLIC_URL || '').trim();
+  if (!raw) return '';
+  if (!/^[a-z]+:\/\//i.test(raw)) raw = 'https://' + raw; // bare host → assume https
+  try {
+    const u = new URL(raw);
+    const scheme = (u.protocol === 'http:' || u.protocol === 'ws:') ? 'ws:' : 'wss:';
+    return `${scheme}//${u.host}`; // origin only — ignore any path/query pasted in
+  } catch { return ''; }
 }
 // Full <Connect><ConversationRelay> TwiML that hands the media stream to our socket.
 // Returned as a raw string (the twilio node SDK's TwiML builder predates the verb).

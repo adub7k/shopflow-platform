@@ -85,6 +85,24 @@ console.log('— relay TwiML —');
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
+console.log('\n— wsBase hardening (PUBLIC_URL misconfig → valid wss origin) —');
+(() => {
+  const db = detailShop();
+  const ctx = { shopId: 'shop1', db, h: shopHelpers(db), settings: db.get('settings').value(), shop: { id: 'shop1' }, shopName: 'Demo', industry: 'detail', today: 'x' };
+  const _pub = process.env.PUBLIC_URL;
+  const originOf = () => { const m = relay.connectTwiml(ctx, 'CA1').match(/ConversationRelay url="(wss?:\/\/[^?"]*)/); return m && m[1]; };
+  process.env.PUBLIC_URL = 'https://shopflowtech.com/api/twilio/voice/mad-detailing'; // whole webhook path pasted in (the real bug)
+  eq('strips a pasted webhook path → clean wss origin', originOf(), 'wss://shopflowtech.com/api/twilio/voice/relay');
+  process.env.PUBLIC_URL = 'shopflowtech.com'; // bare host, no scheme
+  eq('bare host → https-assumed wss origin', originOf(), 'wss://shopflowtech.com/api/twilio/voice/relay');
+  process.env.PUBLIC_URL = 'https://shopflowtech.com/'; // trailing slash
+  eq('trailing slash → clean origin', originOf(), 'wss://shopflowtech.com/api/twilio/voice/relay');
+  process.env.PUBLIC_URL = 'http://localhost:3000'; // http → ws
+  eq('http → ws', originOf(), 'ws://localhost:3000/api/twilio/voice/relay');
+  process.env.PUBLIC_URL = _pub;
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
 console.log('\n— relay turn: stream tokens → capture → end —');
 (async () => {
   const db = detailShop();
