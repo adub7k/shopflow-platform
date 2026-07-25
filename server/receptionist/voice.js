@@ -94,6 +94,9 @@ function voiceConfig(settings) {
     minConfidence: Number.isFinite(Number(v.minConfidence)) ? Number(v.minConfidence) : 0.4,
     relayInterruptSensitivity: ['high', 'medium', 'low'].includes(v.relayInterruptSensitivity) ? v.relayInterruptSensitivity : 'low',
     relayIgnoreBackchannel: v.relayIgnoreBackchannel !== false,
+    // ConversationRelay STT model. Deepgram nova-3 is the most accurate on
+    // telephony audio + domain words; overridable if a shop needs to fall back.
+    relaySpeechModel: (v.relaySpeechModel || 'nova-3-general').trim(),
     // Latency knobs. speechTimeout = seconds of silence before Twilio decides the
     // caller is done — a fixed 1s feels like a real back-and-forth; 'auto' is
     // Twilio's smart endpointing but adds ~1-2s of dead air. Bump toward 2 if it
@@ -153,7 +156,13 @@ function businessHours(db) {
 function speechHints(ctx) {
   const menu = getMenu(ctx.db);
   const names = [...menu.services.map(s => s.name), ...menu.addons.map(a => a.name)];
-  const base = ['window tint', 'ceramic coating', 'ceramic', 'tint', 'paint protection film', 'PPF', 'full vehicle', 'front windows', 'windshield', 'detail', 'sedan', 'SUV', 'truck'];
+  const base = [
+    'window tint', 'ceramic tint', 'carbon tint', 'ceramic coating', 'ceramic', 'tint', 'tinting',
+    'paint protection film', 'PPF', 'clear bra', 'full detail', 'detail', 'wash', 'wax', 'polish',
+    'full vehicle', 'whole car', 'front two windows', 'two front windows', 'front windows',
+    'back windows', 'rear windshield', 'windshield', 'sunroof', 'visor strip',
+    'sedan', 'SUV', 'truck', 'coupe', 'van', 'Tesla', 'Toyota', 'Honda', 'Ford', 'Chevy', 'Jeep',
+  ];
   return [...new Set([...names, ...base].map(s => String(s || '').trim()).filter(Boolean))].join(', ');
 }
 
@@ -177,7 +186,7 @@ function buildSystemPrompt(ctx, cfg) {
     ? [
         'YOUR GOAL: understand what the caller needs, give them a rough price from the menu below,',
         "get the caller's NAME — always ask for it directly if they have not offered it (e.g. \"And can I get your name?\"); this is required, never wrap up or save without it —",
-        'and (for vehicle work) collect the year, make, model and rough size of the vehicle,',
+        'and (for vehicle work) collect the year, make and model, plus the vehicle SIZE — when a price depends on size, ask for it in plain words ("is it a sedan, SUV, or truck?") rather than asking for the "model",',
         'and ask when they are hoping to come in. This shop confirms the exact time and final quote itself —',
         'so DO NOT promise a specific appointment slot.',
         'BEFORE you save, read the key details back in one short sentence to confirm — their name, the callback',
@@ -495,7 +504,10 @@ async function runTurn(ctx, call, userSpeech, { finalTurn = false } = {}) {
 function greeting(ctx) {
   const cfg = voiceConfig(ctx.settings);
   if (cfg.greeting) return cfg.greeting;
-  return `Thanks for calling ${ctx.shopName}! This is the virtual assistant. How can I help you today?`;
+  // No "this is the virtual assistant" — leading with that spikes hang-ups. The
+  // bot still says so if a caller asks (see the guardrail rule). Warm + straight
+  // to helping.
+  return `Thanks for calling ${ctx.shopName}! How can I help you today?`;
 }
 
 // Fresh conversation state for a call the AI is about to answer.

@@ -70,6 +70,7 @@ function connectTwiml(ctx, callSid) {
     + ` interruptSensitivity="${escapeXml(cfg.relayInterruptSensitivity)}"`
     + ` ignoreBackchannel="${cfg.relayIgnoreBackchannel ? 'true' : 'false'}"`
     + hintsAttr
+    + ` speechModel="${escapeXml(cfg.relaySpeechModel)}"`
     + ' transcriptionLanguage="en-US"'
     + '/></Connect></Response>';
 }
