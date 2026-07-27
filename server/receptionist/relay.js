@@ -17,8 +17,11 @@ const voice = require('./voice');
 const RELAY_PATH = '/api/twilio/voice/relay';
 const MAX_TURNS = 16;
 
-// Available when a key is configured (same gate as the rest of the receptionist).
-const available = () => voice.voiceAvailable();
+// Available only when a key is configured AND PUBLIC_URL is set — the streaming
+// engine hands Twilio a wss:// URL built from PUBLIC_URL, so with none the socket
+// has no reachable address. Gating here means the AI handler cleanly falls back to
+// the gather engine instead of returning TwiML that dead-ends the call.
+const available = () => voice.voiceAvailable() && !!wsBase();
 
 // ── Handshake auth ────────────────────────────────────────────────────────────
 // The websocket is public (Twilio dials it), so we sign the callSid into the wss
@@ -28,10 +31,22 @@ function relayToken(callSid) { return crypto.createHmac('sha256', relaySecret())
 
 // ── TwiML ─────────────────────────────────────────────────────────────────────
 const escapeXml = (s) => String(s == null ? '' : s).replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]));
+// The wss origin ConversationRelay dials back on, derived from PUBLIC_URL.
+// Hardened: we only want scheme://host — but PUBLIC_URL gets set wrong in the
+// wild (a bare host with no scheme, or the whole Twilio webhook path pasted in).
+// Both produced a malformed url → Twilio error 64102 "not a valid URI" and a dead
+// call. So parse it, keep ONLY the origin, drop any path, and force secure wss
+// (ws for http). Returns '' only when PUBLIC_URL is truly empty/unparseable, in
+// which case available() falls the call back to the gather engine.
 function wsBase() {
-  const base = (process.env.PUBLIC_URL || '').replace(/\/+$/, '');
-  if (base) return base.replace(/^https/, 'wss').replace(/^http:/, 'ws:');
-  return ''; // PUBLIC_URL must be set in any real (non-local) deploy
+  let raw = (process.env.PUBLIC_URL || '').trim();
+  if (!raw) return '';
+  if (!/^[a-z]+:\/\//i.test(raw)) raw = 'https://' + raw; // bare host → assume https
+  try {
+    const u = new URL(raw);
+    const scheme = (u.protocol === 'http:' || u.protocol === 'ws:') ? 'ws:' : 'wss:';
+    return `${scheme}//${u.host}`; // origin only — ignore any path/query pasted in
+  } catch { return ''; }
 }
 // Full <Connect><ConversationRelay> TwiML that hands the media stream to our socket.
 // Returned as a raw string (the twilio node SDK's TwiML builder predates the verb).
@@ -39,14 +54,24 @@ function connectTwiml(ctx, callSid) {
   const cfg = voice.voiceConfig(ctx.settings);
   const url = `${wsBase()}${RELAY_PATH}?shopId=${encodeURIComponent(ctx.shopId)}&callSid=${encodeURIComponent(callSid)}&t=${relayToken(callSid)}`;
   const voiceAttr = cfg.relayVoice ? ` voice="${escapeXml(cfg.relayVoice)}"` : '';
+  // Bias the transcriber toward the shop's real vocabulary — without this, phone
+  // audio garbles industry words ("ceramic"→"Syringe", "tint"→"windowton").
+  const hints = voice.speechHints(ctx);
+  const hintsAttr = hints ? ` hints="${escapeXml(hints)}"` : '';
   return '<?xml version="1.0" encoding="UTF-8"?>'
     + '<Response><Connect>'
     + `<ConversationRelay url="${escapeXml(url)}"`
     + ` welcomeGreeting="${escapeXml(voice.greeting(ctx))}"`
     + ` ttsProvider="${escapeXml(cfg.relayTtsProvider)}"${voiceAttr}`
+    // ElevenLabs: normalize numbers/prices/units so "$250" is spoken "two hundred
+    // fifty dollars", not "dollar two five zero" — matters for a shop quoting prices.
+    + (cfg.relayTtsProvider === 'ElevenLabs' ? ' elevenlabsTextNormalization="on"' : '')
     + ' interruptible="speech" reportInputDuringAgentSpeech="none"'
     + ` interruptSensitivity="${escapeXml(cfg.relayInterruptSensitivity)}"`
     + ` ignoreBackchannel="${cfg.relayIgnoreBackchannel ? 'true' : 'false'}"`
+    + hintsAttr
+    + ` speechModel="${escapeXml(cfg.relaySpeechModel)}"`
+    + ' transcriptionLanguage="en-US"'
     + '/></Connect></Response>';
 }
 

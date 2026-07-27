@@ -26,7 +26,7 @@ function detailShop() {
       shopName: 'Demo Auto Studio',
       customFields: [{ key: 'vehicleYear', label: 'Year', type: 'text', required: true }, { key: 'vehicleMake', label: 'Make', type: 'text', required: true }, { key: 'vehicleModel', label: 'Model', type: 'text', required: true }],
       deposit: { enabled: false },
-      voiceAI: { mode: 'always', engine: 'relay', voice: '', relayTtsProvider: 'ElevenLabs' },
+      voiceAI: { mode: 'always', engine: 'relay', voice: '', relayTtsProvider: 'ElevenLabs', relayVoice: 's3TPKV1kjDlVtZbl4Ksh' },
     },
     services: [
       { id: 's1', name: 'Ceramic Window Tint — Full Vehicle', category: 'tint', price: 450, duration: 210, cost: 0, sizePricing: { sedan: 450, suv: 550, truck: 600 } },
@@ -75,8 +75,36 @@ console.log('— relay TwiML —');
   check('TwiML: welcomeGreeting + ttsProvider + interruptible', /welcomeGreeting="Thanks for calling Demo Auto Studio/.test(xml) && /ttsProvider="ElevenLabs"/.test(xml) && /interruptible="speech"/.test(xml), xml);
   check('TwiML: noise controls (interruptSensitivity=low + ignoreBackchannel=true)', /interruptSensitivity="low"/.test(xml) && /ignoreBackchannel="true"/.test(xml), xml);
   check('TwiML: & in url is XML-escaped', xml.includes('&amp;callSid='));
+  check('TwiML: ElevenLabs voice id in voice attr', xml.includes('voice="s3TPKV1kjDlVtZbl4Ksh"'), xml);
+  check('TwiML: elevenlabsTextNormalization on for ElevenLabs', /elevenlabsTextNormalization="on"/.test(xml), xml);
+  check('TwiML: STT hints include shop vocabulary (fixes garbled words)', /hints="[^"]*(ceramic|tint)[^"]*"/i.test(xml), xml);
+  check('TwiML: transcriptionLanguage set', /transcriptionLanguage="en-US"/.test(xml), xml);
+  check('TwiML: speechModel = nova-3 (accuracy)', /speechModel="nova-3-general"/.test(xml), xml);
   eq('relayToken is deterministic', relay.relayToken('CA123'), relay.relayToken('CA123'));
   check('relayToken differs per callSid', relay.relayToken('CA123') !== relay.relayToken('CA999'));
+  // Availability gate: relay needs BOTH an API key and PUBLIC_URL (the wss base).
+  check('available() true with key + PUBLIC_URL', relay.available() === true);
+  const _pub = process.env.PUBLIC_URL; delete process.env.PUBLIC_URL;
+  check('available() false without PUBLIC_URL → AI handler falls back to gather', relay.available() === false);
+  process.env.PUBLIC_URL = _pub;
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n— wsBase hardening (PUBLIC_URL misconfig → valid wss origin) —');
+(() => {
+  const db = detailShop();
+  const ctx = { shopId: 'shop1', db, h: shopHelpers(db), settings: db.get('settings').value(), shop: { id: 'shop1' }, shopName: 'Demo', industry: 'detail', today: 'x' };
+  const _pub = process.env.PUBLIC_URL;
+  const originOf = () => { const m = relay.connectTwiml(ctx, 'CA1').match(/ConversationRelay url="(wss?:\/\/[^?"]*)/); return m && m[1]; };
+  process.env.PUBLIC_URL = 'https://shopflowtech.com/api/twilio/voice/mad-detailing'; // whole webhook path pasted in (the real bug)
+  eq('strips a pasted webhook path → clean wss origin', originOf(), 'wss://shopflowtech.com/api/twilio/voice/relay');
+  process.env.PUBLIC_URL = 'shopflowtech.com'; // bare host, no scheme
+  eq('bare host → https-assumed wss origin', originOf(), 'wss://shopflowtech.com/api/twilio/voice/relay');
+  process.env.PUBLIC_URL = 'https://shopflowtech.com/'; // trailing slash
+  eq('trailing slash → clean origin', originOf(), 'wss://shopflowtech.com/api/twilio/voice/relay');
+  process.env.PUBLIC_URL = 'http://localhost:3000'; // http → ws
+  eq('http → ws', originOf(), 'ws://localhost:3000/api/twilio/voice/relay');
+  process.env.PUBLIC_URL = _pub;
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────

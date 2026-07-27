@@ -94,6 +94,9 @@ function voiceConfig(settings) {
     minConfidence: Number.isFinite(Number(v.minConfidence)) ? Number(v.minConfidence) : 0.4,
     relayInterruptSensitivity: ['high', 'medium', 'low'].includes(v.relayInterruptSensitivity) ? v.relayInterruptSensitivity : 'low',
     relayIgnoreBackchannel: v.relayIgnoreBackchannel !== false,
+    // ConversationRelay STT model. Deepgram nova-3 is the most accurate on
+    // telephony audio + domain words; overridable if a shop needs to fall back.
+    relaySpeechModel: (v.relaySpeechModel || 'nova-3-general').trim(),
     // Latency knobs. speechTimeout = seconds of silence before Twilio decides the
     // caller is done — a fixed 1s feels like a real back-and-forth; 'auto' is
     // Twilio's smart endpointing but adds ~1-2s of dead air. Bump toward 2 if it
@@ -145,6 +148,24 @@ function businessHours(db) {
   return `${range}, ${s.startTime || '9:00 AM'} to ${s.endTime || '6:00 PM'}`;
 }
 
+// Speech-recognition hints: bias the STT toward the shop's actual vocabulary so
+// domain words survive a phone line (callers get "ceramic", not "Syringe"; "full
+// vehicle", not "old vehicle"). Built from the shop's own service + add-on names
+// plus core industry terms and vehicle sizes. Used by BOTH engines — the gather
+// <Gather hints> and ConversationRelay's hints attribute.
+function speechHints(ctx) {
+  const menu = getMenu(ctx.db);
+  const names = [...menu.services.map(s => s.name), ...menu.addons.map(a => a.name)];
+  const base = [
+    'window tint', 'ceramic tint', 'carbon tint', 'ceramic coating', 'ceramic', 'tint', 'tinting',
+    'paint protection film', 'PPF', 'clear bra', 'full detail', 'detail', 'wash', 'wax', 'polish',
+    'full vehicle', 'whole car', 'front two windows', 'two front windows', 'front windows',
+    'back windows', 'rear windshield', 'windshield', 'sunroof', 'visor strip',
+    'sedan', 'SUV', 'truck', 'coupe', 'van', 'Tesla', 'Toyota', 'Honda', 'Ford', 'Chevy', 'Jeep',
+  ];
+  return [...new Set([...names, ...base].map(s => String(s || '').trim()).filter(Boolean))].join(', ');
+}
+
 function buildSystemPrompt(ctx, cfg) {
   const profile = resolveProfile(ctx.industry);
   const menu = getMenu(ctx.db);
@@ -156,8 +177,8 @@ function buildSystemPrompt(ctx, cfg) {
   const persona = [
     `You are the friendly, professional phone receptionist for ${ctx.shopName}, a ${profile.label.toLowerCase()}.`,
     'You are speaking on a LIVE phone call — your words are read aloud by a text-to-speech voice.',
-    'Keep every reply to one or two short, natural spoken sentences. Ask ONE question at a time.',
-    'No markdown, no lists, no emojis, no symbols — just plain spoken words. Be warm and efficient.',
+    'Keep replies to ONE short spoken sentence whenever you can (two at the very most). Do not over-explain, do not repeat back everything they said, do not list options unless asked. Ask ONE question at a time, then stop and let them talk.',
+    'No markdown, no lists, no emojis, no symbols — just plain spoken words. Be warm, brief, and efficient, like a good front-desk person who is happy to help but not chatty.',
     `Today is ${ctx.today}. The caller is phoning from ${ctx.callerPhone || 'an unknown number'}.`,
   ].join(' ');
 
@@ -165,7 +186,7 @@ function buildSystemPrompt(ctx, cfg) {
     ? [
         'YOUR GOAL: understand what the caller needs, give them a rough price from the menu below,',
         "get the caller's NAME — always ask for it directly if they have not offered it (e.g. \"And can I get your name?\"); this is required, never wrap up or save without it —",
-        'and (for vehicle work) collect the year, make, model and rough size of the vehicle,',
+        'and (for vehicle work) collect the year, make and model, plus the vehicle SIZE — when a price depends on size, ask for it in plain words ("is it a sedan, SUV, or truck?") rather than asking for the "model",',
         'and ask when they are hoping to come in. This shop confirms the exact time and final quote itself —',
         'so DO NOT promise a specific appointment slot.',
         'BEFORE you save, read the key details back in one short sentence to confirm — their name, the service,',
@@ -189,7 +210,8 @@ function buildSystemPrompt(ctx, cfg) {
   const rules = [
     'RULES:',
     '- Only quote prices that appear in the SERVICE MENU below, and quote by vehicle size when the service is size-priced. Never invent, estimate, or negotiate a price for anything not listed.',
-    `- If they ask for a service NOT on the menu, tell them ${ctx.shopName} does not offer that one, mention the closest service you do offer if there is one, and offer to have the shop call them back. Do not improvise a price or a workaround.`,
+    `- If they ask for a smaller or partial version of a listed service, or a reasonable variation of one (e.g. just the front windows when the menu lists full-vehicle tint, or one section of a detail), do NOT tell them you don't offer it. Say ${ctx.shopName} can take care of that, and capture the lead noting exactly what they asked for — the shop will confirm the exact price. Do not invent or estimate that price yourself.`,
+    `- Only when a request is clearly unrelated to anything on the menu, tell them ${ctx.shopName} does not offer that one, mention the closest service you do offer if there is one, and offer to have the shop call them back. Never improvise a price or a workaround.`,
     `- Stay strictly on ${ctx.shopName}'s services. Do not answer general questions, give advice, tell jokes, do math, write anything, or role-play. Briefly steer back to how you can help; if they persist, wrap up with end_call.`,
     '- PRICE PUSHBACK (too expensive / wants a discount / comparing quotes): do NOT lose them. First acknowledge it warmly and briefly restate the value. If a lower-priced option on the menu genuinely fits what they want, offer that real option. If they still hesitate, ask what they were hoping to spend, and tell them the shop will call to work something out. Then capture_lead with priceSensitive=true and their number in "budget". NEVER invent a discount, agree to a lower price, negotiate a specific deal, or promise the shop will match it — you only set the callback up; the shop decides pricing.',
     '- ALWAYS read the key details back and get a "yes" BEFORE calling capture_lead or book_appointment. People mishear on the phone — a wrong name or vehicle makes the whole lead useless. If they correct you, fix it and read it back again.',
@@ -563,7 +585,10 @@ async function runTurn(ctx, call, userSpeech, { finalTurn = false } = {}) {
 function greeting(ctx) {
   const cfg = voiceConfig(ctx.settings);
   if (cfg.greeting) return cfg.greeting;
-  return `Thanks for calling ${ctx.shopName}! This is the virtual assistant. How can I help you today?`;
+  // No "this is the virtual assistant" — leading with that spikes hang-ups. The
+  // bot still says so if a caller asks (see the guardrail rule). Warm + straight
+  // to helping.
+  return `Thanks for calling ${ctx.shopName}! How can I help you today?`;
 }
 
 // Fresh conversation state for a call the AI is about to answer.
@@ -577,6 +602,6 @@ module.exports = {
   // Exported so the ConversationRelay engine (receptionist/relay.js) reuses the
   // exact same client, system prompt, tools, and server-authoritative tool
   // execution — the transport differs, the brain does not.
-  getClient, runTool, FAREWELL, createMessage, isRetryableApiError,
+  getClient, runTool, FAREWELL, createMessage, isRetryableApiError, speechHints,
   resolveCallbackPhone,
 };

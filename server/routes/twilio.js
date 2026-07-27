@@ -360,6 +360,9 @@ function aiGather(vr, ctx, callSid, prompt) {
     speechTimeout: cfg.speechTimeout,   // fixed short pause → snappy turn-taking
     speechModel: cfg.speechModel,
     language: 'en-US',
+    // Bias recognition toward the shop's own vocabulary so industry words survive
+    // the phone line ("ceramic", not "Syringe").
+    hints: voice.speechHints(ctx),
     action: `/api/twilio/voice/ai/gather/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`,
     method: 'POST',
     actionOnEmptyResult: true,

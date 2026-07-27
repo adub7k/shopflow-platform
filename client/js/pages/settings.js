@@ -138,6 +138,11 @@ const Settings = {
           </select>
           <div style="font-size:11px;color:var(--muted);margin-top:6px;">Streaming uses Twilio ConversationRelay: the AI replies in well under a second, the caller can interrupt it, and it uses top-tier ElevenLabs voices. Requires ConversationRelay enabled on your Twilio account. If a call fails to connect, switch back to Standard.</div>
         </div>
+        <div class="form-group" style="margin-bottom:8px;">
+          <label class="form-label">ElevenLabs voice ID <span style="color:var(--faint);font-weight:400;">(Streaming engine only)</span></label>
+          <input id="s-voiceai-relayvoice" class="form-input" placeholder="e.g. s3TPKV1kjDlVtZbl4Ksh" value="${esc(va.relayVoice||'')}" />
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;">Paste a voice ID from the ElevenLabs Voice Library (the Standard engine ignores this and uses the Voice dropdown above). Leave blank for ElevenLabs' default voice.</div>
+        </div>
         <div style="font-size:11px;color:var(--muted);">Requires an AI key configured on the server (the same one that powers voicemail analysis). Each answered call costs a few cents.</div>
       `);
       html.push('</div>');
@@ -888,7 +893,7 @@ const Settings = {
     const tpl=document.getElementById('s-leadtpl'); if(tpl)data.leadPageTemplate=tpl.value;
     const pp=document.getElementById('s-publicphone'); if(pp)data.publicPhone=pp.value.trim();
     const ar=document.getElementById('s-aireceptionist'); if(ar)data.aiReceptionist={enabled:ar.checked};
-    const vam=document.getElementById('s-voiceai-mode'); if(vam){ data.voiceAI={ mode:vam.value, engine:document.getElementById('s-voiceai-engine')?.value||'gather', greeting:(document.getElementById('s-voiceai-greeting')?.value||'').trim(), voice:document.getElementById('s-voiceai-voice')?.value||'Polly.Joanna-Neural', speechTimeout:document.getElementById('s-voiceai-pace')?.value||'1' }; }
+    const vam=document.getElementById('s-voiceai-mode'); if(vam){ data.voiceAI={ mode:vam.value, engine:document.getElementById('s-voiceai-engine')?.value||'gather', greeting:(document.getElementById('s-voiceai-greeting')?.value||'').trim(), voice:document.getElementById('s-voiceai-voice')?.value||'Polly.Joanna-Neural', relayVoice:(document.getElementById('s-voiceai-relayvoice')?.value||'').trim(), speechTimeout:document.getElementById('s-voiceai-pace')?.value||'1' }; }
     const lv=document.getElementById('s-lvis')?.value; if(lv)data.loyalty={visitsForReward:parseInt(lv),rewardDescription:document.getElementById('s-lrew')?.value.trim()||'One free service'};
     // Message templates: owner-managed [{id,label,body}] list (drops empty rows).
     this._syncTemplates();
