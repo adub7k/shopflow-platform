@@ -150,6 +150,17 @@ console.log('\n— voice helpers —');
   eq('isQuoteFirst: barbershop = false', voice.isQuoteFirst({}, 'barbershop'), false);
   eq('isQuoteFirst: per-shop bookingMode override', voice.isQuoteFirst({ bookingMode: 'calendar' }, 'detail'), false);
 
+  // resolveCallbackPhone: the Twilio caller ID is authoritative — a spoken number
+  // (STT-transcribed, error-prone) must NEVER overwrite it. This is the fix for
+  // the live incident where the shop called back a mis-heard number.
+  const rcp = voice.resolveCallbackPhone;
+  eq('phone: caller ID kept when no spoken number', rcp('+15551234567', null), { phone: '+15551234567', altCallbackNumber: null });
+  eq('phone: same number spoken (diff format) is NOT flagged as alternate', rcp('+15551234567', '555-123-4567'), { phone: '+15551234567', altCallbackNumber: null });
+  eq('phone: a DIFFERENT spoken number becomes a verify-me alternate, not the primary', rcp('+15551234567', '505-867-5309'), { phone: '+15551234567', altCallbackNumber: '505-867-5309' });
+  eq('phone: garbled/non-number spoken input is ignored (caller ID wins)', rcp('+15551234567', 'um yeah'), { phone: '+15551234567', altCallbackNumber: null });
+  eq('phone: withheld caller ID falls back to the spoken number', rcp('', '505-867-5309'), { phone: '505-867-5309', altCallbackNumber: null });
+  eq('phone: no caller ID and no spoken number → empty', rcp('anonymous', null), { phone: 'anonymous', altCallbackNumber: null });
+
   eq('tools: quote-first shop = capture + transfer + end', voice.toolsFor(true, { canBook: true }).map(t => t.name), ['capture_lead', 'transfer_to_human', 'end_call']);
   eq('tools: calendar shop = availability + book + capture + transfer + end', voice.toolsFor(false, { canBook: true }).map(t => t.name), ['check_availability', 'book_appointment', 'capture_lead', 'transfer_to_human', 'end_call']);
 
@@ -200,7 +211,11 @@ console.log('\n— simulated call: detail shop, qualify + capture —');
   check('capture: lead.ai written with quality + service', lead.ai && lead.ai.quality === 'hot' && lead.ai.serviceNeeded === 'Full Detail', JSON.stringify(lead.ai));
   eq('capture: lead.ai.source = voice', lead.ai.source, 'voice');
   eq('capture: lead name enriched', lead.name, 'John');
-  eq('capture: confirmed callback number used', lead.phone, '505-555-8899');
+  // Phone safety: the authoritative caller ID stays primary; a DIFFERENT spoken
+  // number is kept only as a verify-me alternate — it must never overwrite it.
+  eq('capture: caller ID kept as primary phone (not the spoken number)', lead.phone, '+15551234567');
+  eq('capture: different spoken number surfaced as alternate to verify', lead.ai.altCallbackNumber, '505-555-8899');
+  check('capture: alternate number noted in followUp for the shop', /505-555-8899/.test(lead.ai.followUp), lead.ai.followUp);
   eq('capture: lead vehicle set', [lead.vehicle.year, lead.vehicle.make, lead.vehicle.model], ['2020', 'Toyota', 'Highlander']);
   eq('capture: outcome recorded', call.voiceAI.outcome.type, 'captured');
   check('capture: no appointment created (quote-first)', db.get('appointments').value().length === 0);

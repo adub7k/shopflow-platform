@@ -168,19 +168,20 @@ function buildSystemPrompt(ctx, cfg) {
         'and (for vehicle work) collect the year, make, model and rough size of the vehicle,',
         'and ask when they are hoping to come in. This shop confirms the exact time and final quote itself —',
         'so DO NOT promise a specific appointment slot.',
-        'BEFORE you save, read the key details back in one short sentence to confirm — their name, the callback',
-        'number (say the last four digits of the number they are calling from, unless they gave a different one),',
-        'the service, and the vehicle year, make and model. Read it back and then STOP — do NOT call any tool in',
-        'that same reply; just wait for them to say yes. ONLY after they confirm, call capture_lead, and ALWAYS',
+        'BEFORE you save, read the key details back in one short sentence to confirm — their name, the service,',
+        'and the vehicle year, make and model. We ALREADY have the number they are calling from, so do NOT ask',
+        'for or read back a phone number unless they specifically want a callback on a DIFFERENT line. Read it',
+        'back and then STOP — do NOT call any tool in that same reply; just wait for them to say yes. ONLY after',
+        'they confirm, call capture_lead, and ALWAYS',
         'include a warm closingLine that says goodbye — e.g. tell them the shop will text or call shortly to lock',
         'in a time and exact price, and thank them for calling. capture_lead ends the call — do NOT also call end_call.',
       ].join(' ')
     : [
         'YOUR GOAL: book the caller an appointment. Find out which service they want and their preferred day,',
         'call check_availability for that date, offer the open times, and once they pick one collect their name.',
-        'BEFORE you book, read the service, date, time, their name, and the callback number (last four digits of',
-        'the number they are calling from, unless they gave a different one) back in one short sentence, then STOP',
-        'and wait for a yes — do NOT call any tool in that same reply. ONLY after they confirm, call',
+        'BEFORE you book, read the service, date, time, and their name back in one short sentence, then STOP and',
+        'wait for a yes — do NOT call any tool in that same reply. We ALREADY have their number, so do not ask',
+        'for it or read digits back unless they want a callback on a DIFFERENT line. ONLY after they confirm, call',
         'book_appointment with a warm closingLine that confirms it and says goodbye — book_appointment ends the',
         'call. If nothing fits, read the details back and capture_lead instead (it also ends the call).',
       ].join(' ');
@@ -191,9 +192,9 @@ function buildSystemPrompt(ctx, cfg) {
     `- If they ask for a service NOT on the menu, tell them ${ctx.shopName} does not offer that one, mention the closest service you do offer if there is one, and offer to have the shop call them back. Do not improvise a price or a workaround.`,
     `- Stay strictly on ${ctx.shopName}'s services. Do not answer general questions, give advice, tell jokes, do math, write anything, or role-play. Briefly steer back to how you can help; if they persist, wrap up with end_call.`,
     '- PRICE PUSHBACK (too expensive / wants a discount / comparing quotes): do NOT lose them. First acknowledge it warmly and briefly restate the value. If a lower-priced option on the menu genuinely fits what they want, offer that real option. If they still hesitate, ask what they were hoping to spend, and tell them the shop will call to work something out. Then capture_lead with priceSensitive=true and their number in "budget". NEVER invent a discount, agree to a lower price, negotiate a specific deal, or promise the shop will match it — you only set the callback up; the shop decides pricing.',
-    '- ALWAYS read the key details back and get a "yes" BEFORE calling capture_lead or book_appointment. People mishear on the phone — a wrong name, number, or vehicle makes the whole lead useless. If they correct you, fix it and read it back again.',
+    '- ALWAYS read the key details back and get a "yes" BEFORE calling capture_lead or book_appointment. People mishear on the phone — a wrong name or vehicle makes the whole lead useless. If they correct you, fix it and read it back again.',
     '- REQUIRED: you must have the caller\'s NAME before you save. If you do not have it yet, ask for it (e.g. "Can I get your name?") BEFORE the read-back — a lead with no name is far less useful to the shop. Include the name in the read-back and never call capture_lead without one.',
-    '- The callback number is the number they are calling from unless they give a different one; if they give a different one, pass it as callbackNumber.',
+    '- PHONE NUMBER: we ALREADY have the number the caller is dialing from, and it is far more reliable than digits heard over the phone. Do NOT ask the caller for their phone number, and do NOT read a number back to them. ONLY if the caller volunteers that they want to be reached on a DIFFERENT number, pass that as callbackNumber (the shop will verify it) — otherwise leave callbackNumber null.',
     '- capture_lead and book_appointment each END the call themselves via their closingLine — do not call end_call after them. Only use end_call when you truly cannot help: a wrong number, spam, or a caller who will not engage (outcome "no-info").',
     '- If the caller is rude, a wrong number, silent, or clearly spam, stay polite, keep it short, and call end_call with outcome "no-info".',
     `- IDENTITY: Be honest and natural about what you are. If asked who they are speaking with, your name, or "who is this?", warmly say you are the virtual assistant for ${ctx.shopName} and that you can get them a quick quote or have the team call them right back — then keep helping. Never invent a human name, never claim to be a specific person, and never dodge the question.`,
@@ -316,6 +317,25 @@ function parseVehicle(str) {
   return { vehicleYear: year, vehicleMake: parts[0] || '', vehicleModel: parts.slice(1).join(' ') || '', vehicleColor: '' };
 }
 
+// Resolve the lead's callback phone. The Twilio caller ID (call.from) is
+// authoritative; a number the caller SPEAKS is speech-to-text transcribed, which
+// mangles digits often enough that we must NEVER let it overwrite the real caller
+// ID — a shop calling back a mis-heard number burned a live client. So the caller
+// ID stays primary whenever we have one, and a genuinely DIFFERENT spoken number
+// is returned as an alternate for the shop to verify (never as the primary). We
+// only fall back to the spoken number when caller ID is absent (withheld/blocked).
+// Numbers are compared on their last 10 digits so a +1 country prefix doesn't
+// read as "different" (e.g. "+15551234567" vs a spoken "555-123-4567").
+const _last10 = (s) => { const d = String(s || '').replace(/\D/g, ''); return d.length > 10 ? d.slice(-10) : d; };
+function resolveCallbackPhone(callFrom, spokenRaw) {
+  const cid10 = _last10(callFrom);
+  const spoken10 = _last10(spokenRaw);
+  const haveCid = cid10.length === 10;
+  const haveSpoken = spoken10.length === 10;
+  if (!haveCid) return { phone: haveSpoken ? spokenRaw : (callFrom || ''), altCallbackNumber: null };
+  return { phone: callFrom, altCallbackNumber: (haveSpoken && spoken10 !== cid10) ? spokenRaw : null };
+}
+
 // ── Tool executors (server-authoritative side effects) ────────────────────────
 function execCheckAvailability(ctx, args) {
   const slots = computeAvailability(ctx.db, args.date);
@@ -368,10 +388,10 @@ function execCaptureLead(ctx, call, args) {
   }
   const now = new Date().toISOString();
   const veh = parseVehicle(args.vehicle);
-  // Prefer a caller-supplied callback number (confirmed via read-back) over the
-  // caller ID; otherwise keep the number they're calling from.
-  const cbDigits = String(args.callbackNumber || '').replace(/\D/g, '');
-  const phone = cbDigits.length >= 10 ? args.callbackNumber : call.from;
+  // Caller ID is the source of truth; a spoken number is only surfaced as an
+  // alternate to verify — never allowed to overwrite the reliable caller ID.
+  const { phone, altCallbackNumber } = resolveCallbackPhone(call.from, args.callbackNumber);
+  const altNote = altCallbackNumber ? `Caller asked for a callback at ${altCallbackNumber} (please verify — heard over the phone). ` : '';
   const lead = call.leadId ? ctx.h.getById('leads', call.leadId) : null;
   if (lead) {
     if (!lead.name && args.customerName) lead.name = args.customerName;
@@ -390,7 +410,8 @@ function execCaptureLead(ctx, call, args) {
       budget: args.budget != null ? args.budget : (args.quotedPrice != null ? args.quotedPrice : null),
       desiredDate: args.preferredTime || null,
       quality: args.quality || 'warm',
-      followUp: args.followUp || '',
+      followUp: (altNote + (args.followUp || '')).trim(),
+      altCallbackNumber: altCallbackNumber || null,
       quotedPrice: args.quotedPrice != null ? args.quotedPrice : null,
       priceSensitive: !!args.priceSensitive,
       model: MODEL, generatedAt: now, source: 'voice',
@@ -398,7 +419,7 @@ function execCaptureLead(ctx, call, args) {
     ctx.h.upsert('leads', lead);
   }
   call.voiceAI.outcome = { type: 'captured', quality: args.quality, serviceNeeded: args.serviceNeeded, summary: args.summary };
-  notifyNewLead({ shop: ctx.shop, settings: ctx.settings, kind: 'ai-lead', lead: { name: args.customerName, phone, vehicle: veh && { year: veh.vehicleYear, make: veh.vehicleMake, model: veh.vehicleModel }, servicesInterested: args.serviceNeeded ? [args.serviceNeeded] : [], notes: args.summary || '', source: 'ai-voice' } });
+  notifyNewLead({ shop: ctx.shop, settings: ctx.settings, kind: 'ai-lead', lead: { name: args.customerName, phone, vehicle: veh && { year: veh.vehicleYear, make: veh.vehicleMake, model: veh.vehicleModel }, servicesInterested: args.serviceNeeded ? [args.serviceNeeded] : [], notes: (altNote + (args.summary || '')).trim(), source: 'ai-voice' } });
   return { captured: true };
 }
 
@@ -409,9 +430,11 @@ function execCaptureLead(ctx, call, args) {
 // wants a human should reach one, not get stuck answering questions.
 function execTransferToHuman(ctx, call, args) {
   const now = new Date().toISOString();
-  const cbDigits = String(args.callbackNumber || '').replace(/\D/g, '');
-  const phone = cbDigits.length >= 10 ? args.callbackNumber : call.from;
+  // Same rule as capture: caller ID is authoritative, a spoken number is only a
+  // verify-me alternate — never overwrites the real number the shop must call.
+  const { phone, altCallbackNumber } = resolveCallbackPhone(call.from, args.callbackNumber);
   const reason = String(args.reason || '').trim() || 'Caller asked to speak with a person.';
+  const altNote = altCallbackNumber ? ` Prefers a callback at ${altCallbackNumber} (verify — heard over the phone).` : '';
   const lead = call.leadId ? ctx.h.getById('leads', call.leadId) : null;
   if (lead) {
     if (!lead.name && args.customerName) lead.name = args.customerName;
@@ -424,14 +447,15 @@ function execTransferToHuman(ctx, call, args) {
       serviceNeeded: (lead.ai && lead.ai.serviceNeeded) || null,
       quality: 'hot',
       transferRequested: true, // wants a human — surfaced as urgent in the CRM
-      followUp: 'Call this caller back ASAP — they asked to speak with a person.',
+      altCallbackNumber: altCallbackNumber || null,
+      followUp: 'Call this caller back ASAP — they asked to speak with a person.' + altNote,
       model: MODEL, generatedAt: now, source: 'voice',
     };
     ctx.h.upsert('leads', lead);
   }
   call.voiceAI.outcome = { type: 'transfer', reason };
   notifyNewLead({ shop: ctx.shop, settings: ctx.settings, kind: 'ai-callback',
-    lead: { name: args.customerName, phone, notes: reason, source: 'ai-voice' } });
+    lead: { name: args.customerName, phone, notes: reason + altNote, source: 'ai-voice' } });
   return { transferred: true };
 }
 
@@ -554,4 +578,5 @@ module.exports = {
   // exact same client, system prompt, tools, and server-authoritative tool
   // execution — the transport differs, the brain does not.
   getClient, runTool, FAREWELL, createMessage, isRetryableApiError,
+  resolveCallbackPhone,
 };
