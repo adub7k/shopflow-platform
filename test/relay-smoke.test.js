@@ -201,7 +201,7 @@ console.log('\n— relay retry: blip AFTER audio streamed does NOT retry (no dou
 // worst case) — a shorter budget would let process.exit fire mid-retry and mask
 // those assertions. Also assert the expected number of checks actually ran, so a
 // swallowed async rejection can never masquerade as a green run.
-const EXPECTED_CHECKS = 21;
+const EXPECTED_CHECKS = 32;
 setTimeout(() => {
   const ran = passed + failures;
   if (ran !== EXPECTED_CHECKS) { console.log(`\n✗ expected ${EXPECTED_CHECKS} checks, ${ran} ran — a test block did not finish`); process.exit(1); }
