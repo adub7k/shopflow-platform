@@ -150,8 +150,8 @@ console.log('\n— voice helpers —');
   eq('isQuoteFirst: barbershop = false', voice.isQuoteFirst({}, 'barbershop'), false);
   eq('isQuoteFirst: per-shop bookingMode override', voice.isQuoteFirst({ bookingMode: 'calendar' }, 'detail'), false);
 
-  eq('tools: quote-first shop = capture_lead + end_call', voice.toolsFor(true, { canBook: true }).map(t => t.name), ['capture_lead', 'end_call']);
-  eq('tools: calendar shop = availability + book + capture + end', voice.toolsFor(false, { canBook: true }).map(t => t.name), ['check_availability', 'book_appointment', 'capture_lead', 'end_call']);
+  eq('tools: quote-first shop = capture + transfer + end', voice.toolsFor(true, { canBook: true }).map(t => t.name), ['capture_lead', 'transfer_to_human', 'end_call']);
+  eq('tools: calendar shop = availability + book + capture + transfer + end', voice.toolsFor(false, { canBook: true }).map(t => t.name), ['check_availability', 'book_appointment', 'capture_lead', 'transfer_to_human', 'end_call']);
 
   check('greeting: default names the shop', voice.greeting({ shopName: 'Summit Auto Detailing', settings: {} }).includes('Summit Auto Detailing'));
 
@@ -249,6 +249,34 @@ console.log('\n— price-sensitive capture —');
   eq('price: lead.ai.priceSensitive = true', lead.ai.priceSensitive, true);
   eq('price: counteroffer stored in budget', lead.ai.budget, 400);
   eq('price: quoted price stored', lead.ai.quotedPrice, 550);
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The real-world "I wanna talk with somebody" call (Call 2 in the field): the AI
+// must not stonewall — it grabs a callback and hands off to a human, ending the
+// call flagged urgent. No end_call scripted → transfer_to_human closes on its own.
+console.log('\n— caller wants a human → transfer/callback —');
+(async () => {
+  const db = detailShop();
+  const ctx = ctxFor(db, 'shopdetail');
+  const call = { id: 'callt', from: '+15551234567', leadId: 'lead1', voiceAI: voice.initState('fallback') };
+  call.voiceAI.turns.push({ role: 'assistant', text: voice.greeting(ctx), at: 't0' });
+
+  voice.__setTestClient(stubClient([
+    { tool: 'transfer_to_human', input: { customerName: 'Dana', callbackNumber: null, reason: 'Wants to talk to a person about a custom job.', closingLine: "No problem, Dana — I'll have the team call you right back at this number very soon. Thanks for your patience!" } },
+  ]));
+  const t = await voice.runTurn(ctx, call, 'I wanna talk with somebody');
+  check('transfer: ends the call in one round-trip', t.end === true, JSON.stringify(t));
+  check('transfer: speaks the reassuring closingLine', /call you right back/.test(t.say), t.say);
+  eq('transfer: outcome recorded', call.voiceAI.outcome.type, 'transfer');
+
+  const lead = db.get('leads').find({ id: 'lead1' }).value();
+  eq('transfer: lead flagged as callback-requested', lead.ai.transferRequested, true);
+  eq('transfer: lead marked hot', lead.ai.quality, 'hot');
+  eq('transfer: name captured', lead.name, 'Dana');
+  eq('transfer: defaults to caller ID when no callback number given', lead.phone, '+15551234567');
+  check('transfer: has an ASAP follow-up for the owner', /ASAP/.test(lead.ai.followUp), lead.ai.followUp);
+  check('transfer: no appointment created', db.get('appointments').value().length === 0);
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────

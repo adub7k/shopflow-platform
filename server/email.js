@@ -101,7 +101,8 @@ function notifyNewLead({ shop, settings, lead, kind }) {
     const who = lead.name || phonePretty || 'Unknown caller';
 
     const subject =
-      kind === 'missed-call' ? `📞 Missed call: ${who} — ${shopName}`
+      kind === 'ai-callback' ? `🔴 CALL BACK NOW: ${who} asked for a person — ${shopName}`
+      : kind === 'missed-call' ? `📞 Missed call: ${who} — ${shopName}`
       : kind === 'form-repeat' ? `🔁 Lead submitted again: ${who} — ${shopName}`
       : `🚗 New lead: ${who} — ${shopName}`;
 
@@ -120,7 +121,9 @@ function notifyNewLead({ shop, settings, lead, kind }) {
 
     const base = (process.env.APP_URL || process.env.PUBLIC_URL || '').replace(/\/$/, '');
     const appLink = base && shop?.slug ? `${base}/shop/${shop.slug}` : '';
-    const headline = kind === 'missed-call'
+    const headline = kind === 'ai-callback'
+      ? 'This caller asked to speak with a person. The assistant took their number — call them back right away.'
+      : kind === 'missed-call'
       ? 'You missed a call — they may still be shopping around. Call back now.'
       : 'Someone just asked for a quote. Leads answered in 5 minutes book far more often.';
 
@@ -128,7 +131,7 @@ function notifyNewLead({ shop, settings, lead, kind }) {
       to,
       subject,
       html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;">
-        <h2 style="color:#16a34a;margin:0 0 6px;">${kind === 'missed-call' ? 'Missed call' : 'New lead'}</h2>
+        <h2 style="color:${kind === 'ai-callback' ? '#dc2626' : '#16a34a'};margin:0 0 6px;">${kind === 'ai-callback' ? 'Callback requested' : kind === 'missed-call' ? 'Missed call' : 'New lead'}</h2>
         <p style="color:#374151;margin:0 0 16px;">${headline}</p>
         <table style="width:100%;border-collapse:collapse;background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;">
           ${rows.map(([k, val]) => `<tr>

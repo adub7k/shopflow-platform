@@ -170,6 +170,7 @@ async function handlePrompt(session, promptText) {
         if (tu.name === 'end_call') { ended = a; if (a.farewell) { spoken += a.farewell; speak(session, a.farewell, false); closed = true; } }
         else if (tu.name === 'capture_lead' && out && out.captured) { ended = { outcome: 'captured' }; if (a.closingLine) { spoken += a.closingLine; speak(session, a.closingLine, false); closed = true; } }
         else if (tu.name === 'book_appointment' && out && out.booked) { ended = { outcome: 'booked' }; if (a.closingLine) { spoken += a.closingLine; speak(session, a.closingLine, false); closed = true; } }
+        else if (tu.name === 'transfer_to_human' && out && out.transferred) { ended = { outcome: 'transfer' }; if (a.closingLine) { spoken += a.closingLine; speak(session, a.closingLine, false); closed = true; } }
       }
       session.messages.push({ role: 'user', content: results });
       if (ended) break;
