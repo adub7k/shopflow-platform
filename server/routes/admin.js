@@ -465,4 +465,42 @@ router.delete('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   master.get('accounts').remove({ shopId: req.params.shopId }).write();
   res.json({ ok: true });
 });
+// ── ADMIN: list accounts (recovery aid — find the exact login email) ──────────
+// Read-only. Never returns password hashes. Used to identify which email a shop
+// actually logs in with when an owner is locked out.
+router.get('/api/admin/accounts', requireAdmin, (req, res) => {
+  const shops = master.get('shops').value() || [];
+  const shopById = {};
+  shops.forEach(s => { shopById[s.id] = s; });
+  const accounts = (master.get('accounts').value() || []).map(a => ({
+    email: a.email,
+    role: a.role || 'full',
+    active: a.active !== false,
+    shopId: a.shopId,
+    shopName: shopById[a.shopId]?.shopName || null,
+    shopSlug: shopById[a.shopId]?.slug || null,
+    createdAt: a.createdAt,
+  }));
+  res.json({ ok: true, count: accounts.length, accounts });
+});
+
+// ── ADMIN: set an account password (recovery — no current password needed) ────
+// The only reset path when an owner is locked out: there is no forgot-password
+// flow, and every other password-write requires a valid session. Admin-gated.
+router.post('/api/admin/accounts/set-password', requireAdmin, async (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) return res.status(400).json({ ok: false, error: 'email and password required' });
+    if (password.length < 6) return res.status(400).json({ ok: false, error: 'Password must be at least 6 characters' });
+    const account = master.get('accounts').find({ email: String(email).toLowerCase() }).value();
+    if (!account) return res.status(404).json({ ok: false, error: 'No account with that email' });
+    const passwordHash = await bcrypt.hash(password, 10);
+    master.get('accounts').find({ id: account.id }).assign({ passwordHash, active: true }).write();
+    res.json({ ok: true, email: account.email, shopId: account.shopId, reactivated: account.active === false });
+  } catch(e) {
+    console.error('Admin set-password error:', e.message);
+    res.status(500).json({ ok: false, error: 'Failed to set password' });
+  }
+});
+
 module.exports = router;
