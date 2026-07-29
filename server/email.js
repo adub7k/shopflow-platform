@@ -172,71 +172,129 @@ async function sendTest({ to }) {
   return r.ok ? { ok: true, to } : r;
 }
 
-// Email a customer their estimate: a branded summary (line items, tax, total,
-// deposit note) plus a big button to the public quote page where they approve,
-// decline, or pay a deposit. This is the email counterpart to the SMS "send"
-// path — the channel that actually works before A2P is registered. AWAITS the
-// send and returns { ok, reason } so the UI can surface the exact failure.
-async function sendQuoteEmail({ to, shopName, accentColor, quote, link }) {
-  if (!to) return { ok: false, reason: 'No email address on file for this customer.' };
+const _MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function fmtDate(iso) {
+  const d = iso ? new Date(iso) : new Date();
+  if (isNaN(d.getTime())) return '';
+  return `${_MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
+// Build the estimate email as { subject, html, text } — a plain business
+// document (letterhead → itemized estimate → totals → approve link → the shop's
+// own sign-off and contact block), NOT a marketing/notification template: no
+// emoji, no "Powered by" badge, real shop contact info so it reads like it came
+// straight from the shop. Pure/no I/O so it can be previewed and unit-tested.
+// `shop`: { name, tagline, phone, address, email, accentColor }.
+function renderQuoteEmail({ shop, quote, link }) {
+  const s = shop || {};
   const q = quote || {};
-  const accent = /^#[0-9a-fA-F]{6}$/.test(accentColor || '') ? accentColor : '#16a34a';
-  const money = (v) => '$' + Number(v || 0).toFixed(2);
-  const firstName = String(q.customerName || 'there').trim().split(/\s+/)[0] || 'there';
-  const name = shopName || 'your shop';
+  const accent = /^#[0-9a-fA-F]{6}$/.test(s.accentColor || '') ? s.accentColor : '#16a34a';
+  const money = (v) => '$' + Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const name = s.name || 'our shop';
+  const firstName = String(q.customerName || '').trim().split(/\s+/)[0] || '';
 
   const v = q.vehicle || {};
   const vehicle = [v.year, v.make, v.model, v.color && `(${v.color})`].filter(Boolean).join(' ');
 
   const itemRows = (q.lineItems || []).map((l) => `<tr>
-      <td style="padding:11px 18px;border-bottom:1px solid #eef0f3;font-size:14px;color:#111827;">${esc(l.name)}</td>
-      <td style="padding:11px 18px;border-bottom:1px solid #eef0f3;font-size:14px;color:#111827;font-weight:700;text-align:right;white-space:nowrap;">${money(l.price)}</td>
-    </tr>`).join('');
+        <td style="padding:12px 0;border-bottom:1px solid #ececec;font-size:15px;color:#222;">${esc(l.name)}</td>
+        <td style="padding:12px 0;border-bottom:1px solid #ececec;font-size:15px;color:#222;text-align:right;white-space:nowrap;">${money(l.price)}</td>
+      </tr>`).join('');
 
   const taxRows = q.taxAmount ? `<tr>
-      <td style="padding:8px 18px;font-size:13px;color:#6b7280;">Subtotal</td>
-      <td style="padding:8px 18px;font-size:13px;color:#6b7280;text-align:right;">${money(q.subtotal)}</td>
-    </tr><tr>
-      <td style="padding:0 18px 8px;font-size:13px;color:#6b7280;">${esc(q.taxLabel || 'Sales Tax')} (${q.taxRate}%)</td>
-      <td style="padding:0 18px 8px;font-size:13px;color:#6b7280;text-align:right;">${money(q.taxAmount)}</td>
-    </tr>` : '';
+        <td style="padding:6px 0 0;font-size:14px;color:#777;">Subtotal</td>
+        <td style="padding:6px 0 0;font-size:14px;color:#777;text-align:right;">${money(q.subtotal)}</td>
+      </tr><tr>
+        <td style="padding:2px 0;font-size:14px;color:#777;">${esc(q.taxLabel || 'Sales Tax')} (${q.taxRate}%)</td>
+        <td style="padding:2px 0;font-size:14px;color:#777;text-align:right;">${money(q.taxAmount)}</td>
+      </tr>` : '';
 
   const depositNote = (q.depositRequired && !q.depositPaid)
-    ? `<p style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;font-size:13px;color:#92400e;font-weight:600;text-align:center;margin:0 0 16px;">💳 A ${money(q.depositAmount)} deposit is required to approve this estimate.</p>`
+    ? `<p style="font-size:14px;color:#555;line-height:1.55;margin:0 0 18px;">A deposit of <strong>${money(q.depositAmount)}</strong> is required to approve this estimate; the balance is due at completion.</p>`
     : '';
-
   const notesNote = q.notes
-    ? `<p style="font-size:13px;color:#6b7280;line-height:1.5;margin:0 0 16px;">${esc(q.notes)}</p>`
+    ? `<p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 18px;white-space:pre-line;">${esc(q.notes)}</p>`
     : '';
 
-  const subject = `Your estimate from ${name}${q.number ? ` — ${q.number}` : ''}`;
-  const text = `Hi ${firstName}, here's your estimate from ${name}${q.number ? ` (${q.number})` : ''} — total ${money(q.total)}. View & approve: ${link}`;
+  // Contact line for the letterhead + footer — only the parts the shop has filled in.
+  const contactBits = [s.phone, s.address, s.email].map((x) => String(x || '').trim()).filter(Boolean);
+  const contactLine = contactBits.map(esc).join('&nbsp;&nbsp;·&nbsp;&nbsp;');
 
-  const r = await deliver({
-    to, subject, text,
-    html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;">
-      <div style="text-align:center;padding:8px 0 20px;">
-        <h2 style="color:${accent};margin:0 0 4px;font-size:20px;">${esc(name)}</h2>
-        <p style="color:#6b7280;margin:0;font-size:14px;">Hi ${esc(firstName)}, here's your estimate.</p>
-      </div>
-      <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #e8eaee;border-radius:12px;overflow:hidden;">
-        <tr><td colspan="2" style="padding:13px 18px;border-bottom:1px solid #eef0f3;background:#f9fafb;">
-          <span style="font-size:12px;font-weight:700;color:#6b7280;font-family:ui-monospace,Menlo,monospace;">${esc(q.number || 'Estimate')}</span>
-          ${vehicle ? `<span style="font-size:12px;color:#6b7280;margin-left:10px;">🚗 ${esc(vehicle)}</span>` : ''}
-        </td></tr>
+  const greeting = firstName ? `Hi ${esc(firstName)},` : 'Hello,';
+
+  const subject = `Estimate${q.number ? ` ${q.number}` : ''} from ${name}`;
+  const text = [
+    greeting.replace(/<[^>]+>/g, ''),
+    ``,
+    `Thanks for the opportunity to earn your business. Here's the estimate${q.number ? ` (${q.number})` : ''}${vehicle ? ` for your ${vehicle}` : ''}:`,
+    ``,
+    ...(q.lineItems || []).map((l) => `  ${l.name} — ${money(l.price)}`),
+    q.taxAmount ? `  ${q.taxLabel || 'Sales Tax'} (${q.taxRate}%) — ${money(q.taxAmount)}` : '',
+    `  Total — ${money(q.total)}`,
+    ``,
+    q.depositRequired && !q.depositPaid ? `A ${money(q.depositAmount)} deposit is required to approve.` : '',
+    `Review and approve your estimate here: ${link}`,
+    ``,
+    `— ${name}${s.phone ? `, ${s.phone}` : ''}`,
+  ].filter((x) => x !== '').join('\n');
+
+  const html = `<div style="background:#f2f2f0;margin:0;padding:24px 12px;font-family:Georgia,'Times New Roman',serif;">
+  <table role="presentation" width="600" align="center" cellpadding="0" cellspacing="0" style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e2df;">
+    <tr><td style="padding:34px 40px 22px;border-top:3px solid ${accent};">
+      <div style="font-size:23px;font-weight:bold;color:#1a1a1a;letter-spacing:-.01em;">${esc(name)}</div>
+      ${s.tagline ? `<div style="font-size:14px;color:#888;margin-top:3px;font-style:italic;">${esc(s.tagline)}</div>` : ''}
+      ${contactLine ? `<div style="font-size:12.5px;color:#999;margin-top:9px;font-family:Arial,Helvetica,sans-serif;">${contactLine}</div>` : ''}
+    </td></tr>
+    <tr><td style="padding:6px 40px 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #ececec;padding-top:20px;">
+        <tr>
+          <td style="font-size:19px;font-weight:bold;color:#1a1a1a;letter-spacing:.14em;text-transform:uppercase;font-family:Arial,Helvetica,sans-serif;">Estimate</td>
+          <td style="text-align:right;font-size:13px;color:#888;font-family:Arial,Helvetica,sans-serif;">${q.number ? `${esc(q.number)}<br/>` : ''}${fmtDate(q.createdAt)}</td>
+        </tr>
+      </table>
+    </td></tr>
+    <tr><td style="padding:16px 40px 0;">
+      <p style="font-size:15px;color:#333;line-height:1.6;margin:0 0 4px;">${greeting}</p>
+      <p style="font-size:15px;color:#333;line-height:1.6;margin:0;">Thank you for the opportunity to earn your business. Here's the estimate${vehicle ? ` for your <strong>${esc(vehicle)}</strong>` : ''}, prepared just for you.</p>
+    </td></tr>
+    <tr><td style="padding:22px 40px 0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
         ${itemRows}
         ${taxRows}
-        <tr><td style="padding:14px 18px;font-size:17px;font-weight:900;color:#111827;">Total</td>
-          <td style="padding:14px 18px;font-size:17px;font-weight:900;color:${accent};text-align:right;">${money(q.total)}</td></tr>
+        <tr>
+          <td style="padding:14px 0 0;font-size:17px;font-weight:bold;color:#1a1a1a;">Total</td>
+          <td style="padding:14px 0 0;font-size:17px;font-weight:bold;color:${accent};text-align:right;">${money(q.total)}</td>
+        </tr>
       </table>
-      <div style="margin:18px 0 8px;">${depositNote}${notesNote}</div>
-      <a href="${esc(link)}" style="display:block;text-align:center;background:${accent};color:#fff;text-decoration:none;border-radius:100px;padding:15px;font-weight:800;font-size:16px;">View & approve estimate →</a>
-      <p style="color:#9ca3af;font-size:11px;margin-top:24px;text-align:center;">Powered by ShopFlow</p>
-    </div>`,
-  });
-  return r;
+    </td></tr>
+    <tr><td style="padding:24px 40px 0;">${depositNote}${notesNote}</td></tr>
+    <tr><td style="padding:6px 40px 34px;">
+      <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="background:${accent};">
+        <a href="${esc(link)}" style="display:inline-block;padding:13px 30px;color:#ffffff;text-decoration:none;font-size:15px;font-weight:bold;font-family:Arial,Helvetica,sans-serif;">Review &amp; approve estimate</a>
+      </td></tr></table>
+      <p style="font-size:12.5px;color:#999;margin:12px 0 0;font-family:Arial,Helvetica,sans-serif;">Or paste this link into your browser:<br/><a href="${esc(link)}" style="color:${accent};">${esc(link)}</a></p>
+    </td></tr>
+    <tr><td style="padding:20px 40px 30px;border-top:1px solid #ececec;">
+      <p style="font-size:14px;color:#555;line-height:1.6;margin:0 0 10px;">We appreciate your business and look forward to taking care of you.</p>
+      <div style="font-size:14px;color:#1a1a1a;font-weight:bold;">${esc(name)}</div>
+      ${contactLine ? `<div style="font-size:12.5px;color:#999;margin-top:4px;font-family:Arial,Helvetica,sans-serif;">${contactLine}</div>` : ''}
+    </td></tr>
+  </table>
+</div>`;
+
+  return { subject, html, text };
+}
+
+// Email a customer their estimate — the counterpart to the SMS "send" path,
+// and the channel that works before A2P is registered. AWAITS the send and
+// returns { ok, reason } so the UI can surface the exact failure.
+async function sendQuoteEmail({ to, shop, quote, link }) {
+  if (!to) return { ok: false, reason: 'No email address on file for this customer.' };
+  const { subject, html, text } = renderQuoteEmail({ shop, quote, link });
+  return deliver({ to, subject, html, text });
 }
 
 // deliver/mailer are exported so server/integrations.js (website-leads modules)
 // shares the same channel selection + config-gating as the owner notifications.
-module.exports = { notifyNewLead, mailer, sendTest, deliver, sendQuoteEmail };
+// renderQuoteEmail is exported so the template can be previewed + unit-tested.
+module.exports = { notifyNewLead, mailer, sendTest, deliver, sendQuoteEmail, renderQuoteEmail };

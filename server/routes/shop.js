@@ -536,7 +536,8 @@ router.post('/api/shop/quotes/:id/send-email', requireAuth, requireRole('full','
   const shopRow = master.get('shops').find({ id: req.shopId }).value();
   const base = process.env.PUBLIC_BASE_URL || (req.protocol + '://' + req.get('host'));
   const link = `${base}/quote/${shopRow.slug}/${q.id}`;
-  const r = await sendQuoteEmail({ to, shopName: s.shopName, accentColor: s.accentColor, quote: q, link });
+  const shop = { name: s.shopName, tagline: s.tagline, phone: s.phone, address: s.address, email: s.email, accentColor: s.accentColor };
+  const r = await sendQuoteEmail({ to, shop, quote: q, link });
   if (!r.ok) return res.status(502).json({ ok:false, error: r.reason || 'Could not send the email' });
   // Persist so future sends default to this address and the timeline reflects it.
   q.sentAt = new Date().toISOString(); q.emailSentAt = q.sentAt; if (!q.customerEmail) q.customerEmail = to;
