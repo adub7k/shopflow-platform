@@ -172,6 +172,71 @@ async function sendTest({ to }) {
   return r.ok ? { ok: true, to } : r;
 }
 
+// Email a customer their estimate: a branded summary (line items, tax, total,
+// deposit note) plus a big button to the public quote page where they approve,
+// decline, or pay a deposit. This is the email counterpart to the SMS "send"
+// path — the channel that actually works before A2P is registered. AWAITS the
+// send and returns { ok, reason } so the UI can surface the exact failure.
+async function sendQuoteEmail({ to, shopName, accentColor, quote, link }) {
+  if (!to) return { ok: false, reason: 'No email address on file for this customer.' };
+  const q = quote || {};
+  const accent = /^#[0-9a-fA-F]{6}$/.test(accentColor || '') ? accentColor : '#16a34a';
+  const money = (v) => '$' + Number(v || 0).toFixed(2);
+  const firstName = String(q.customerName || 'there').trim().split(/\s+/)[0] || 'there';
+  const name = shopName || 'your shop';
+
+  const v = q.vehicle || {};
+  const vehicle = [v.year, v.make, v.model, v.color && `(${v.color})`].filter(Boolean).join(' ');
+
+  const itemRows = (q.lineItems || []).map((l) => `<tr>
+      <td style="padding:11px 18px;border-bottom:1px solid #eef0f3;font-size:14px;color:#111827;">${esc(l.name)}</td>
+      <td style="padding:11px 18px;border-bottom:1px solid #eef0f3;font-size:14px;color:#111827;font-weight:700;text-align:right;white-space:nowrap;">${money(l.price)}</td>
+    </tr>`).join('');
+
+  const taxRows = q.taxAmount ? `<tr>
+      <td style="padding:8px 18px;font-size:13px;color:#6b7280;">Subtotal</td>
+      <td style="padding:8px 18px;font-size:13px;color:#6b7280;text-align:right;">${money(q.subtotal)}</td>
+    </tr><tr>
+      <td style="padding:0 18px 8px;font-size:13px;color:#6b7280;">${esc(q.taxLabel || 'Sales Tax')} (${q.taxRate}%)</td>
+      <td style="padding:0 18px 8px;font-size:13px;color:#6b7280;text-align:right;">${money(q.taxAmount)}</td>
+    </tr>` : '';
+
+  const depositNote = (q.depositRequired && !q.depositPaid)
+    ? `<p style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;font-size:13px;color:#92400e;font-weight:600;text-align:center;margin:0 0 16px;">💳 A ${money(q.depositAmount)} deposit is required to approve this estimate.</p>`
+    : '';
+
+  const notesNote = q.notes
+    ? `<p style="font-size:13px;color:#6b7280;line-height:1.5;margin:0 0 16px;">${esc(q.notes)}</p>`
+    : '';
+
+  const subject = `Your estimate from ${name}${q.number ? ` — ${q.number}` : ''}`;
+  const text = `Hi ${firstName}, here's your estimate from ${name}${q.number ? ` (${q.number})` : ''} — total ${money(q.total)}. View & approve: ${link}`;
+
+  const r = await deliver({
+    to, subject, text,
+    html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;">
+      <div style="text-align:center;padding:8px 0 20px;">
+        <h2 style="color:${accent};margin:0 0 4px;font-size:20px;">${esc(name)}</h2>
+        <p style="color:#6b7280;margin:0;font-size:14px;">Hi ${esc(firstName)}, here's your estimate.</p>
+      </div>
+      <table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #e8eaee;border-radius:12px;overflow:hidden;">
+        <tr><td colspan="2" style="padding:13px 18px;border-bottom:1px solid #eef0f3;background:#f9fafb;">
+          <span style="font-size:12px;font-weight:700;color:#6b7280;font-family:ui-monospace,Menlo,monospace;">${esc(q.number || 'Estimate')}</span>
+          ${vehicle ? `<span style="font-size:12px;color:#6b7280;margin-left:10px;">🚗 ${esc(vehicle)}</span>` : ''}
+        </td></tr>
+        ${itemRows}
+        ${taxRows}
+        <tr><td style="padding:14px 18px;font-size:17px;font-weight:900;color:#111827;">Total</td>
+          <td style="padding:14px 18px;font-size:17px;font-weight:900;color:${accent};text-align:right;">${money(q.total)}</td></tr>
+      </table>
+      <div style="margin:18px 0 8px;">${depositNote}${notesNote}</div>
+      <a href="${esc(link)}" style="display:block;text-align:center;background:${accent};color:#fff;text-decoration:none;border-radius:100px;padding:15px;font-weight:800;font-size:16px;">View & approve estimate →</a>
+      <p style="color:#9ca3af;font-size:11px;margin-top:24px;text-align:center;">Powered by ShopFlow</p>
+    </div>`,
+  });
+  return r;
+}
+
 // deliver/mailer are exported so server/integrations.js (website-leads modules)
 // shares the same channel selection + config-gating as the owner notifications.
-module.exports = { notifyNewLead, mailer, sendTest, deliver };
+module.exports = { notifyNewLead, mailer, sendTest, deliver, sendQuoteEmail };

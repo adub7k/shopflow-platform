@@ -87,10 +87,11 @@ function makeAutocomplete(inputId, listId, onSelect) {
       try{
         const results=await db.customers.search(q);
         if(!results.length){list.classList.remove('open');return;}
-        list.innerHTML=results.slice(0,6).map(c=>`<div class="autocomplete-item" data-id="${c.id}" data-name="${c.name}" data-phone="${c.phone||''}">${c.name}<span style="font-size:11px;color:var(--faint);margin-left:6px;">${c.phone||''}</span></div>`).join('');
+        list.innerHTML=results.slice(0,6).map(c=>`<div class="autocomplete-item" data-id="${c.id}" data-name="${esc(c.name)}" data-phone="${c.phone||''}" data-email="${esc(c.email||'')}">${c.name}<span style="font-size:11px;color:var(--faint);margin-left:6px;">${c.phone||''}</span></div>`).join('');
         list.classList.add('open');
         list.querySelectorAll('.autocomplete-item').forEach(item=>{
-          item.addEventListener('click',()=>{ onSelect(item.dataset.id,item.dataset.name,item.dataset.phone||''); list.classList.remove('open'); });
+          // 4th arg (email) is additive — existing callers ignore it.
+          item.addEventListener('click',()=>{ onSelect(item.dataset.id,item.dataset.name,item.dataset.phone||'',item.dataset.email||''); list.classList.remove('open'); });
         });
       }catch(e){}
     },300);

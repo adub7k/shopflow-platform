@@ -54,6 +54,8 @@ const Quotes = {
         <div class="autocomplete-wrap"><input class="form-input" id="fq-name" value="${esc(q?.customerName||'')}" placeholder="Search or type name..." /><div class="autocomplete-list" id="fq-list"></div></div>
         <input type="hidden" id="fq-cid" value="${q?.customerId||''}" /><input type="hidden" id="fq-phone" value="${esc(q?.customerPhone||'')}" />
       </div>
+      <div class="form-group"><label class="form-label">Email <span style="color:var(--faint);font-weight:400;">(to send the estimate)</span></label>
+        <input class="form-input" id="fq-email" type="email" value="${esc(q?.customerEmail||'')}" placeholder="customer@email.com" /></div>
       ${fields.length?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;">${fields.map(f=>`<div class="form-group"><label class="form-label">${esc(f.label)}</label><input class="form-input" id="fq-v-${esc(f.key)}" value="${esc(v[this._vkey(f.key)]||'')}" placeholder="${esc(f.label)}" /></div>`).join('')}</div>`:''}
       <div class="form-group"><label class="form-label">Line items</label><div id="fq-lines"></div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
@@ -75,7 +77,7 @@ const Quotes = {
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
       </div>`);
     setTimeout(()=>{
-      makeAutocomplete('fq-name','fq-list',(cid,name,phone)=>{document.getElementById('fq-name').value=name;document.getElementById('fq-cid').value=cid;document.getElementById('fq-phone').value=phone||'';});
+      makeAutocomplete('fq-name','fq-list',(cid,name,phone,email)=>{document.getElementById('fq-name').value=name;document.getElementById('fq-cid').value=cid;document.getElementById('fq-phone').value=phone||'';const em=document.getElementById('fq-email');if(em&&email&&!em.value)em.value=email;});
       this._renderLines();
     },150);
   },
@@ -114,6 +116,7 @@ const Quotes = {
         customerId:document.getElementById('fq-cid')?.value||null,
         customerName:name,
         customerPhone:document.getElementById('fq-phone')?.value||'',
+        customerEmail:document.getElementById('fq-email')?.value.trim()||'',
         vehicle,
         lineItems:this._lines,
         depositRequired:!!depOn,
@@ -143,6 +146,7 @@ const Quotes = {
       ${q.notes?`<div style="font-size:13px;color:var(--muted);margin-bottom:14px;">${esc(q.notes)}</div>`:''}
       <div class="modal-actions">
         <button class="btn btn-full" onclick="navigator.clipboard.writeText('${link}');toast('Link copied ✓')">🔗 Copy estimate link</button>
+        ${q.customerEmail?`<button class="btn btn-full" onclick="Quotes.sendEmail('${q.id}')">✉️ Email to customer</button>`:''}
         ${q.customerPhone?`<button class="btn btn-full" onclick="Quotes.sendLink('${q.id}')">📱 Text to customer</button>`:''}
         ${q.status==='approved'?`<button class="btn btn-green btn-full" onclick="Quotes.schedule('${q.id}')">📅 Schedule appointment</button>`:''}
         ${q.status==='sent'?`<button class="btn btn-full" onclick="Quotes.mark('${q.id}','approved')">Mark approved</button>`:''}
@@ -154,6 +158,10 @@ const Quotes = {
 
   async sendLink(id){
     try{ const r=await db.quotes.send(id); if(r&&r.ok){toast('Estimate texted ✓');} else {toast((r&&r.error)||'Could not send','error');} }
+    catch(e){ toast(e.message||'Could not send','error'); }
+  },
+  async sendEmail(id){
+    try{ const r=await db.quotes.sendEmail(id); if(r&&r.ok){toast('Estimate emailed ✓');} else {toast((r&&r.error)||'Could not send','error');} }
     catch(e){ toast(e.message||'Could not send','error'); }
   },
   async mark(id, status){
