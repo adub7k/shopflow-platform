@@ -10,6 +10,17 @@ const Quotes = {
     const lb={sent:'Sent',approved:'Approved',scheduled:'Scheduled',declined:'Declined'};
     return `<span class="badge ${m[st]||'badge-gray'}" style="margin-top:3px;">${lb[st]||st}</span>`;
   },
+  // Delivery/open indicator for an emailed estimate. Empty until it's been
+  // emailed; then shows whether the customer has opened it (tracking pixel).
+  _openTag(q){
+    if(!q.emailSentAt) return '';
+    const opened=!!q.emailOpenedAt;
+    const when=(iso)=>{try{return new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric'});}catch(e){return '';}};
+    const title=opened
+      ? 'Customer opened the email'+(q.emailOpenCount>1?` (${q.emailOpenCount}×)`:'')+(q.emailOpenedAt?` — first on ${when(q.emailOpenedAt)}`:'')
+      : 'Email delivered — not opened yet';
+    return `<span title="${esc(title)}" style="display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;margin-top:3px;color:${opened?'var(--green)':'var(--faint)'};">${opened?'👁':'✉️'} ${opened?'Opened':'Not opened'}</span>`;
+  },
 
   async render(){
     const el=document.getElementById('page-quotes'); if(!el)return;
@@ -33,7 +44,7 @@ const Quotes = {
           html.push(`<div class="list-row" onclick="Quotes.openDetail('${q.id}')">
             <div class="list-main"><div class="list-name">${esc(q.customerName||'—')} <span style="font-size:11px;color:var(--faint);font-family:monospace;">${esc(q.number||'')}</span></div>
             <div class="list-sub">${n} item${n!==1?'s':''}${veh}</div></div>
-            <div class="list-right"><div style="font-weight:700;color:var(--green);">${fmtMoney(q.total)}</div>${this._badge(q.status)}</div>
+            <div class="list-right" style="text-align:right;"><div style="font-weight:700;color:var(--green);">${fmtMoney(q.total)}</div>${this._badge(q.status)}<div>${this._openTag(q)}</div></div>
           </div>`);
         });
         html.push('</div>');
@@ -54,6 +65,8 @@ const Quotes = {
         <div class="autocomplete-wrap"><input class="form-input" id="fq-name" value="${esc(q?.customerName||'')}" placeholder="Search or type name..." /><div class="autocomplete-list" id="fq-list"></div></div>
         <input type="hidden" id="fq-cid" value="${q?.customerId||''}" /><input type="hidden" id="fq-phone" value="${esc(q?.customerPhone||'')}" />
       </div>
+      <div class="form-group"><label class="form-label">Email <span style="color:var(--faint);font-weight:400;">(to send the estimate)</span></label>
+        <input class="form-input" id="fq-email" type="email" value="${esc(q?.customerEmail||'')}" placeholder="customer@email.com" /></div>
       ${fields.length?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;">${fields.map(f=>`<div class="form-group"><label class="form-label">${esc(f.label)}</label><input class="form-input" id="fq-v-${esc(f.key)}" value="${esc(v[this._vkey(f.key)]||'')}" placeholder="${esc(f.label)}" /></div>`).join('')}</div>`:''}
       <div class="form-group"><label class="form-label">Line items</label><div id="fq-lines"></div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
@@ -71,11 +84,12 @@ const Quotes = {
       </div>
       <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="fq-notes" rows="2" placeholder="Scope, expectations, timeline...">${esc(q?.notes||'')}</textarea></div>
       <div class="modal-actions">
-        <button id="fq-btn" class="btn btn-primary btn-full" onclick="Quotes.save('${q?.id||''}')">${q?'Save Estimate':'Create Estimate'}</button>
+        <button id="fq-btn-send" class="btn btn-green btn-full" onclick="Quotes.save('${q?.id||''}',true)">${q?'Save & email':'Create & email'} estimate</button>
+        <button id="fq-btn" class="btn btn-full" onclick="Quotes.save('${q?.id||''}',false)">${q?'Save without sending':'Create without sending'}</button>
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
       </div>`);
     setTimeout(()=>{
-      makeAutocomplete('fq-name','fq-list',(cid,name,phone)=>{document.getElementById('fq-name').value=name;document.getElementById('fq-cid').value=cid;document.getElementById('fq-phone').value=phone||'';});
+      makeAutocomplete('fq-name','fq-list',(cid,name,phone,email)=>{document.getElementById('fq-name').value=name;document.getElementById('fq-cid').value=cid;document.getElementById('fq-phone').value=phone||'';const em=document.getElementById('fq-email');if(em&&email&&!em.value)em.value=email;});
       this._renderLines();
     },150);
   },
@@ -101,25 +115,36 @@ const Quotes = {
   _removeLine(i){ this._lines.splice(i,1); this._renderLines(); },
   _toggleDep(){ const on=document.getElementById('fq-dep-on')?.checked; const r=document.getElementById('fq-dep-row'); if(r)r.style.display=on?'block':'none'; },
 
-  async save(id){
+  async save(id, alsoEmail){
     const name=document.getElementById('fq-name')?.value.trim();
     if(!name){toast('Enter a customer name','warning');return;}
     if(!this._lines.length){toast('Add at least one line item','warning');return;}
+    const email=document.getElementById('fq-email')?.value.trim()||'';
+    // Create & email needs somewhere to send it — stop before saving a half-action.
+    if(alsoEmail && !email){toast('Add an email address to send the estimate','warning');document.getElementById('fq-email')?.focus();return;}
     const vehicle={}; (Shop.fields||[]).forEach(f=>{ const val=document.getElementById('fq-v-'+f.key)?.value.trim()||''; if(val) vehicle[this._vkey(f.key)]=val; });
     const depOn=document.getElementById('fq-dep-on')?.checked;
-    const btn=document.getElementById('fq-btn'); disableBtn(btn);
+    const btn=document.getElementById(alsoEmail?'fq-btn-send':'fq-btn'); disableBtn(btn);
     try{
-      await db.quotes.save({
+      const saved=await db.quotes.save({
         id:id||undefined,
         customerId:document.getElementById('fq-cid')?.value||null,
         customerName:name,
         customerPhone:document.getElementById('fq-phone')?.value||'',
+        customerEmail:email,
         vehicle,
         lineItems:this._lines,
         depositRequired:!!depOn,
         depositAmount:depOn?(parseFloat(document.getElementById('fq-dep-amt')?.value)||50):0,
         notes:document.getElementById('fq-notes')?.value.trim()||'',
       });
+      if(alsoEmail){
+        const qid=(saved&&saved.id)||id;
+        const r=await db.quotes.sendEmail(qid);
+        Modal.close(); await this.render();
+        toast(r&&r.ok?'Estimate saved & emailed ✓':`Saved, but email failed: ${(r&&r.error)||'unknown error'}`, r&&r.ok?'success':'error');
+        return;
+      }
       Modal.close(); toast(id?'Estimate updated ✓':'Estimate created ✓'); await this.render();
     }catch(e){ toast('Could not save','error'); enableBtn(btn); }
   },
@@ -132,7 +157,8 @@ const Quotes = {
       <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:14px;">
         <div style="font-size:16px;font-weight:700;">${esc(q.customerName||'—')}</div>
         ${q.vehicle&&(q.vehicle.make||q.vehicle.model)?`<div style="font-size:13px;color:var(--muted);margin-top:3px;">🚗 ${esc([q.vehicle.year,q.vehicle.make,q.vehicle.model,q.vehicle.color].filter(Boolean).join(' '))}</div>`:''}
-        <div style="margin-top:8px;">${this._badge(q.status)} ${q.depositPaid?'<span class="badge badge-green">Deposit paid</span>':''}</div>
+        <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${this._badge(q.status)} ${q.depositPaid?'<span class="badge badge-green">Deposit paid</span>':''}${this._openTag(q)}</div>
+        ${q.emailSentAt?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">${q.emailOpenedAt?'Customer opened the email':'Emailed — not opened yet'}${(q.reminderCount||0)>0?` · ${q.reminderCount} reminder${q.reminderCount>1?'s':''} sent`:''}</div>`:''}
       </div>
       <div class="list-card" style="margin-bottom:14px;">
         ${(q.lineItems||[]).map(l=>`<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:14px;">${esc(l.name)}</div></div><div style="font-weight:700;">${fmtMoney(l.price)}</div></div>`).join('')}
@@ -143,6 +169,7 @@ const Quotes = {
       ${q.notes?`<div style="font-size:13px;color:var(--muted);margin-bottom:14px;">${esc(q.notes)}</div>`:''}
       <div class="modal-actions">
         <button class="btn btn-full" onclick="navigator.clipboard.writeText('${link}');toast('Link copied ✓')">🔗 Copy estimate link</button>
+        ${q.customerEmail?`<button class="btn btn-full" onclick="Quotes.sendEmail('${q.id}')">✉️ Email to customer</button>`:''}
         ${q.customerPhone?`<button class="btn btn-full" onclick="Quotes.sendLink('${q.id}')">📱 Text to customer</button>`:''}
         ${q.status==='approved'?`<button class="btn btn-green btn-full" onclick="Quotes.schedule('${q.id}')">📅 Schedule appointment</button>`:''}
         ${q.status==='sent'?`<button class="btn btn-full" onclick="Quotes.mark('${q.id}','approved')">Mark approved</button>`:''}
@@ -154,6 +181,10 @@ const Quotes = {
 
   async sendLink(id){
     try{ const r=await db.quotes.send(id); if(r&&r.ok){toast('Estimate texted ✓');} else {toast((r&&r.error)||'Could not send','error');} }
+    catch(e){ toast(e.message||'Could not send','error'); }
+  },
+  async sendEmail(id){
+    try{ const r=await db.quotes.sendEmail(id); if(r&&r.ok){toast('Estimate emailed ✓');} else {toast((r&&r.error)||'Could not send','error');} }
     catch(e){ toast(e.message||'Could not send','error'); }
   },
   async mark(id, status){

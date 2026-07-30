@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const { requireAuth, requireRole } = require('../middleware');
-const { sendTest } = require('../email');
+const { sendTest, sendQuoteEmail } = require('../email');
 const { resolveProfile } = require('../industries');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, shopOwnNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, deleteUpload, computeTax, computeApptCost } = require('../db');
 
@@ -524,6 +524,26 @@ router.post('/api/shop/quotes/:id/send', requireAuth, requireRole('full','techni
     q.sentAt = new Date().toISOString(); h.upsert('quotes', q);
     res.json({ ok:true });
   } catch(e) { res.status(500).json({ ok:false, error:'Could not send the text' }); }
+}));
+// Email the customer a link to view + approve the quote. Works without SMS/A2P.
+// Recipient: the quote's own email, falling back to the linked customer record.
+router.post('/api/shop/quotes/:id/send-email', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  ensureQuotes(db);
+  const q = h.getById('quotes', req.params.id); if (!q) return res.status(404).json({ ok:false, error:'Quote not found' });
+  const to = (q.customerEmail || (q.customerId ? (h.getById('customers', q.customerId)||{}).email : '') || '').trim();
+  if (!to) return res.status(400).json({ ok:false, error:'No email address on file for this customer' });
+  const s = db.get('settings').value() || {};
+  const shopRow = master.get('shops').find({ id: req.shopId }).value();
+  const base = process.env.PUBLIC_BASE_URL || (req.protocol + '://' + req.get('host'));
+  const link = `${base}/quote/${shopRow.slug}/${q.id}`;
+  const openPixel = `${base}/api/public/${shopRow.slug}/quote/${q.id}/opened.gif`;
+  const shop = { name: s.shopName, tagline: s.tagline, phone: s.phone, address: s.address, email: s.email, accentColor: s.accentColor };
+  const r = await sendQuoteEmail({ to, shop, quote: q, link, openPixel });
+  if (!r.ok) return res.status(502).json({ ok:false, error: r.reason || 'Could not send the email' });
+  // Persist so future sends default to this address and the timeline reflects it.
+  q.sentAt = new Date().toISOString(); q.emailSentAt = q.sentAt; if (!q.customerEmail) q.customerEmail = to;
+  h.upsert('quotes', q);
+  res.json({ ok:true, to });
 }));
 
 // ── PROTECTED: Expenses (operating costs for true net-profit reporting) ───────

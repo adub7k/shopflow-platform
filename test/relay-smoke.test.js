@@ -14,8 +14,8 @@ const { shopHelpers } = require('../server/db');
 const voice = require('../server/receptionist/voice');
 const relay = require('../server/receptionist/relay');
 
-let failures = 0;
-function check(name, cond, detail) { if (!cond) { failures++; console.log(`FAIL  ${name}${detail ? `  (${detail})` : ''}`); } else console.log(`PASS  ${name}`); }
+let failures = 0, passed = 0;
+function check(name, cond, detail) { if (!cond) { failures++; console.log(`FAIL  ${name}${detail ? `  (${detail})` : ''}`); } else { passed++; console.log(`PASS  ${name}`); } }
 function eq(name, a, b) { check(name, JSON.stringify(a) === JSON.stringify(b), `got ${JSON.stringify(a)}, expected ${JSON.stringify(b)}`); }
 
 function detailShop() {
@@ -48,7 +48,11 @@ function streamStub(script) {
     const listeners = {};
     const s = {
       on(ev, cb) { listeners[ev] = cb; return s; },
-      async finalMessage() { for (const d of (step.text || [])) if (listeners.text) listeners.text(d); return { content: step.content }; },
+      async finalMessage() {
+        for (const d of (step.text || [])) if (listeners.text) listeners.text(d);
+        if (step.error) throw step.error;   // simulate an API failure (after any text it emitted)
+        return { content: step.content };
+      },
       abort() {},
     };
     return s;
@@ -135,4 +139,72 @@ console.log('\n— relay turn: stream tokens → capture → end —');
   check('no appointment created (quote-first)', db.get('appointments').value().length === 0);
 })();
 
-setTimeout(() => { console.log(`\n${failures === 0 ? '✓ ALL PASSED' : `✗ ${failures} FAILED`}`); process.exit(failures === 0 ? 0 : 1); }, 100);
+// ─────────────────────────────────────────────────────────────────────────────
+// The H7 fix: a transient API blip on the INITIAL request (the usual cause of a
+// dropped call) is retried invisibly, since no audio has gone out yet.
+console.log('\n— relay retry: transient blip before any audio recovers (call does NOT drop) —');
+(async () => {
+  const db = detailShop();
+  const ctx = { shopId: 'shop1', db, h: shopHelpers(db), settings: db.get('settings').value(), shop: { id: 'shop1', slug: 'demo-detail', shopName: 'Demo Auto Studio' }, shopName: 'Demo Auto Studio', industry: 'detail', today: '2026-07-14' };
+  const ws = fakeWs();
+  const call = { id: 'CA200', from: '+15551234567', leadId: 'lead1', voiceAI: voice.initState('relay') };
+  call.voiceAI.turns.push({ role: 'assistant', text: voice.greeting(ctx), at: 't0' });
+  const session = { ws, ctx, call, cfg: voice.voiceConfig(ctx.settings), messages: [], busy: false, ended: false, gen: 0, stream: null };
+
+  voice.__setTestClient(streamStub([
+    { error: Object.assign(new Error('overloaded'), { status: 529 }) },   // attempt 1: blip, nothing spoken
+    { text: ["You're all set, John — "], content: [                        // attempt 2: succeeds
+      { type: 'text', text: "You're all set, John — thanks for calling!" },
+      { type: 'tool_use', id: 'tu1', name: 'capture_lead', input: { customerName: 'John', callbackNumber: null, serviceNeeded: 'Ceramic Window Tint', vehicle: '2021 Toyota Highlander', vehicleSize: 'suv', quotedPrice: 550, callOutcome: 'captured', agreedTime: null, servicesDiscussed: ['Ceramic Window Tint'], preferredTime: 'Saturday', quality: 'hot', summary: 'Ceramic tint, Saturday.', followUp: 'Text a slot.', closingLine: "You're all set, John — thanks for calling!" } },
+    ] },
+  ]));
+
+  await relay.__test.handlePrompt(session, 'Yes that is right');
+
+  const textMsgs = ws.sent.filter(m => m.type === 'text');
+  check('retry: call did NOT drop (no "something went wrong")', !textMsgs.some(m => /something went wrong/i.test(m.token)), JSON.stringify(textMsgs.map(m => m.token)));
+  check('retry: recovered and spoke the real reply', textMsgs.some(m => /all set, John/.test(m.token)), JSON.stringify(textMsgs.map(m => m.token)));
+  const lead = db.get('leads').find({ id: 'lead1' }).value();
+  check('retry: capture still executed after recovery', lead.ai && lead.ai.quality === 'hot', JSON.stringify(lead.ai));
+  eq('retry: outcome recorded', call.voiceAI.outcome.type, 'captured');
+})();
+
+// The safety half of H7: a blip AFTER tokens were already spoken must NOT retry
+// (a retry would re-speak a half-finished sentence) — it degrades gracefully.
+console.log('\n— relay retry: blip AFTER audio streamed does NOT retry (no double-speech) —');
+(async () => {
+  const db = detailShop();
+  const ctx = { shopId: 'shop1', db, h: shopHelpers(db), settings: db.get('settings').value(), shop: { id: 'shop1', slug: 'demo-detail', shopName: 'Demo Auto Studio' }, shopName: 'Demo Auto Studio', industry: 'detail', today: '2026-07-14' };
+  const ws = fakeWs();
+  const call = { id: 'CA201', from: '+15551234567', leadId: 'lead1', voiceAI: voice.initState('relay') };
+  call.voiceAI.turns.push({ role: 'assistant', text: voice.greeting(ctx), at: 't0' });
+  const session = { ws, ctx, call, cfg: voice.voiceConfig(ctx.settings), messages: [], busy: false, ended: false, gen: 0, stream: null };
+
+  voice.__setTestClient(streamStub([
+    { text: ['Let me check that for '], error: Object.assign(new Error('overloaded'), { status: 529 }) }, // spoke, THEN blip
+    { text: ['a totally different reply '], content: [                       // must never run (would prove a bad retry)
+      { type: 'text', text: 'a totally different reply ' },
+      { type: 'tool_use', id: 'tu9', name: 'capture_lead', input: { customerName: 'Ghost', callbackNumber: null, serviceNeeded: 'x', vehicle: null, vehicleSize: null, quotedPrice: null, budget: null, preferredTime: null, quality: 'hot', summary: 'x', followUp: 'x', closingLine: 'x' } },
+    ] },
+  ]));
+
+  await relay.__test.handlePrompt(session, 'Yes');
+
+  const textMsgs = ws.sent.filter(m => m.type === 'text');
+  check('post-audio blip: did NOT retry (second reply never spoken)', !textMsgs.some(m => /different reply/.test(m.token)), JSON.stringify(textMsgs.map(m => m.token)));
+  check('post-audio blip: degrades to a graceful callback line', textMsgs.some(m => /call you right back/i.test(m.token)), JSON.stringify(textMsgs.map(m => m.token)));
+  const lead = db.get('leads').find({ id: 'lead1' }).value();
+  check('post-audio blip: no wrongful capture from a retry', !lead.ai, JSON.stringify(lead.ai));
+})();
+
+// Long enough to outlast the retry backoff in the recovery test (200ms + 400ms
+// worst case) — a shorter budget would let process.exit fire mid-retry and mask
+// those assertions. Also assert the expected number of checks actually ran, so a
+// swallowed async rejection can never masquerade as a green run.
+const EXPECTED_CHECKS = 32;
+setTimeout(() => {
+  const ran = passed + failures;
+  if (ran !== EXPECTED_CHECKS) { console.log(`\n✗ expected ${EXPECTED_CHECKS} checks, ${ran} ran — a test block did not finish`); process.exit(1); }
+  console.log(`\n${failures === 0 ? '✓ ALL PASSED' : `✗ ${failures} FAILED`}`);
+  process.exit(failures === 0 ? 0 : 1);
+}, 2000);

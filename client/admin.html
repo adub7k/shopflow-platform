@@ -1276,6 +1276,7 @@ function renderDrawer(d) {
       <div class="drawer-actions">
         <a href="/shop/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Open App</a>
         <a href="/book/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Booking Page</a>
+        <button class="btn btn-outline btn-sm" onclick="resetPassword('${shop.id}','${esc(shop.email||'')}')">🔑 Reset Password</button>
         <button class="btn btn-red btn-sm" onclick="deleteShop('${shop.id}','${esc(shop.shopName)}')">🗑 Delete</button>
       </div>
     </div>`;
@@ -1497,6 +1498,24 @@ async function updateShop(shopId, field, value) {
     if (idx >= 0) allShops[idx][field] = value;
     filterShops(); loadStats();
   } catch(e) { toast('Update failed'); }
+}
+
+async function resetPassword(shopId, email) {
+  if (!email) { toast('No email on file — use the account list to find it'); return; }
+  const pw = prompt(`Set a NEW password for:\n${email}\n\nThey can change it after logging in. Minimum 6 characters.`);
+  if (pw === null) return;              // cancelled
+  if (pw.length < 6) { toast('Password must be at least 6 characters'); return; }
+  try {
+    const res = await fetch('/api/admin/accounts/set-password', {
+      method: 'POST',
+      headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pw }),
+    });
+    const data = await res.json().catch(()=>({}));
+    if (!data.ok) { toast(data.error || 'Reset failed'); return; }
+    toast('Password reset ✓ — give it to the owner');
+    alert(`Done. ${email} can now log in with the password you just set.` + (data.reactivated ? '\n\n(Account was suspended — it has been reactivated.)' : ''));
+  } catch(e) { toast('Reset failed: ' + e.message); }
 }
 
 async function deleteShop(shopId, shopName) {

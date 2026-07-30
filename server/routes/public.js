@@ -242,6 +242,32 @@ router.post('/api/public/:shopSlug/quote/:quoteId/decline', (req, res) => {
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ ok: false, error: 'Server error' }); }
 });
+// Email open tracking: the estimate email embeds <img src=".../opened.gif">.
+// First fetch stamps emailOpenedAt (and counts subsequent opens); always returns
+// a 1x1 transparent GIF. Best-effort — never errors the image, and note that
+// image proxies (Gmail, Apple Mail Privacy) can pre-fetch, so an "open" is a
+// strong-but-imperfect signal. Never regresses status; purely informational.
+const _PIXEL = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+router.get('/api/public/:shopSlug/quote/:quoteId/opened.gif', (req, res) => {
+  try {
+    const ctx = publicShopFromSlug(req.params.shopSlug);
+    if (ctx) {
+      const h = shopHelpers(ctx.db);
+      const q = h.getById('quotes', req.params.quoteId);
+      if (q) {
+        if (!q.emailOpenedAt) q.emailOpenedAt = new Date().toISOString();
+        q.emailOpenCount = (q.emailOpenCount || 0) + 1;
+        q.emailLastOpenedAt = new Date().toISOString();
+        h.upsert('quotes', q);
+      }
+    }
+  } catch(e) { /* never let tracking break the image */ }
+  res.set('Content-Type', 'image/gif');
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.end(_PIXEL);
+});
 
 // ── PUBLIC: Review page context (?a=<appointmentId> for prefill) ──────────────
 router.get('/api/public/:shopSlug/review-info', (req, res) => {

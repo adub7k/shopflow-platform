@@ -149,6 +149,38 @@ async function onMessage(session, data) {
 function send(session, obj) { try { if (session.ws.readyState === 1) session.ws.send(JSON.stringify(obj)); } catch (e) { /* socket gone */ } }
 function speak(session, token, last) { send(session, { type: 'text', token: token || '', last: !!last }); }
 
+// One streaming model call for a relay turn. Streams tokens straight to TTS as
+// they arrive (unless the caller has barged in — session.gen has moved on).
+//
+// Retry parity with the gather engine (voice.js createMessage): a transient API
+// blip must NOT drop a live call. The blip that actually drops calls hits the
+// INITIAL request, before any audio has gone out — so we retry a retryable error
+// only when this attempt spoke nothing yet, which makes the recovery inaudible.
+// We deliberately do NOT retry once tokens were spoken (a retry would re-speak a
+// half-finished sentence) or after a barge-in (the caller is already talking) —
+// those fall through to handlePrompt's graceful "we'll call you right back" exit.
+// Returns { final, spokeText }; throws the last error only when it can't recover.
+async function streamTurn(session, params, myGen, { retries = 2 } = {}) {
+  const client = voice.getClient();
+  for (let attempt = 0; ; attempt++) {
+    let spokeText = '';
+    const stream = client.messages.stream(params);
+    session.stream = stream;
+    stream.on('text', delta => { if (session.gen === myGen) { spokeText += delta; speak(session, delta, false); } });
+    try {
+      const final = await stream.finalMessage();
+      session.stream = null;
+      return { final, spokeText };
+    } catch (e) {
+      session.stream = null;
+      if (session.gen !== myGen) throw e;                              // barge-in — not ours to retry
+      if (attempt >= retries || spokeText || !voice.isRetryableApiError(e)) throw e;
+      console.warn(`[relay] stream retry ${attempt + 1}/${retries} after ${e.status || e.code || e.type || e.message}`);
+      await new Promise(r => setTimeout(r, 200 * (attempt + 1)));
+    }
+  }
+}
+
 // ── One conversational turn (streaming) ───────────────────────────────────────
 async function handlePrompt(session, promptText) {
   const text = String(promptText || '').trim();
@@ -175,11 +207,8 @@ async function handlePrompt(session, promptText) {
 
   try {
     for (let hop = 0; hop < 4; hop++) {
-      const stream = client.messages.stream({ model: voice.MODEL, max_tokens: 320, system, messages: session.messages, tools });
-      session.stream = stream;
-      stream.on('text', delta => { if (session.gen === myGen) { spoken += delta; speak(session, delta, false); } });
-      const final = await stream.finalMessage();
-      session.stream = null;
+      const { final, spokeText } = await streamTurn(session, { model: voice.MODEL, max_tokens: 320, system, messages: session.messages, tools }, myGen);
+      spoken += spokeText;
       if (session.gen !== myGen) return;                 // interrupted mid-turn
 
       session.messages.push({ role: 'assistant', content: final.content });
@@ -195,6 +224,7 @@ async function handlePrompt(session, promptText) {
         if (tu.name === 'end_call') { ended = a; if (a.farewell) { spoken += a.farewell; speak(session, a.farewell, false); closed = true; } }
         else if (tu.name === 'capture_lead' && out && out.captured) { ended = { outcome: 'captured' }; if (a.closingLine) { spoken += a.closingLine; speak(session, a.closingLine, false); closed = true; } }
         else if (tu.name === 'book_appointment' && out && out.booked) { ended = { outcome: 'booked' }; if (a.closingLine) { spoken += a.closingLine; speak(session, a.closingLine, false); closed = true; } }
+        else if (tu.name === 'transfer_to_human' && out && out.transferred) { ended = { outcome: 'transfer' }; if (a.closingLine) { spoken += a.closingLine; speak(session, a.closingLine, false); closed = true; } }
       }
       session.messages.push({ role: 'user', content: results });
       if (ended) break;
