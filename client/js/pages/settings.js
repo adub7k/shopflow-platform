@@ -117,6 +117,16 @@ const Settings = {
           <label class="form-label">Greeting <span style="color:var(--faint);font-weight:400;">(optional)</span></label>
           <input id="s-voiceai-greeting" class="form-input" maxlength="240" placeholder="Thanks for calling ${esc(s.shopName||'us')}! How can I help you today?" value="${esc(va.greeting||'')}" />
         </div>
+        <div class="form-group">
+          <label class="form-label">Assistant name <span style="color:var(--faint);font-weight:400;">(optional)</span></label>
+          <input id="s-voiceai-name" class="form-input" maxlength="40" placeholder="e.g. Sarah" value="${esc(va.assistantName||'')}" />
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;">Give the receptionist a name — it introduces itself this way and answers to it. Leave blank for none. (It still says it's a virtual assistant if a caller asks.)</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">What should the receptionist know? <span style="color:var(--faint);font-weight:400;">(optional)</span></label>
+          <textarea id="s-voiceai-notes" class="form-input" rows="4" maxlength="1500" placeholder="Anything a caller might ask that isn't in your service menu — location & parking, hours details, do you offer mobile service, turnaround times, walk-ins vs appointment only, payment methods, warranty, what you DON'T do, etc.">${esc(va.notes||'')}</textarea>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px;">The AI uses this to answer questions about your shop. It won't change your prices — quotes always come from your service menu.</div>
+        </div>
         <div class="form-group" style="margin-bottom:8px;">
           <label class="form-label">Voice</label>
           <select id="s-voiceai-voice" class="form-input">
@@ -893,7 +903,7 @@ const Settings = {
     const tpl=document.getElementById('s-leadtpl'); if(tpl)data.leadPageTemplate=tpl.value;
     const pp=document.getElementById('s-publicphone'); if(pp)data.publicPhone=pp.value.trim();
     const ar=document.getElementById('s-aireceptionist'); if(ar)data.aiReceptionist={enabled:ar.checked};
-    const vam=document.getElementById('s-voiceai-mode'); if(vam){ data.voiceAI={ mode:vam.value, engine:document.getElementById('s-voiceai-engine')?.value||'gather', greeting:(document.getElementById('s-voiceai-greeting')?.value||'').trim(), voice:document.getElementById('s-voiceai-voice')?.value||'Polly.Joanna-Neural', relayVoice:(document.getElementById('s-voiceai-relayvoice')?.value||'').trim(), speechTimeout:document.getElementById('s-voiceai-pace')?.value||'1' }; }
+    const vam=document.getElementById('s-voiceai-mode'); if(vam){ data.voiceAI={ mode:vam.value, engine:document.getElementById('s-voiceai-engine')?.value||'gather', greeting:(document.getElementById('s-voiceai-greeting')?.value||'').trim(), assistantName:(document.getElementById('s-voiceai-name')?.value||'').trim(), notes:(document.getElementById('s-voiceai-notes')?.value||'').trim(), voice:document.getElementById('s-voiceai-voice')?.value||'Polly.Joanna-Neural', relayVoice:(document.getElementById('s-voiceai-relayvoice')?.value||'').trim(), speechTimeout:document.getElementById('s-voiceai-pace')?.value||'1' }; }
     const lv=document.getElementById('s-lvis')?.value; if(lv)data.loyalty={visitsForReward:parseInt(lv),rewardDescription:document.getElementById('s-lrew')?.value.trim()||'One free service'};
     // Message templates: owner-managed [{id,label,body}] list (drops empty rows).
     this._syncTemplates();

@@ -170,6 +170,14 @@ console.log('\n— voice helpers —');
   // capture_lead now carries the confirmed callback number + a spoken closingLine.
   const capTool = voice.toolsFor(true, { canBook: true }).find(t => t.name === 'capture_lead');
   check('capture_lead schema: callbackNumber + closingLine', capTool.input_schema.required.includes('callbackNumber') && capTool.input_schema.required.includes('closingLine'));
+
+  // Assistant name + shop notes flow into the persona/prompt/greeting.
+  const sysNamed = voice.buildSystemPrompt(ctxFor(db, 'shopdetail'), voice.voiceConfig({ voiceAI: { assistantName: 'Sarah', notes: 'We are at 123 Main St. Free parking in back. Cash or card only.' } }));
+  check('system prompt: assistant name in persona', /You are Sarah, the friendly/.test(sysNamed) && /your name is Sarah/.test(sysNamed));
+  check('system prompt: shop notes injected as reference', /ABOUT THE SHOP/.test(sysNamed) && /Free parking in back/.test(sysNamed));
+  check('system prompt: notes do NOT override menu pricing', /quotes still come ONLY from the SERVICE MENU/.test(sysNamed));
+  check('greeting: uses the assistant name when set', voice.greeting({ shopName: 'X', settings: { voiceAI: { assistantName: 'Sarah' } } }).includes('This is Sarah'));
+  check('greeting: no name → no "This is" prefix', !voice.greeting({ shopName: 'X', settings: {} }).includes('This is'));
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
