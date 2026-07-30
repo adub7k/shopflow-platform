@@ -43,15 +43,20 @@ const INTAKE_SCHEMA = {
 
 // Call Claude on a transcript. Returns the validated intake object, or null on
 // any failure (no key, API error, bad JSON) — callers treat null as "no AI".
-async function analyzeTranscript(transcript, { shopName, industryLabel, callerPhone, location } = {}) {
+async function analyzeTranscript(transcript, { shopName, industryLabel, callerPhone, location, kind } = {}) {
   const client = getClient();
   if (!client) return null;
   const text = String(transcript || '').trim();
   if (!text) return null;
 
+  // 'call' = a two-way answered conversation (speaker-labelled); 'voicemail' (the
+  // default) = a one-way message. The framing changes how the model reads the text.
+  const isCall = kind === 'call';
   const system = [
     `You are the intake assistant for ${shopName || 'a service business'}` + (industryLabel ? ` (a ${industryLabel.toLowerCase()})` : '') + '.',
-    'A prospective customer called and left a message (transcribed below).',
+    isCall
+      ? 'A prospective customer spoke with the shop on a recorded phone call, transcribed below with each speaker on a separate line. The speaker labels may be swapped, so infer from context which side is the customer and which is the shop, and base the intake on what the customer wants.'
+      : 'A prospective customer called and left a message (transcribed below).',
     'Extract structured lead-intake details for the CRM. Be conservative: if a',
     'detail is not actually stated, use null — do not guess. Keep the summary to',
     'at most three sentences. Judge quality honestly (a wrong number or spam is "cold").',
@@ -63,7 +68,8 @@ async function analyzeTranscript(transcript, { shopName, industryLabel, callerPh
     '',
     'Transcript:',
     '"""',
-    text.slice(0, 6000), // cap input — voicemails are short; bound cost/abuse
+    // Cap input to bound cost/abuse. A two-way call runs longer than a voicemail.
+    text.slice(0, isCall ? 16000 : 6000),
     '"""',
   ].filter(v => v !== null).join('\n');
 
@@ -123,6 +129,7 @@ async function runIntake(ctx, callId, opts = {}) {
     industryLabel: resolveProfile(industry).label,
     callerPhone: lead ? lead.phone : call.from,
     location: lead ? lead.location : '',
+    kind: opts.kind,   // 'call' for answered-call transcripts; undefined ⇒ voicemail
   });
   if (!ai) return { ok: false, reason: 'error', message: 'AI analysis unavailable' };
 
