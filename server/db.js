@@ -124,6 +124,9 @@ function initShopDb(db, shopData) {
       staffPicker: profile.staffPicker !== false,
       supportsFleet: profile.supportsFleet,
       supportsQuotes: profile.supportsQuotes || false,
+      // Auto-email a gentle follow-up on estimates left unapproved. Cadence:
+      // first nudge afterDays after send, then everyDays, capped at maxReminders.
+      quoteReminders: { enabled: true, afterDays: 3, everyDays: 3, maxReminders: 2 },
       loyalty: { enabled: true, visitsForReward: 10, rewardDescription: 'One free service' },
       // Sales tax applied to the service subtotal at checkout + on estimates.
       // Off by default; the owner enables it and sets the rate in Settings.

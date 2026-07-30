@@ -57,6 +57,7 @@ db.set('quotes', [
 const app = express();
 app.use(express.json());
 app.use(require('../server/routes/shop'));
+app.use(require('../server/routes/public'));  // for the open-tracking pixel route
 const server = app.listen(0, async () => {
   const base = `http://127.0.0.1:${server.address().port}`;
   const token = jwt.sign({ shopId, accountId, role: 'full' }, JWT_SECRET);
@@ -72,9 +73,20 @@ const server = app.listen(0, async () => {
     ok('email body contains the total $900.00', last.html.includes('$900.00'), 'total missing');
     ok('email body links to the public quote page', last.html.includes(`/quote/qe-test/qDirect`), 'link missing');
     ok('email uses the shop accent color', last.html.includes('#0ea5e9'), 'accent missing');
+    ok('email embeds the open-tracking pixel', last.html.includes('/api/public/qe-test/quote/qDirect/opened.gif'), 'pixel missing');
     // Persistence: emailSentAt stamped, customerEmail kept
     const stored = shopHelpers(getShopDb(shopId)).getById('quotes', 'qDirect');
     ok('qDirect emailSentAt persisted', !!stored.emailSentAt, 'not stamped');
+    ok('qDirect not opened yet', !stored.emailOpenedAt, 'unexpectedly opened');
+
+    // Open tracking: fetching the pixel stamps emailOpenedAt + counts opens.
+    let px = await fetch(`${base}/api/public/qe-test/quote/qDirect/opened.gif`);
+    eq('pixel → 200', px.status, 200);
+    eq('pixel → image/gif', px.headers.get('content-type'), 'image/gif');
+    await fetch(`${base}/api/public/qe-test/quote/qDirect/opened.gif`); // second open
+    const opened = shopHelpers(getShopDb(shopId)).getById('quotes', 'qDirect');
+    ok('emailOpenedAt stamped after pixel fetch', !!opened.emailOpenedAt, 'not stamped');
+    eq('emailOpenCount counts both opens', opened.emailOpenCount, 2);
 
     // 2) Fallback to the linked customer's email
     r = await send('qFallback'); j = await r.json();
@@ -92,6 +104,16 @@ const server = app.listen(0, async () => {
 
     // 4) Unknown quote → 404
     r = await send('nope'); eq('unknown id → 404', r.status, 404);
+
+    // 5) renderQuoteEmail reminder variant softens copy + prefixes subject
+    const { renderQuoteEmail } = require('../server/email');
+    const first = renderQuoteEmail({ shop: { name: 'QE Test' }, quote: { number: 'Q-1001', total: 900, lineItems: [{ name: 'x', price: 900 }] }, link: 'http://x/q' });
+    const rem = renderQuoteEmail({ shop: { name: 'QE Test' }, quote: { number: 'Q-1001', total: 900, lineItems: [{ name: 'x', price: 900 }] }, link: 'http://x/q', reminder: true, openPixel: 'http://x/px.gif' });
+    ok('first-send subject is neutral', /^Estimate Q-1001 from/.test(first.subject), first.subject);
+    ok('reminder subject signals a follow-up', /Following up/i.test(rem.subject), rem.subject);
+    ok('reminder body softens the copy', /checking in/i.test(rem.html), 'copy not softened');
+    ok('openPixel embedded when provided', rem.html.includes('http://x/px.gif'), 'pixel missing');
+    ok('no pixel when openPixel omitted', !first.html.includes('px.gif'), 'unexpected pixel');
   } catch (e) { failures++; console.log('FAIL  threw', e.message, e.stack); }
   server.close();
   try { fs.rmSync(process.env.DATA_DIR, { recursive: true, force: true }); } catch (e) { /* best effort */ }

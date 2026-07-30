@@ -185,7 +185,10 @@ function fmtDate(iso) {
 // emoji, no "Powered by" badge, real shop contact info so it reads like it came
 // straight from the shop. Pure/no I/O so it can be previewed and unit-tested.
 // `shop`: { name, tagline, phone, address, email, accentColor }.
-function renderQuoteEmail({ shop, quote, link }) {
+// `openPixel`: optional URL of a 1x1 tracking image appended to the HTML so the
+// app can record when the customer opened the email. `reminder`: true softens
+// the copy into a gentle follow-up ("just checking in on the estimate…").
+function renderQuoteEmail({ shop, quote, link, openPixel, reminder }) {
   const s = shop || {};
   const q = quote || {};
   const accent = /^#[0-9a-fA-F]{6}$/.test(s.accentColor || '') ? s.accentColor : '#16a34a';
@@ -222,11 +225,21 @@ function renderQuoteEmail({ shop, quote, link }) {
 
   const greeting = firstName ? `Hi ${esc(firstName)},` : 'Hello,';
 
-  const subject = `Estimate${q.number ? ` ${q.number}` : ''} from ${name}`;
+  // Intro copy differs for a first send vs. a follow-up nudge.
+  const introHtml = reminder
+    ? `Just checking in on the estimate we sent${vehicle ? ` for your <strong>${esc(vehicle)}</strong>` : ''}. It's still available to review whenever you're ready — no rush, and reach out with any questions.`
+    : `Thank you for the opportunity to earn your business. Here's the estimate${vehicle ? ` for your <strong>${esc(vehicle)}</strong>` : ''}, prepared just for you.`;
+  const introText = reminder
+    ? `Just checking in on the estimate we sent${q.number ? ` (${q.number})` : ''}${vehicle ? ` for your ${vehicle}` : ''}. It's still available whenever you're ready:`
+    : `Thanks for the opportunity to earn your business. Here's the estimate${q.number ? ` (${q.number})` : ''}${vehicle ? ` for your ${vehicle}` : ''}:`;
+
+  const subject = reminder
+    ? `Following up on your estimate${q.number ? ` ${q.number}` : ''} from ${name}`
+    : `Estimate${q.number ? ` ${q.number}` : ''} from ${name}`;
   const text = [
     greeting.replace(/<[^>]+>/g, ''),
     ``,
-    `Thanks for the opportunity to earn your business. Here's the estimate${q.number ? ` (${q.number})` : ''}${vehicle ? ` for your ${vehicle}` : ''}:`,
+    introText,
     ``,
     ...(q.lineItems || []).map((l) => `  ${l.name} — ${money(l.price)}`),
     q.taxAmount ? `  ${q.taxLabel || 'Sales Tax'} (${q.taxRate}%) — ${money(q.taxAmount)}` : '',
@@ -255,7 +268,7 @@ function renderQuoteEmail({ shop, quote, link }) {
     </td></tr>
     <tr><td style="padding:16px 40px 0;">
       <p style="font-size:15px;color:#333;line-height:1.6;margin:0 0 4px;">${greeting}</p>
-      <p style="font-size:15px;color:#333;line-height:1.6;margin:0;">Thank you for the opportunity to earn your business. Here's the estimate${vehicle ? ` for your <strong>${esc(vehicle)}</strong>` : ''}, prepared just for you.</p>
+      <p style="font-size:15px;color:#333;line-height:1.6;margin:0;">${introHtml}</p>
     </td></tr>
     <tr><td style="padding:22px 40px 0;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
@@ -280,6 +293,7 @@ function renderQuoteEmail({ shop, quote, link }) {
       ${contactLine ? `<div style="font-size:12.5px;color:#999;margin-top:4px;font-family:Arial,Helvetica,sans-serif;">${contactLine}</div>` : ''}
     </td></tr>
   </table>
+  ${openPixel ? `<img src="${esc(openPixel)}" width="1" height="1" alt="" style="display:block;width:1px;height:1px;border:0;overflow:hidden;" />` : ''}
 </div>`;
 
   return { subject, html, text };
@@ -288,9 +302,9 @@ function renderQuoteEmail({ shop, quote, link }) {
 // Email a customer their estimate — the counterpart to the SMS "send" path,
 // and the channel that works before A2P is registered. AWAITS the send and
 // returns { ok, reason } so the UI can surface the exact failure.
-async function sendQuoteEmail({ to, shop, quote, link }) {
+async function sendQuoteEmail({ to, shop, quote, link, openPixel, reminder }) {
   if (!to) return { ok: false, reason: 'No email address on file for this customer.' };
-  const { subject, html, text } = renderQuoteEmail({ shop, quote, link });
+  const { subject, html, text } = renderQuoteEmail({ shop, quote, link, openPixel, reminder });
   return deliver({ to, subject, html, text });
 }
 
