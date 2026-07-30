@@ -244,6 +244,7 @@ function finalize(session) {
     if (call.voiceAI.status === 'active') call.voiceAI.status = call.voiceAI.outcome ? call.voiceAI.outcome.type : 'ended';
     call.aiHandled = true;
     syncTranscript(call);
+    voice.stampCallAttribution(call);
     ctx.h.upsert('calls', call);
   } catch (e) { console.error('[relay] finalize error', e.message); }
 }

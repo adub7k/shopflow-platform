@@ -171,6 +171,24 @@ function speechHints(ctx) {
   return [...new Set([...names, ...base].map(s => String(s || '').trim()).filter(Boolean))].join(', ');
 }
 
+// Two concrete times to offer, BOTH at least 72 hours out, on the shop's working
+// days — so the bot proposes real slots instead of open-ended "want to schedule?".
+// The shop confirms the exact final time; these are just the anchor to book against.
+function proposeSlots(ctx) {
+  const staff = (ctx.db.get('barbers').value() || []).filter(b => b.active !== false);
+  const wd = ((staff[0] && staff[0].schedule && staff[0].schedule.workDays) || [1, 2, 3, 4, 5, 6]);
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const times = ['10:00 AM', '2:00 PM'];
+  const base = new Date((ctx.today || new Date().toISOString().slice(0, 10)) + 'T12:00:00');
+  const out = [];
+  for (let add = 3; add <= 21 && out.length < 2; add++) {
+    const d = new Date(base); d.setDate(d.getDate() + add);
+    if (!wd.includes(d.getDay())) continue;
+    out.push(`${days[d.getDay()]} at ${times[out.length]}`);
+  }
+  return out;
+}
+
 function buildSystemPrompt(ctx, cfg) {
   const profile = resolveProfile(ctx.industry);
   const menu = getMenu(ctx.db);
@@ -178,6 +196,7 @@ function buildSystemPrompt(ctx, cfg) {
   const addonLines = menu.addons.length ? '\nAdd-ons: ' + menu.addons.map(a => `${a.name} ($${a.price})`).join(', ') : '';
   const greetingNote = cfg._greeting ? `\nYou already greeted the caller with: "${cfg._greeting}"` : '';
   const hours = businessHours(ctx.db);
+  const slots = quoteFirst ? proposeSlots(ctx) : [];
 
   const persona = [
     `You are ${cfg.assistantName ? cfg.assistantName + ', ' : ''}the friendly, professional phone receptionist for ${ctx.shopName}, a ${profile.label.toLowerCase()}.${cfg.assistantName ? ` If a caller asks your name or who they are speaking with, your name is ${cfg.assistantName}.` : ''}`,
@@ -189,17 +208,17 @@ function buildSystemPrompt(ctx, cfg) {
 
   const goal = quoteFirst
     ? [
-        'YOUR GOAL: understand what the caller needs, give them a rough price from the menu below,',
-        "get the caller's NAME — always ask for it directly if they have not offered it (e.g. \"And can I get your name?\"); this is required, never wrap up or save without it —",
-        'and (for vehicle work) collect the year, make and model, plus the vehicle SIZE — when a price depends on size, ask for it in plain words ("is it a sedan, SUV, or truck?") rather than asking for the "model",',
-        'and ask when they are hoping to come in. This shop confirms the exact time and final quote itself —',
-        'so DO NOT promise a specific appointment slot.',
-        'BEFORE you save, read the key details back in one short sentence to confirm — their name, the callback',
-        'number (say the last four digits of the number they are calling from, unless they gave a different one),',
-        'the service, and the vehicle year, make and model. Read it back and then STOP — do NOT call any tool in',
-        'that same reply; just wait for them to say yes. ONLY after they confirm, call capture_lead, and ALWAYS',
-        'include a warm closingLine that says goodbye — e.g. tell them the shop will text or call shortly to lock',
-        'in a time and exact price, and thank them for calling. capture_lead ends the call — do NOT also call end_call.',
+        'YOUR GOAL: figure out what the caller needs and drive toward a booked visit.',
+        'Get their FIRST NAME within the first couple of exchanges and use it naturally after that.',
+        'Confirm the callback number BEFORE you talk any pricing — read back the last four digits of the number they are calling from (or a different one if they give it) and get a yes.',
+        'PRICING IS BY SERVICE:',
+        '(a) Window tint (including ceramic tint) — ONLY if they ask the price, give a STARTING-AT range from the menu ("tint starts around $X and goes up depending on the vehicle and how much coverage you want"), never a single flat number.',
+        '(b) Ceramic COATING and paint protection film / PPF — do NOT quote a price at all; say the price depends on the paint\'s condition and it\'s best to take a quick look in person, then get them in.',
+        'Never bring up price unprompted, never say one flat number, and never give a single bundled total for multiple services.',
+        'The MOMENT you mention any price OR suggest coming in, offer the TWO specific times below — never an open-ended "want to schedule?". Both are at least three days out; the shop confirms the exact final time and price, so do not promise it is locked.',
+        'If they pick one of the times, call capture_lead with callOutcome "booked" and that time in agreedTime. If they will not commit to a time, get their first name and callback number, ask permission to text them the quote, then call capture_lead with callOutcome "quoted" (if you gave a tint range) or "captured" (if you did not).',
+        'Do NOT re-ask anything they already told you, and infer the body style (sedan, SUV, or truck) from the vehicle model instead of asking whenever you can.',
+        'Before you save, read the key details back in one short sentence — name, callback number, service, and vehicle — then STOP and wait for a yes (do not call a tool in that same reply). capture_lead ends the call with your warm closingLine; do not also call end_call.',
       ].join(' ')
     : [
         'YOUR GOAL: book the caller an appointment. Find out which service they want and their preferred day,',
@@ -213,11 +232,11 @@ function buildSystemPrompt(ctx, cfg) {
 
   const rules = [
     'RULES:',
-    '- Only quote prices that appear in the SERVICE MENU below, and quote by vehicle size when the service is size-priced. Never invent, estimate, or negotiate a price for anything not listed.',
+    '- Prices come ONLY from the menu, and only the way described in your goal: window tint as a STARTING-AT range, and NO price at all for ceramic coating or PPF (paint condition drives those — offer an in-person look). Never invent, estimate, negotiate, bundle, or give one flat number.',
     `- If they ask for a smaller or partial version of a listed service, or a reasonable variation of one (e.g. just the front windows when the menu lists full-vehicle tint, or one section of a detail), do NOT tell them you don't offer it. Say ${ctx.shopName} can take care of that, and capture the lead noting exactly what they asked for — the shop will confirm the exact price. Do not invent or estimate that price yourself.`,
     `- Only when a request is clearly unrelated to anything on the menu, tell them ${ctx.shopName} does not offer that one, mention the closest service you do offer if there is one, and offer to have the shop call them back. Never improvise a price or a workaround.`,
     `- Stay strictly on ${ctx.shopName}'s services. Do not answer general questions, give advice, tell jokes, do math, write anything, or role-play. Briefly steer back to how you can help; if they persist, wrap up with end_call.`,
-    '- PRICE PUSHBACK (too expensive / wants a discount / comparing quotes): do NOT lose them. First acknowledge it warmly and briefly restate the value. If a lower-priced option on the menu genuinely fits what they want, offer that real option. If they still hesitate, ask what they were hoping to spend, and tell them the shop will call to work something out. Then capture_lead with priceSensitive=true and their number in "budget". NEVER invent a discount, agree to a lower price, negotiate a specific deal, or promise the shop will match it — you only set the callback up; the shop decides pricing.',
+    '- PRICE OBJECTION (too expensive / shopping around): make ONE attempt only — either point them to a genuinely lower-priced option on the menu that fits, or briefly restate the value — then go straight to offering the two times. NEVER ask their budget or what they hoped to spend, and NEVER offer, hint at, or agree to a discount. If they still will not book, capture the lead and offer to text the quote.',
     '- ALWAYS read the key details back and get a "yes" BEFORE calling capture_lead or book_appointment. People mishear on the phone — a wrong name, number, or vehicle makes the whole lead useless. If they correct you, fix it and read it back again.',
     '- REQUIRED: you must have the caller\'s NAME before you save. If you do not have it yet, ask for it (e.g. "Can I get your name?") BEFORE the read-back — a lead with no name is far less useful to the shop. Include the name in the read-back and never call capture_lead without one.',
     '- The callback number is the number they are calling from unless they give a different one; if they give a different one, pass it as callbackNumber.',
@@ -229,6 +248,7 @@ function buildSystemPrompt(ctx, cfg) {
   return [
     persona + greetingNote,
     hours ? `\nBusiness hours: ${hours}. If they want to come outside these hours, offer the nearest time within hours or a callback.` : '',
+    slots.length >= 2 ? `\nTWO TIMES TO OFFER (both already at least 3 days out — offer THESE, not open-ended): ${slots[0]} or ${slots[1]}. If neither works, ask what day suits them and use that as the agreed time.` : '',
     '',
     goal,
     '',
@@ -254,16 +274,17 @@ function toolsFor(quoteFirst, cfg) {
         serviceNeeded: { type: ['string', 'null'], description: 'The service they want, in the shop\'s terms, or null.' },
         vehicle: { type: ['string', 'null'], description: 'Vehicle as "year make model color" if relevant, else null.' },
         vehicleSize: { type: ['string', 'null'], enum: ['sedan', 'suv', 'truck', null], description: 'Rough vehicle size class if relevant, else null.' },
-        quotedPrice: { type: ['number', 'null'], description: 'The rough price you quoted them from the menu, or null.' },
-        priceSensitive: { type: 'boolean', description: 'true if they pushed back on price (too expensive, wanted a discount, or comparing quotes).' },
-        budget: { type: ['number', 'null'], description: 'What they were hoping to spend, in dollars — their counteroffer if they pushed back on price. Null if not stated.' },
+        quotedPrice: { type: ['number', 'null'], description: 'The starting-at price you quoted for tint (the low end of the range), or null if you quoted nothing.' },
+        callOutcome: { type: 'string', enum: ['booked', 'quoted', 'captured'], description: 'booked = they agreed to one of the two times you offered; quoted = you gave a tint range but they did not commit to a time; captured = you got their info to follow up (no price and no time).' },
+        agreedTime: { type: ['string', 'null'], description: 'The specific time the caller agreed to (from the two you offered), e.g. "Thursday at 2 PM", or null if they did not commit to a time.' },
+        servicesDiscussed: { type: 'array', items: { type: 'string' }, description: "Every service the caller asked about, in the shop's terms (e.g. [\"Ceramic Tint\", \"PPF\"])." },
         preferredTime: { type: ['string', 'null'], description: 'When they want to come in, as they said it (free text), or null.' },
         quality: { type: 'string', enum: ['hot', 'warm', 'cold'], description: 'hot = ready to book; warm = interested; cold = vague/price-shopping/wrong number.' },
         summary: { type: 'string', description: 'One or two sentence summary of the call for the shop owner.' },
         followUp: { type: 'string', description: 'One concrete next step for the shop (e.g. a text to send).' },
         closingLine: { type: 'string', description: 'A short, warm closing line to say after saving — confirm the shop will text or call shortly to lock in the time and exact price. This ends the call.' },
       },
-      required: ['customerName', 'callbackNumber', 'serviceNeeded', 'vehicle', 'vehicleSize', 'quotedPrice', 'priceSensitive', 'budget', 'preferredTime', 'quality', 'summary', 'followUp', 'closingLine'],
+      required: ['customerName', 'callbackNumber', 'serviceNeeded', 'vehicle', 'vehicleSize', 'quotedPrice', 'callOutcome', 'agreedTime', 'servicesDiscussed', 'preferredTime', 'quality', 'summary', 'followUp', 'closingLine'],
     },
   };
   const endCall = {
@@ -374,6 +395,12 @@ function execCaptureLead(ctx, call, args) {
   }
   const now = new Date().toISOString();
   const veh = parseVehicle(args.vehicle);
+  const services = Array.isArray(args.servicesDiscussed) && args.servicesDiscussed.length
+    ? args.servicesDiscussed.map(s => String(s).trim()).filter(Boolean)
+    : (args.serviceNeeded ? [args.serviceNeeded] : []);
+  const outcome = ['booked', 'quoted', 'captured'].includes(args.callOutcome)
+    ? args.callOutcome
+    : (args.agreedTime ? 'booked' : (args.quotedPrice != null ? 'quoted' : 'captured'));
   // Prefer a caller-supplied callback number (confirmed via read-back) over the
   // caller ID; otherwise keep the number they're calling from.
   const cbDigits = String(args.callbackNumber || '').replace(/\D/g, '');
@@ -399,11 +426,21 @@ function execCaptureLead(ctx, call, args) {
       followUp: args.followUp || '',
       quotedPrice: args.quotedPrice != null ? args.quotedPrice : null,
       priceSensitive: !!args.priceSensitive,
+      callOutcome: outcome, agreedTime: args.agreedTime || null,
+      servicesDiscussed: services,
       model: MODEL, generatedAt: now, source: 'voice',
     };
+    if (args.agreedTime) lead.status = 'scheduled';
     ctx.h.upsert('leads', lead);
   }
-  call.voiceAI.outcome = { type: 'captured', quality: args.quality, serviceNeeded: args.serviceNeeded, summary: args.summary };
+  // Normalized call outcome for attribution: booked (agreed to a slot) | quoted
+  // (gave a tint range, no slot) | captured (info only). Falls back sensibly if
+  // the model omits callOutcome.
+  call.voiceAI.outcome = {
+    type: outcome, quality: args.quality, serviceNeeded: args.serviceNeeded, summary: args.summary,
+    quotedPrice: args.quotedPrice != null ? Number(args.quotedPrice) : null,
+    agreedTime: args.agreedTime || null, servicesDiscussed: services,
+  };
   notifyNewLead({ shop: ctx.shop, settings: ctx.settings, kind: 'ai-lead', lead: { name: args.customerName, phone, vehicle: veh && { year: veh.vehicleYear, make: veh.vehicleMake, model: veh.vehicleModel }, servicesInterested: args.serviceNeeded ? [args.serviceNeeded] : [], notes: args.summary || '', source: 'ai-voice' } });
   return { captured: true };
 }
@@ -516,6 +553,26 @@ function greeting(ctx) {
   return `Thanks for calling ${ctx.shopName}! ${cfg.assistantName ? `This is ${cfg.assistantName}. ` : ''}How can I help you today?`;
 }
 
+// Stamp normalized attribution fields onto the call at end-of-call, so reporting
+// doesn't have to reach into voiceAI.outcome. staff_answered is false for every
+// AI-handled call (the AI answered because staff didn't, or it's always-mode).
+// booking_id stays null for quote-first captures until the shop books the lead —
+// the booking path back-fills it (see booking.createAppointment).
+function stampCallAttribution(call) {
+  if (!call) return call;
+  const o = (call.voiceAI && call.voiceAI.outcome) || null;
+  const start = call.startedAt || (call.voiceAI && call.voiceAI.startedAt) || null;
+  const end = call.endedAt || (call.voiceAI && call.voiceAI.endedAt) || new Date().toISOString();
+  call.staff_answered = !!call.accepted;
+  call.outcome = o && ['booked', 'quoted', 'captured'].includes(o.type) ? o.type : 'lost';
+  call.services_discussed = (o && o.servicesDiscussed) || [];
+  call.quoted_value = o && o.quotedPrice != null ? Number(o.quotedPrice) : null;
+  call.booking_id = (o && o.appointmentId) || call.booking_id || null;
+  call.call_started_at = start;
+  call.duration = call.durationSec || (start ? Math.max(0, Math.round((new Date(end) - new Date(start)) / 1000)) : 0);
+  return call;
+}
+
 // Fresh conversation state for a call the AI is about to answer.
 function initState(mode) {
   return { status: 'active', mode, turns: [], startedAt: new Date().toISOString(), outcome: null };
@@ -528,4 +585,5 @@ module.exports = {
   // exact same client, system prompt, tools, and server-authoritative tool
   // execution — the transport differs, the brain does not.
   getClient, runTool, FAREWELL, createMessage, isRetryableApiError, speechHints,
+  stampCallAttribution, proposeSlots,
 };

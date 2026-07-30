@@ -392,6 +392,7 @@ function endAiCall(vr, ctx, call, res, sayText) {
     notifyNewLead({ shop: ctx.shop, settings: ctx.settings, kind: 'missed-call', lead: lead || { phone: call.from, source: 'call' } });
   }
   syncVoiceTranscript(call);
+  voice.stampCallAttribution(call);
   ctx.h.upsert('calls', call);
   // Always speak a closing line before hanging up — never an abrupt cut-off.
   vr.say({ voice: voice.voiceConfig(ctx.settings).voice }, sayText || voice.FAREWELL);

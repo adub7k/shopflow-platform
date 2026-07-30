@@ -728,6 +728,38 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
   });
 }));
 
+// ── AI receptionist attribution (per shop, date range) ──────────────────────────
+// "Revenue recovered" = revenue from CLOSED (done) jobs joined via booking_id to
+// AI-answered calls the shop did NOT pick up. It only counts staff-not-answered
+// calls, so it's money the AI recovered that a missed call would otherwise lose.
+// Date range via ?from=YYYY-MM-DD&to=YYYY-MM-DD (either optional). Calls are
+// windowed by call_started_at; a call is "AI-answered" if it has voiceAI state.
+router.get('/api/shop/receptionist/attribution', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
+  const from = String(req.query.from || '').slice(0, 10);
+  const to   = String(req.query.to   || '').slice(0, 10);
+  const inRange = d => { const day = String(d || '').slice(0, 10); return (!from || day >= from) && (!to || day <= to); };
+
+  const aiCalls = h.getAll('calls').filter(c => c && c.voiceAI && inRange(c.call_started_at || c.startedAt));
+  const staffMissed = aiCalls.filter(c => !c.staff_answered); // AI answered because staff didn't
+  const apptById = new Map(h.getAll('appointments').map(a => [a.id, a]));
+
+  let revenueRecovered = 0, recoveredJobs = 0;
+  staffMissed.forEach(c => {
+    const a = c.booking_id ? apptById.get(c.booking_id) : null;
+    if (a && a.status === 'done') { revenueRecovered += Number(a.price || 0); recoveredJobs++; }
+  });
+
+  const byOutcome = aiCalls.reduce((m, c) => { const k = c.outcome || 'lost'; m[k] = (m[k] || 0) + 1; return m; }, {});
+  res.json({
+    from: from || null, to: to || null,
+    aiAnswered: aiCalls.length,
+    staffNotAnswered: staffMissed.length,
+    revenueRecovered: Math.round(revenueRecovered * 100) / 100,
+    recoveredJobs,
+    byOutcome,
+  });
+}));
+
 // ── PROTECTED: Auth ───────────────────────────────────────────────────────────
 router.post('/api/shop/auth/verify-pin', requireAuth, shopRoute(async (req, res, db) => {
   const { pin } = req.body;

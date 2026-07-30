@@ -117,7 +117,7 @@ console.log('\n— relay turn: stream tokens → capture → end —');
     text: ['So that\'s a ceramic tint on the 2021 Highlander — ', 'I\'ll text you shortly. '],
     content: [
       { type: 'text', text: 'So that\'s a ceramic tint on the 2021 Highlander — I\'ll text you shortly. ' },
-      { type: 'tool_use', id: 'tu1', name: 'capture_lead', input: { customerName: 'John', callbackNumber: null, serviceNeeded: 'Ceramic Window Tint', vehicle: '2021 Toyota Highlander', vehicleSize: 'suv', quotedPrice: 550, budget: null, preferredTime: 'Saturday', quality: 'hot', summary: 'Ceramic tint on a 2021 Highlander, Saturday.', followUp: 'Text a Saturday slot + $550 quote.', closingLine: "You're all set, John — thanks for calling!" } },
+      { type: 'tool_use', id: 'tu1', name: 'capture_lead', input: { customerName: 'John', callbackNumber: null, serviceNeeded: 'Ceramic Window Tint', vehicle: '2021 Toyota Highlander', vehicleSize: 'suv', quotedPrice: 550, callOutcome: 'captured', agreedTime: null, servicesDiscussed: ['Ceramic Window Tint'], preferredTime: 'Saturday', quality: 'hot', summary: 'Ceramic tint on a 2021 Highlander, Saturday.', followUp: 'Text a Saturday slot + $550 quote.', closingLine: "You're all set, John — thanks for calling!" } },
     ],
   }]));
 

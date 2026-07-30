@@ -209,6 +209,23 @@ function createAppointment(db, shop, payload = {}) {
     source: source || 'booking-page', createdAt: new Date().toISOString(),
   };
   upsert('appointments', appt);
+
+  // Attribution back-fill: if this booking traces to an AI-handled call the shop
+  // didn't pick up, stamp the booking id onto that call so "revenue recovered" can
+  // join closed jobs to the calls the AI saved. Best-effort, matched by caller
+  // number; the most recent unlinked AI call wins. Runs for owner/public bookings
+  // of AI-captured leads (the AI's own bookings already carry the id).
+  try {
+    const want = (customerPhone || '').replace(/\D/g, '').slice(-10);
+    if (want.length === 10) {
+      const match = getAll('calls')
+        .filter(c => c && c.voiceAI && !c.staff_answered && !c.booking_id &&
+          String(c.from || '').replace(/\D/g, '').slice(-10) === want)
+        .sort((a, b) => new Date(b.call_started_at || b.startedAt || 0) - new Date(a.call_started_at || a.startedAt || 0))[0];
+      if (match) { match.booking_id = apptId; match.outcome = 'booked'; upsert('calls', match); }
+    }
+  } catch (e) { /* attribution is best-effort — never block a booking */ }
+
   return { ok: true, appointmentId: apptId, appt };
 }
 
