@@ -119,7 +119,7 @@ const Settings = {
         </div>
         <div class="form-group">
           <label class="form-label">Assistant name <span style="color:var(--faint);font-weight:400;">(optional)</span></label>
-          <input id="s-voiceai-name" class="form-input" maxlength="40" placeholder="e.g. Sarah" value="${esc(va.assistantName||'')}" />
+          <input id="s-voiceai-name" class="form-input" maxlength="40" placeholder="e.g. Adam" value="${esc(va.assistantName||'')}" />
           <div style="font-size:11px;color:var(--muted);margin-top:6px;">Give the receptionist a name — it introduces itself this way and answers to it. Leave blank for none. (It still says it's a virtual assistant if a caller asks.)</div>
         </div>
         <div class="form-group">

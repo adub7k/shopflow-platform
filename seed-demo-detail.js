@@ -64,7 +64,7 @@ function seedDemoDetail({ force = true } = {}) {
     // quotes/qualifies/captures from settings.services (seeded below).
     voiceAI: {
       mode: 'always',
-      greeting: 'Thanks for calling Demo Auto Studio! This is Sarah — how can I help you today?',
+      greeting: 'Thanks for calling Demo Auto Studio! This is Adam — how can I help you today?',
       voice: 'Polly.Joanna-Generative', // gather-engine (Polly) fallback voice
       speechTimeout: '1',               // snappy turn-taking (seconds of silence before the AI replies)
       // Streaming (ConversationRelay) engine + an ElevenLabs voice, so the staging
@@ -72,7 +72,8 @@ function seedDemoDetail({ force = true } = {}) {
       engine: 'relay',
       relayVoice: 's3TPKV1kjDlVtZbl4Ksh',
       // Named assistant + a shop-knowledge note, so the demo shows both features.
-      assistantName: 'Sarah',
+      // Adam = a man's name to match the male ElevenLabs voice.
+      assistantName: 'Adam',
       notes: "We're at 500 Central Avenue with free parking in the lot behind the building. Appointment only — no walk-ins. Most tint jobs take about 2 to 3 hours. We take card or cash. We do NOT tint front windshields (state law). Ceramic tint carries a lifetime warranty.",
     },
     addons: [
