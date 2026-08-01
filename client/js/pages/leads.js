@@ -202,11 +202,14 @@ const Leads = {
     const sm = this._sourceMeta(l.source);
     const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model, l.vehicle.color].filter(Boolean).join(' ') : '';
     const infoRow = (k, v) => v ? `<div style="display:flex;gap:10px;padding:5px 0;font-size:13px;"><span style="width:86px;color:var(--muted);flex-shrink:0;">${k}</span><span style="font-weight:600;color:var(--text);">${esc(v)}</span></div>` : '';
+    const contactRow = (k, v, href) => v ? `<div style="display:flex;gap:10px;padding:5px 0;font-size:13px;"><span style="width:86px;color:var(--muted);flex-shrink:0;">${k}</span><a href="${href}:${esc(v)}" style="font-weight:600;color:var(--green);text-decoration:none;">${esc(v)}</a></div>` : '';
     const detailCard = `
+      ${contactRow('Phone', l.phone, 'tel')}
+      ${(l.ai && l.ai.altCallbackNumber) ? infoRow('Alt callback', l.ai.altCallbackNumber + ' · verify') : ''}
       ${infoRow('Source', sm.icon + ' ' + sm.label + (l.utm && l.utm.campaign ? ' · ' + l.utm.campaign : ''))}
       ${infoRow('Vehicle', veh)}
-      ${infoRow('Interested in', (l.servicesInterested||[]).join(', '))}
-      ${l.email ? `<div style="display:flex;gap:10px;padding:5px 0;font-size:13px;"><span style="width:86px;color:var(--muted);flex-shrink:0;">Email</span><a href="mailto:${esc(l.email)}" style="font-weight:600;color:var(--green);text-decoration:none;">${esc(l.email)}</a></div>` : ''}`;
+      ${infoRow('Interested in', ((l.ai && l.ai.servicesDiscussed && l.ai.servicesDiscussed.length ? l.ai.servicesDiscussed : l.servicesInterested) || []).join(', '))}
+      ${contactRow('Email', l.email, 'mailto')}`;
 
     Modal.show(`
       <div class="modal-title" style="display:flex;align-items:center;gap:10px;">
@@ -268,9 +271,11 @@ const Leads = {
     const a = l.ai; if (!a) return '';
     const tags = [];
     if (a.serviceNeeded) tags.push(['Service', esc(a.serviceNeeded)]);
-    // Budget shows in the price-sensitive banner instead when flagged (no dupe).
+    // Quoted/budget show in the price-sensitive banner instead when flagged (no dupe).
+    if (a.quotedPrice != null && !a.priceSensitive) tags.push(['Quoted', fmtMoney(a.quotedPrice)]);
     if (a.budget != null && !a.priceSensitive) tags.push(['Budget', fmtMoney(a.budget)]);
-    if (a.desiredDate) tags.push(['When', esc(a.desiredDate)]);
+    if (a.agreedTime) tags.push(['Wants', esc(a.agreedTime)]);
+    else if (a.desiredDate) tags.push(['When', esc(a.desiredDate)]);
     const grid = tags.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin:9px 0 0;">${tags.map(t=>`<span style="font-size:12px;background:var(--surface2);border-radius:6px;padding:3px 8px;"><strong>${t[0]}:</strong> ${t[1]}</span>`).join('')}</div>` : '';
     // Price-sensitive: they balked at the quote — surface it loudly so the owner
     // calls back fast with room to close (quoted vs. what they'd pay).
