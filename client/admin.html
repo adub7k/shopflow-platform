@@ -342,6 +342,9 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div class="sb-item" data-page="shops" onclick="nav('shops');closeAdminSidebar()">
       <span class="sb-item-icon">🏪</span>Shops
     </div>
+    <div class="sb-item" data-page="addlead" onclick="nav('addlead');closeAdminSidebar()">
+      <span class="sb-item-icon">➕</span>Add Lead
+    </div>
     <div class="sb-item" data-page="growth" onclick="nav('growth');closeAdminSidebar()">
       <span class="sb-item-icon">📈</span>Growth
     </div>
@@ -489,6 +492,62 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
               <tr><td colspan="6"><div class="empty-state"><span class="spinner"></span>Loading…</div></td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Lead page (manual fallback for a broken lead pipeline) -->
+    <div id="page-addlead" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Add Lead</div>
+          <div class="page-sub">Manually drop leads into a shop when Make/Meta stops sending. Dedupes by phone — safe to re-run.</div>
+        </div>
+      </div>
+
+      <div class="form-row" style="max-width:420px;">
+        <label class="form-label">Shop</label>
+        <select class="form-input" id="al-shop"><option value="">Loading shops…</option></select>
+      </div>
+
+      <!-- Single lead -->
+      <div class="card">
+        <div class="card-header"><div><div class="card-title">Add one lead</div><div class="card-sub">Owner gets the same email + phone push as a real Meta lead.</div></div></div>
+        <div style="padding:18px;">
+          <div class="form-row-2">
+            <div class="form-row"><label class="form-label">Name</label><input class="form-input" id="al-name" placeholder="Jane Doe"/></div>
+            <div class="form-row"><label class="form-label">Phone</label><input class="form-input" id="al-phone" placeholder="(505) 555-0100"/></div>
+          </div>
+          <div class="form-row-2">
+            <div class="form-row"><label class="form-label">Email <span style="color:var(--faint);font-weight:400;">(optional)</span></label><input class="form-input" id="al-email" placeholder="jane@email.com"/></div>
+            <div class="form-row"><label class="form-label">Source</label><input class="form-input" id="al-source" value="facebook" placeholder="facebook"/></div>
+          </div>
+          <div class="form-row"><label class="form-label">Vehicle <span style="color:var(--faint);font-weight:400;">(optional — year / make / model / color)</span></label>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <input class="form-input" id="al-vyear" placeholder="Year" style="max-width:90px;"/>
+              <input class="form-input" id="al-vmake" placeholder="Make" style="flex:1;min-width:100px;"/>
+              <input class="form-input" id="al-vmodel" placeholder="Model" style="flex:1;min-width:100px;"/>
+              <input class="form-input" id="al-vcolor" placeholder="Color" style="max-width:110px;"/>
+            </div>
+          </div>
+          <div class="form-row"><label class="form-label">Notes <span style="color:var(--faint);font-weight:400;">(optional)</span></label><textarea class="form-input" id="al-notes" rows="2" placeholder="Interested in ceramic coating, saw the FB ad…"></textarea></div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
+            <button class="btn btn-green btn-sm" onclick="addAdminLead()">+ Add Lead</button>
+            <span id="al-msg" style="font-size:13px;color:var(--muted);"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bulk paste -->
+      <div class="card">
+        <div class="card-header"><div><div class="card-title">Bulk import</div><div class="card-sub">One lead per line: <code>Name, Phone, Email, Notes</code> (email + notes optional). Paste a column straight from a Meta CSV export.</div></div></div>
+        <div style="padding:18px;">
+          <textarea class="form-input" id="al-bulk" rows="7" placeholder="Jane Doe, 5055550100, jane@email.com, ceramic coating&#10;John Smith, 5055550142&#10;Maria Lopez, (505) 555-0199, maria@email.com"></textarea>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
+            <button class="btn btn-black btn-sm" onclick="bulkImportLeads()">Import all</button>
+            <span id="al-bulk-msg" style="font-size:13px;color:var(--muted);"></span>
+          </div>
+          <div id="al-bulk-log" style="margin-top:12px;font-size:13px;"></div>
         </div>
       </div>
     </div>
@@ -934,6 +993,7 @@ function nav(page) {
   document.getElementById('page-' + page).classList.add('active');
   document.querySelector(`.sb-item[data-page="${page}"]`).classList.add('active');
   if (page === 'shops')   { if (!allShops.length) loadShops(); else filterShops(); }
+  if (page === 'addlead') populateLeadShops();
   if (page === 'billing') renderBilling();
   if (page === 'growth')  renderGrowth();
   if (page === 'settings')  loadPlatformSettings();
@@ -2076,6 +2136,106 @@ function relTime(iso) {
   return fmtDate(iso);
 }
 let toastTimer;
+// ── Add Lead (manual pipeline fallback) ───────────────────────────────────────
+async function populateLeadShops() {
+  if (!allShops.length) { try { await loadShops(); } catch(e){} }
+  const sel = document.getElementById('al-shop');
+  const prev = sel.value;
+  const active = allShops.filter(s => s.active !== false)
+    .sort((a,b) => (a.shopName||'').localeCompare(b.shopName||''));
+  sel.innerHTML = '<option value="">Select a shop…</option>' +
+    active.map(s => `<option value="${s.id}">${escHtml(s.shopName||s.slug||s.id)}</option>`).join('');
+  if (prev) sel.value = prev;
+}
+function escHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// POST a single lead to the admin endpoint. Returns the parsed JSON (or throws).
+async function postAdminLead(shopId, body) {
+  const res = await fetch('/api/admin/shop/' + shopId + '/lead', {
+    method: 'POST',
+    headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({ ok:false, error:'Bad response' }));
+  if (!res.ok || !data.ok) throw new Error(data.error || ('HTTP ' + res.status));
+  return data;
+}
+
+async function addAdminLead() {
+  const shopId = document.getElementById('al-shop').value;
+  const msg = document.getElementById('al-msg');
+  if (!shopId) { msg.style.color = 'var(--red)'; msg.textContent = 'Pick a shop first.'; return; }
+  const body = {
+    name:  document.getElementById('al-name').value.trim(),
+    phone: document.getElementById('al-phone').value.trim(),
+    email: document.getElementById('al-email').value.trim(),
+    notes: document.getElementById('al-notes').value.trim(),
+    source: document.getElementById('al-source').value.trim() || 'facebook',
+    vehicle: {
+      year:  document.getElementById('al-vyear').value.trim(),
+      make:  document.getElementById('al-vmake').value.trim(),
+      model: document.getElementById('al-vmodel').value.trim(),
+      color: document.getElementById('al-vcolor').value.trim(),
+    },
+  };
+  if (!body.name && body.phone.replace(/\D/g,'').length < 7) {
+    msg.style.color = 'var(--red)'; msg.textContent = 'Enter at least a name or a phone number.'; return;
+  }
+  msg.style.color = 'var(--muted)'; msg.textContent = 'Adding…';
+  try {
+    const data = await postAdminLead(shopId, body);
+    msg.style.color = 'var(--green)';
+    msg.textContent = data.isNew ? `Added ✓ ${data.name || data.phone}` : `Updated existing lead ✓ ${data.name || data.phone}`;
+    ['al-name','al-phone','al-email','al-notes','al-vyear','al-vmake','al-vmodel','al-vcolor'].forEach(id => document.getElementById(id).value = '');
+  } catch(e) {
+    msg.style.color = 'var(--red)'; msg.textContent = 'Failed: ' + e.message;
+  }
+}
+
+// Parse "Name, Phone, Email, Notes" lines (email + notes optional). Commas past
+// the 4th field fold back into notes so a note can itself contain commas.
+function parseBulkLine(line) {
+  const parts = line.split(',').map(x => x.trim());
+  return {
+    name:  parts[0] || '',
+    phone: parts[1] || '',
+    email: parts[2] || '',
+    notes: parts.slice(3).join(', ').trim(),
+  };
+}
+
+async function bulkImportLeads() {
+  const shopId = document.getElementById('al-shop').value;
+  const msg = document.getElementById('al-bulk-msg');
+  const logEl = document.getElementById('al-bulk-log');
+  if (!shopId) { msg.style.color = 'var(--red)'; msg.textContent = 'Pick a shop first.'; return; }
+  const lines = document.getElementById('al-bulk').value.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!lines.length) { msg.style.color = 'var(--red)'; msg.textContent = 'Paste at least one line.'; return; }
+  const source = (document.getElementById('al-source').value.trim() || 'facebook');
+
+  msg.style.color = 'var(--muted)'; msg.textContent = `Importing ${lines.length}…`;
+  logEl.innerHTML = '';
+  let added = 0, updated = 0, failed = 0;
+  const rows = [];
+  for (const line of lines) {
+    const p = parseBulkLine(line);
+    if (!p.name && p.phone.replace(/\D/g,'').length < 7) {
+      failed++; rows.push(`<div style="color:var(--red)">✗ ${escHtml(line)} — no name or valid phone</div>`); continue;
+    }
+    try {
+      const data = await postAdminLead(shopId, { ...p, source });
+      if (data.isNew) added++; else updated++;
+      rows.push(`<div style="color:var(--green)">✓ ${escHtml(data.name || data.phone)} ${data.isNew ? '' : '(updated)'}</div>`);
+    } catch(e) {
+      failed++; rows.push(`<div style="color:var(--red)">✗ ${escHtml(p.name || p.phone || line)} — ${escHtml(e.message)}</div>`);
+    }
+    logEl.innerHTML = rows.join('');
+  }
+  msg.style.color = failed ? 'var(--yellow)' : 'var(--green)';
+  msg.textContent = `Done — ${added} added, ${updated} updated${failed ? `, ${failed} skipped` : ''}.`;
+  if (!failed) document.getElementById('al-bulk').value = '';
+}
+
 function toast(msg) {
   const el=document.getElementById('toast');
   el.textContent=msg; el.classList.add('show');

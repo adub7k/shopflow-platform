@@ -3,8 +3,7 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { master, getShopDb, shopHelpers, shopRoute, genId, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl } = require('../db');
 const { resolveProfile } = require('../industries');
-const { notifyNewLead } = require('../email');
-const { sendPush } = require('../push-instance');
+const { upsertLead } = require('../leads-core');
 // Booking core (single source of truth): the menu, open-slot availability, and
 // the create-appointment path (double-book guard + price resolution) live in
 // ../booking so the public page and the AI voice receptionist share one
@@ -391,49 +390,15 @@ router.post('/api/public/:shopSlug/lead', async (req, res) => {
     const source = (utm.source || 'website').toLowerCase();
     const referrer = String(req.body.referrer || '').trim().slice(0, 300);
 
-    const now = new Date().toISOString();
-    const existing = h.getAll('leads').find(l => String(l.phone || '').replace(/\D/g, '') === digits);
-    let lead;
-    if (existing) {
-      lead = existing;
-      if (!lead.name) lead.name = name;
-      if (email) lead.email = email;
-      if (vehicle) lead.vehicle = vehicle;
-      if (servicesInterested.length) lead.servicesInterested = servicesInterested;
-      if (notes) lead.notes = [lead.notes, notes].filter(Boolean).join('\n');
-      if (Object.keys(utm).length) lead.utm = utm;      // latest campaign, for reference
-      lead.formSubmits = (lead.formSubmits || 0) + 1;
-      lead.lastContactAt = now;
-    } else {
-      lead = {
-        id: genId('lead'), name, phone, email,
-        location: '', source, utm: Object.keys(utm).length ? utm : null, referrer,
-        vehicle, servicesInterested, status: 'new',
-        callCount: 0, missedCount: 0, formSubmits: 1, customerId: null, notes,
-        firstContactAt: now, lastContactAt: now, createdAt: now,
-      };
-    }
-    h.upsert('leads', lead);
-    master.get('shops').find({ id: shop.id }).assign({ lastActivity: now }).write();
-
-    // No automated SMS here — A2P isn't registered, and the product stance is
-    // manual texting anyway: the owner sees the lead in ShopFlow → Leads and
-    // texts back from there. Speed-to-lead is covered by an email ping to the
-    // owner instead (fire-and-forget — a mail failure never breaks the submit).
-    notifyNewLead({ shop, settings: s, lead, kind: existing ? 'form-repeat' : 'form' });
-
-    // Mobile push to the owner's phone (free, instant) — mirrors the email above.
-    // EVERY non-call lead source lands here (website form + Meta/Make via
-    // skipRequiredCustomFields), so this is the one place that guarantees a push
-    // for all of them. Phone-call leads are notified separately (routes/twilio.js).
-    const veh = lead.vehicle && [lead.vehicle.year, lead.vehicle.make, lead.vehicle.model].filter(Boolean).join(' ');
-    sendPush(shop.id, {
-      title: `🔔 New lead — ${lead.name || lead.phone || 'website'}`,
-      body: [lead.phone, veh, (lead.servicesInterested || []).join(', '), lead.source && `via ${lead.source}`]
-        .filter(Boolean).join(' · '),
-      url: '/leads',
-      tag: `lead-${lead.id}`,
-    }).catch(e => console.error('Lead push failed:', e.message));
+    // Dedupe/persist + owner email + mobile push live in leads-core so the admin
+    // manual-add fallback (routes/admin.js) behaves byte-identically to this
+    // path. No automated SMS here — A2P isn't registered, and the product stance
+    // is manual texting anyway: the owner sees the lead in ShopFlow → Leads and
+    // texts back from there. EVERY non-call lead source lands here (website form
+    // + Meta/Make via skipRequiredCustomFields), so the push in leads-core is the
+    // one place that guarantees a notification for all of them. Phone-call leads
+    // are notified separately (routes/twilio.js).
+    upsertLead(db, shop, { name, phone, email, notes, vehicle, servicesInterested, utm, source, referrer });
     res.json({ ok: true });
   } catch(e) {
     console.error('Lead capture error:', e.message);

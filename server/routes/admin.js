@@ -5,6 +5,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { requireAdmin } = require('../middleware');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb } = require('../db');
+const { upsertLead } = require('../leads-core');
 
 // ── ADMIN: overview stats ─────────────────────────────────────────────────────
 router.get('/api/admin/stats', requireAdmin, (req, res) => {
@@ -156,6 +157,54 @@ router.patch('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   master.get('shops').find({ id: req.params.shopId }).assign(updates).write();
   master.get('accounts').find({ id: shop.accountId }).assign(updates.plan ? { plan: updates.plan } : {}).assign(updates.active !== undefined ? { active: updates.active } : {}).write();
   res.json({ ok: true });
+});
+
+// ── ADMIN: manually add a lead to a shop ──────────────────────────────────────
+// A hand-entry fallback for when an upstream pipeline (e.g. Meta lead-ads via
+// Make) breaks and leads land nowhere. Goes through the same leads-core.upsertLead
+// as the public form, so a hand-entered lead dedupes by phone (safe to re-run a
+// recovery batch), notifies the owner, and attributes identically. Accepts one
+// lead per call; the admin UI loops for bulk paste.
+router.post('/api/admin/shop/:shopId/lead', requireAdmin, (req, res) => {
+  try {
+    const shop = master.get('shops').find({ id: req.params.shopId }).value();
+    if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
+
+    const name  = String(req.body.name  || '').trim().slice(0, 80);
+    const phone = String(req.body.phone || '').trim().slice(0, 25);
+    const email = String(req.body.email || '').trim().slice(0, 120);
+    const notes = String(req.body.notes || '').trim().slice(0, 1000);
+    const digits = phone.replace(/\D/g, '');
+    // Admin is trusted, so requirements are loose — but a lead with neither a
+    // name nor a usable phone is unusable noise, so reject that.
+    if (!name && digits.length < 7) {
+      return res.status(400).json({ ok: false, error: 'Enter at least a name or a phone number.' });
+    }
+
+    const v = req.body.vehicle || {};
+    const vehicle = (v.year || v.make || v.model || v.color)
+      ? { year: String(v.year||'').trim().slice(0,20), make: String(v.make||'').trim().slice(0,40),
+          model: String(v.model||'').trim().slice(0,40), color: String(v.color||'').trim().slice(0,30) }
+      : null;
+
+    const services = Array.isArray(req.body.services)
+      ? [...new Set(req.body.services.map(x => String(x||'').trim()).filter(Boolean))].slice(0, 20)
+      : [];
+
+    // Attribution: default to 'facebook' since this fallback exists mainly to
+    // recover Meta leads, but honor an explicit source when the admin sets one.
+    const source = String(req.body.source || 'facebook').trim().toLowerCase().slice(0, 40) || 'facebook';
+    const utm = source ? { source } : {};
+
+    const db = getShopDb(shop.id);
+    const { lead, isNew } = upsertLead(db, shop, {
+      name, phone, email, notes, vehicle, servicesInterested: services, utm, source, referrer: 'admin-manual',
+    });
+    res.json({ ok: true, isNew, leadId: lead.id, name: lead.name, phone: lead.phone });
+  } catch (e) {
+    console.error('Admin add-lead error:', e.message);
+    res.status(500).json({ ok: false, error: 'Something went wrong adding the lead.' });
+  }
 });
 
 // ── ADMIN: seed demo account ──────────────────────────────────────────────────
