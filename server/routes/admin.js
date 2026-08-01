@@ -5,7 +5,7 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { requireAdmin } = require('../middleware');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb } = require('../db');
-const { upsertLead } = require('../leads-core');
+const { upsertLead, getLeadPayloads } = require('../leads-core');
 
 // ── ADMIN: overview stats ─────────────────────────────────────────────────────
 router.get('/api/admin/stats', requireAdmin, (req, res) => {
@@ -205,6 +205,14 @@ router.post('/api/admin/shop/:shopId/lead', requireAdmin, (req, res) => {
     console.error('Admin add-lead error:', e.message);
     res.status(500).json({ ok: false, error: 'Something went wrong adding the lead.' });
   }
+});
+
+// ── ADMIN: recent integration (Meta/Make) lead payloads — diagnostics ─────────
+// Shows exactly what an upstream POSTed to the public lead endpoint, so a blank
+// "Test Lead" can be traced: empty {} from Make (mapping/fetch broken upstream)
+// vs. real data under keys we didn't map. In-memory, cleared on restart.
+router.get('/api/admin/lead-payloads', requireAdmin, (req, res) => {
+  res.json(getLeadPayloads());
 });
 
 // ── ADMIN: seed demo account ──────────────────────────────────────────────────

@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { master, getShopDb, shopHelpers, shopRoute, genId, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl } = require('../db');
 const { resolveProfile } = require('../industries');
-const { upsertLead } = require('../leads-core');
+const { upsertLead, resolveContact, recordLeadPayload } = require('../leads-core');
 // Booking core (single source of truth): the menu, open-slot availability, and
 // the create-appointment path (double-book guard + price resolution) live in
 // ../booking so the public page and the AI voice receptionist share one
@@ -338,16 +338,23 @@ router.post('/api/public/:shopSlug/lead', async (req, res) => {
     // pretend success so they don't adapt, and log nothing.
     if (String(req.body.website || '').trim()) return res.json({ ok: true });
 
-    let name  = String(req.body.name || '').trim().slice(0, 80);
-    const phone = String(req.body.phone || '').trim().slice(0, 25);
-    const email = String(req.body.email || '').trim().slice(0, 120);
+    // Resolve name/phone/email tolerantly — a Meta lead forwarded by Make may
+    // arrive under native keys (full_name, phone_number) or a field_data array,
+    // not just name/phone/email. The website form's direct keys still win.
+    const contact = resolveContact(req.body);
+    let name  = contact.name.slice(0, 80);
+    const phone = contact.phone.slice(0, 25);
+    const email = contact.email.slice(0, 120);
     const notes = String(req.body.notes || '').trim().slice(0, 1000);
     const digits = phone.replace(/\D/g, '');
     // Integration/test leads (skipRequiredCustomFields:true, e.g. Meta via Make)
     // are never rejected for missing fields — a blank one still comes through,
     // labeled "Test Lead" so it's identifiable in the Leads list. The website
     // form doesn't send the flag, so it still requires a real name + phone.
+    // Capture the raw integration payload for the admin diagnostics panel so a
+    // blank "Test Lead" can be traced to what Make actually sent.
     if (req.body.skipRequiredCustomFields) {
+      recordLeadPayload(req.params.shopSlug, req.body);
       if (!name) name = 'Test Lead';
     } else if (!name || digits.length < 10) {
       return res.status(400).json({ ok: false, error: 'Please enter your name and a valid phone number.' });

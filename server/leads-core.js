@@ -77,4 +77,69 @@ function upsertLead(db, shop, f = {}) {
   return { lead, isNew: !existing };
 }
 
-module.exports = { upsertLead };
+// ── Contact-field resolution (Meta/Make robustness) ───────────────────────────
+// Meta lead-ad payloads forwarded by Make don't always use our name/phone/email
+// keys. A mis-mapped scenario commonly forwards Meta's native field names
+// (full_name, first_name/last_name, phone_number) or the raw field_data array.
+// Resolve from every common shape so a lead is captured even when the mapping
+// isn't exactly name/phone/email. The website form sends name/phone/email
+// directly, so those still win (checked first) — behavior there is unchanged.
+function pick(body, keys) {
+  const lower = {};
+  Object.keys(body || {}).forEach(k => { lower[k.toLowerCase()] = body[k]; });
+  for (const k of keys) {
+    const v = lower[k];
+    if (v != null && String(v).trim()) return String(v).trim();
+  }
+  return '';
+}
+// Meta raw lead: field_data: [{ name:'phone_number', values:['+1…'] }, …]
+function fromFieldData(body, keys) {
+  const fd = body && (body.field_data || body.fieldData);
+  if (!Array.isArray(fd)) return '';
+  for (const f of fd) {
+    const nm = String((f && f.name) || '').toLowerCase();
+    if (keys.includes(nm)) {
+      const v = Array.isArray(f && f.values) ? f.values[0] : (f && f.value);
+      if (v != null && String(v).trim()) return String(v).trim();
+    }
+  }
+  return '';
+}
+function resolveContact(body = {}) {
+  let name = pick(body, ['name', 'full_name', 'fullname', 'fullname ']) || fromFieldData(body, ['full_name', 'name']);
+  if (!name) {
+    const first = pick(body, ['first_name', 'firstname']) || fromFieldData(body, ['first_name']);
+    const last  = pick(body, ['last_name', 'lastname'])  || fromFieldData(body, ['last_name']);
+    name = [first, last].filter(Boolean).join(' ').trim();
+  }
+  const phone = pick(body, ['phone', 'phone_number', 'phonenumber', 'mobile', 'mobile_number', 'mobilenumber'])
+    || fromFieldData(body, ['phone_number', 'phone']);
+  const email = pick(body, ['email', 'email_address', 'emailaddress'])
+    || fromFieldData(body, ['email']);
+  return { name, phone, email };
+}
+
+// ── Integration payload capture (diagnostics) ─────────────────────────────────
+// A tiny in-memory ring of the most recent integration (Meta/Make) lead POSTs,
+// so the admin panel can show exactly what an upstream sent — the fast way to
+// tell a blank "Test Lead" apart (empty {} from Make vs. real data under keys we
+// didn't map). In-memory only (no DB, cleared on restart): it's a live debugging
+// aid, not a record. Values are truncated so a payload can't bloat memory.
+const _payloads = [];
+function recordLeadPayload(shopSlug, body) {
+  try {
+    const snapshot = {};
+    Object.keys(body || {}).slice(0, 40).forEach(k => {
+      let v = body[k];
+      if (v && typeof v === 'object') { try { v = JSON.stringify(v).slice(0, 300); } catch { v = '[object]'; } }
+      else v = String(v).slice(0, 200);
+      snapshot[k] = v;
+    });
+    _payloads.unshift({ at: new Date().toISOString(), shopSlug, keyCount: Object.keys(body || {}).length, snapshot });
+    while (_payloads.length > 8) _payloads.pop();
+  } catch (e) { /* diagnostics must never break intake */ }
+}
+function getLeadPayloads() { return _payloads; }
+
+module.exports = { upsertLead, resolveContact, recordLeadPayload, getLeadPayloads };

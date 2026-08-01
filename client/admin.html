@@ -505,6 +505,15 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         </div>
       </div>
 
+      <!-- Diagnostics: what Meta/Make actually sent -->
+      <div class="card">
+        <div class="card-header" style="cursor:pointer;" onclick="loadLeadPayloads()">
+          <div><div class="card-title">🔍 Last leads received from Make</div><div class="card-sub">Raw payloads hitting the lead endpoint. Empty snapshot = Make is sending blanks (fix the mapping in Make). Real name/phone under odd keys = ShopFlow now captures it.</div></div>
+          <button class="btn btn-outline btn-sm" onclick="event.stopPropagation();loadLeadPayloads()">↻ Refresh</button>
+        </div>
+        <div style="padding:14px 18px;" id="al-payloads"><span style="color:var(--muted);font-size:13px;">Click Refresh after a lead comes in…</span></div>
+      </div>
+
       <div class="form-row" style="max-width:420px;">
         <label class="form-label">Shop</label>
         <select class="form-input" id="al-shop"><option value="">Loading shops…</option></select>
@@ -993,7 +1002,7 @@ function nav(page) {
   document.getElementById('page-' + page).classList.add('active');
   document.querySelector(`.sb-item[data-page="${page}"]`).classList.add('active');
   if (page === 'shops')   { if (!allShops.length) loadShops(); else filterShops(); }
-  if (page === 'addlead') populateLeadShops();
+  if (page === 'addlead') { populateLeadShops(); loadLeadPayloads(); }
   if (page === 'billing') renderBilling();
   if (page === 'growth')  renderGrowth();
   if (page === 'settings')  loadPlatformSettings();
@@ -2148,6 +2157,32 @@ async function populateLeadShops() {
   if (prev) sel.value = prev;
 }
 function escHtml(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// Diagnostics: show the raw integration payloads the lead endpoint received.
+async function loadLeadPayloads() {
+  const host = document.getElementById('al-payloads');
+  host.innerHTML = '<span style="color:var(--muted);font-size:13px;">Loading…</span>';
+  try {
+    const res = await fetch('/api/admin/lead-payloads', { headers: { 'x-admin-key': adminKey } });
+    const rows = await res.json();
+    if (!Array.isArray(rows) || !rows.length) {
+      host.innerHTML = '<span style="color:var(--muted);font-size:13px;">No leads received since the last restart. Trigger a Meta test lead, then Refresh.</span>';
+      return;
+    }
+    host.innerHTML = rows.map(r => {
+      const fields = Object.entries(r.snapshot || {});
+      const body = fields.length
+        ? fields.map(([k,v]) => `<div style="display:flex;gap:8px;"><span style="color:var(--muted);min-width:130px;">${escHtml(k)}</span><span>${escHtml(v) || '<em style="color:var(--faint)">(empty)</em>'}</span></div>`).join('')
+        : '<div style="color:var(--red);font-weight:600;">Empty payload — Make sent no fields. Fix the field mapping in Make.</div>';
+      return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;font-size:13px;">
+        <div style="font-size:11px;color:var(--faint);margin-bottom:6px;">${escHtml(r.at)} · shop: ${escHtml(r.shopSlug||'?')} · ${r.keyCount} field(s)</div>
+        ${body}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    host.innerHTML = '<span style="color:var(--red);font-size:13px;">Failed to load: ' + escHtml(e.message) + '</span>';
+  }
+}
 
 // POST a single lead to the admin endpoint. Returns the parsed JSON (or throws).
 async function postAdminLead(shopId, body) {
