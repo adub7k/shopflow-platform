@@ -18,6 +18,7 @@ const {
   twilioClient, genId, toE164, today,
 } = require('../db');
 const { runIntake } = require('../receptionist/intake');
+const { transcribeEnabled, transcribeTwilioRecording } = require('../receptionist/transcribe');
 const voice = require('../receptionist/voice');
 const relay = require('../receptionist/relay');
 const { notifyNewLead } = require('../email');
@@ -322,7 +323,16 @@ router.post('/api/twilio/voice/recording/:shopId', verifyTwilio, (req, res) => {
     const call = ctx.h.getById('calls', callSid);
     if (call) {
       call.recording = { recordingSid, durationSec, recordedAt: new Date().toISOString() };
+      if (transcribeEnabled()) call.transcriptStatus = 'processing';
       ctx.h.upsert('calls', call);
+      // Transcribe the bridged (answered-call) recording via ElevenLabs Scribe,
+      // then run the same AI intake voicemails use. Fire-and-forget — the recording
+      // still plays if this fails, and it no-ops unless ELEVENLABS_API_KEY is set.
+      if (transcribeEnabled()) {
+        transcribeTwilioRecording(recordingSid)
+          .then(text => text ? runIntake(ctx, callSid, { transcript: text, kind: 'call' }) : null)
+          .catch(e => console.error('Answered-call transcription failed:', e.message));
+      }
     }
   }
   res.type('text/xml').send('<Response></Response>'); // ACK (status callback ignores TwiML)
