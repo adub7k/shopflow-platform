@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>ShopFlow — Booking, CRM & AI Call Screening for service businesses</title>
-<meta name="description" content="ShopFlow is the all-in-one app for cleaning companies, detail shops, barbershops, nail salons & tint shops. Online booking, CRM, invoicing, automations — plus AI call screening that captures every missed lead."/>
+<title>ShopFlow — Done-for-you growth for local service businesses</title>
+<meta name="description" content="ShopFlow is the complete growth engine for detail shops, cleaning companies, barbershops and salons — Meta ads, a 24/7 AI receptionist, CRM, content and reviews, all done for you. Leads → booked jobs → repeat customers."/>
 <link rel="icon" href="/icons/icon-192.png"/>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -49,23 +49,19 @@ nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.82);backdrop-f
 @media(max-width:860px){.nav-links .hide-sm{display:none;}}
 
 /* ── Hero ── */
-.hero{position:relative;overflow:hidden;padding:64px 0 72px;background:
+.hero{position:relative;overflow:hidden;padding:70px 0 76px;background:
   radial-gradient(1100px 480px at 50% -120px,rgba(22,163,74,.10),transparent 70%),
   linear-gradient(180deg,#fbfdfc 0%,#ffffff 60%);}
-.trade-tabs{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:26px;}
-.trade-tab{border:1px solid var(--line);background:#fff;color:var(--ink-2);font-weight:600;font-size:13.5px;padding:8px 15px;border-radius:100px;cursor:pointer;font-family:var(--font);transition:all .15s;}
-.trade-tab:hover{border-color:#cfd6dd;}
-.trade-tab.active{background:var(--ink);color:#fff;border-color:var(--ink);}
 .hero h1{font-size:clamp(38px,6vw,62px);font-weight:900;letter-spacing:-.045em;line-height:1.02;margin:18px 0 0;}
 .hero h1 .green{color:var(--green);}
-.hero-sub{font-size:clamp(16px,2vw,19px);color:var(--muted);max-width:620px;margin:18px auto 30px;line-height:1.6;}
+.hero-sub{font-size:clamp(16px,2vw,19px);color:var(--muted);max-width:640px;margin:20px auto 30px;line-height:1.6;}
 .hero-btns{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
 .trust{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;color:var(--faint);font-size:13px;font-weight:600;margin-top:22px;}
 .trust span{display:inline-flex;align-items:center;gap:6px;}
 .trust b{color:var(--green-d);}
 
 /* ── Dashboard mockup ── */
-.mock{max-width:760px;margin:46px auto 0;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-lg);overflow:hidden;}
+.mock{max-width:760px;margin:50px auto 0;background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-lg);overflow:hidden;}
 .mock-bar{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--soft);}
 .mock-bar i{width:11px;height:11px;border-radius:50%;background:#dfe4ea;display:inline-block;}
 .mock-bar .mock-title{font-size:12.5px;font-weight:700;color:var(--muted);margin-left:6px;}
@@ -83,11 +79,23 @@ nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.82);backdrop-f
 .mock-time{font-size:12px;color:var(--muted);}
 .mock-badge{margin-left:auto;font-size:11px;font-weight:700;color:var(--green-d);background:var(--green-l);border:1px solid #c9efd6;border-radius:7px;padding:3px 9px;}
 
-/* ── Logos / proof band ── */
+/* ── Proof band ── */
 .band{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--soft);}
 .band-inner{display:flex;flex-wrap:wrap;gap:14px 40px;align-items:center;justify-content:center;padding:22px 0;color:var(--faint);font-weight:700;font-size:14px;}
 
-/* ── AI Call Screening (hero differentiator) ── */
+/* ── Process (the 5-step engine) ── */
+.flow{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-top:48px;counter-reset:step;}
+.flow-step{position:relative;background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px 20px;text-align:left;transition:transform .15s,box-shadow .2s,border-color .2s;}
+.flow-step:hover{transform:translateY(-3px);box-shadow:var(--shadow);border-color:#dde3e8;}
+.flow-num{width:34px;height:34px;border-radius:10px;background:var(--green-l);color:var(--green-d);font-weight:900;font-size:15px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;}
+.flow-k{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);}
+.flow-t{font-size:17px;font-weight:800;letter-spacing:-.01em;margin-top:3px;}
+.flow-d{font-size:13.5px;color:var(--muted);margin-top:8px;line-height:1.55;}
+.flow-step .arrow{display:none;}
+@media(max-width:980px){.flow{grid-template-columns:1fr 1fr;}}
+@media(max-width:560px){.flow{grid-template-columns:1fr;}}
+
+/* ── AI Receptionist (dark differentiator) ── */
 .ai{background:linear-gradient(180deg,#0b1320 0%,#0e1a14 100%);color:#fff;}
 .ai .eyebrow{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.3);color:#7ee2a0;}
 .ai h2{color:#fff;}
@@ -100,7 +108,6 @@ nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.82);backdrop-f
 .ai-step .d{font-size:13.5px;color:rgba(255,255,255,.6);margin-top:3px;line-height:1.55;}
 .ai-note{margin-top:18px;font-size:13.5px;color:rgba(255,255,255,.55);border-left:2px solid rgba(34,197,94,.5);padding:6px 0 6px 14px;line-height:1.6;}
 .ai-note b{color:#cdeed8;}
-/* phone */
 .phone{background:#0a0f14;border:1px solid rgba(255,255,255,.1);border-radius:26px;padding:14px;max-width:330px;margin:0 auto;box-shadow:0 30px 70px rgba(0,0,0,.5);}
 .phone-screen{background:#0f1620;border-radius:16px;padding:16px;}
 .call-head{display:flex;align-items:center;gap:11px;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.08);}
@@ -124,17 +131,17 @@ nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.82);backdrop-f
 .fdesc{font-size:14px;color:var(--muted);margin-top:6px;line-height:1.6;}
 
 /* ── Industries ── */
-.ind-langs{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:36px;}
-.ind-chip{background:#fff;border:1px solid var(--line);border-radius:13px;padding:16px;text-align:center;}
-.ind-chip .k{font-size:12px;color:var(--faint);font-weight:700;text-transform:uppercase;letter-spacing:.05em;}
-.ind-chip .v{font-size:18px;font-weight:800;color:var(--green-d);margin-top:5px;}
+.ind-langs{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:36px;}
+.ind-chip{background:#fff;border:1px solid var(--line);border-radius:13px;padding:18px 12px;text-align:center;}
+.ind-chip .em{font-size:24px;}
+.ind-chip .v{font-size:14px;font-weight:800;color:var(--ink);margin-top:8px;}
 @media(max-width:760px){.ind-langs{grid-template-columns:1fr 1fr;}}
 
-/* ── Pricing ── */
-.price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:46px;text-align:left;}
+/* ── Packages ── */
+.price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:46px;text-align:left;align-items:start;}
 .price{background:#fff;border:1px solid var(--line);border-radius:20px;padding:28px;display:flex;flex-direction:column;}
 .price.feat{border-color:var(--green);box-shadow:0 16px 40px rgba(22,163,74,.14);position:relative;}
-.price.feat::before{content:'Most popular';position:absolute;top:-12px;left:24px;background:var(--green);color:#fff;font-size:11px;font-weight:800;letter-spacing:.03em;padding:4px 12px;border-radius:100px;}
+.price.feat::before{content:'The Complete Solution';position:absolute;top:-12px;left:24px;background:var(--green);color:#fff;font-size:11px;font-weight:800;letter-spacing:.03em;padding:4px 12px;border-radius:100px;}
 .price .pn{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);}
 .price.feat .pn{color:var(--green-d);}
 .price .amt{font-size:44px;font-weight:900;letter-spacing:-.04em;margin-top:10px;}
@@ -142,12 +149,14 @@ nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.82);backdrop-f
 .price .per{font-size:13px;color:var(--faint);font-weight:600;}
 .price .desc{font-size:13.5px;color:var(--muted);margin:10px 0 16px;line-height:1.5;}
 .price hr{border:none;border-top:1px solid var(--line);margin:4px 0 16px;}
+.incl-head{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--faint);margin-bottom:12px;}
 .feat-li{font-size:14px;color:var(--ink-2);display:flex;gap:9px;align-items:flex-start;margin-bottom:10px;line-height:1.45;}
-.feat-li svg{flex-shrink:0;margin-top:2px;}
+.feat-li .ck{color:var(--green);font-weight:900;flex-shrink:0;}
 .feat-li.star{font-weight:700;color:var(--green-d);}
 .price .btn{margin-top:auto;width:100%;}
+.price .fine{font-size:11.5px;color:var(--faint);margin-top:14px;line-height:1.5;}
 
-/* ── Testimonials ── */
+/* ── Testimonials (ready for real quotes) ── */
 .quote{background:#fff;border:1px solid var(--line);border-radius:16px;padding:24px;}
 .quote .stars{color:#f5a623;font-size:15px;letter-spacing:2px;}
 .quote p{font-size:15px;line-height:1.6;margin:12px 0 16px;color:var(--ink-2);}
@@ -178,7 +187,7 @@ nav{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.82);backdrop-f
 /* ── Footer ── */
 footer{padding:54px 0 40px;border-top:1px solid var(--line);}
 .foot{display:flex;flex-wrap:wrap;gap:30px;justify-content:space-between;}
-.foot-brand{max-width:280px;}
+.foot-brand{max-width:300px;}
 .foot-brand .nav-logo{margin-bottom:10px;}
 .foot-brand p{font-size:13px;color:var(--muted);line-height:1.6;}
 .foot-cols{display:flex;gap:54px;flex-wrap:wrap;}
@@ -202,12 +211,12 @@ footer{padding:54px 0 40px;border-top:1px solid var(--line);}
     <a class="nav-logo" href="/"><img src="/icons/icon-192.png"/> ShopFlow</a>
     <div class="nav-links">
       <a class="lnk hide-sm" href="#how">How it works</a>
-      <a class="lnk hide-sm" href="#features">Features</a>
-      <a class="lnk hide-sm" href="#industries">Industries</a>
-      <a class="lnk" href="#pricing">Pricing</a>
+      <a class="lnk hide-sm" href="#receptionist">AI Receptionist</a>
+      <a class="lnk hide-sm" href="#packages">Packages</a>
+      <a class="lnk hide-sm" href="#faq">FAQ</a>
       <span class="nav-sep hide-sm"></span>
-      <a class="lnk hide-sm" href="/login">Login</a>
-      <a class="btn btn-green go-signup" id="nav-cta" href="/signup" style="padding:9px 16px;">Start free</a>
+      <a class="lnk hide-sm" href="/login">Client login</a>
+      <a class="btn btn-green" id="nav-cta" href="/demo" style="padding:9px 16px;">Book a call</a>
     </div>
   </div>
 </nav>
@@ -215,37 +224,32 @@ footer{padding:54px 0 40px;border-top:1px solid var(--line);}
 <!-- ═══ HERO ═══ -->
 <header class="hero">
   <div class="wrap center">
-    <div class="trade-tabs" role="tablist" aria-label="Choose your industry">
-      <button class="trade-tab active" data-trade-tab="cleaning"   onclick="setTrade('cleaning')">Cleaning</button>
-      <button class="trade-tab"        data-trade-tab="detail"     onclick="setTrade('detail')">Detail Shops</button>
-      <button class="trade-tab"        data-trade-tab="barbershop" onclick="setTrade('barbershop')">Barbershops</button>
-      <button class="trade-tab"        data-trade-tab="nails"      onclick="setTrade('nails')">Nail Salons</button>
-      <button class="trade-tab"        data-trade-tab="tint"       onclick="setTrade('tint')">Tint Shops</button>
-    </div>
-    <div class="eyebrow"><span class="dot"></span> <span id="t-eyebrow">Built for cleaning companies</span></div>
-    <h1><span id="t-hero-line1">Run your business.</span> <span class="green" id="t-hero-line2">Never miss a lead.</span></h1>
-    <p class="hero-sub" id="t-hero-sub">Booking, CRM, invoicing and automations in one simple app — plus AI call screening that captures every missed call and turns it into a lead.</p>
+    <div class="eyebrow"><span class="dot"></span> The complete growth engine for local service businesses</div>
+    <h1>We bring the leads.<br><span class="green">You run the shop.</span></h1>
+    <p class="hero-sub">ShopFlow runs your growth end to end — Meta ads that fill your pipeline, a 24/7 AI receptionist that answers every call, a CRM that keeps you organized, and content that builds your brand. All done for you.</p>
     <div class="hero-btns">
-      <a class="btn btn-green btn-lg go-signup" href="/signup">Start free trial →</a>
-      <a class="btn btn-ghost btn-lg" href="/demo">Book a demo</a>
+      <a class="btn btn-green btn-lg" href="/demo">Book a strategy call →</a>
+      <a class="btn btn-ghost btn-lg" href="#packages">See the packages</a>
     </div>
     <div class="trust">
-      <span>✓ <b>14-day</b> free trial</span>
-      <span>✓ No contracts</span>
-      <span>✓ Set up in <b>2 minutes</b></span>
+      <span>✓ <b>Fully managed</b>, end to end</span>
+      <span>✓ Bi-weekly strategy &amp; reporting</span>
+      <span>✓ Built for service businesses</span>
     </div>
 
-    <!-- Product overview / dashboard mockup -->
+    <!-- CRM snapshot mockup -->
     <div class="mock" id="how">
-      <div class="mock-bar"><i></i><i></i><i></i><span class="mock-title" id="mock-title">Sparkle Cleaning Co · Dashboard</span></div>
+      <div class="mock-bar"><i></i><i></i><i></i><span class="mock-title">Your shop · ShopFlow CRM</span></div>
       <div class="mock-body">
         <div class="mock-stats">
-          <div class="mock-stat"><div class="l">Revenue MTD</div><div class="v g" id="mock-rev">$18,420</div></div>
-          <div class="mock-stat"><div class="l">New leads</div><div class="v" id="mock-leads">7</div></div>
-          <div class="mock-stat"><div class="l">Jobs today</div><div class="v" id="mock-jobs">9</div></div>
+          <div class="mock-stat"><div class="l">New leads MTD</div><div class="v g">34</div></div>
+          <div class="mock-stat"><div class="l">Booked jobs</div><div class="v">21</div></div>
+          <div class="mock-stat"><div class="l">Revenue MTD</div><div class="v g">$18,420</div></div>
         </div>
-        <div class="mock-label" id="mock-list-label">Today's Schedule</div>
-        <div id="mock-rows"></div>
+        <div class="mock-label">Today's pipeline</div>
+        <div class="mock-row"><div class="mock-av"></div><div><div class="mock-name">Chris T. · Tesla Model 3</div><div class="mock-time">Ceramic coating · from Meta ad · called back in 12s</div></div><div class="mock-badge">New lead</div></div>
+        <div class="mock-row"><div class="mock-av" style="background:rgba(37,99,235,.14);"></div><div><div class="mock-name">Mia L. · Ford F-150</div><div class="mock-time">Full detail · booked online · reminder sent</div></div><div class="mock-badge">Booked</div></div>
+        <div class="mock-row"><div class="mock-av" style="background:rgba(217,119,6,.14);"></div><div><div class="mock-name">Andre C. · BMW X5</div><div class="mock-time">Job complete · review request sent</div></div><div class="mock-badge">Review ✦</div></div>
       </div>
     </div>
   </div>
@@ -253,24 +257,65 @@ footer{padding:54px 0 40px;border-top:1px solid var(--line);}
 
 <!-- proof band -->
 <div class="band"><div class="wrap band-inner">
-  <span>One app, your whole business</span><span>·</span><span>5 industries</span><span>·</span><span>Booking + CRM + Invoicing</span><span>·</span><span>AI Call Screening</span>
+  <span>Meta ads</span><span>·</span><span>24/7 AI receptionist</span><span>·</span><span>CRM &amp; automations</span><span>·</span><span>Reviews &amp; reputation</span><span>·</span><span>Short-form content</span>
 </div></div>
 
-<!-- ═══ AI CALL SCREENING (the differentiator) ═══ -->
-<section class="ai section" id="call-screening">
+<!-- ═══ PROCESS (the 5-step engine) ═══ -->
+<section class="section" id="process">
+  <div class="wrap center">
+    <div class="eyebrow">How it works</div>
+    <h2 class="h2" style="margin-top:16px;">One simple engine, five moving parts</h2>
+    <p class="lead" style="max-width:600px;margin:14px auto 0;">Most shops lose money at the seams — a lead that never gets a callback, a job that never gets rebooked. We own the whole flow, so nothing slips.</p>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-num">1</div>
+        <div class="flow-k">Generate</div>
+        <div class="flow-t">Leads</div>
+        <div class="flow-d">Meta ad campaigns — copy, creative and landing pages — that put your shop in front of ready-to-buy local customers.</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">2</div>
+        <div class="flow-k">Convert</div>
+        <div class="flow-t">Receptionist</div>
+        <div class="flow-d">A 24/7 AI receptionist answers every call, books the job, and texts back instantly — so no lead ever goes to voicemail.</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">3</div>
+        <div class="flow-k">Operate</div>
+        <div class="flow-t">CRM</div>
+        <div class="flow-d">Every lead lands in your ShopFlow CRM with booking, reminders and job history — your whole business in one place.</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">4</div>
+        <div class="flow-k">Retain</div>
+        <div class="flow-t">Automations &amp; Reviews</div>
+        <div class="flow-d">Automatic follow-ups, rebook nudges and review requests turn one-time jobs into repeat customers and 5-star ratings.</div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-num">5</div>
+        <div class="flow-k">Build</div>
+        <div class="flow-t">Brand &amp; Content</div>
+        <div class="flow-d">Short-form videos, social posts and stories keep your shop top-of-mind — and make every ad convert better.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══ AI RECEPTIONIST (dark differentiator) ═══ -->
+<section class="ai section" id="receptionist">
   <div class="wrap">
     <div class="center">
-      <div class="eyebrow"><span class="dot"></span> What sets ShopFlow apart</div>
-      <h2 class="h2" style="margin-top:16px;">Never lose another job to a missed call.</h2>
-      <p class="lead" style="max-width:640px;margin:14px auto 0;">Most jobs are won or lost on the phone. ShopFlow's <strong style="color:#cdeed8;">AI Call Screening &amp; Lead Capture</strong> works the moment you can't pick up.</p>
+      <div class="eyebrow"><span class="dot"></span> The part that pays for itself</div>
+      <h2 class="h2" style="margin-top:16px;">A receptionist that never misses a call.</h2>
+      <p class="lead" style="max-width:640px;margin:14px auto 0;">Most jobs are won or lost on the phone. Your <strong style="color:#cdeed8;">24/7 AI receptionist</strong> answers every call — day, night, weekends, and every time you're already on a job.</p>
     </div>
     <div class="ai-grid">
       <div class="ai-steps">
-        <div class="ai-step"><div class="n">1</div><div><div class="t">Screens the call</div><div class="d">Tells a real customer from spam and robocalls, so you only get pulled away for calls that matter.</div></div></div>
-        <div class="ai-step"><div class="n">2</div><div><div class="t">Captures missed &amp; unanswered leads</div><div class="d">When you're on a job and can't answer, the caller is captured instead of lost — no callback sticky notes.</div></div></div>
-        <div class="ai-step"><div class="n">3</div><div><div class="t">Sends an instant SMS follow-up</div><div class="d">The caller gets a text back in seconds — "sorry we missed you, how can we help?" — so the lead stays warm.</div></div></div>
-        <div class="ai-step"><div class="n">4</div><div><div class="t">Creates the CRM lead &amp; logs the call</div><div class="d">A new lead lands in your pipeline automatically, with the call activity and a summary when one's available.</div></div></div>
-        <div class="ai-note">It's <b>not</b> a robotic receptionist pretending to be you. It screens, captures, and follows up — so a real conversation can still happen, and no lead ever slips through.</div>
+        <div class="ai-step"><div class="n">1</div><div><div class="t">Answers every call, 24/7</div><div class="d">Picks up on the first ring when you can't — nights, weekends, or mid-job — in a natural voice, never a robotic menu.</div></div></div>
+        <div class="ai-step"><div class="n">2</div><div><div class="t">Quotes, books &amp; captures the lead</div><div class="d">Answers common questions, gives ballpark pricing, and books the appointment or captures the caller's details.</div></div></div>
+        <div class="ai-step"><div class="n">3</div><div><div class="t">Texts back instantly</div><div class="d">The caller gets a follow-up text in seconds so the lead stays warm — even if they hang up first.</div></div></div>
+        <div class="ai-step"><div class="n">4</div><div><div class="t">Logs it in your CRM</div><div class="d">A new lead lands in your pipeline automatically, with a call summary and transcript, ready to follow up.</div></div></div>
+        <div class="ai-note">And when a call needs a human, it <b>transfers to you</b> — you stay in control, you just stop losing the calls you'd have missed.</div>
       </div>
       <div class="phone">
         <div class="phone-screen">
@@ -278,32 +323,15 @@ footer{padding:54px 0 40px;border-top:1px solid var(--line);}
             <div class="call-ic">📞</div>
             <div><div class="call-from">+1 (505) 555-0148</div><div class="call-meta">Incoming · Albuquerque, NM</div></div>
           </div>
-          <div class="evt"><div class="evt-ic">🛡️</div><div><div class="et">Screened — looks like a real customer</div><div class="es">Not flagged as spam or robocall.</div></div></div>
-          <div class="evt"><div class="evt-ic">⚡</div><div><div class="et">You were on a job — auto-text sent</div><div class="es">Replied in 4 seconds.</div>
-            <div class="sms">Hi! This is Sparkle Cleaning — sorry we missed your call. How can we help? Reply here or book online anytime.</div></div></div>
-          <div class="evt"><div class="evt-ic">✓</div><div><div class="et">New lead created in your CRM</div><div class="es">Added to pipeline · call logged · follow-up task set.</div></div></div>
+          <div class="evt"><div class="evt-ic">✅</div><div><div class="et">Answered in 1 ring — 7:42 PM</div><div class="es">You were closed. The AI picked up.</div></div></div>
+          <div class="evt"><div class="evt-ic">📅</div><div><div class="et">Booked: Full detail, Saturday 10 AM</div><div class="es">Quoted $180 · deposit link texted.</div>
+            <div class="sms">Hi! This is Mad Detailing — you're booked for Saturday at 10 AM. Here's your confirmation & deposit link. See you then! 🚗</div></div></div>
+          <div class="evt"><div class="evt-ic">✓</div><div><div class="et">New lead created in your CRM</div><div class="es">Call summary + transcript attached · follow-up task set.</div></div></div>
         </div>
       </div>
     </div>
     <div class="center" style="margin-top:36px;">
-      <a class="btn btn-green btn-lg" href="/demo">See it on a 15-min demo →</a>
-    </div>
-  </div>
-</section>
-
-<!-- ═══ FEATURES ═══ -->
-<section class="section" id="features">
-  <div class="wrap center">
-    <div class="eyebrow">Everything in one place</div>
-    <h2 class="h2" style="margin-top:16px;">Run the whole business from one app</h2>
-    <p class="lead" style="max-width:560px;margin:14px auto 0;">No more juggling a booking app, a spreadsheet, an invoice tool and a notepad. It's all here.</p>
-    <div class="grid-3">
-      <div class="card"><div class="fic">📅</div><div class="fname">Online Booking</div><div class="fdesc">Clients book from a link — no app download, no account. Works on any phone.</div></div>
-      <div class="card"><div class="fic">👤</div><div class="fname">Customer CRM</div><div class="fdesc" id="t-crm-desc">Every customer gets a full profile — history, notes, spending, loyalty, and no-shows.</div></div>
-      <div class="card"><div class="fic">🧾</div><div class="fname">Invoices &amp; Deposits</div><div class="fdesc">Send estimates, collect deposits, and take card payments straight to your Stripe account.</div></div>
-      <div class="card"><div class="fic">💬</div><div class="fname">SMS Automations</div><div class="fdesc">Appointment reminders, review requests and follow-ups fire automatically. Fewer no-shows.</div></div>
-      <div class="card"><div class="fic">🔁</div><div class="fname">Retention &amp; Rebooking</div><div class="fdesc">Customers who go quiet get an automatic nudge to come back. Set it and let it run.</div></div>
-      <div class="card"><div class="fic">📈</div><div class="fname">Revenue Dashboard</div><div class="fdesc" id="t-rev-desc">See revenue by staff, by service, by month. Know exactly what your business is doing.</div></div>
+      <a class="btn btn-green btn-lg" href="/demo">Hear it on a 15-min call →</a>
     </div>
   </div>
 </section>
@@ -311,105 +339,112 @@ footer{padding:54px 0 40px;border-top:1px solid var(--line);}
 <!-- ═══ INDUSTRIES ═══ -->
 <section class="section soft" id="industries">
   <div class="wrap center">
-    <div class="eyebrow">Built for your trade</div>
-    <h2 class="h2" style="margin-top:16px;">One platform that speaks your language</h2>
-    <p class="lead" style="max-width:600px;margin:14px auto 0;">Pick your industry and the whole app relabels itself — not a generic one-size-fits-all booking tool. Pressure washing and other service businesses are supported too.</p>
-    <div class="trade-tabs" style="margin-top:28px;">
-      <button class="trade-tab active" data-trade-tab="cleaning"   onclick="setTrade('cleaning')">Cleaning</button>
-      <button class="trade-tab"        data-trade-tab="detail"     onclick="setTrade('detail')">Detail Shops</button>
-      <button class="trade-tab"        data-trade-tab="barbershop" onclick="setTrade('barbershop')">Barbershops</button>
-      <button class="trade-tab"        data-trade-tab="nails"      onclick="setTrade('nails')">Nail Salons</button>
-      <button class="trade-tab"        data-trade-tab="tint"       onclick="setTrade('tint')">Tint Shops</button>
-    </div>
+    <div class="eyebrow">Who it's for</div>
+    <h2 class="h2" style="margin-top:16px;">Built for local service businesses</h2>
+    <p class="lead" style="max-width:600px;margin:14px auto 0;">We specialize in the trades that live and die by the phone and the calendar — where one missed call is a lost job.</p>
     <div class="ind-langs">
-      <div class="ind-chip"><div class="k">Your team</div><div class="v" id="t-lang-staff">Cleaners</div></div>
-      <div class="ind-chip"><div class="k">Grouped as</div><div class="v" id="t-lang-station">Crews</div></div>
-      <div class="ind-chip"><div class="k">The work</div><div class="v" id="t-lang-job">Jobs</div></div>
-      <div class="ind-chip"><div class="k">Customer record</div><div class="v" id="t-lang-record">Properties</div></div>
+      <div class="ind-chip"><div class="em">🚗</div><div class="v">Detail Shops</div></div>
+      <div class="ind-chip"><div class="em">🧼</div><div class="v">Cleaning Cos</div></div>
+      <div class="ind-chip"><div class="em">💈</div><div class="v">Barbershops</div></div>
+      <div class="ind-chip"><div class="em">💅</div><div class="v">Nail Salons</div></div>
+      <div class="ind-chip"><div class="em">🪟</div><div class="v">Tint Shops</div></div>
     </div>
   </div>
 </section>
 
-<!-- ═══ PRICING ═══ -->
-<section class="section" id="pricing">
+<!-- ═══ PACKAGES ═══ -->
+<section class="section" id="packages">
   <div class="wrap center">
-    <div class="eyebrow" style="color:var(--green-d);">Pricing</div>
-    <h2 class="h2" style="margin-top:16px;">Simple, honest pricing</h2>
-    <p class="lead" style="margin-top:10px;">Flat monthly price. No contracts. 14-day free trial on every plan.</p>
+    <div class="eyebrow" style="color:var(--green-d);">Packages</div>
+    <h2 class="h2" style="margin-top:16px;">Pick the level of growth you want</h2>
+    <p class="lead" style="margin-top:10px;max-width:600px;margin-left:auto;margin-right:auto;">Every package builds on the one before it. Start where you are — scale when you're ready.</p>
     <div class="price-grid">
+
       <!-- Starter -->
       <div class="price">
         <div class="pn">Starter</div>
-        <div class="amt"><sup>$</sup>50</div><div class="per">per month</div>
-        <div class="desc">Everything a solo operator needs to look professional and stay booked.</div>
+        <div class="amt"><sup>$</sup>750</div><div class="per">per month</div>
+        <div class="desc">The foundation — convert the calls you're already getting and keep customers coming back.</div>
         <hr/>
-        <div class="feat-li">✓ Online booking page</div>
-        <div class="feat-li" id="t-price-staff-2">✓ Up to 2 team members</div>
-        <div class="feat-li">✓ Customer CRM &amp; profiles</div>
-        <div class="feat-li">✓ Revenue dashboard</div>
-        <div class="feat-li">✓ Loyalty program</div>
-        <a class="btn btn-ghost go-signup" data-plan="starter" href="/signup?plan=starter">Start free trial</a>
+        <div class="incl-head">What's included</div>
+        <div class="feat-li"><span class="ck">✓</span> AI Receptionist (24/7 call answering)</div>
+        <div class="feat-li"><span class="ck">✓</span> ShopFlow CRM</div>
+        <div class="feat-li"><span class="ck">✓</span> Online booking</div>
+        <div class="feat-li"><span class="ck">✓</span> Automated appointment reminders</div>
+        <div class="feat-li"><span class="ck">✓</span> Reputation management</div>
+        <div class="feat-li"><span class="ck">✓</span> Monthly analytics</div>
+        <a class="btn btn-ghost" href="/demo">Book a call</a>
       </div>
-      <!-- Pro (featured) -->
-      <div class="price feat">
-        <div class="pn">Pro</div>
-        <div class="amt"><sup>$</sup>150</div><div class="per">per month</div>
-        <div class="desc">For growing shops that want automation doing the busywork.</div>
-        <hr/>
-        <div class="feat-li">✓ Everything in Starter</div>
-        <div class="feat-li" id="t-price-staff-unl">✓ Unlimited team members</div>
-        <div class="feat-li">✓ SMS automations &amp; reminders</div>
-        <div class="feat-li">✓ Invoices, estimates &amp; deposits</div>
-        <div class="feat-li">✓ Retention &amp; review campaigns</div>
-        <a class="btn btn-green go-signup" data-plan="pro" href="/signup?plan=pro">Start free trial</a>
-      </div>
-      <!-- Shop (AI Call Screening anchor) -->
+
+      <!-- Build My Brand -->
       <div class="price">
-        <div class="pn">Shop</div>
-        <div class="amt"><sup>$</sup>350</div><div class="per">per month</div>
-        <div class="desc">The full system — including the AI that captures every lead.</div>
+        <div class="pn">Build My Brand</div>
+        <div class="amt"><sup>$</sup>1,250</div><div class="per">per month</div>
+        <div class="desc">Build the brand — a steady stream of short-form content and social that keeps your shop top-of-mind.</div>
         <hr/>
-        <div class="feat-li">✓ Everything in Pro</div>
-        <div class="feat-li star">★ AI Call Screening &amp; Lead Capture</div>
-        <div class="feat-li">✓ Missed-call text-back &amp; call logs</div>
-        <div class="feat-li">✓ Multi-location &amp; kiosk mode</div>
-        <div class="feat-li">✓ White-glove setup</div>
-        <a class="btn btn-ghost go-signup" data-plan="shop" href="/signup?plan=shop">Start free trial</a>
+        <div class="incl-head">Everything in Starter, plus</div>
+        <div class="feat-li star"><span class="ck">★</span> 6 short-form videos / mo</div>
+        <div class="feat-li"><span class="ck">✓</span> 8 social posts / mo</div>
+        <div class="feat-li"><span class="ck">✓</span> Creative design</div>
+        <div class="feat-li"><span class="ck">✓</span> Content calendar</div>
+        <div class="feat-li"><span class="ck">✓</span> Bi-weekly strategy call</div>
+        <a class="btn btn-ghost" href="/demo">Book a call</a>
       </div>
+
+      <!-- Scale (featured) -->
+      <div class="price feat">
+        <div class="pn">Scale</div>
+        <div class="amt"><sup>$</sup>2,000</div><div class="per">per month</div>
+        <div class="desc">The complete solution — Meta ads plus the full content engine, managed and reported on for you.</div>
+        <hr/>
+        <div class="incl-head">Everything in Build My Brand, plus</div>
+        <div class="feat-li star"><span class="ck">★</span> Meta ad management</div>
+        <div class="feat-li"><span class="ck">✓</span> Ad copywriting</div>
+        <div class="feat-li"><span class="ck">✓</span> Landing page optimization</div>
+        <div class="feat-li"><span class="ck">✓</span> 8 short-form videos / mo</div>
+        <div class="feat-li"><span class="ck">✓</span> 12 social posts / mo</div>
+        <div class="feat-li"><span class="ck">✓</span> 20 stories / mo</div>
+        <div class="feat-li"><span class="ck">✓</span> Review generation</div>
+        <div class="feat-li"><span class="ck">✓</span> Advanced lead tracking</div>
+        <div class="feat-li"><span class="ck">✓</span> Bi-weekly reporting</div>
+        <div class="feat-li"><span class="ck">✓</span> Bi-weekly strategy meetings</div>
+        <a class="btn btn-green" href="/demo">Book a call</a>
+        <div class="fine">+ Meta ad spend, billed separately and paid directly to Meta.</div>
+      </div>
+
     </div>
-    <p style="font-size:13px;color:var(--faint);margin-top:22px;font-weight:600;">AI Call Screening &amp; Lead Capture is included on the Shop plan · Cancel anytime</p>
+    <p style="font-size:13px;color:var(--faint);margin-top:22px;font-weight:600;">Not sure which fits? Book a call and we'll map it to your shop · Setup handled for you</p>
   </div>
 </section>
 
 <!-- ═══ WHY / OUTCOMES ═══ -->
-<!-- Social-proof slot uses real product outcomes, not invented quotes or stats.
-     Drop genuine, permissioned customer testimonials in here when you have them
-     (the .quote styles above are ready for a 3-up testimonial grid). -->
+<!-- Social-proof slot: drop genuine, permissioned client results/testimonials here.
+     The .quote styles above are ready for a 3-up testimonial grid. -->
 <section class="section soft">
   <div class="wrap center">
-    <div class="eyebrow">Why owners switch</div>
-    <h2 class="h2" style="margin-top:16px;">Built to win you more business</h2>
-    <p class="lead" style="max-width:560px;margin:14px auto 0;">Every feature points at one thing — more booked jobs, less time at the desk.</p>
+    <div class="eyebrow">Why shops work with us</div>
+    <h2 class="h2" style="margin-top:16px;">One team for the whole growth problem</h2>
+    <p class="lead" style="max-width:560px;margin:14px auto 0;">No more stitching together an ad guy, a booking app, an answering service and a content freelancer. It's one engine, one team, one bill.</p>
     <div class="grid-3" style="text-align:left;">
-      <div class="card"><div class="fic">📞</div><div class="fname">Never miss a lead</div><div class="fdesc">AI call screening catches missed and unanswered calls and turns them into CRM leads with an instant text back.</div></div>
-      <div class="card"><div class="fic">✅</div><div class="fname">Fewer no-shows</div><div class="fdesc">Automatic reminders and rebook nudges keep your calendar full — without you lifting a finger.</div></div>
-      <div class="card"><div class="fic">⚡</div><div class="fname">Less time on admin</div><div class="fdesc">Booking, customer history, invoices and payments live in one app, so you spend less time at the desk.</div></div>
+      <div class="card"><div class="fic">📈</div><div class="fname">More leads</div><div class="fdesc">Meta campaigns built and managed by people who do this every day — put in front of buyers in your service area.</div></div>
+      <div class="card"><div class="fic">📞</div><div class="fname">Nothing slips</div><div class="fdesc">Every call answered, every lead captured, every follow-up sent — automatically, around the clock.</div></div>
+      <div class="card"><div class="fic">🤝</div><div class="fname">You stay focused</div><div class="fdesc">You run the shop and do the work. We run the marketing, the pipeline and the reporting.</div></div>
     </div>
   </div>
 </section>
 
 <!-- ═══ FAQ ═══ -->
-<section class="section">
+<section class="section" id="faq">
   <div class="wrap center">
     <div class="eyebrow">Questions</div>
     <h2 class="h2" style="margin-top:16px;">Everything you might be wondering</h2>
     <div class="faq" style="text-align:left;">
-      <details class="qa"><summary>Is there really a free trial? <span class="pm">+</span></summary><div class="ans">Yes — 14 days free on every plan, no contract. Set up your shop in about two minutes and cancel anytime.</div></details>
-      <details class="qa"><summary>Does the AI Call Screening replace my receptionist? <span class="pm">+</span></summary><div class="ans">No. It's a call <em>screening &amp; lead capture</em> system, not a full receptionist. It screens spam from real callers, captures missed and unanswered calls, texts the caller back instantly, and creates a CRM lead — so a real conversation can still happen and no lead is lost. It doesn't pretend to be a person or fully answer every call for you.</div></details>
-      <details class="qa"><summary>Which industries is ShopFlow for? <span class="pm">+</span></summary><div class="ans">Cleaning companies, detail shops, barbershops, nail salons and tint shops are first-class — and pressure washing and other service businesses are supported too. The whole app relabels itself to your trade.</div></details>
-      <details class="qa"><summary>How long does setup take? <span class="pm">+</span></summary><div class="ans">About two minutes: pick your business type, add your team, and connect your booking link. No training required, and white-glove setup is included on the Shop plan.</div></details>
-      <details class="qa"><summary>Do I need to download an app? <span class="pm">+</span></summary><div class="ans">No. ShopFlow runs in any browser and installs to your home screen like an app. Your customers book from a link you text them — they never download anything.</div></details>
-      <details class="qa"><summary>Can I cancel anytime? <span class="pm">+</span></summary><div class="ans">Yes. No contracts, no cancellation fees — month to month.</div></details>
+      <details class="qa"><summary>Is ad spend included in the price? <span class="pm">+</span></summary><div class="ans">No — your monthly package covers the management, creative and software. Your Meta ad budget is separate and paid directly to Meta, so every dollar of spend goes to reaching customers, not to us. We'll recommend a starting budget on your call.</div></details>
+      <details class="qa"><summary>Do the packages build on each other? <span class="pm">+</span></summary><div class="ans">Yes. Starter is the foundation (receptionist, CRM, booking, reviews). Build My Brand adds short-form content and social on top. Scale is the complete engine — it turns on Meta ad management with full content output and reporting. Every tier includes everything in the one before it.</div></details>
+      <details class="qa"><summary>What does the AI receptionist actually do? <span class="pm">+</span></summary><div class="ans">It answers your calls 24/7 in a natural voice, answers common questions, gives quotes, books appointments, and captures the lead into your CRM with a summary and transcript. When a call needs you, it transfers to a human. It's how you stop losing jobs to missed and after-hours calls.</div></details>
+      <details class="qa"><summary>Which businesses is this for? <span class="pm">+</span></summary><div class="ans">Local service businesses that rely on the phone and the calendar — detail shops, cleaning companies, barbershops, nail salons and tint shops especially. If you win jobs by phone and repeat customers, this is built for you.</div></details>
+      <details class="qa"><summary>How fast will I see results? <span class="pm">+</span></summary><div class="ans">The receptionist and CRM start capturing leads on day one. Meta ads typically take a few weeks to gather data and hit their stride — that's why we work in bi-weekly strategy cycles, reviewing the numbers and adjusting together.</div></details>
+      <details class="qa"><summary>Do I have to switch off my current tools? <span class="pm">+</span></summary><div class="ans">We handle setup for you and route everything through your ShopFlow CRM so your leads, calls, bookings and reviews live in one place. We'll sort out the details of your current setup on the onboarding call.</div></details>
     </div>
   </div>
 </section>
@@ -418,13 +453,13 @@ footer{padding:54px 0 40px;border-top:1px solid var(--line);}
 <section class="section">
   <div class="wrap">
     <div class="final">
-      <h2 class="h2">Ready to stop losing leads?</h2>
-      <p id="t-cta-sub">Join the cleaning companies, shops and studios running their whole business on ShopFlow.</p>
+      <h2 class="h2">Ready to fill your calendar?</h2>
+      <p>Book a free strategy call. We'll look at where you're losing jobs and map out exactly which package fits your shop.</p>
       <div class="hero-btns" style="justify-content:center;">
-        <a class="btn btn-green btn-lg go-signup" href="/signup">Start free trial →</a>
-        <a class="btn btn-ghost btn-lg" href="/demo">Book a demo</a>
+        <a class="btn btn-green btn-lg" href="/demo">Book a strategy call →</a>
+        <a class="btn btn-ghost btn-lg" href="#packages">See the packages</a>
       </div>
-      <small>14-day free trial · No contracts · Set up in 2 minutes</small>
+      <small>Fully managed · Bi-weekly strategy &amp; reporting · Built for service businesses</small>
     </div>
   </div>
 </section>
@@ -435,13 +470,13 @@ footer{padding:54px 0 40px;border-top:1px solid var(--line);}
     <div class="foot">
       <div class="foot-brand">
         <a class="nav-logo" href="/"><img src="/icons/icon-192.png"/> ShopFlow</a>
-        <p>The all-in-one operating system for service businesses — booking, CRM, invoicing, automations and AI call screening.</p>
+        <p>The complete growth engine for local service businesses — Meta ads, a 24/7 AI receptionist, CRM, content and reviews, all done for you.</p>
       </div>
       <div class="foot-cols">
-        <div class="foot-col"><h4>Product</h4>
-          <a href="#features">Features</a><a href="#call-screening">AI Call Screening</a><a href="#industries">Industries</a><a href="#pricing">Pricing</a></div>
         <div class="foot-col"><h4>Company</h4>
-          <a href="/demo">Book a demo</a><a href="/login">Login</a><a href="/signup">Start free</a></div>
+          <a href="#how">How it works</a><a href="#receptionist">AI Receptionist</a><a href="#packages">Packages</a><a href="#faq">FAQ</a></div>
+        <div class="foot-col"><h4>Get started</h4>
+          <a href="/demo">Book a call</a><a href="/login">Client login</a></div>
         <div class="foot-col"><h4>Legal</h4>
           <a href="/terms.html">Terms</a><a href="/privacy.html">Privacy</a></div>
       </div>
@@ -451,125 +486,8 @@ footer{padding:54px 0 40px;border-top:1px solid var(--line);}
 </footer>
 
 <script>
-// ── Industry switcher ─────────────────────────────────────────────────────────
-// One landing page; copy, dashboard mockup, and trade language relabel per
-// industry. Keys mirror server/industries.js. Selecting a trade also carries it
-// into the signup flow via ?industry= so the new account starts on the right vertical.
-const TRADES = {
-  cleaning: {
-    eyebrow:'Built for cleaning companies', line1:'Run your business.', line2:'Never miss a lead.',
-    sub:"Booking, CRM, invoicing and automations in one simple app — plus AI call screening that captures every missed call and turns it into a lead.",
-    crmDesc:'Every customer gets a full profile — properties, job history, gate codes, notes, and spending.',
-    revDesc:'See revenue per cleaner, per crew, per month. Know exactly what your business is doing.',
-    lang:{staff:'Cleaners',station:'Crews',job:'Jobs',record:'Properties'},
-    ctaSub:'Join the cleaning companies running their whole business on ShopFlow.',
-    mock:{title:'Sparkle Cleaning Co · Dashboard',rev:'$18,420',leads:'7',jobs:'9',listLabel:"Today's Schedule",rows:[
-      {name:'Maria Lopez · 3-bed deep clean',meta:'9:00 AM · Crew A · 123 Oak St',badge:'9 AM'},
-      {name:'Riverside Offices',meta:'12:00 PM · Crew B · recurring',badge:'12 PM'},
-      {name:'The Hales · move-out',meta:'2:30 PM · Crew A · 88 Pine Ave',badge:'2:30'},
-    ]},
-  },
-  detail: {
-    eyebrow:'Built for detail shops', line1:'Run your bay.', line2:'Never miss a lead.',
-    sub:"Booking, deposits, vehicle tracking and automations in one simple app — plus AI call screening that captures every missed call and turns it into a lead.",
-    crmDesc:'Every customer gets a full profile — vehicles, service history, photos, notes, and spending.',
-    revDesc:'See revenue per technician, per service, per month. Know exactly what your shop is doing.',
-    lang:{staff:'Technicians',station:'Bays',job:'Jobs',record:'Vehicles'},
-    ctaSub:'Join the detail shops running their whole business on ShopFlow.',
-    mock:{title:'Mad Detailing · Dashboard',rev:'$11,640',leads:'5',jobs:'6',listLabel:"Today's Bays",rows:[
-      {name:'Chris Tran · Tesla Model 3',meta:'9:00 AM · Ceramic Coating · Bay 1',badge:'9 AM'},
-      {name:'Mia Lopez · Ford F-150',meta:'11:00 AM · Full Detail · Bay 2',badge:'11 AM'},
-      {name:'Andre Cole · BMW X5',meta:'1:30 PM · Interior Detail · Bay 1',badge:'1:30'},
-    ]},
-  },
-  barbershop: {
-    eyebrow:'Built for barbershops', line1:'Run your shop.', line2:'Never miss a lead.',
-    sub:"Booking, CRM, reminders and automations in one simple app — plus AI call screening that captures every missed call and turns it into a lead.",
-    crmDesc:'Every client gets a full profile — visit history, cut notes, spending, loyalty points, no-shows.',
-    revDesc:'See revenue per barber, per service, per month. Know exactly what your shop is doing.',
-    lang:{staff:'Barbers',station:'Chairs',job:'Visits',record:'Clients'},
-    ctaSub:'Join the barbershops running their whole business on ShopFlow.',
-    mock:{title:"King's Cuts · Dashboard",rev:'$4,280',leads:'4',jobs:'12',listLabel:"Today's Appointments",rows:[
-      {name:'Jordan Rivera',meta:'9:00 AM · Skin Fade · Marcus',badge:'9 AM'},
-      {name:'Kevin James',meta:'10:00 AM · Haircut · Dre',badge:'10 AM'},
-      {name:'DeShawn Carter',meta:'11:30 AM · Cut + Beard · Tony',badge:'11:30'},
-    ]},
-  },
-  nails: {
-    eyebrow:'Built for nail salons', line1:'Run your studio.', line2:'Never miss a lead.',
-    sub:"Booking, CRM, reminders and automations in one simple app — plus AI call screening that captures every missed call and turns it into a lead.",
-    crmDesc:'Every client gets a full profile — visit history, service notes, spending, loyalty points, no-shows.',
-    revDesc:'See revenue per nail tech, per service, per month. Know exactly what your studio is doing.',
-    lang:{staff:'Nail Techs',station:'Stations',job:'Appointments',record:'Clients'},
-    ctaSub:'Join the nail salons running their whole business on ShopFlow.',
-    mock:{title:'Polished Studio · Dashboard',rev:'$6,150',leads:'6',jobs:'10',listLabel:"Today's Appointments",rows:[
-      {name:'Sofia Reyes',meta:'9:30 AM · Full Set · Bella',badge:'9:30'},
-      {name:'Hannah Kim',meta:'11:00 AM · Gel Fill · Tara',badge:'11 AM'},
-      {name:'Priya Patel',meta:'2:00 PM · Mani + Pedi · Bella',badge:'2 PM'},
-    ]},
-  },
-  tint: {
-    eyebrow:'Built for tint shops', line1:'Run your shop.', line2:'Never miss a lead.',
-    sub:"Booking, deposits, vehicle tracking and automations in one simple app — plus AI call screening that captures every missed call and turns it into a lead.",
-    crmDesc:'Every customer gets a full profile — vehicles, service history, photos, notes, and spending.',
-    revDesc:'See revenue per installer, per service, per month. Know exactly what your shop is doing.',
-    lang:{staff:'Installers',station:'Bays',job:'Jobs',record:'Vehicles'},
-    ctaSub:'Join the tint shops running their whole business on ShopFlow.',
-    mock:{title:'Apex Window Tint · Dashboard',rev:'$9,300',leads:'5',jobs:'7',listLabel:"Today's Bays",rows:[
-      {name:'Marcus Bell · Charger',meta:'9:00 AM · Full Vehicle Tint · Bay 1',badge:'9 AM'},
-      {name:'Lena Park · Model Y',meta:'11:30 AM · Ceramic Tint · Bay 2',badge:'11:30'},
-      {name:'Omar Said · Silverado',meta:'2:00 PM · Windshield Strip · Bay 1',badge:'2 PM'},
-    ]},
-  },
-};
-
-function setText(id,val){ const el=document.getElementById(id); if(el) el.innerHTML=val; }
-
-function setTrade(key){
-  const t = TRADES[key]; if(!t) return;
-  setText('t-eyebrow',t.eyebrow);
-  setText('t-hero-line1',t.line1);
-  setText('t-hero-line2',t.line2);
-  setText('t-hero-sub',t.sub);
-  setText('t-crm-desc',t.crmDesc);
-  setText('t-rev-desc',t.revDesc);
-  setText('t-cta-sub',t.ctaSub);
-  setText('t-lang-staff',t.lang.staff);
-  setText('t-lang-station',t.lang.station);
-  setText('t-lang-job',t.lang.job);
-  setText('t-lang-record',t.lang.record);
-  setText('t-price-staff-2','✓ Up to 2 '+t.lang.staff.toLowerCase());
-  setText('t-price-staff-unl','✓ Unlimited '+t.lang.staff.toLowerCase());
-  // Dashboard mockup
-  setText('mock-title',t.mock.title);
-  setText('mock-rev',t.mock.rev);
-  setText('mock-leads',t.mock.leads);
-  setText('mock-jobs',t.mock.jobs);
-  setText('mock-list-label',t.mock.listLabel);
-  const rowsEl=document.getElementById('mock-rows');
-  if(rowsEl){
-    const avs=['rgba(22,163,74,.14)','rgba(37,99,235,.14)','rgba(217,119,6,.14)'];
-    rowsEl.innerHTML=t.mock.rows.map((r,i)=>(
-      '<div class="mock-row"><div class="mock-av" style="background:'+avs[i%3]+';"></div>'+
-      '<div><div class="mock-name">'+r.name+'</div><div class="mock-time">'+r.meta+'</div></div>'+
-      '<div class="mock-badge">'+r.badge+'</div></div>'
-    )).join('');
-  }
-  // Active tab (both tab groups), remember choice, carry into signup
-  document.querySelectorAll('[data-trade-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tradeTab===key));
-  document.querySelectorAll('.go-signup').forEach(a=>{
-    const plan=a.getAttribute('data-plan');
-    a.href='/signup?industry='+key+(plan?('&plan='+plan):'');
-  });
-  try{ localStorage.setItem('sf_landing_trade',key); }catch(e){}
-}
-
-// Initial render (default cleaning) + restore last choice
+// Logged-in clients → send them straight to their shop.
 (function init(){
-  let key='cleaning';
-  try{ const saved=localStorage.getItem('sf_landing_trade'); if(saved&&TRADES[saved]) key=saved; }catch(e){}
-  setTrade(key);
-  // Logged-in users → send them to their shop
   try{
     const token=localStorage.getItem('sf_token'), slug=localStorage.getItem('sf_shopSlug');
     if(token&&slug){ const b=document.getElementById('nav-cta'); if(b){ b.textContent='Go to my shop →'; b.href='/shop/'+slug; } }
