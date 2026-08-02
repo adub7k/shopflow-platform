@@ -146,7 +146,7 @@ function initShopDb(db, shopData) {
     ],
     services: profile.services.map((s, i) => ({ id: 's' + (i + 1), ...s })),
     customers: [], appointments: [], conversations: [], blockedDates: [], quotes: [],
-    leads: [], calls: [], expenses: [],
+    leads: [], calls: [], expenses: [], campaigns: [],
   }).write();
 }
 

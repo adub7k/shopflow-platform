@@ -5,7 +5,7 @@ function closeSidebar(){document.body.classList.remove('sidebar-open');}
 // ── Role-based page permissions ───────────────────────────────────────────────
 // full = owner/full access · technician = appts + clients · viewonly = calendar only
 const ROLE_PAGES = {
-  full:       ['dashboard','messages','appointments','response','leads','clients','quotes','revenue','tasks','reviews','automations','settings'],
+  full:       ['dashboard','messages','appointments','response','leads','clients','quotes','revenue','tasks','reviews','automations','newsletter','settings'],
   technician: ['dashboard','messages','appointments','response','leads','clients','quotes','tasks'],
   viewonly:   ['appointments'],
 };
@@ -67,6 +67,7 @@ const App = {
     if(page==='tasks')       Tasks.render();
     if(page==='reviews')     Reviews.render();
     if(page==='automations') Automations.render();
+    if(page==='newsletter')  Newsletter.render();
     if(page==='settings')    Settings.render();
   },
   refresh() { this._render(this._page); }

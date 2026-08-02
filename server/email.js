@@ -54,7 +54,9 @@ function telHref(raw) {
 // Deliver one email over whichever channel is configured — Resend's HTTPS API
 // first (survives SMTP-blocked hosts), else SMTP via nodemailer. Never throws;
 // returns { ok:true } or { ok:false, reason } so callers can log or surface it.
-async function deliver({ to, subject, html, text }) {
+// `headers`: optional extra message headers (newsletter sends use it for
+// List-Unsubscribe / RFC 8058 one-click).
+async function deliver({ to, subject, html, text, headers }) {
   if (!to) return { ok: false, reason: 'No recipient email set.' };
   const from = process.env.RESEND_FROM
     || process.env.SMTP_FROM
@@ -66,7 +68,7 @@ async function deliver({ to, subject, html, text }) {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to, subject, html, text }),
+        body: JSON.stringify({ from, to, subject, html, text, ...(headers ? { headers } : {}) }),
       });
       if (res.ok) return { ok: true };
       let detail = '';
@@ -81,7 +83,7 @@ async function deliver({ to, subject, html, text }) {
   const t = mailer();
   if (!t) return { ok: false, reason: 'Email is not set up on the server yet (set RESEND_API_KEY, or SMTP_HOST/USER/PASS).' };
   try {
-    await t.sendMail({ from, to, subject, html, text });
+    await t.sendMail({ from, to, subject, html, text, ...(headers ? { headers } : {}) });
     return { ok: true };
   } catch (e) {
     return { ok: false, reason: e.message || 'The email provider rejected the message.' };

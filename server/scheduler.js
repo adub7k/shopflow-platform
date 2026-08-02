@@ -2,6 +2,7 @@ const { master, getShopDb, shopHelpers, shopFromNumber, twilioClient, TWILIO_DEF
 const { generateDueRecurring } = require('./recurring');
 const { runAutomations } = require('./automation/engine');
 const { sendQuoteEmail } = require('./email');
+const { resumeStalledCampaigns } = require('./newsletter');
 
 const _DAY = 24 * 60 * 60 * 1000;
 function publicBase() {
@@ -77,6 +78,11 @@ async function runScheduler() {
         // Runs before the Twilio guard so every shop with email configured gets
         // estimate nudges regardless of SMS setup.
         try { await remindStaleQuotes(db, shop, s); } catch(e){}
+
+        // ── Newsletter crash recovery ──
+        // A campaign left mid-send by a restart resumes here (the launch route
+        // normally drives the whole send in-process).
+        try { resumeStalledCampaigns(db, shop); } catch(e){}
 
         // ── SMS-gated automation campaigns ──
         // The campaign engine runs each enabled campaign (24h reminder + rebook

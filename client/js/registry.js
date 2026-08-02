@@ -25,6 +25,7 @@ const NavRegistry = {
     revenue:      { label: 'Revenue',      icon: '📈' },
     reviews:      { label: 'Reviews',      icon: '⭐' },
     automations:  { label: 'Automations',  icon: '⚡' },
+    newsletter:   { label: 'Newsletter',   icon: '✉️' },
     settings:     { label: 'Settings',     icon: '⚙️' },
   },
 
@@ -47,6 +48,7 @@ const NavRegistry = {
     revenue:      '<line x1="3" y1="21" x2="21" y2="21"/><line x1="7" y1="21" x2="7" y2="13"/><line x1="12" y1="21" x2="12" y2="5"/><line x1="17" y1="21" x2="17" y2="9"/>',
     reviews:      '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
     automations:  '<path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z"/>',
+    newsletter:   '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
     settings:     '<line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2.2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2.2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="7" cy="18" r="2.2"/>',
   },
   icon(p) {
@@ -63,7 +65,7 @@ const NavRegistry = {
     { title: 'CRM',        pages: ['response', 'leads', 'clients', 'tasks', 'messages'] },
     { title: 'Operations', pages: ['appointments'], industry: true },
     { title: 'Money',      pages: ['quotes', 'revenue'] },
-    { title: 'Growth',     pages: ['reviews', 'automations'] },
+    { title: 'Growth',     pages: ['reviews', 'automations', 'newsletter'] },
     { title: '',           pages: ['settings'] },
   ],
 

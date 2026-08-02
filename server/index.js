@@ -79,6 +79,7 @@ app.use(require('./routes/auth'));
 app.use(require('./routes/public'));
 app.use(require('./routes/twilio'));
 app.use(require('./routes/shop'));
+app.use(require('./routes/newsletter'));
 app.use(require('./routes/cleaning'));
 app.use(require('./routes/receptionist'));
 app.use(require('./routes/admin'));
