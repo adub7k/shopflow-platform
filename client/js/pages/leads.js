@@ -164,6 +164,9 @@ const Leads = {
     const l = this._leads.find(x => x.id === id); if (!l) return;
     const m = this._statusMeta[l.status] || this._statusMeta.new;
     const name = l.name || l.phone || 'Unknown caller';
+    // Owner's saved quick-reply presets (Settings → Message Templates), shared
+    // with the Messages composer and Response Center via _smsTemplates().
+    this._tplList = _smsTemplates();
 
     const statusPills = Object.keys(this._statusMeta).map(k => {
       const sm = this._statusMeta[k];
@@ -236,8 +239,12 @@ const Leads = {
 
       <div class="form-group">
         <label class="form-label">Text back</label>
-        <div style="display:flex;gap:8px;">
-          <input class="form-input" id="lead-sms" placeholder="Type a quick reply…" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();Leads.sendSms('${l.id}');}"/>
+        <select class="form-input" id="lead-tpl" style="margin-bottom:8px;" onchange="Leads.useTemplate('${l.id}')">
+          <option value="">Quick replies — pick a template…</option>
+          ${this._tplList.map((t, i) => `<option value="${i}">${esc(t.label)}</option>`).join('')}
+        </select>
+        <div style="display:flex;gap:8px;align-items:flex-end;">
+          <textarea class="form-input" id="lead-sms" rows="2" placeholder="Type a quick reply…" style="flex:1;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();Leads.sendSms('${l.id}');}"></textarea>
           <button class="btn btn-primary" onclick="Leads.sendSms('${l.id}')">Send</button>
         </div>
       </div>
@@ -294,6 +301,18 @@ const Leads = {
     const l = this._leads.find(x => x.id === id);
     const el = document.getElementById('lead-sms');
     if (l && l.ai && l.ai.followUp && el) { el.value = l.ai.followUp; el.focus(); }
+  },
+  // Template picker → fill the Text-back box with the preset, merge fields resolved
+  // for this lead. Leaves the box editable so the owner can tweak before sending.
+  useTemplate(id) {
+    const l = this._leads.find(x => x.id === id);
+    const sel = document.getElementById('lead-tpl');
+    const box = document.getElementById('lead-sms');
+    if (!l || !sel || !box || sel.value === '') return;
+    const t = (this._tplList || [])[Number(sel.value)]; if (!t) return;
+    const first = String(l.name || '').trim().split(/\s+/)[0] || 'there';
+    box.value = _smsFill(t.body, { first, name: l.name, shop: Shop.settings && Shop.settings.shopName });
+    box.focus();
   },
   async analyze(id, btn) {
     if (btn) { btn.disabled = true; btn.textContent = '✨ Analyzing…'; }
