@@ -903,6 +903,19 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   res.json({ ok:true, lead });
 }));
 
+// Notes history: append a timestamped note to the lead (newest first). Mirrors
+// the client noteLog — the "by" name comes from the signed-in user client-side.
+router.post('/api/shop/leads/:id/note', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  const lead = h.getById('leads', req.params.id);
+  if (!lead) return res.status(404).json({ ok:false, error:'Lead not found' });
+  const text = String(req.body.text || '').trim().slice(0, 2000);
+  if (!text) return res.status(400).json({ ok:false, error:'Note is empty' });
+  lead.noteLog = lead.noteLog || [];
+  lead.noteLog.unshift({ id: genId('note'), text, at: new Date().toISOString(), by: String(req.body.by || '').slice(0, 60) });
+  h.upsert('leads', lead);
+  res.json({ ok:true, noteLog: lead.noteLog });
+}));
+
 router.delete('/api/shop/leads/:id', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   db.get('calls').remove({ leadId: req.params.id }).write();
   h.remove('leads', req.params.id);
@@ -920,7 +933,7 @@ router.post('/api/shop/leads/:id/convert', requireAuth, requireRole('full','tech
   }
   if (!cust) {
     cust = { id: genId('c'), name: lead.name || lead.phone, phone: lead.phone, email: lead.email || '', source: lead.source || 'call',
-             notes: lead.notes || '', loyaltyPoints: 0, noShows: 0, preferredBarberId: null,
+             notes: lead.notes || '', noteLog: (lead.noteLog || []).slice(), loyaltyPoints: 0, noShows: 0, preferredBarberId: null,
              isFleet: false, companyName: '', vehicles: lead.vehicle ? [lead.vehicle] : [], createdAt: today() };
     h.upsert('customers', cust);
   }

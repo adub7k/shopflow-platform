@@ -256,7 +256,11 @@ const Leads = {
 
       <div class="form-group">
         <label class="form-label">Notes</label>
-        <textarea class="form-input" id="lead-notes" rows="2" placeholder="Notes about this lead…">${esc(l.notes||'')}</textarea>
+        <div style="display:flex;gap:8px;align-items:flex-end;">
+          <textarea class="form-input" id="lead-note-new" rows="2" placeholder="Add a note…" style="flex:1;"></textarea>
+          <button class="btn" onclick="Leads.addNote('${l.id}')">Save note</button>
+        </div>
+        ${this._noteHistory(l)}
       </div>
 
       <div class="modal-actions" style="flex-wrap:wrap;gap:8px;">
@@ -302,6 +306,35 @@ const Leads = {
     const el = document.getElementById('lead-sms');
     if (l && l.ai && l.ai.followUp && el) { el.value = l.ai.followUp; el.focus(); }
   },
+  // Saved-note history, newest first. A pre-history lead keeps its old free-text
+  // notes as a trailing "Earlier note" entry (read-only, still saved on the lead).
+  _noteHistory(l) {
+    const rows = (l.noteLog || []).map(n => `
+      <div style="padding:8px 0;border-bottom:1px solid var(--border);">
+        <div style="font-size:13px;color:var(--text);line-height:1.45;white-space:pre-wrap;">${esc(n.text)}</div>
+        <div style="font-size:11px;color:var(--faint);margin-top:3px;">${_msgTimeFull(n.at)}${n.by ? ' · ' + esc(n.by) : ''}</div>
+      </div>`).join('');
+    const legacy = l.notes ? `
+      <div style="padding:8px 0;">
+        <div style="font-size:13px;color:var(--muted);line-height:1.45;white-space:pre-wrap;">${esc(l.notes)}</div>
+        <div style="font-size:11px;color:var(--faint);margin-top:3px;">Earlier note</div>
+      </div>` : '';
+    if (!rows && !legacy) return '';
+    return `<div style="margin-top:8px;">${rows}${legacy}</div>`;
+  },
+  async addNote(id) {
+    const box = document.getElementById('lead-note-new');
+    const text = box ? box.value.trim() : '';
+    if (!text) { toast('Type a note first', 'warning'); return; }
+    const l = this._leads.find(x => x.id === id); if (!l) return;
+    try {
+      const res = await db.leads.note(id, text);
+      l.noteLog = (res && res.noteLog) || l.noteLog;
+      this._captureModalEdits(l);   // keep a half-typed name across the re-render
+      toast('Note saved ✓');
+      this.open(id);
+    } catch(e) { toast(e.message || 'Could not save note', 'error'); }
+  },
   // Template picker → fill the Text-back box with the preset, merge fields resolved
   // for this lead. Leaves the box editable so the owner can tweak before sending.
   useTemplate(id) {
@@ -340,18 +373,17 @@ const Leads = {
   // Pull the current modal field values into the in-memory lead so a re-render
   // (or a convert) doesn't lose what the user just typed.
   _captureModalEdits(l) {
-    const nameEl  = document.getElementById('lead-name');
-    const notesEl = document.getElementById('lead-notes');
-    if (nameEl)  l.name  = nameEl.value;
-    if (notesEl) l.notes = notesEl.value;
+    const nameEl = document.getElementById('lead-name');
+    if (nameEl) l.name = nameEl.value;
   },
 
   async save(id) {
     const l = this._leads.find(x => x.id === id); if (!l) return;
     const name = document.getElementById('lead-name')?.value || '';
-    const notes = document.getElementById('lead-notes')?.value || '';
     try {
-      await db.leads.update(id, { name, notes, status: l.status });
+      // Notes are saved per-entry via addNote — never send `notes` here, or a
+      // blank value would wipe a pre-history lead's legacy free-text notes.
+      await db.leads.update(id, { name, status: l.status });
       Modal.close(); toast('Lead saved ✓'); this.render();
     } catch(e) { toast(e.message || 'Could not save', 'error'); }
   },
@@ -378,7 +410,7 @@ const Leads = {
       // the new client record — convert() builds the customer from the saved lead.
       if (l) {
         this._captureModalEdits(l);
-        await db.leads.update(id, { name: l.name || '', notes: l.notes || '', status: l.status });
+        await db.leads.update(id, { name: l.name || '', status: l.status });
       }
       const res = await db.leads.convert(id);
       if (!res.ok) throw new Error(res.error || 'Convert failed');
