@@ -183,6 +183,7 @@ const Settings = {
       if (s.industry === 'detail' || s.industry === 'tint') {
       const siteImages = (s.siteImages && typeof s.siteImages === 'object') ? s.siteImages : {};
       const SITE_SLOTS = [
+        { key:'logo',            label:'Logo (shown in the site header & browser tab)' },
         { key:'hero',            label:'Homepage hero background' },
         { key:'service_tint',    label:'Window Tint photo' },
         { key:'service_ceramic', label:'Ceramic Coating photo' },
