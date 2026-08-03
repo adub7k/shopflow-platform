@@ -1,7 +1,7 @@
 const { master, getShopDb, shopHelpers, shopFromNumber, twilioClient, TWILIO_DEFAULT_FROM } = require('./db');
 const { generateDueRecurring } = require('./recurring');
 const { runAutomations } = require('./automation/engine');
-const { sendQuoteEmail } = require('./email');
+const { sendQuoteEmail, shopReplyTo } = require('./email');
 const { resumeStalledCampaigns } = require('./newsletter');
 
 const _DAY = 24 * 60 * 60 * 1000;
@@ -42,7 +42,7 @@ async function remindStaleQuotes(db, shop, s) {
     const link = `${base}/quote/${shop.slug}/${q.id}`;
     const openPixel = `${base}/api/public/${shop.slug}/quote/${q.id}/opened.gif`;
     try {
-      const r = await sendQuoteEmail({ to, shop: shopObj, quote: q, link, openPixel, reminder: true });
+      const r = await sendQuoteEmail({ to, shop: shopObj, quote: q, link, openPixel, reminder: true, replyTo: shopReplyTo(s, shop) });
       if (r && r.ok) {
         q.reminderCount = (q.reminderCount || 0) + 1;
         q.lastReminderAt = new Date().toISOString();

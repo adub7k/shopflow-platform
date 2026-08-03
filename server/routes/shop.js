@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const { requireAuth, requireRole } = require('../middleware');
-const { sendTest, sendQuoteEmail } = require('../email');
+const { sendTest, sendQuoteEmail, shopReplyTo } = require('../email');
 const { resolveProfile } = require('../industries');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, shopOwnNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, deleteUpload, computeTax, computeApptCost } = require('../db');
 
@@ -538,7 +538,7 @@ router.post('/api/shop/quotes/:id/send-email', requireAuth, requireRole('full','
   const link = `${base}/quote/${shopRow.slug}/${q.id}`;
   const openPixel = `${base}/api/public/${shopRow.slug}/quote/${q.id}/opened.gif`;
   const shop = { name: s.shopName, tagline: s.tagline, phone: s.phone, address: s.address, email: s.email, accentColor: s.accentColor };
-  const r = await sendQuoteEmail({ to, shop, quote: q, link, openPixel });
+  const r = await sendQuoteEmail({ to, shop, quote: q, link, openPixel, replyTo: shopReplyTo(s, shopRow) });
   if (!r.ok) return res.status(502).json({ ok:false, error: r.reason || 'Could not send the email' });
   // Persist so future sends default to this address and the timeline reflects it.
   q.sentAt = new Date().toISOString(); q.emailSentAt = q.sentAt; if (!q.customerEmail) q.customerEmail = to;

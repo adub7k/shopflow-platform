@@ -51,12 +51,22 @@ function telHref(raw) {
   return 'tel:' + (d.length === 10 ? '+1' + d : '+' + d);
 }
 
+// Reply-To resolution for customer-facing mail (estimates, newsletters). The
+// From address lives on a send-only domain with no MX records, so a customer
+// hitting "reply" would hard-bounce unless we steer replies to a mailbox the
+// owner actually reads: the shop's public email, else the alert email, else
+// the login email on the master shop record.
+function shopReplyTo(settings, shopRow) {
+  return String((settings || {}).email || (settings || {}).notificationEmail || (shopRow || {}).email || '').trim() || undefined;
+}
+
 // Deliver one email over whichever channel is configured — Resend's HTTPS API
 // first (survives SMTP-blocked hosts), else SMTP via nodemailer. Never throws;
 // returns { ok:true } or { ok:false, reason } so callers can log or surface it.
 // `headers`: optional extra message headers (newsletter sends use it for
-// List-Unsubscribe / RFC 8058 one-click).
-async function deliver({ to, subject, html, text, headers }) {
+// List-Unsubscribe / RFC 8058 one-click). `replyTo`: optional Reply-To address
+// (see shopReplyTo above).
+async function deliver({ to, subject, html, text, headers, replyTo }) {
   if (!to) return { ok: false, reason: 'No recipient email set.' };
   const from = process.env.RESEND_FROM
     || process.env.SMTP_FROM
@@ -68,7 +78,7 @@ async function deliver({ to, subject, html, text, headers }) {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ from, to, subject, html, text, ...(headers ? { headers } : {}) }),
+        body: JSON.stringify({ from, to, subject, html, text, ...(headers ? { headers } : {}), ...(replyTo ? { reply_to: replyTo } : {}) }),
       });
       if (res.ok) return { ok: true };
       let detail = '';
@@ -83,7 +93,7 @@ async function deliver({ to, subject, html, text, headers }) {
   const t = mailer();
   if (!t) return { ok: false, reason: 'Email is not set up on the server yet (set RESEND_API_KEY, or SMTP_HOST/USER/PASS).' };
   try {
-    await t.sendMail({ from, to, subject, html, text, ...(headers ? { headers } : {}) });
+    await t.sendMail({ from, to, subject, html, text, ...(headers ? { headers } : {}), ...(replyTo ? { replyTo } : {}) });
     return { ok: true };
   } catch (e) {
     return { ok: false, reason: e.message || 'The email provider rejected the message.' };
@@ -304,13 +314,13 @@ function renderQuoteEmail({ shop, quote, link, openPixel, reminder }) {
 // Email a customer their estimate — the counterpart to the SMS "send" path,
 // and the channel that works before A2P is registered. AWAITS the send and
 // returns { ok, reason } so the UI can surface the exact failure.
-async function sendQuoteEmail({ to, shop, quote, link, openPixel, reminder }) {
+async function sendQuoteEmail({ to, shop, quote, link, openPixel, reminder, replyTo }) {
   if (!to) return { ok: false, reason: 'No email address on file for this customer.' };
   const { subject, html, text } = renderQuoteEmail({ shop, quote, link, openPixel, reminder });
-  return deliver({ to, subject, html, text });
+  return deliver({ to, subject, html, text, replyTo });
 }
 
 // deliver/mailer are exported so server/integrations.js (website-leads modules)
 // shares the same channel selection + config-gating as the owner notifications.
 // renderQuoteEmail is exported so the template can be previewed + unit-tested.
-module.exports = { notifyNewLead, mailer, sendTest, deliver, sendQuoteEmail, renderQuoteEmail };
+module.exports = { notifyNewLead, mailer, sendTest, deliver, sendQuoteEmail, renderQuoteEmail, shopReplyTo };
