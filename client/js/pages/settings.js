@@ -242,15 +242,15 @@ const Settings = {
       // Team — one place for everyone. A member can have a login (role) and/or be
       // assignable to appointments (a linked, color-coded booking record). Logins =
       // accounts; bookable providers = barber records linked by barber.accountId.
-      const roleLabels={full:'Full Access',technician:'Technician',viewonly:'View Only'};
-      const roleColors={full:'#16a34a',technician:'#2563eb',viewonly:'#6e6e73'};
+      const roleLabels={full:'Full Access',technician:'Technician',viewonly:'View Only',client:'Client Portal'};
+      const roleColors={full:'#16a34a',technician:'#2563eb',viewonly:'#6e6e73',client:'#7c3aed'};
       // Build a unified roster: every login, plus any bookable provider with no login.
       const team=[];
       staff.forEach(u=>team.push({ account:u, barber:barbers.find(b=>b.accountId===u.id)||null }));
       barbers.filter(b=>!staff.some(u=>u.id===b.accountId)).forEach(b=>team.push({ account:null, barber:b }));
       html.push('<div style="margin:26px 0 10px;border-top:1px solid var(--line);padding-top:16px;font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--muted);">TEAM</div>');
       html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Team</span><button class="btn btn-sm btn-green" onclick="Settings.openTeam(\'\',\'\')">+ Add</button></div>');
-      html.push('<div style="font-size:12px;color:var(--muted);margin:-6px 0 10px;">Add the people who work with you. Give them a login (Full Access sees everything · Technician sees jobs &amp; clients, no money or settings · View Only sees the calendar) and/or make them assignable to appointments.</div>');
+      html.push('<div style="font-size:12px;color:var(--muted);margin:-6px 0 10px;">Add the people who work with you. Give them a login (Full Access sees everything · Technician sees jobs &amp; clients, no money or settings · View Only sees the calendar · Client Portal is for outside partners — a lead list only) and/or make them assignable to appointments.</div>');
       team.forEach(m=>{
         const u=m.account, b=m.barber;
         const name=(u&&u.name)||(b&&b.name)||'—';
@@ -448,6 +448,7 @@ const Settings = {
       ['full','Full Access — sees everything'],
       ['technician','Technician — jobs & clients only'],
       ['viewonly','View Only — calendar only'],
+      ['client','Client Portal — lead list only (outside partners)'],
     ];
     const sched=b?.schedule||{workDays:[1,2,3,4,5,6],startTime:'9:00 AM',endTime:'6:00 PM',slotMinutes:30};
     const colors=['#16a34a','#2563eb','#d97706','#7c3aed','#dc2626','#0891b2','#be185d'];
@@ -468,9 +469,12 @@ const Settings = {
       <div class="form-group"><label class="form-label">Password ${u?'<span style="font-weight:400;color:var(--faint);">(leave blank to keep current)</span>':'<span style="font-weight:400;color:var(--faint);">(needed for a login)</span>'}</label><input class="form-input" id="fu-pass" type="password" placeholder="At least 6 characters" autocomplete="new-password" /></div>
       ${isOwner
         ? '<input type="hidden" id="fu-role" value="full" /><div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Owner account — always Full Access.</div>'
-        : `<div class="form-group"><label class="form-label">Role</label><select class="form-input" id="fu-role">${roles.map(([v,l])=>`<option value="${v}"${(u?.role||'technician')===v?' selected':''}>${esc(l)}</option>`).join('')}</select></div>`}
+        : `<div class="form-group"><label class="form-label">Role</label><select class="form-input" id="fu-role" onchange="Settings._roleChanged()">${roles.map(([v,l])=>`<option value="${v}"${(u?.role||'technician')===v?' selected':''}>${esc(l)}</option>`).join('')}</select></div>`}
+      <div id="team-client-hint" style="display:${u?.role==='client'?'block':'none'};background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:10px 12px;margin:-6px 0 14px;font-size:12px;color:#5b21b6;line-height:1.5;">
+        🔗 A Client Portal login only sees the shared lead list at <strong>${location.origin}/portal</strong> — names, contact info, coarse source, and new/contacted status. No jobs, money, campaigns, notes, or settings. Made for outside partners like a marketing vendor.
+      </div>
 
-      <div class="form-group" style="margin-top:6px;"><label class="toggle-row" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span><span class="form-label" style="display:block;">Assignable to appointments</span><span style="font-size:12px;color:var(--muted);">Show them as a bookable provider with their own color.</span></span><input type="checkbox" id="fu-bookable" ${bookable?'checked':''} onchange="Settings._toggleBookable()" style="width:20px;height:20px;flex-shrink:0;" /></label></div>
+      <div class="form-group" id="team-bookable-row" style="margin-top:6px;${u?.role==='client'?'display:none;':''}"><label class="toggle-row" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span><span class="form-label" style="display:block;">Assignable to appointments</span><span style="font-size:12px;color:var(--muted);">Show them as a bookable provider with their own color.</span></span><input type="checkbox" id="fu-bookable" ${bookable?'checked':''} onchange="Settings._toggleBookable()" style="width:20px;height:20px;flex-shrink:0;" /></label></div>
 
       <div id="team-booking" style="${bookable?'':'display:none;'}">
         <div class="form-group"><label class="form-label">Color</label>
@@ -530,6 +534,21 @@ const Settings = {
     const w=document.getElementById('team-booking'); if(w)w.style.display=on?'':'none';
   },
 
+  // Client Portal logins are for outside partners — never bookable, and the
+  // email/password becomes their /portal credential. Swap the UI accordingly.
+  _roleChanged() {
+    const isClient = document.getElementById('fu-role')?.value === 'client';
+    const hint = document.getElementById('team-client-hint');
+    if (hint) hint.style.display = isClient ? 'block' : 'none';
+    const row = document.getElementById('team-bookable-row');
+    if (row) row.style.display = isClient ? 'none' : '';
+    if (isClient) {
+      const cb = document.getElementById('fu-bookable');
+      if (cb) cb.checked = false;
+      this._toggleBookable();
+    }
+  },
+
   _toggleCustomTimes() {
     const on = document.getElementById('fb-customtimes')?.checked;
     const range = document.getElementById('fb-range-fields');
@@ -569,7 +588,8 @@ const Settings = {
     const email = document.getElementById('fu-email')?.value.trim();
     const pass  = document.getElementById('fu-pass')?.value||'';
     const role  = document.getElementById('fu-role')?.value||'technician';
-    const bookable = !!document.getElementById('fu-bookable')?.checked;
+    // Client Portal members are never bookable — their login IS the deliverable.
+    const bookable = role!=='client' && !!document.getElementById('fu-bookable')?.checked;
     if(!name){ toast('Enter a name','warning'); return; }
     const wantLogin = !!email || !!accountId;
     if(!wantLogin && !bookable){ toast('Add a login (email) or make them assignable to appointments','warning'); return; }

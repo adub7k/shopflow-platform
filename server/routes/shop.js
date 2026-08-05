@@ -185,7 +185,9 @@ router.get('/api/shop/staff', requireAuth, requireRole('full'), (req, res) => {
 router.post('/api/shop/staff', requireAuth, requireRole('full'), async (req, res) => {
   const { id, name, email, password, role } = req.body;
   const shop = master.get('shops').find({ id: req.shopId }).value();
-  const validRoles = ['full', 'technician', 'viewonly'];
+  // 'client' = outside-collaborator portal login (leads only, /portal) — its
+  // token is rejected on every /api/shop route by requireAuth (middleware.js).
+  const validRoles = ['full', 'technician', 'viewonly', 'client'];
   const r = validRoles.includes(role) ? role : 'technician';
   if (id) {
     const acct = master.get('accounts').find({ id }).value();
