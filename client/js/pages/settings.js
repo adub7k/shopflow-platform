@@ -189,6 +189,7 @@ const Settings = {
         { key:'service_ceramic', label:'Ceramic Coating photo' },
         { key:'service_ppf',     label:'Paint Protection Film photo' },
         { key:'service_detail',  label:'Auto Detailing photo' },
+        { key:'service_commercial', label:'Commercial & Home Tint photo' },
       ];
       html.push('<div class="section-header">Website Photos</div>');
       html.push('<div class="card">');

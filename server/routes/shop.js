@@ -90,7 +90,7 @@ router.delete('/api/shop/gallery/:id', requireAuth, requireRole('full'), shopRou
 // time. Distinct from settings.gallery (a list) and settings.heroImage (this
 // platform's own booking-page background). Unknown slots are rejected so the map
 // can't be polluted with arbitrary keys.
-const SITE_IMAGE_SLOTS = ['logo', 'hero', 'service_tint', 'service_ceramic', 'service_ppf', 'service_detail'];
+const SITE_IMAGE_SLOTS = ['logo', 'hero', 'service_tint', 'service_ceramic', 'service_ppf', 'service_detail', 'service_commercial'];
 router.post('/api/shop/site-image', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
   try {
     const key = String(req.body.key || '');
