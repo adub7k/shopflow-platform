@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script>if('IntersectionObserver' in window)document.documentElement.classList.add('js');</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -47,9 +48,10 @@ img{max-width:100%;display:block;}
 .btn-lg{padding:16px 30px;font-size:16.5px;border-radius:14px;}
 .ic{width:20px;height:20px;stroke:currentColor;stroke-width:1.75;fill:none;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;}
 
-/* reveal animations */
-.rv{opacity:0;transform:translateY(22px);transition:opacity .7s cubic-bezier(.2,.6,.2,1),transform .7s cubic-bezier(.2,.6,.2,1);}
-.rv.in{opacity:1;transform:none;}
+/* reveal animations — hidden state only applies when JS is confirmed running
+   (html.js), so the page can never render blank if scripts fail or are off */
+html.js .rv{opacity:0;transform:translateY(22px);transition:opacity .7s cubic-bezier(.2,.6,.2,1),transform .7s cubic-bezier(.2,.6,.2,1);}
+html.js .rv.in{opacity:1;transform:none;}
 .rv-d1{transition-delay:.08s;}.rv-d2{transition-delay:.16s;}.rv-d3{transition-delay:.24s;}.rv-d4{transition-delay:.32s;}
 @media(prefers-reduced-motion:reduce){.rv{opacity:1;transform:none;transition:none;}*{animation-duration:.01ms!important;animation-iteration-count:1!important;}}
 
@@ -175,27 +177,14 @@ nav.scrolled{background:rgba(255,255,255,.85);backdrop-filter:saturate(180%) blu
 .res .l{font-size:12.5px;color:#94A3B8;margin-top:8px;line-height:1.5;}
 @media(max-width:760px){.results{padding:44px 26px;}.res-grid{grid-template-columns:1fr;}}
 
-/* ── Pricing ── */
-.price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:52px;text-align:left;align-items:stretch;}
-.price{background:#fff;border:1px solid var(--line);border-radius:20px;padding:30px;display:flex;flex-direction:column;transition:box-shadow .2s,transform .18s;}
-.price:hover{box-shadow:var(--shadow-md);}
-.price.feat{border:1.5px solid var(--green-d);box-shadow:0 4px 12px rgba(22,163,74,.08),0 24px 60px rgba(22,163,74,.14);position:relative;}
-.price.feat::before{content:'The Complete Solution';position:absolute;top:-13px;left:26px;background:var(--green-d);color:#fff;font-size:11px;font-weight:700;letter-spacing:.04em;padding:5px 13px;border-radius:100px;}
-.price .pn{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);}
-.price.feat .pn{color:var(--green-deep);}
-.price .amt{font-size:46px;font-weight:800;letter-spacing:-.045em;margin-top:12px;font-variant-numeric:tabular-nums;}
-.price .amt sup{font-size:22px;font-weight:700;top:-.55em;margin-right:2px;}
-.price .per{font-size:13px;color:var(--faint);font-weight:500;margin-top:2px;}
-.price .desc{font-size:14px;color:var(--muted);margin:14px 0 18px;line-height:1.6;}
-.price hr{border:none;border-top:1px solid var(--line-soft);margin:0 0 16px;}
-.incl-head{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);margin-bottom:12px;}
-.fl{font-size:14px;color:var(--text);display:flex;gap:10px;align-items:flex-start;margin-bottom:10px;line-height:1.5;font-weight:500;}
-.fl .ic{width:16px;height:16px;color:var(--green-d);margin-top:2.5px;}
-.fl.hot{font-weight:700;color:var(--green-deep);}
-.price .btn{margin-top:auto;width:100%;}
-.price .fine{font-size:11.5px;color:var(--faint);margin-top:14px;line-height:1.5;}
-.roi{font-size:14px;color:var(--muted);margin-top:28px;font-weight:500;}
-.roi b{color:var(--text);}
+/* ── How we start (3-step cards) ── */
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:48px;}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:26px;box-shadow:var(--shadow-sm);transition:transform .18s,box-shadow .2s,border-color .2s;}
+.card:hover{transform:translateY(-3px);box-shadow:var(--shadow-md);border-color:#D1D5DB;}
+.fic{width:44px;height:44px;border-radius:12px;background:var(--green-tint);display:flex;align-items:center;justify-content:center;margin-bottom:14px;}
+.fname{font-size:16.5px;font-weight:700;letter-spacing:-.015em;}
+.fdesc{font-size:14px;color:var(--muted);margin-top:7px;line-height:1.65;}
+@media(max-width:860px){.grid-3{grid-template-columns:1fr;}}
 
 /* ── FAQ ── */
 .faq{max-width:740px;margin:44px auto 0;}
@@ -228,7 +217,6 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
 
 @media(max-width:760px){
   .section{padding:72px 0;}
-  .price-grid{grid-template-columns:1fr;}
   .hero-stats{flex-direction:column;border:none;}
   .hstat{padding:14px 0;}
   .hstat + .hstat::before{display:none;}
@@ -276,11 +264,11 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
       <a class="lnk" href="#platform">Platform</a>
       <a class="lnk" href="#how">How it works</a>
       <a class="lnk" href="#industries">Industries</a>
-      <a class="lnk" href="#pricing">Pricing</a>
+      <a class="lnk" href="#fit">Working with us</a>
       <a class="lnk" href="#faq">FAQ</a>
       <span class="nav-sep"></span>
       <a class="lnk" href="/login">Client login</a>
-      <a class="btn btn-green" id="nav-cta" href="/demo" style="padding:10px 18px;font-size:14.5px;">Book a demo</a>
+      <a class="btn btn-green" id="nav-cta" href="/demo" style="padding:10px 18px;font-size:14.5px;">Book a call</a>
     </div>
     <button class="nav-burger" id="burger" aria-label="Menu" aria-expanded="false"><svg class="ic"><use href="#i-menu"/></svg></button>
   </div>
@@ -289,10 +277,10 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
   <a href="#platform">Platform</a>
   <a href="#how">How it works</a>
   <a href="#industries">Industries</a>
-  <a href="#pricing">Pricing</a>
+  <a href="#fit">Working with us</a>
   <a href="#faq">FAQ</a>
   <a href="/login">Client login</a>
-  <a class="btn btn-green" href="/demo">Book a demo</a>
+  <a class="btn btn-green" href="/demo">Book a call</a>
 </div>
 
 <!-- ═══ HERO ═══ -->
@@ -302,11 +290,11 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
     <h1 class="rv rv-d1">Never miss another <span class="accent">customer.</span></h1>
     <p class="hero-sub rv rv-d2">ShopFlow captures every lead, answers every call with a 24/7 AI receptionist, books the job, collects the deposit, and brings customers back — so nothing slips while you're doing the work.</p>
     <div class="hero-btns rv rv-d3">
-      <a class="btn btn-green btn-lg" href="/demo">Book a demo <svg class="ic" style="width:17px;height:17px;"><use href="#i-arrow"/></svg></a>
+      <a class="btn btn-green btn-lg" href="/demo">Book a call <svg class="ic" style="width:17px;height:17px;"><use href="#i-arrow"/></svg></a>
       <a class="btn btn-ghost btn-lg" href="#how">See how it works</a>
     </div>
     <div class="hero-stats rv rv-d4">
-      <div class="hstat"><div class="n"><span data-count="5">0</span></div><div class="l">qualified leads in the first 24 hours of a new campaign</div></div>
+      <div class="hstat"><div class="n"><span data-count="4">0</span><em>×</em></div><div class="l">return on ad spend in booked appointments — 5 days into a new campaign</div></div>
       <div class="hstat"><div class="n"><em>$</em><span data-count="3600">0</span></div><div class="l">booked by the AI receptionist in its first 10 days</div></div>
       <div class="hstat"><div class="n">24<em>/</em>7</div><div class="l">every call answered — nights, weekends, mid-job</div></div>
     </div>
@@ -337,7 +325,7 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
         <div class="kicker">The problem</div>
         <h2 class="h2">You're great at the work. The busywork is where jobs die.</h2>
         <p class="lead">Every missed call, unanswered Facebook lead, and forgotten follow-up is revenue walking out the door. ShopFlow closes every one of those gaps — automatically.</p>
-        <a class="btn btn-green" href="/demo" style="margin-top:28px;">Book a demo</a>
+        <a class="btn btn-green" href="/demo" style="margin-top:28px;">Book a call</a>
       </div>
       <div class="prob-list">
         <div class="prob rv">
@@ -524,68 +512,40 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
       <h3>What happened when real shops turned it on</h3>
       <p>We publish early numbers from live shops — not stock-photo testimonials. These are from the first days of real campaigns and real phone lines.</p>
       <div class="res-grid">
-        <div class="res"><div class="n"><span data-count="5">0</span> <em>leads</em></div><div class="l">in the first 24 hours of a brand-new ad campaign</div></div>
+        <div class="res"><div class="n"><span data-count="4">0</span><em>×</em></div><div class="l">ad spend returned in booked appointments — 5 days into a brand-new campaign</div></div>
+        <div class="res"><div class="n"><span data-count="5">0</span> <em>leads</em></div><div class="l">in the first 24 hours of that same campaign</div></div>
         <div class="res"><div class="n"><em>$</em><span data-count="3600">0</span></div><div class="l">booked by the AI receptionist in its first 10 days — including a ceramic job that would have gone to voicemail</div></div>
-        <div class="res"><div class="n">24<em>/</em>7</div><div class="l">answer rate since launch — every call picked up or texted back</div></div>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ═══ PRICING ═══ -->
-<section class="section" id="pricing">
+<!-- ═══ HOW WE START ═══ -->
+<section class="section" id="fit">
   <div class="wrap center">
-    <div class="rv" style="max-width:620px;margin:0 auto;">
-      <div class="kicker">Pricing</div>
-      <h2 class="h2">Pick the level of growth you want</h2>
-      <p class="lead">Every plan builds on the one before it. Start where you are — scale when you're ready.</p>
+    <div class="rv" style="max-width:640px;margin:0 auto;">
+      <div class="kicker">How we start</div>
+      <h2 class="h2">We look under the hood before we talk numbers</h2>
+      <p class="lead">No price list, no pitch deck. We dig into how your shop actually gets and keeps customers — and only move forward if we're confident we can grow it.</p>
     </div>
-    <div class="price-grid">
-      <div class="price rv">
-        <div class="pn">Starter</div>
-        <div class="amt"><sup>$</sup>750</div><div class="per">per month</div>
-        <div class="desc">The foundation — convert the calls you're already getting and keep customers coming back.</div>
-        <hr/>
-        <div class="incl-head">What's included</div>
-        <div class="fl"><svg class="ic"><use href="#i-check"/></svg> AI Receptionist — 24/7 call answering</div>
-        <div class="fl"><svg class="ic"><use href="#i-check"/></svg> ShopFlow CRM &amp; customer profiles</div>
-        <div class="fl"><svg class="ic"><use href="#i-check"/></svg> Online booking</div>
-        <div class="fl"><svg class="ic"><use href="#i-check"/></svg> Automated appointment reminders</div>
-        <div class="fl"><svg class="ic"><use href="#i-check"/></svg> Reputation management</div>
-        <div class="fl"><svg class="ic"><use href="#i-check"/></svg> Monthly analytics</div>
-        <a class="btn btn-ghost" href="/demo" style="margin-top:18px;">Book a demo</a>
+    <div class="grid-3" style="text-align:left;">
+      <div class="card rv">
+        <div class="fic" style="font-family:var(--mono);font-size:15px;font-weight:600;color:var(--green-deep);">01</div>
+        <div class="fname">Book a 15-minute call</div>
+        <div class="fdesc">Tell us about the shop — what you do, where the work comes from, what's growing and what's stuck. No prep, no obligation.</div>
       </div>
-      <div class="price rv rv-d1">
-        <div class="pn">Build My Brand</div>
-        <div class="amt"><sup>$</sup>1,250</div><div class="per">per month</div>
-        <div class="desc">Build the brand — a steady stream of short-form content that keeps your shop top-of-mind.</div>
-        <hr/>
-        <div class="incl-head">Everything in Starter, plus</div>
-        <div class="fl hot"><svg class="ic"><use href="#i-video"/></svg> 6 short-form videos / month</div>
-        <div class="fl"><svg class="ic"><use href="#i-check"/></svg> 8 social posts / month</div>
-        <div class="fl"><svg class="ic"><use href="#i-check"/></svg> Creative design</div>
-        <div class="fl"><svg class="ic"><use href="#i-check"/></svg> Content calendar</div>
-        <div class="fl"><svg class="ic"><use href="#i-check"/></svg> Bi-weekly strategy call</div>
-        <a class="btn btn-ghost" href="/demo" style="margin-top:18px;">Book a demo</a>
+      <div class="card rv rv-d1">
+        <div class="fic" style="font-family:var(--mono);font-size:15px;font-weight:600;color:var(--green-deep);">02</div>
+        <div class="fname">We dive into your business</div>
+        <div class="fdesc">We audit where jobs are leaking — missed calls, slow lead follow-up, customers who never came back, reviews you never asked for — and put real numbers on it.</div>
       </div>
-      <div class="price feat rv rv-d2">
-        <div class="pn">Scale</div>
-        <div class="amt"><sup>$</sup>2,000</div><div class="per">per month</div>
-        <div class="desc">The complete engine — Meta ads plus full content output, managed and reported on for you.</div>
-        <hr/>
-        <div class="incl-head">Everything in Build My Brand, plus</div>
-        <div class="fl hot"><svg class="ic"><use href="#i-zap"/></svg> Meta ad management</div>
-        <div class="fl"><svg class="ic"><use href="#i-check"/></svg> Ad copywriting &amp; landing pages</div>
-        <div class="fl"><svg class="ic"><use href="#i-check"/></svg> 8 short-form videos / month</div>
-        <div class="fl"><svg class="ic"><use href="#i-check"/></svg> 12 social posts + 20 stories / month</div>
-        <div class="fl"><svg class="ic"><use href="#i-check"/></svg> Review generation</div>
-        <div class="fl"><svg class="ic"><use href="#i-check"/></svg> Advanced lead tracking</div>
-        <div class="fl"><svg class="ic"><use href="#i-check"/></svg> Bi-weekly reporting &amp; strategy meetings</div>
-        <a class="btn btn-green" href="/demo" style="margin-top:18px;">Book a demo</a>
-        <div class="fine">+ Meta ad spend, billed separately and paid directly to Meta.</div>
+      <div class="card rv rv-d2">
+        <div class="fic" style="font-family:var(--mono);font-size:15px;font-weight:600;color:var(--green-deep);">03</div>
+        <div class="fname">You get a straight answer</div>
+        <div class="fdesc">If we're confident we can move your revenue, we'll show you exactly how and what it costs. If we're not the right fit, we'll tell you that too — and you keep the audit.</div>
       </div>
     </div>
-    <p class="roi rv">Think in jobs, not fees — <b>one saved ceramic coating covers a month of Starter.</b> Not sure which fits? Book a demo and we'll map it to your shop.</p>
+    <a class="btn btn-green btn-lg rv" href="/demo" style="margin-top:40px;">Book a call <svg class="ic" style="width:17px;height:17px;"><use href="#i-arrow"/></svg></a>
   </div>
 </section>
 
@@ -597,13 +557,13 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
       <h2 class="h2">Everything you might be wondering</h2>
     </div>
     <div class="faq" style="text-align:left;">
-      <details class="qa rv"><summary>Will this actually work for my shop? <span class="pm"><svg class="ic"><use href="#i-plus"/></svg></span></summary><div class="ans">If you win work over the phone and live off repeat customers — tint, detail, ceramic, PPF, wraps, or any service trade — this was built for exactly your workflow. The platform reshapes itself to your trade's services and language. On a demo we'll walk through it configured for your kind of shop, not a generic version.</div></details>
+      <details class="qa rv"><summary>Will this actually work for my shop? <span class="pm"><svg class="ic"><use href="#i-plus"/></svg></span></summary><div class="ans">If you win work over the phone and live off repeat customers — tint, detail, ceramic, PPF, wraps, or any service trade — this was built for exactly your workflow. The platform reshapes itself to your trade's services and language. On the call we'll walk through it configured for your kind of shop, not a generic version.</div></details>
       <details class="qa rv"><summary>How hard is setup? <span class="pm"><svg class="ic"><use href="#i-plus"/></svg></span></summary><div class="ans">You don't set it up — we do. Services, prices, booking calendar, phone number, automations: configured for you during onboarding. Most shops are live within days, and the receptionist starts answering from day one.</div></details>
       <details class="qa rv"><summary>Can my employees use it? Do I need to be technical? <span class="pm"><svg class="ic"><use href="#i-plus"/></svg></span></summary><div class="ans">If your team can use a phone, they can use ShopFlow. It runs in any browser, installs to a home screen like an app, and the daily flow is simple: check the queue, tap to reply, mark jobs done. No training courses, no IT person.</div></details>
       <details class="qa rv"><summary>I already have a CRM. Can I switch? <span class="pm"><svg class="ic"><use href="#i-plus"/></svg></span></summary><div class="ans">Yes — bring your customer list and we'll import it during onboarding, so your history comes with you. Nothing starts from zero.</div></details>
       <details class="qa rv"><summary>What does the AI receptionist actually do? <span class="pm"><svg class="ic"><use href="#i-plus"/></svg></span></summary><div class="ans">It answers your line 24/7 in a natural voice, answers questions, quotes your real prices, books appointments on your schedule, and texts callers back. When a call needs you, it transfers live. Every call is logged in your CRM with a summary and transcript — nothing disappears into voicemail.</div></details>
-      <details class="qa rv"><summary>Is ad spend included in Scale? <span class="pm"><svg class="ic"><use href="#i-plus"/></svg></span></summary><div class="ans">No — your ad budget is paid directly to Meta, so every dollar of spend goes toward reaching customers. The Scale plan covers strategy, creative, copy, landing pages, management and reporting. We'll recommend a starting budget on your call.</div></details>
-      <details class="qa rv"><summary>What support do I get? <span class="pm"><svg class="ic"><use href="#i-plus"/></svg></span></summary><div class="ans">A direct line to the team that built it — not a ticket queue. Onboarding is white-glove, and on the higher plans you're in bi-weekly strategy meetings with us, reviewing real numbers and adjusting together.</div></details>
+      <details class="qa rv"><summary>What does it cost? <span class="pm"><svg class="ic"><use href="#i-plus"/></svg></span></summary><div class="ans">It depends on what your shop actually needs — which is why we start with an audit, not a price list. On the call we dig into your lead flow, phones and follow-up. If we're confident we can grow your revenue, we'll scope the work and quote it straight. If we're not the right fit, we'll say so. If we run ads for you, your ad budget is paid directly to Meta — every dollar of spend goes toward reaching customers, not to us.</div></details>
+      <details class="qa rv"><summary>What support do I get? <span class="pm"><svg class="ic"><use href="#i-plus"/></svg></span></summary><div class="ans">A direct line to the team that built it — not a ticket queue. Onboarding is white-glove, and you're in regular strategy meetings with us, reviewing real numbers and adjusting together.</div></details>
     </div>
   </div>
 </section>
@@ -613,8 +573,8 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
   <div class="wrap">
     <div class="final rv">
       <h2>Stop losing jobs you already earned.</h2>
-      <p>Book a 15-minute demo. We'll show you ShopFlow running for a shop like yours — and exactly where your current setup is leaking revenue.</p>
-      <a class="btn btn-green btn-lg" href="/demo">Book a demo <svg class="ic" style="width:17px;height:17px;"><use href="#i-arrow"/></svg></a>
+      <p>Book a 15-minute call. We'll dive into how your shop gets and keeps customers, show you exactly where revenue is leaking — and give you a straight answer on whether we can help.</p>
+      <a class="btn btn-green btn-lg" href="/demo">Book a call <svg class="ic" style="width:17px;height:17px;"><use href="#i-arrow"/></svg></a>
       <small>15 minutes · configured for your trade · no pressure, no obligation</small>
     </div>
   </div>
@@ -630,9 +590,9 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
       </div>
       <div class="foot-cols">
         <div class="foot-col"><h4>Product</h4>
-          <a href="#platform">Platform</a><a href="#how">How it works</a><a href="#industries">Industries</a><a href="#pricing">Pricing</a></div>
+          <a href="#platform">Platform</a><a href="#how">How it works</a><a href="#industries">Industries</a><a href="#fit">Working with us</a></div>
         <div class="foot-col"><h4>Company</h4>
-          <a href="/demo">Book a demo</a><a href="#faq">FAQ</a><a href="/login">Client login</a></div>
+          <a href="/demo">Book a call</a><a href="#faq">FAQ</a><a href="/login">Client login</a></div>
         <div class="foot-col"><h4>Legal</h4>
           <a href="/terms.html">Terms</a><a href="/privacy.html">Privacy</a></div>
       </div>
