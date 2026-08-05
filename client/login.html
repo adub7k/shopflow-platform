@@ -56,10 +56,10 @@ h1{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margi
 // so home-screen installs get offline shell + push before first app visit.
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
-// Auto-redirect if already logged in
+// Auto-redirect if already logged in (client-portal logins go to /portal)
 const token = localStorage.getItem('sf_token');
 const slug = localStorage.getItem('sf_shopSlug');
-if (token && slug) window.location.href = '/shop/'+slug;
+if (token && slug) window.location.href = localStorage.getItem('sf_role') === 'client' ? '/portal' : '/shop/'+slug;
 
 async function login() {
   const email    = document.getElementById('email').value.trim();

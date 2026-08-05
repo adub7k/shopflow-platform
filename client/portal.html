@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-title" content="ShopFlow Leads"/>
+<link rel="apple-touch-icon" href="/icons/icon-192.png"/>
+<link rel="icon" type="image/png" href="/icons/icon-192.png"/>
+<title>Leads — ShopFlow</title>
+<link rel="stylesheet" href="/css/app2.css"/>
+<style>
+/* Portal shell: same shell as the CRM (app2.css) minus the sidebar. */
+#portal-logout{margin-left:auto;}
+.pt-detail{padding:4px 15px 14px 65px;border-bottom:1px solid var(--border);background:var(--bg);}
+.pt-detail-row{display:flex;gap:10px;padding:4px 0;font-size:13px;align-items:baseline;}
+.pt-detail-row .k{width:70px;color:var(--muted);flex-shrink:0;font-size:12px;}
+.pt-detail-row a{font-weight:600;color:var(--green-deep);text-decoration:none;}
+.pt-range{flex-shrink:0;width:auto;padding:6px 28px 6px 13px;border-radius:100px;font-size:12px;font-weight:600;color:var(--muted);border:1px solid var(--border);background:var(--surface);cursor:pointer;font-family:var(--font);appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235C6B63' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;}
+@media(max-width:640px){.pt-detail{padding-left:15px;}}
+</style>
+</head>
+<body>
+
+<!-- Topbar -->
+<div id="topbar">
+  <img id="topbar-logo" src="/icons/icon-192.png" style="width:28px;height:28px;border-radius:8px;" />
+  <div id="topbar-title">ShopFlow</div>
+  <button id="portal-logout" class="btn btn-sm" onclick="PortalAuth.logout()">Sign out</button>
+</div>
+
+<!-- App (no sidebar — the portal is a single page) -->
+<div id="app">
+  <div id="main">
+    <div id="page-portal" class="page active"></div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div id="modal-overlay">
+  <div id="modal-box"></div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+// Auth guard: portal is for client-role logins. Owners get bounced to the CRM.
+(function(){
+  var t = localStorage.getItem('sf_token'), r = localStorage.getItem('sf_role');
+  if (!t) { window.location.href = '/login'; return; }
+  if (r !== 'client') { window.location.href = '/shop/' + (localStorage.getItem('sf_shopSlug') || ''); }
+})();
+</script>
+<script src="/js/utils.js"></script>
+<script src="/js/portal.js"></script>
+</body>
+</html>

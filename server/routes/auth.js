@@ -139,7 +139,9 @@ router.post('/api/accounts/login', async (req, res) => {
       shopName: shop?.shopName,
       role,
       name: account.name || '',
-      crmUrl: '/shop/' + shop?.slug,
+      // Client-portal logins land on /portal — their token is rejected by every
+      // /api/shop route anyway (middleware.js), so the CRM would just error out.
+      crmUrl: role === 'client' ? '/portal' : '/shop/' + shop?.slug,
       bookUrl: '/book/' + shop?.slug,
     });
   } catch(e) {

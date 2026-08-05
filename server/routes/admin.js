@@ -560,4 +560,35 @@ router.post('/api/admin/accounts/set-password', requireAdmin, async (req, res) =
   }
 });
 
+// ── ADMIN: create a client-portal login for a shop ────────────────────────────
+// A client account is bound to exactly one shop and can ONLY use /api/client/*
+// (see middleware.js). Meant for outside collaborators — e.g. a marketing
+// vendor — so the owner hands over a credential we generate, no self-serve.
+router.post('/api/admin/accounts/create-client', requireAdmin, async (req, res) => {
+  try {
+    const { shop: shopKey, email, password, name } = req.body || {};
+    if (!shopKey || !email || !password) return res.status(400).json({ ok: false, error: 'shop, email, and password required' });
+    if (password.length < 6) return res.status(400).json({ ok: false, error: 'Password must be at least 6 characters' });
+    const shop = master.get('shops').find(s => s.slug === shopKey || s.id === shopKey).value();
+    if (!shop) return res.status(404).json({ ok: false, error: 'No shop matches ' + shopKey });
+    const existing = master.get('accounts').find({ email: String(email).toLowerCase() }).value();
+    if (existing) return res.status(400).json({ ok: false, error: 'An account with this email already exists' });
+    const passwordHash = await bcrypt.hash(password, 10);
+    master.get('accounts').push({
+      id: uuidv4(),
+      shopId: shop.id,
+      email: String(email).toLowerCase(),
+      passwordHash,
+      name: String(name || 'Client').slice(0, 60),
+      role: 'client',
+      createdAt: new Date().toISOString(),
+      active: true,
+    }).write();
+    res.json({ ok: true, email: String(email).toLowerCase(), shopSlug: shop.slug, portalUrl: '/portal' });
+  } catch(e) {
+    console.error('Admin create-client error:', e.message);
+    res.status(500).json({ ok: false, error: 'Failed to create client account' });
+  }
+});
+
 module.exports = router;

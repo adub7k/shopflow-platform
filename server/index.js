@@ -79,6 +79,7 @@ app.use(require('./routes/auth'));
 app.use(require('./routes/public'));
 app.use(require('./routes/twilio'));
 app.use(require('./routes/shop'));
+app.use(require('./routes/client'));
 app.use(require('./routes/newsletter'));
 app.use(require('./routes/cleaning'));
 app.use(require('./routes/receptionist'));
@@ -179,6 +180,7 @@ app.get('/review/*',(req, res) => res.sendFile(path.join(CLIENT_DIR, 'review.htm
 app.get('/quote/*', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'quote.html')));
 app.get('/demo',    (req, res) => res.sendFile(path.join(CLIENT_DIR, 'demo.html')));
 app.get('/sales',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'sales.html')));
+app.get(['/portal', '/portal/*'], (req, res) => res.sendFile(path.join(CLIENT_DIR, 'portal.html')));
 app.get('/signup',  (req, res) => res.sendFile(path.join(CLIENT_DIR, 'signup.html')));
 app.get('/login',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'login.html')));
 app.get('/admin',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'admin.html')));
