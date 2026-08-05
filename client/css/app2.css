@@ -342,6 +342,23 @@ table.v2-table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:68
 .v2-appt.progress{background:#FBF1E2;border-color:#EBD3AC;color:var(--orange);}
 .v2-appt.done{background:var(--surface2);border-color:var(--border-md);color:var(--muted);}
 
+/* ── Leads on phones: app-like list, not a shrunken desktop table ── */
+.v2-leadlist{display:none;padding:0;}
+@media(max-width:640px){
+  #page-leads .v2-tablewrap{display:none;}
+  .v2-leadlist{display:block;}
+  /* Status chips pin under the topbar and scroll sideways with a thumb. */
+  #page-leads .v2-chips{position:sticky;top:0;z-index:40;background:var(--bg);margin:0 -13px 12px;padding:10px 13px 8px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  #page-leads .v2-chips::-webkit-scrollbar{display:none;}
+  #page-leads .v2-chip{flex-shrink:0;min-height:36px;}
+  #page-leads .msg-inbox-row{padding:14px 15px;}
+  /* Channel scorecards stack full-width — 2-up overflows a phone. */
+  #page-leads .v2-mgrid{grid-template-columns:1fr!important;}
+  /* Header: title + count on their own line, actions full width beneath. */
+  #page-leads .v2-pagehd .v2-segwrap{margin-right:0;}
+  #page-leads .v2-pagehd>.btn{flex:1;justify-content:center;}
+}
+
 /* ── Leads / call tracking ── */
 .lead-banner{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:12px;box-shadow:var(--shadow);}
 .lead-filters{display:flex;gap:6px;overflow-x:auto;margin-bottom:12px;padding-bottom:2px;-webkit-overflow-scrolling:touch;}

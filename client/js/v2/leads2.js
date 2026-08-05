@@ -185,6 +185,36 @@
       }
     });
     html.push('</tbody></table></div>');
+
+    // Phones get a tappable card list instead of a side-scrolling table —
+    // app2.css swaps the two at 640px. Same rows, same modal on tap.
+    html.push('<div class="v2-leadlist v2-card">');
+    rows.forEach(l => {
+      try {
+        const sm = Leads._sourceMeta(l.source);
+        const name = l.name || l.phone || 'Unknown caller';
+        const { services, vehicle } = requested(l);
+        const sub = [services, vehicle].filter(Boolean).join(' · ') || l.phone || '';
+        const when = l.lastContactAt || l.createdAt;
+        html.push(`<div class="msg-inbox-row" onclick="Leads.open('${l.id}')">
+          ${avatarEl(name, 42)}
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</div>
+              <div style="font-size:11px;color:var(--faint);white-space:nowrap;flex-shrink:0;">${when ? _msgTime(when) : ''}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:3px;min-width:0;">
+              ${STATUS_PILL[colOf(l)] || ''}
+              <span class="v2-src" style="flex-shrink:0;">${sm.icon} ${esc(sm.label)}</span>
+              <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">${esc(sub)}</div>
+            </div>
+          </div>
+        </div>`);
+      } catch (err) {
+        console.error('Lead card render failed for', l && l.id, err);
+      }
+    });
+    html.push('</div>');
   }
 
   // ── Pipeline view (kanban board, kept from the redesign) ──────────────────

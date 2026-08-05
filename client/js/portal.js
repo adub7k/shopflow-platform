@@ -79,12 +79,12 @@ const Portal = {
     const pill = (key, label) =>
       `<button class="lead-pill ${this._filter === key ? 'active' : ''}" onclick="Portal.setFilter('${key}')">${label}</button>`;
     const rangeOpt = (v, label) => `<option value="${v}" ${this._range === v ? 'selected' : ''}>${label}</option>`;
-    const filters = `<div class="lead-filters" style="align-items:center;">
+    const filters = `<div class="pt-filterbar"><div class="lead-filters" style="align-items:center;">
       ${pill('all', 'All')}${pill('new', 'New')}${pill('contacted', 'Contacted')}
       <select class="pt-range" onchange="Portal.setRange(this.value)">
         ${rangeOpt('7', 'Last 7 days')}${rangeOpt('30', 'Last 30 days')}${rangeOpt('90', 'Last 90 days')}${rangeOpt('180', 'Last 180 days')}${rangeOpt('custom', 'Custom range')}
       </select>
-    </div>`;
+    </div></div>`;
 
     const custom = this._range === 'custom' ? `<div style="display:flex;gap:8px;margin:-4px 0 12px;">
       <input type="date" class="form-input" style="flex:1;" value="${esc(this._from)}" onchange="Portal.setCustom(this.value, null)"/>
@@ -96,7 +96,7 @@ const Portal = {
         <div style="font-size:19px;font-weight:700;letter-spacing:-.02em;">Leads</div>
         <div style="font-size:12.5px;color:var(--muted);margin-top:1px;">${this._total} lead${this._total !== 1 ? 's' : ''}</div>
       </div>
-      <button class="btn btn-green" onclick="Portal.openLog()">＋ Log a lead</button>
+      <button class="btn btn-green pt-head-btn" onclick="Portal.openLog()">＋ Log a lead</button>
     </div>`;
 
     if (!this._leads.length) {
@@ -128,15 +128,22 @@ const Portal = {
         </div>
       </div>`;
       if (this._expanded !== l.id) return row;
-      const dr = (k, v, href) => v ? `<div class="pt-detail-row"><span class="k">${k}</span>${href ? `<a href="${href}:${esc(v)}">${esc(v)}</a>` : `<span style="font-weight:600;color:var(--text);">${esc(v)}</span>`}</div>` : '';
+      const dr = (k, v) => v ? `<div class="pt-detail-row"><span class="k">${k}</span><span style="font-weight:600;color:var(--text);">${esc(v)}</span></div>` : '';
+      // One-tap contact actions — the whole point of this page on a phone.
+      const acts = [
+        l.phone ? `<a class="pt-act" href="tel:${esc(l.phone)}">📞 Call</a>` : '',
+        l.phone ? `<a class="pt-act" href="sms:${esc(l.phone)}">💬 Text</a>` : '',
+        l.email ? `<a class="pt-act" href="mailto:${esc(l.email)}">✉️ Email</a>` : '',
+      ].filter(Boolean).join('');
       return row + `<div class="pt-detail">
-        ${dr('Phone', l.phone, 'tel')}
-        ${dr('Email', l.email, 'mailto')}
+        ${dr('Phone', l.phone)}
+        ${dr('Email', l.email)}
         ${dr('Service', l.serviceRequested)}
         ${dr('Vehicle', l.vehicle)}
+        ${acts ? `<div class="pt-acts">${acts}</div>` : ''}
         ${l.status === 'new'
-          ? `<button class="btn btn-green" style="margin-top:8px;" onclick="Portal.markContacted('${l.id}', this)">✓ Mark contacted</button>`
-          : `<div style="font-size:12px;color:var(--faint);margin-top:6px;">Contacted ✓</div>`}
+          ? `<button class="btn btn-green" style="margin-top:8px;width:100%;justify-content:center;min-height:42px;" onclick="Portal.markContacted('${l.id}', this)">✓ Mark contacted</button>`
+          : `<div style="font-size:12px;color:var(--faint);margin-top:8px;text-align:center;">Contacted ✓</div>`}
       </div>`;
     }).join('');
 

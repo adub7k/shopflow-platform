@@ -17,7 +17,27 @@
 .pt-detail-row .k{width:70px;color:var(--muted);flex-shrink:0;font-size:12px;}
 .pt-detail-row a{font-weight:600;color:var(--green-deep);text-decoration:none;}
 .pt-range{flex-shrink:0;width:auto;padding:6px 28px 6px 13px;border-radius:100px;font-size:12px;font-weight:600;color:var(--muted);border:1px solid var(--border);background:var(--surface);cursor:pointer;font-family:var(--font);appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%235C6B63' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;}
-@media(max-width:640px){.pt-detail{padding-left:15px;}}
+/* Big tappable actions in an expanded lead (Call / Text / Email). */
+.pt-acts{display:flex;gap:8px;margin-top:10px;}
+.pt-act{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:42px;border:1px solid var(--border-md);background:var(--surface);color:var(--text);border-radius:10px;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer;}
+.pt-act:active{background:var(--surface2);}
+/* Floating "log a lead" button — phones only; desktop keeps the header button. */
+.pt-fab{display:none;}
+@media(max-width:640px){
+  .pt-detail{padding-left:15px;}
+  /* Sticky filter bar right under the topbar while the list scrolls. */
+  .pt-filterbar{position:sticky;top:0;z-index:40;background:var(--bg);margin:0 -13px;padding:10px 13px 8px;}
+  .pt-filterbar .lead-filters{margin-bottom:0;}
+  .lead-pill,.pt-range{min-height:36px;display:inline-flex;align-items:center;font-size:13px;}
+  .msg-inbox-row{padding:15px;}
+  .pt-head-btn{display:none;}
+  .pt-fab{position:fixed;right:16px;bottom:calc(18px + env(safe-area-inset-bottom));z-index:60;display:inline-flex;align-items:center;gap:8px;background:var(--green-deep);color:#fff;border:none;border-radius:100px;padding:15px 22px;font-size:14.5px;font-weight:700;font-family:var(--font);box-shadow:var(--shadow-lg);cursor:pointer;}
+  .pt-fab:active{transform:scale(.97);}
+  /* 16px inputs stop iOS Safari from zoom-jumping into focused fields. */
+  .form-input{font-size:16px;}
+  /* Room so the last lead never hides behind the floating button. */
+  #page-portal{padding-bottom:96px;}
+}
 </style>
 </head>
 <body>
@@ -35,6 +55,9 @@
     <div id="page-portal" class="page active"></div>
   </div>
 </div>
+
+<!-- Floating action button (phones) -->
+<button class="pt-fab" onclick="Portal.openLog()">＋ Log a lead</button>
 
 <!-- Modal -->
 <div id="modal-overlay">
