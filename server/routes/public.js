@@ -10,6 +10,7 @@ const { upsertLead, resolveContact, recordLeadPayload } = require('../leads-core
 // implementation. inspoMode is re-exported from there. (The inline slot helpers
 // that used to live here now live in ../booking — do not re-add them.)
 const { computeAvailability, createAppointment, inspoMode } = require('../booking');
+const { deliver } = require('../email');
 
 // ── Per-date availability overrides ───────────────────────────────────────────
 // When settings.availabilityMode === 'perDate', the shop hand-picks the open
@@ -72,6 +73,33 @@ router.post('/api/public/demo/book', async (req, res) => {
     if (taken) return res.status(409).json({ ok: false, error: 'That time slot was just taken. Please choose another.' });
     const demo = { id: uuidv4(), name, shopName: shopName||'', phone, currentTool: currentTool||'', date, time, status: 'scheduled', notes: '', bookedAt: new Date().toISOString() };
     master.get('demos').push(demo).write();
+    // Ping the platform owner — demo bookings are rare enough that every one
+    // matters, and there's no ops dashboard being watched. Fire-and-forget.
+    const notifyTo = process.env.DEMO_NOTIFY_EMAIL || 'adub7k@gmail.com';
+    const digits = phone.replace(/\D/g, '');
+    const esc = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    deliver({
+      to: notifyTo,
+      subject: `📅 Demo call booked: ${name}${shopName ? ` (${shopName})` : ''} — ${date} at ${time}`,
+      html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;">
+        <h2 style="color:#16a34a;margin:0 0 6px;">New demo call booked</h2>
+        <table style="width:100%;border-collapse:collapse;background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;">
+          ${[['Name', esc(name)],
+             shopName && ['Shop', esc(shopName)],
+             ['Phone', `<a href="tel:+1${digits}" style="color:#16a34a;font-weight:600;">${esc(phone)}</a>`],
+             currentTool && ['Using now', esc(currentTool)],
+             ['When', `${esc(date)} at ${esc(time)}`]]
+            .filter(Boolean)
+            .map(([k, v]) => `<tr>
+              <td style="padding:8px 12px;color:#6b7280;font-size:13px;white-space:nowrap;vertical-align:top;">${k}</td>
+              <td style="padding:8px 12px;color:#111827;font-size:13px;">${v}</td>
+            </tr>`).join('')}
+        </table>
+      </div>`,
+      text: `New demo call booked\nName: ${name}\nShop: ${shopName || '—'}\nPhone: ${phone}\nUsing now: ${currentTool || '—'}\nWhen: ${date} at ${time}`,
+    }).then((r) => r.ok
+      ? console.log('Demo-booking email sent →', notifyTo)
+      : console.error('Demo-booking email failed:', r.reason));
     if (twilioClient && TWILIO_DEFAULT_FROM) {
       const msg = `Hey ${name}! Your ShopFlow demo is confirmed for ${date} at ${time}. We'll walk you through everything — see you then! 🚀`;
       try { await twilioClient.messages.create({ from: TWILIO_DEFAULT_FROM, to: '+1' + phone.replace(/\D/g,''), body: msg }); } catch(e) { console.error('Demo SMS error:', e.message); }
