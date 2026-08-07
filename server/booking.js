@@ -103,12 +103,14 @@ function computeAvailability(db, date, { barberId } = {}) {
 // where `code` is an HTTP status the caller can surface.
 //
 // `payload` is the public-booking body shape plus an optional `source`
-// (default 'booking-page'; the voice AI passes 'ai-voice').
+// (default 'booking-page'; the voice AI passes 'ai-voice') and an optional
+// `createdBy`/`createdByName` (the staff accountId when an authenticated user
+// books on a customer's behalf; anonymous/AI paths leave it null).
 function createAppointment(db, shop, payload = {}) {
   const {
     customerName, customerPhone, customerEmail, barberId, barberName,
     serviceId, date, time, notes, customFields, inspoPhoto, vehicleSize,
-    addons, source,
+    addons, source, createdBy, createdByName,
   } = payload;
 
   if (!customerName || !customerPhone || !date || !time) {
@@ -207,6 +209,7 @@ function createAppointment(db, shop, payload = {}) {
     status: needsDeposit ? 'pending-deposit' : 'confirmed', notes: notes || '',
     customFields: cf, vehicleSize: vehicleSize || null, addons: chosenAddons, inspoPhoto: inspo,
     source: source || 'booking-page', createdAt: new Date().toISOString(),
+    createdBy: createdBy || null, createdByName: createdByName || null,
   };
   upsert('appointments', appt);
 

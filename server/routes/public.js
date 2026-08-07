@@ -449,7 +449,9 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     const db = getShopDb(shop.id);
     // All validation + the double-book guard + server-authoritative pricing live
     // in booking.createAppointment (shared with the AI voice receptionist).
-    const result = createAppointment(db, shop, req.body);
+    // This endpoint is anonymous, so booked-by attribution fields must never be
+    // accepted from the request body.
+    const result = createAppointment(db, shop, { ...req.body, createdBy: null, createdByName: null });
     if (!result.ok) return res.status(result.code || 400).json({ ok: false, error: result.error });
     master.get('shops').find({ id: shop.id }).assign({ lastActivity: new Date().toISOString() }).write();
     // No confirmation SMS. The platform has no Twilio A2P and the booker isn't the

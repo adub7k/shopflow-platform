@@ -365,6 +365,18 @@ router.get('/api/shop/appointments', requireAuth, shopRoute(async (req, res, db,
 }));
 router.post('/api/shop/appointments', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const a = req.body; if (!a.id) a.id = genId('a');
+  // Booked-by attribution: stamp WHO entered this appointment from the auth
+  // token, never from the client body (a crafted request could credit someone
+  // else). Stamped on create only — edits keep the original booker (upsert
+  // merges, so deleting the keys here leaves the stored values untouched).
+  // Name is snapshotted so attribution survives a deleted staff login.
+  delete a.createdBy; delete a.createdByName;
+  if (!h.getById('appointments', a.id)) {
+    a.createdBy = req.accountId || null;
+    const acct = master.get('accounts').find({ id: req.accountId }).value();
+    a.createdByName = acct ? (acct.name || acct.email) : null;
+    if (!a.createdAt) a.createdAt = new Date().toISOString();
+  }
   // Prevent double-booking the same staff member at the same date+time. The
   // public booking path validates this; the in-app create previously did not,
   // so staff (or a crafted request) could silently overbook a chair. Terminal
@@ -667,6 +679,38 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
   const totalDeposits = round2(paidDeposits.reduce((s, d) => s + Number(d.amount || 0), 0));
   const monthDeposits = round2(paidDeposits.filter(d => monthOf(d.paidAt) === curMonth).reduce((s, d) => s + Number(d.amount || 0), 0));
 
+  // ── Booked by (who ENTERED the appointment) ────────────────────────────────
+  // Per-account sales attribution: every staff-created appointment carries a
+  // server-stamped createdBy (accountId). "Booked" = jobs that person entered
+  // this month (by entry timestamp, excluding dead statuses) at booked price —
+  // the money they put on the calendar. "Closed" = their jobs marked done,
+  // bucketed by appointment date like the rest of the revenue math. Names join
+  // live from master accounts (renames stick) and fall back to the snapshot
+  // taken at booking time, so deleted logins keep their history.
+  const shopAccounts = master.get('accounts').filter({ shopId: req.shopId }).value() || [];
+  const DEAD_STATUSES = ['cancelled', 'canceled', 'declined', 'no-show'];
+  const byCreatorMap = {};
+  h.getAll('appointments').forEach(a => {
+    if (!a.createdBy) return;
+    const live = shopAccounts.find(x => x.id === a.createdBy);
+    const row = byCreatorMap[a.createdBy] || (byCreatorMap[a.createdBy] = {
+      accountId: a.createdBy,
+      name: (live && (live.name || live.email)) || a.createdByName || 'Former staff',
+      bookedMonth: 0, bookedMonthJobs: 0,
+      closedMonth: 0, closedMonthJobs: 0,
+      closedTotal: 0, closedTotalJobs: 0,
+    });
+    const price = Number(a.price || 0);
+    if (monthOf(a.createdAt) === curMonth && !DEAD_STATUSES.includes(a.status)) { row.bookedMonth += price; row.bookedMonthJobs++; }
+    if (a.status === 'done') {
+      row.closedTotal += price; row.closedTotalJobs++;
+      if ((a.date || '') >= ms) { row.closedMonth += price; row.closedMonthJobs++; }
+    }
+  });
+  const byCreator = Object.values(byCreatorMap)
+    .map(r => ({ ...r, bookedMonth: round2(r.bookedMonth), closedMonth: round2(r.closedMonth), closedTotal: round2(r.closedTotal) }))
+    .sort((a, b) => b.bookedMonth - a.bookedMonth || b.closedTotal - a.closedTotal);
+
   // ── Revenue Recovered (AI receptionist) ────────────────────────────────────
   // Money the AI voice receptionist brought in on calls the shop would otherwise
   // have missed. Two sources, deduped by appointment id:
@@ -743,6 +787,7 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
     monthDeposits, totalDeposits,
     monthJobs: thisMonth.length,
     avgTicket: thisMonth.length?Math.round(thisMonth.reduce((s,a)=>s+Number(a.price||0),0)/thisMonth.length):0,
+    byCreator,
     byBarber: Object.values(byBarber).sort((a,b)=>b.revenue-a.revenue),
     byMonth: Object.entries(byMonth).sort((a,b)=>a[0].localeCompare(b[0])).map(([month,revenue])=>({month,revenue})),
     recentDone: [...done].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,5),

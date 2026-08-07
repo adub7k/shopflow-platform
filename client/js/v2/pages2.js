@@ -355,6 +355,23 @@
         html.push('</div></div>');
       }
 
+      // Booked by: sales attribution — who ENTERED each job (from the login that
+      // created it), vs. "Revenue by barber" below which is who PERFORMS the work.
+      // Booked = money they put on the calendar this month; Closed = their jobs
+      // marked done this month.
+      if (data.byCreator?.length) {
+        html.push(`<div class="v2-card"><div class="v2-chd"><div class="t">Booked by</div><span class="sub">who brought it in · this month</span></div><div style="padding:10px 16px 12px;">
+          <div style="display:flex;gap:10px;padding:0 0 6px;font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:600;">
+            <span style="flex:1;">Person</span><span style="width:104px;text-align:right;">Booked</span><span style="width:104px;text-align:right;">Closed</span></div>`);
+        data.byCreator.forEach(p => {
+          html.push(`<div style="display:flex;align-items:center;gap:10px;padding:5px 0;">
+            <span style="font-size:12.5px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(p.name)}</span>
+            <span class="num" style="width:104px;text-align:right;font-size:12.5px;font-weight:650;font-variant-numeric:tabular-nums;">${fmtMoney(p.bookedMonth)} <span style="color:var(--faint);font-weight:500;font-size:10.5px;">×${p.bookedMonthJobs}</span></span>
+            <span class="num" style="width:104px;text-align:right;font-size:12.5px;font-weight:650;color:var(--green-deep);font-variant-numeric:tabular-nums;">${fmtMoney(p.closedMonth)} <span style="color:var(--faint);font-weight:500;font-size:10.5px;">×${p.closedMonthJobs}</span></span></div>`);
+        });
+        html.push(`<div style="font-size:11px;color:var(--faint);margin-top:8px;">Booked = jobs this person entered this month (any status). Closed = their jobs completed this month. Older appointments (before attribution existed) aren’t counted.</div></div></div>`);
+      }
+
       if (data.byBarber?.length > 1) {
         const maxRev = Math.max(...data.byBarber.map(b => b.revenue), 1);
         html.push(`<div class="v2-card"><div class="v2-chd"><div class="t">Revenue by ${esc(V('staffPlural', 'Barber').toLowerCase())}</div></div><div style="padding:10px 16px 12px;">`);
