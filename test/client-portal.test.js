@@ -24,6 +24,13 @@ master.get('shops').push(
   { id: A, accountId: 'acA', shopName: 'Shop A', slug: 'shop-a', active: true },
   { id: B, accountId: 'acB', shopName: 'Shop B', slug: 'shop-b', active: true },
 ).write();
+// Real master account behind the client token, so activity attribution + the
+// login event (routes/auth.js) can be asserted end-to-end.
+const bcrypt = require('bcryptjs');
+master.get('accounts').push({
+  id: 'ca', shopId: A, email: 'clienta@test.com', name: 'Client A',
+  passwordHash: bcrypt.hashSync('clientpass', 4), role: 'client', active: true,
+}).write();
 
 const now = new Date().toISOString();
 const old = new Date(Date.now() - 200 * 86400000).toISOString();
@@ -64,6 +71,7 @@ const app = express();
 app.use(express.json());
 app.use(require('../server/routes/client'));
 app.use(require('../server/routes/shop'));
+app.use(require('../server/routes/auth'));
 
 const WHITELIST = ['createdAt', 'email', 'id', 'name', 'phone', 'serviceRequested', 'source', 'status', 'vehicle'];
 const SENTINELS = ['SENTINEL-NOTES', 'SENTINEL-CAMPAIGN', 'SENTINEL-ADCAMPAIGN', 'SENTINEL-ADSET',
@@ -99,8 +107,11 @@ const server = app.listen(0, async () => {
     eq('legacy vehicle flattened', byId.la1.vehicle, '2019 Ford F-150');
     eq('no shop-B lead in shop-A list', byId.lb1, undefined);
 
-    // Date range reaches back to the old lead when asked.
-    r = await call('GET', '/api/client/leads?from=' + old.slice(0, 10), clientA);
+    // Date range reaches back to the old lead when asked. Query from the day
+    // BEFORE its UTC date — from= is parsed as local midnight, which can land
+    // after the lead's timestamp when local date and UTC date straddle midnight.
+    const dayBeforeOld = new Date(new Date(old).getTime() - 86400000).toISOString().slice(0, 10);
+    r = await call('GET', '/api/client/leads?from=' + dayBeforeOld, clientA);
     j = await r.json();
     eq('explicit from= includes the old lead', j.total, 4);
     // Status filter.
@@ -158,6 +169,35 @@ const server = app.listen(0, async () => {
     r = await call('GET', '/api/client/leads', clientB);
     j = await r.json();
     eq('shop B client still sees only its own lead', j.leads.map(l => l.id), ['lb1']);
+
+    // ── 5. Activity journal + attribution ──
+    r = await fetch(base + '/api/accounts/login', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'clienta@test.com', password: 'clientpass' }),
+    });
+    j = await r.json();
+    eq('client login ok, lands on /portal', [j.ok, j.crmUrl], [true, '/portal']);
+    const acts = getShopDb(A).get('clientActivity').value() || [];
+    const byAction = {}; acts.filter(a => a.accountId === 'ca').forEach(a => { byAction[a.action] = (byAction[a.action] || 0) + 1; });
+    eq('one throttled view despite three list fetches', byAction['view'], 1);
+    eq('one lead.created entry (rejected POSTs never log)', byAction['lead.created'], 1);
+    eq('two lead.contacted entries (409/422s never log)', byAction['lead.contacted'], 2);
+    eq('login event journaled', byAction['login'], 1);
+    eq('activity attributed to the account email', acts.every(a => a.email === 'clienta@test.com'), true);
+    const wendy = getShopDb(A).get('leads').find(l => l.name === 'Walter Walkin').value();
+    eq('manual lead stamped createdBy', wendy.createdBy, 'clienta@test.com');
+    eq('contacted lead stamped contactedBy', getShopDb(A).get('leads').find({ id: 'la1' }).value().contactedBy, 'clienta@test.com');
+    // Stamps stay internal — the client list response still has only whitelisted keys.
+    r = await call('GET', '/api/client/leads', clientA);
+    j = await r.json();
+    eq('whitelist still exact after stamping', j.leads.every(l => JSON.stringify(Object.keys(l).sort()) === JSON.stringify(WHITELIST)), true);
+    // Owner reads the journal; the client token cannot.
+    r = await call('GET', '/api/shop/client-activity', ownerA);
+    j = await r.json();
+    const csum = (j.clients || []).find(c => c.email === 'clienta@test.com');
+    eq('owner activity endpoint summarizes the client', [csum.logins, csum.views, csum.created, csum.contacted], [1, 1, 1, 2]);
+    r = await call('GET', '/api/shop/client-activity', clientA);
+    eq('client token rejected on the activity endpoint', r.status, 403);
   } catch (e) { failures++; console.log('FAIL  threw', e.stack || e.message); }
 
   server.close();

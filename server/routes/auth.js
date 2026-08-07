@@ -131,6 +131,13 @@ router.post('/api/accounts/login', async (req, res) => {
     // Update last activity
     master.get('shops').find({ id: account.shopId }).assign({ lastActivity: new Date().toISOString() }).write();
 
+    // Client-portal sign-ins land in the shop's activity journal so the owner
+    // can see when the outside login was used (Settings → Team → Activity).
+    if (role === 'client') {
+      try { require('./client').logClientActivity(getShopDb(account.shopId), account.id, 'login'); }
+      catch (e) { console.error('client login activity failed:', e.message); }
+    }
+
     res.json({
       ok: true,
       token,

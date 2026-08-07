@@ -224,6 +224,24 @@ router.delete('/api/shop/staff/:id', requireAuth, requireRole('full'), (req, res
   res.json({ ok: true });
 });
 
+// ── PROTECTED: Client-portal activity (owner only) ────────────────────────────
+// Everything a role:client login did — sign-ins, list views (session-throttled),
+// leads logged, leads marked contacted. Written by routes/client.js + auth.js;
+// read here for Settings → Team → Activity. Per-client summary rides along.
+router.get('/api/shop/client-activity', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
+  const activity = (db.get('clientActivity').value() || []).slice(0, 200);
+  const clients = {};
+  (db.get('clientActivity').value() || []).forEach(a => {
+    const c = clients[a.email] || (clients[a.email] = { email: a.email, name: a.name, lastSeen: a.at, logins: 0, views: 0, created: 0, contacted: 0 });
+    if (a.at > c.lastSeen) c.lastSeen = a.at;
+    if (a.action === 'login') c.logins++;
+    else if (a.action === 'view') c.views++;
+    else if (a.action === 'lead.created') c.created++;
+    else if (a.action === 'lead.contacted') c.contacted++;
+  });
+  res.json({ ok: true, activity, clients: Object.values(clients) });
+}));
+
 // ── PROTECTED: Barbers ────────────────────────────────────────────────────────
 router.get('/api/shop/barbers', requireAuth, shopRoute(async (req, res, db, h) => {
   res.json(h.getAll('barbers').filter(b => b.active !== false));

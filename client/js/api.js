@@ -70,6 +70,7 @@ const db = {
   stripe:        { status: () => apiFetch('/stripe/connect/status'), onboard: () => apiFetch('/stripe/connect/onboard',{method:'POST'}), disconnect: () => apiFetch('/stripe/connect/disconnect',{method:'POST'}) },
   square:        { status: () => apiFetch('/square/connect/status'), onboard: () => apiFetch('/square/connect/onboard',{method:'POST'}), disconnect: () => apiFetch('/square/connect/disconnect',{method:'POST'}), reconcileDeposits: (customerId) => apiFetch('/square/reconcile-deposits',{method:'POST',body:{customerId}}) },
   staff:         { all: () => apiFetch('/staff'), save: (u) => apiFetch('/staff',{method:'POST',body:u}), delete: (id) => apiFetch('/staff/'+id,{method:'DELETE'}) },
+  clientActivity:{ get: () => apiFetch('/client-activity') },
   gallery:       { add: (image,caption) => apiFetch('/gallery',{method:'POST',body:{image,caption}}), remove: (id) => apiFetch('/gallery/'+id,{method:'DELETE'}) },
   siteImage:     { set: (key,image) => apiFetch('/site-image',{method:'POST',body:{key,image}}), reset: (key) => apiFetch('/site-image/'+key,{method:'DELETE'}) },
   siteTeam:      { save: (m) => apiFetch('/site-team',{method:'POST',body:m}), remove: (id) => apiFetch('/site-team/'+id,{method:'DELETE'}) },

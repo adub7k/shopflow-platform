@@ -10,9 +10,41 @@
 //   • no export endpoint, no aggregates beyond the result count
 // Storage is untouched: internal leads keep every field; this is a projection.
 const router = require('express').Router();
-const { master, shopRoute } = require('../db');
+const { master, shopRoute, genId } = require('../db');
 const { requireClient } = require('../middleware');
 const { upsertLead } = require('../leads-core');
+
+// ── Activity journal ──────────────────────────────────────────────────────────
+// Every client action is recorded server-side in the shop's own DB, so the
+// owner can see exactly what an outside login did (Settings → Team → Activity).
+// Append-only, newest first, capped so it can't bloat the shop file.
+const ACTIVITY_CAP = 400;
+function clientWho(accountId) {
+  const a = master.get('accounts').find({ id: accountId }).value() || {};
+  return { email: a.email || '', name: a.name || a.email || 'Client' };
+}
+function logClientActivity(db, accountId, action, lead) {
+  try {
+    if (db.get('clientActivity').value() === undefined) db.set('clientActivity', []).write();
+    const { email, name } = clientWho(accountId);
+    db.get('clientActivity').unshift({
+      id: genId('act'), at: new Date().toISOString(),
+      accountId, email, name, action,
+      leadId: lead ? lead.id : null,
+      leadName: lead ? (lead.name || lead.phone || '') : '',
+    }).write();
+    const excess = db.get('clientActivity').size().value() - ACTIVITY_CAP;
+    if (excess > 0) db.set('clientActivity', db.get('clientActivity').take(ACTIVITY_CAP).value()).write();
+  } catch (e) { console.error('client activity log failed:', e.message); }
+}
+// List views are throttled to one entry per account per 30 min, so the feed
+// reads like sessions ("viewed the lead list") instead of one row per refresh.
+function logClientView(db, accountId) {
+  const recent = (db.get('clientActivity').value() || [])
+    .find(a => a.accountId === accountId);
+  if (recent && Date.now() - new Date(recent.at).getTime() < 30 * 60000) return;
+  logClientActivity(db, accountId, 'view');
+}
 
 // ── Response mapper ───────────────────────────────────────────────────────────
 // Leads come in two shapes: call-tracking/public-form leads (camelCase, status
@@ -78,6 +110,8 @@ router.get('/api/client/leads', requireClient, shopRoute(async (req, res, db, h)
     .filter(l => !statusQ || l.status === statusQ)
     .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
+  logClientView(db, req.accountId);
+
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
   const page  = Math.max(parseInt(req.query.page, 10) || 1, 1);
   res.json({
@@ -118,11 +152,17 @@ router.post('/api/client/leads', requireClient, shopRoute(async (req, res, db) =
   }
 
   const shop = master.get('shops').find({ id: req.shopId }).value();
-  const { lead } = upsertLead(db, shop, {
+  const { lead, isNew } = upsertLead(db, shop, {
     name, phone, email, vehicle,
     servicesInterested: serviceRequested ? [serviceRequested] : [],
     source: source === 'Call' ? 'call' : 'website',
   });
+  // Internal attribution only — toClientLead never exposes these fields.
+  if (isNew) {
+    lead.createdBy = clientWho(req.accountId).email;
+    db.get('leads').find({ id: lead.id }).assign({ createdBy: lead.createdBy }).write();
+  }
+  logClientActivity(db, req.accountId, 'lead.created', lead);
   res.status(201).json({ ok: true, lead: toClientLead(lead) });
 }));
 
@@ -153,10 +193,16 @@ router.patch('/api/client/leads/:id/status', requireClient, shopRoute(async (req
     lead.status = 'contacted';
     if (!lead.firstResponseAt) lead.firstResponseAt = now;
   }
+  // Internal attribution only — toClientLead never exposes these fields.
+  lead.contactedBy = clientWho(req.accountId).email;
+  lead.contactedAt = now;
   h.upsert('leads', lead);
+  logClientActivity(db, req.accountId, 'lead.contacted', lead);
   res.json({ ok: true, lead: toClientLead(lead) });
 }));
 
 module.exports = router;
+// Login events are written by routes/auth.js on successful client sign-in.
+module.exports.logClientActivity = logClientActivity;
 // Exposed for tests: the whitelist mapper is the security boundary here.
 module.exports._internal = { toClientLead, coarsenSource, CLIENT_SOURCES };

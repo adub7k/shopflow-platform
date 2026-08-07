@@ -7,6 +7,8 @@ const Settings = {
     try{
       const [s,barbers,services,staff]=await Promise.all([db.settings.get(),db.barbers.all(),db.services.all(),db.staff.all().catch(()=>[])]);
       this._barbers=barbers; this._services=services; this._staff=staff; this._addons=s.addons||[]; this._plans=s.membershipPlans||[];
+      // Client-portal activity summary (only fetched when a client login exists).
+      this._clientAct = staff.some(u=>u.role==='client') ? await db.clientActivity.get().catch(()=>null) : null;
       this._siteTeam=s.siteTeam||[];   // public "Meet the Team" roster (website)
       this._tpls=_smsTemplates(s.smsTemplates);   // owner-managed message templates (normalized list)
       const html=[];
@@ -256,7 +258,10 @@ const Settings = {
         const u=m.account, b=m.barber;
         const name=(u&&u.name)||(b&&b.name)||'—';
         const accent=(b&&b.color)||roleColors[u&&u.role]||'#6e6e73';
-        const sub=u?u.email:'No login';
+        // Client-portal members show when the login was last used (from the
+        // server-side activity journal) + an Activity button with the full feed.
+        const act=(u&&u.role==='client'&&this._clientAct)?(this._clientAct.clients||[]).find(c=>c.email===u.email):null;
+        const sub=u?u.email+(act&&typeof _msgTime==='function'?' · active '+_msgTime(act.lastSeen):''):'No login';
         const chips=[];
         if(u) chips.push(`<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:${roleColors[u.role]||'#6e6e73'}1a;color:${roleColors[u.role]||'#6e6e73'};white-space:nowrap;">${esc(roleLabels[u.role]||u.role)}</span>`);
         if(b) chips.push(`<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:${b.color||'#16a34a'}1a;color:${b.color||'#16a34a'};white-space:nowrap;">● Bookable</span>`);
@@ -264,6 +269,7 @@ const Settings = {
           <div style="width:40px;height:40px;border-radius:50%;background:${accent}22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:${accent};">${initials(name)}</div>
           <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;">${esc(name)}${u&&u.isOwner?' <span style="font-size:10px;color:var(--faint);font-weight:600;">(owner)</span>':''}</div><div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(sub)}</div></div>
           <div style="display:flex;gap:5px;flex:none;align-items:center;">${chips.join('')}</div>
+          ${u&&u.role==='client'?`<button class="btn btn-sm" onclick="Settings.openClientActivity('${esc(u.email)}')">Activity</button>`:''}
           <button class="btn btn-sm" onclick="Settings.openTeam('${u?u.id:''}','${b?b.id:''}')">Edit</button>
         </div>`);
       });
@@ -533,6 +539,41 @@ const Settings = {
   _toggleBookable() {
     const on=document.getElementById('fu-bookable')?.checked;
     const w=document.getElementById('team-booking'); if(w)w.style.display=on?'':'none';
+  },
+
+  // ── Client-portal activity feed (what an outside login did) ──
+  async openClientActivity(email) {
+    let data=this._clientAct;
+    try{ data=await db.clientActivity.get(); this._clientAct=data; }catch(e){}
+    const acct=(this._staff||[]).find(u=>u.email===email)||{};
+    const sum=((data&&data.clients)||[]).find(c=>c.email===email);
+    const feed=((data&&data.activity)||[]).filter(a=>a.email===email);
+    const t=(iso)=>typeof _msgTimeFull==='function'?_msgTimeFull(iso):new Date(iso).toLocaleString();
+    const LABEL={
+      'login':        ['🔑','Signed in'],
+      'view':         ['👀','Viewed the lead list'],
+      'lead.created': ['➕','Logged lead'],
+      'lead.contacted':['✓','Marked contacted'],
+    };
+    const statChip=(n,l)=>`<div style="flex:1;min-width:70px;background:var(--surface2);border-radius:10px;padding:8px 4px;text-align:center;"><div style="font-size:18px;font-weight:800;">${n||0}</div><div style="font-size:10.5px;color:var(--muted);font-weight:600;">${l}</div></div>`;
+    const rows=feed.length?feed.map(a=>{
+      const m=LABEL[a.action]||['·',a.action];
+      const what=a.leadName?`${m[1]} <strong>${esc(a.leadName)}</strong>`:m[1];
+      return `<div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);align-items:baseline;">
+        <span style="flex-shrink:0;">${m[0]}</span>
+        <div style="flex:1;min-width:0;font-size:13px;color:var(--text);">${what}</div>
+        <div style="font-size:11px;color:var(--faint);white-space:nowrap;">${t(a.at)}</div>
+      </div>`;
+    }).join(''):'<div style="font-size:13px;color:var(--faint);text-align:center;padding:18px 0;">No activity yet — entries appear the first time this login is used.</div>';
+    Modal.show(`
+      <div class="modal-title">Portal activity — ${esc(acct.name||email)}</div>
+      <div style="font-size:12px;color:var(--muted);margin:-8px 0 12px;">${esc(email)}${sum?` · last active ${t(sum.lastSeen)}`:''}</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        ${statChip(sum&&((sum.logins||0)+(sum.views||0)),'Visits')}${statChip(sum&&sum.created,'Leads logged')}${statChip(sum&&sum.contacted,'Contacted')}
+      </div>
+      <div style="max-height:45vh;overflow-y:auto;">${rows}</div>
+      <div class="modal-actions"><button class="btn btn-full" onclick="Modal.close()">Close</button></div>
+    `);
   },
 
   // Client Portal logins are for outside partners — never bookable, and the
