@@ -294,8 +294,8 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
       <a class="btn btn-ghost btn-lg" href="#how">See how it works</a>
     </div>
     <div class="hero-stats rv rv-d4">
-      <div class="hstat"><div class="n"><em>$</em><span data-count="5.89">0</span></div><div class="l">of booked work for every $1.00 spent on ads — first 7 days of a live campaign</div></div>
-      <div class="hstat"><div class="n"><em>$</em><span data-count="3600">0</span></div><div class="l">booked by the AI receptionist in its first 10 days</div></div>
+      <div class="hstat"><div class="n"><em>$</em><span data-count="5.89">5.89</span></div><div class="l">of booked work for every $1.00 spent on ads — first 7 days of a live campaign</div></div>
+      <div class="hstat"><div class="n"><em>$</em><span data-count="3600">3,600</span></div><div class="l">booked by the AI receptionist in its first 10 days</div></div>
       <div class="hstat"><div class="n">24<em>/</em>7</div><div class="l">every call answered — nights, weekends, mid-job</div></div>
     </div>
     <div class="hstat-note rv rv-d4">Early numbers from live shops</div>
@@ -512,9 +512,9 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
       <h3>What happened when real shops turned it on</h3>
       <p>We publish early numbers from live shops — not stock-photo testimonials. These come straight from a client's 7-day ad report and real phone lines. Ask on your call and we'll walk you through the full report.</p>
       <div class="res-grid">
-        <div class="res"><div class="n"><em>$</em><span data-count="5.89">0</span></div><div class="l">of booked work for every $1.00 spent on ads — a window-tint shop's first 7 days, $147.70 in, $870 booked</div></div>
-        <div class="res"><div class="n"><span data-count="23">0</span> <em>leads</em></div><div class="l">captured in those 7 days at $6.42 a lead — every one called, texted and emailed</div></div>
-        <div class="res"><div class="n"><em>$</em><span data-count="3600">0</span></div><div class="l">booked by the AI receptionist in its first 10 days — including a ceramic job that would have gone to voicemail</div></div>
+        <div class="res"><div class="n"><em>$</em><span data-count="5.89">5.89</span></div><div class="l">of booked work for every $1.00 spent on ads — a window-tint shop's first 7 days, $147.70 in, $870 booked</div></div>
+        <div class="res"><div class="n"><span data-count="23">23</span> <em>leads</em></div><div class="l">captured in those 7 days at $6.42 a lead — every one called, texted and emailed</div></div>
+        <div class="res"><div class="n"><em>$</em><span data-count="3600">3,600</span></div><div class="l">booked by the AI receptionist in its first 10 days — including a ceramic job that would have gone to voicemail</div></div>
       </div>
     </div>
   </div>
@@ -628,7 +628,7 @@ const cio=new IntersectionObserver(es=>es.forEach(e=>{
   const step=t=>{const p=Math.min((t-t0)/dur,1),ease=1-Math.pow(1-p,3);el.textContent=dec?(target*ease).toFixed(dec):fmt(Math.round(target*ease));if(p<1)requestAnimationFrame(step);};
   requestAnimationFrame(step);
 }),{threshold:.5});
-document.querySelectorAll('[data-count]').forEach(el=>cio.observe(el));
+document.querySelectorAll('[data-count]').forEach(el=>{el.textContent=el.dataset.count.includes('.')?'0.00':'0';cio.observe(el);});
 
 // Logged-in clients → straight to their shop
 try{
