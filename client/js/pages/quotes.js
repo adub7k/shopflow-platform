@@ -146,15 +146,25 @@ const Quotes = {
         depositAmount:depOn?(parseFloat(document.getElementById('fq-dep-amt')?.value)||50):0,
         notes:document.getElementById('fq-notes')?.value.trim()||'',
       });
-      if(sendVia){
+      if(sendVia==='sms'){
+        // Manual send: fetch the saved quote (server computed number/total),
+        // then pull up Messages prefilled — the owner just hits send.
+        const qid=(saved&&saved.id)||id;
+        const q=await db.quotes.get(qid);
+        Modal.close(); await this.render();
+        _cpSms(q.customerPhone, this._smsBody(q), q.customerId);
+        q.smsSentAt=new Date().toISOString();
+        try{ await db.quotes.save({id:qid, smsSentAt:q.smsSentAt}); }catch(err){}
+        return;
+      }
+      if(sendVia==='email'){
         const qid=(saved&&saved.id)||id;
         // apiFetch throws on non-2xx — the quote is already saved by then, so
         // report a send failure as exactly that, not "could not save".
-        let r; try{ r=sendVia==='sms'?await db.quotes.send(qid):await db.quotes.sendEmail(qid); }
+        let r; try{ r=await db.quotes.sendEmail(qid); }
         catch(err){ r={ok:false,error:err.message}; }
-        const verb=sendVia==='sms'?'texted':'emailed';
         Modal.close(); await this.render();
-        toast(r&&r.ok?`Estimate saved & ${verb} ✓`:`Saved, but ${sendVia==='sms'?'text':'email'} failed: ${(r&&r.error)||'unknown error'}`, r&&r.ok?'success':'error');
+        toast(r&&r.ok?'Estimate saved & emailed ✓':`Saved, but email failed: ${(r&&r.error)||'unknown error'}`, r&&r.ok?'success':'error');
         return;
       }
       Modal.close(); toast(id?'Estimate updated ✓':'Estimate created ✓'); await this.render();
@@ -192,9 +202,20 @@ const Quotes = {
       </div>`);
   },
 
+  // Prefilled estimate text (same copy the server-side sender uses).
+  _smsBody(q){
+    const link=location.origin+'/quote/'+Auth.getShopSlug()+'/'+q.id;
+    return `Hi ${(q.customerName||'there').split(' ')[0]}! Here's your estimate from ${Auth.getShopName()||'us'} (${q.number||''}) — $${q.total}. View & approve: ${link}`;
+  },
+  // Manual send: pull up the owner's Messages app prefilled (iPhone sms: deep
+  // link via _cpSms — no Twilio/A2P; same stance as Tasks/Messages/Response).
   async sendLink(id){
-    try{ const r=await db.quotes.send(id); if(r&&r.ok){toast('Estimate texted ✓'); const q=this._data.find(x=>x.id===id); if(q)q.smsSentAt=new Date().toISOString();} else {toast((r&&r.error)||'Could not send','error');} }
-    catch(e){ toast(e.message||'Could not send','error'); }
+    const q=this._data.find(x=>x.id===id); if(!q)return;
+    const phone=q.customerPhone||'';
+    if(phone.replace(/\D/g,'').length<10){toast('No phone number on this estimate','warning');return;}
+    _cpSms(phone, this._smsBody(q), q.customerId);
+    q.smsSentAt=new Date().toISOString();
+    try{ await db.quotes.save({id:q.id, smsSentAt:q.smsSentAt}); }catch(e){}
   },
   async sendEmail(id){
     try{ const r=await db.quotes.sendEmail(id); if(r&&r.ok){toast('Estimate emailed ✓'); const q=this._data.find(x=>x.id===id); if(q&&!q.emailSentAt)q.emailSentAt=new Date().toISOString();} else {toast((r&&r.error)||'Could not send','error');} }
