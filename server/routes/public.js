@@ -227,9 +227,15 @@ router.get('/api/public/:shopSlug/quote/:quoteId', (req, res) => {
     res.json({
       shopName: s.shopName || ctx.shop.shopName,
       accentColor: s.accentColor || '#16a34a',
+      // Letterhead fields — same shop-chosen contact info the estimate email
+      // already shows this customer (never staff/internal numbers).
+      tagline: s.tagline || '',
+      phone: s.phone || '',
+      address: s.address || '',
+      email: s.email || '',
       stripeConnected: !!(s.stripe && s.stripe.connectAccountId && s.stripe.onboardingComplete),
       quote: {
-        id: q.id, number: q.number, status: q.status,
+        id: q.id, number: q.number, status: q.status, createdAt: q.createdAt || null,
         customerName: q.customerName || '',
         vehicle: q.vehicle || null, vehicleSize: q.vehicleSize || null,
         lineItems: q.lineItems || [], total: q.total || 0, notes: q.notes || '',
