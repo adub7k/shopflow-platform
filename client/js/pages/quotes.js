@@ -63,10 +63,14 @@ const Quotes = {
       <div class="modal-title">${q?'Edit Estimate':'New Estimate'}</div>
       <div class="form-group"><label class="form-label">Customer *</label>
         <div class="autocomplete-wrap"><input class="form-input" id="fq-name" value="${esc(q?.customerName||'')}" placeholder="Search or type name..." /><div class="autocomplete-list" id="fq-list"></div></div>
-        <input type="hidden" id="fq-cid" value="${q?.customerId||''}" /><input type="hidden" id="fq-phone" value="${esc(q?.customerPhone||'')}" />
+        <input type="hidden" id="fq-cid" value="${q?.customerId||''}" />
       </div>
-      <div class="form-group"><label class="form-label">Email <span style="color:var(--faint);font-weight:400;">(to send the estimate)</span></label>
-        <input class="form-input" id="fq-email" type="email" value="${esc(q?.customerEmail||'')}" placeholder="customer@email.com" /></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;">
+        <div class="form-group"><label class="form-label">Email <span style="color:var(--faint);font-weight:400;">(to email it)</span></label>
+          <input class="form-input" id="fq-email" type="email" value="${esc(q?.customerEmail||'')}" placeholder="customer@email.com" /></div>
+        <div class="form-group"><label class="form-label">Mobile <span style="color:var(--faint);font-weight:400;">(to text it)</span></label>
+          <input class="form-input" id="fq-phone" type="tel" value="${esc(q?.customerPhone||'')}" placeholder="(555) 555-1234" /></div>
+      </div>
       ${fields.length?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;">${fields.map(f=>`<div class="form-group"><label class="form-label">${esc(f.label)}</label><input class="form-input" id="fq-v-${esc(f.key)}" value="${esc(v[this._vkey(f.key)]||'')}" placeholder="${esc(f.label)}" /></div>`).join('')}</div>`:''}
       <div class="form-group"><label class="form-label">Line items</label><div id="fq-lines"></div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
@@ -84,8 +88,9 @@ const Quotes = {
       </div>
       <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="fq-notes" rows="2" placeholder="Scope, expectations, timeline...">${esc(q?.notes||'')}</textarea></div>
       <div class="modal-actions">
-        <button id="fq-btn-send" class="btn btn-green btn-full" onclick="Quotes.save('${q?.id||''}',true)">${q?'Save & email':'Create & email'} estimate</button>
-        <button id="fq-btn" class="btn btn-full" onclick="Quotes.save('${q?.id||''}',false)">${q?'Save without sending':'Create without sending'}</button>
+        <button id="fq-btn-send" class="btn btn-green btn-full" onclick="Quotes.save('${q?.id||''}','email')">${q?'Save & email':'Create & email'} estimate</button>
+        <button id="fq-btn-text" class="btn btn-green btn-full" onclick="Quotes.save('${q?.id||''}','sms')">${q?'Save & text':'Create & text'} estimate</button>
+        <button id="fq-btn" class="btn btn-full" onclick="Quotes.save('${q?.id||''}','')">${q?'Save without sending':'Create without sending'}</button>
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
       </div>`);
     setTimeout(()=>{
@@ -115,22 +120,25 @@ const Quotes = {
   _removeLine(i){ this._lines.splice(i,1); this._renderLines(); },
   _toggleDep(){ const on=document.getElementById('fq-dep-on')?.checked; const r=document.getElementById('fq-dep-row'); if(r)r.style.display=on?'block':'none'; },
 
-  async save(id, alsoEmail){
+  // sendVia: 'email' | 'sms' | '' (save only)
+  async save(id, sendVia){
     const name=document.getElementById('fq-name')?.value.trim();
     if(!name){toast('Enter a customer name','warning');return;}
     if(!this._lines.length){toast('Add at least one line item','warning');return;}
     const email=document.getElementById('fq-email')?.value.trim()||'';
-    // Create & email needs somewhere to send it — stop before saving a half-action.
-    if(alsoEmail && !email){toast('Add an email address to send the estimate','warning');document.getElementById('fq-email')?.focus();return;}
+    const phone=document.getElementById('fq-phone')?.value.trim()||'';
+    // Sending needs somewhere to send it — stop before saving a half-action.
+    if(sendVia==='email' && !email){toast('Add an email address to send the estimate','warning');document.getElementById('fq-email')?.focus();return;}
+    if(sendVia==='sms' && phone.replace(/\D/g,'').length<10){toast('Add a mobile number to text the estimate','warning');document.getElementById('fq-phone')?.focus();return;}
     const vehicle={}; (Shop.fields||[]).forEach(f=>{ const val=document.getElementById('fq-v-'+f.key)?.value.trim()||''; if(val) vehicle[this._vkey(f.key)]=val; });
     const depOn=document.getElementById('fq-dep-on')?.checked;
-    const btn=document.getElementById(alsoEmail?'fq-btn-send':'fq-btn'); disableBtn(btn);
+    const btn=document.getElementById(sendVia==='email'?'fq-btn-send':sendVia==='sms'?'fq-btn-text':'fq-btn'); disableBtn(btn);
     try{
       const saved=await db.quotes.save({
         id:id||undefined,
         customerId:document.getElementById('fq-cid')?.value||null,
         customerName:name,
-        customerPhone:document.getElementById('fq-phone')?.value||'',
+        customerPhone:phone,
         customerEmail:email,
         vehicle,
         lineItems:this._lines,
@@ -138,11 +146,15 @@ const Quotes = {
         depositAmount:depOn?(parseFloat(document.getElementById('fq-dep-amt')?.value)||50):0,
         notes:document.getElementById('fq-notes')?.value.trim()||'',
       });
-      if(alsoEmail){
+      if(sendVia){
         const qid=(saved&&saved.id)||id;
-        const r=await db.quotes.sendEmail(qid);
+        // apiFetch throws on non-2xx — the quote is already saved by then, so
+        // report a send failure as exactly that, not "could not save".
+        let r; try{ r=sendVia==='sms'?await db.quotes.send(qid):await db.quotes.sendEmail(qid); }
+        catch(err){ r={ok:false,error:err.message}; }
+        const verb=sendVia==='sms'?'texted':'emailed';
         Modal.close(); await this.render();
-        toast(r&&r.ok?'Estimate saved & emailed ✓':`Saved, but email failed: ${(r&&r.error)||'unknown error'}`, r&&r.ok?'success':'error');
+        toast(r&&r.ok?`Estimate saved & ${verb} ✓`:`Saved, but ${sendVia==='sms'?'text':'email'} failed: ${(r&&r.error)||'unknown error'}`, r&&r.ok?'success':'error');
         return;
       }
       Modal.close(); toast(id?'Estimate updated ✓':'Estimate created ✓'); await this.render();
@@ -159,6 +171,7 @@ const Quotes = {
         ${q.vehicle&&(q.vehicle.make||q.vehicle.model)?`<div style="font-size:13px;color:var(--muted);margin-top:3px;">🚗 ${esc([q.vehicle.year,q.vehicle.make,q.vehicle.model,q.vehicle.color].filter(Boolean).join(' '))}</div>`:''}
         <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${this._badge(q.status)} ${q.depositPaid?'<span class="badge badge-green">Deposit paid</span>':''}${this._openTag(q)}</div>
         ${q.emailSentAt?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">${q.emailOpenedAt?'Customer opened the email':'Emailed — not opened yet'}${(q.reminderCount||0)>0?` · ${q.reminderCount} reminder${q.reminderCount>1?'s':''} sent`:''}</div>`:''}
+        ${q.smsSentAt?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">📱 Texted ${(()=>{try{return new Date(q.smsSentAt).toLocaleDateString(undefined,{month:'short',day:'numeric'});}catch(e){return '';}})()}</div>`:''}
       </div>
       <div class="list-card" style="margin-bottom:14px;">
         ${(q.lineItems||[]).map(l=>`<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:14px;">${esc(l.name)}</div></div><div style="font-weight:700;">${fmtMoney(l.price)}</div></div>`).join('')}
@@ -170,7 +183,7 @@ const Quotes = {
       <div class="modal-actions">
         <button class="btn btn-full" onclick="navigator.clipboard.writeText('${link}');toast('Link copied ✓')">🔗 Copy estimate link</button>
         ${q.customerEmail?`<button class="btn btn-full" onclick="Quotes.sendEmail('${q.id}')">✉️ Email to customer</button>`:''}
-        ${q.customerPhone?`<button class="btn btn-full" onclick="Quotes.sendLink('${q.id}')">📱 Text to customer</button>`:''}
+        ${(q.customerPhone||q.customerId)?`<button class="btn btn-full" onclick="Quotes.sendLink('${q.id}')">📱 Text to customer</button>`:''}
         ${q.status==='approved'?`<button class="btn btn-green btn-full" onclick="Quotes.schedule('${q.id}')">📅 Schedule appointment</button>`:''}
         ${q.status==='sent'?`<button class="btn btn-full" onclick="Quotes.mark('${q.id}','approved')">Mark approved</button>`:''}
         ${canWrite()?`<button class="btn btn-full" onclick="Quotes.openForm('${q.id}')">Edit</button>`:''}
@@ -180,11 +193,11 @@ const Quotes = {
   },
 
   async sendLink(id){
-    try{ const r=await db.quotes.send(id); if(r&&r.ok){toast('Estimate texted ✓');} else {toast((r&&r.error)||'Could not send','error');} }
+    try{ const r=await db.quotes.send(id); if(r&&r.ok){toast('Estimate texted ✓'); const q=this._data.find(x=>x.id===id); if(q)q.smsSentAt=new Date().toISOString();} else {toast((r&&r.error)||'Could not send','error');} }
     catch(e){ toast(e.message||'Could not send','error'); }
   },
   async sendEmail(id){
-    try{ const r=await db.quotes.sendEmail(id); if(r&&r.ok){toast('Estimate emailed ✓');} else {toast((r&&r.error)||'Could not send','error');} }
+    try{ const r=await db.quotes.sendEmail(id); if(r&&r.ok){toast('Estimate emailed ✓'); const q=this._data.find(x=>x.id===id); if(q&&!q.emailSentAt)q.emailSentAt=new Date().toISOString();} else {toast((r&&r.error)||'Could not send','error');} }
     catch(e){ toast(e.message||'Could not send','error'); }
   },
   async mark(id, status){

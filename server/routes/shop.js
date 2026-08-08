@@ -539,11 +539,13 @@ router.delete('/api/shop/quotes/:id', requireAuth, requireRole('full','technicia
   ensureQuotes(db); h.remove('quotes', req.params.id); res.json({ ok:true });
 }));
 // Text the customer a link to view + approve the quote.
+// Recipient: the quote's own phone, falling back to the linked customer record.
 router.post('/api/shop/quotes/:id/send', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   ensureQuotes(db);
   const q = h.getById('quotes', req.params.id); if (!q) return res.status(404).json({ ok:false, error:'Quote not found' });
-  const phone = (q.customerPhone||'').replace(/\D/g,'');
-  if (phone.length < 10) return res.status(400).json({ ok:false, error:'No phone number on file for this customer' });
+  const rawPhone = q.customerPhone || (q.customerId ? (h.getById('customers', q.customerId)||{}).phone : '') || '';
+  const toNum = toE164(rawPhone);
+  if (!toNum) return res.status(400).json({ ok:false, error:'No phone number on file for this customer' });
   const from = shopFromNumber(req.shopId);
   if (!twilioClient || !from) return res.status(400).json({ ok:false, error:'SMS is not active for this shop yet' });
   const s = db.get('settings').value() || {};
@@ -552,8 +554,14 @@ router.post('/api/shop/quotes/:id/send', requireAuth, requireRole('full','techni
   const link = `${base}/quote/${shopRow.slug}/${q.id}`;
   const body = `Hi ${(q.customerName||'there').split(' ')[0]}! Here's your estimate from ${s.shopName||'us'} (${q.number}) — $${q.total}. View & approve: ${link}`;
   try {
-    await twilioClient.messages.create({ from, to:'+1'+phone, body });
-    q.sentAt = new Date().toISOString(); h.upsert('quotes', q);
+    await twilioClient.messages.create({ from, to: toNum, body });
+    // Log to the customer's text thread so the estimate shows in their history.
+    h.upsert('conversations', { id: genId('msg'), customerId: q.customerId || null,
+      customerName: q.customerName || rawPhone, type:'sms', direction:'outbound', body,
+      sentAt: new Date().toISOString(), read:true });
+    q.sentAt = new Date().toISOString(); q.smsSentAt = q.sentAt;
+    if (!q.customerPhone) q.customerPhone = rawPhone; // persist for future sends
+    h.upsert('quotes', q);
     res.json({ ok:true });
   } catch(e) { res.status(500).json({ ok:false, error:'Could not send the text' }); }
 }));
