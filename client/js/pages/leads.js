@@ -289,6 +289,11 @@ const Leads = {
       </div>
 
       <div class="form-group">
+        <label class="form-label">Quoted amount ($)</label>
+        <input class="form-input" id="lead-quoted" type="number" min="0" step="1" inputmode="decimal" placeholder="e.g. 450" value="${l.quotedAmount != null ? l.quotedAmount : ''}"/>
+      </div>
+
+      <div class="form-group">
         <label class="form-label">Text back</label>
         <select class="form-input" id="lead-tpl" style="margin-bottom:8px;" onchange="Leads.useTemplate('${l.id}')">
           <option value="">Quick replies — pick a template…</option>
@@ -426,15 +431,18 @@ const Leads = {
   _captureModalEdits(l) {
     const nameEl = document.getElementById('lead-name');
     if (nameEl) l.name = nameEl.value;
+    const qEl = document.getElementById('lead-quoted');
+    if (qEl) { const v = parseFloat(qEl.value); l.quotedAmount = (Number.isFinite(v) && v > 0) ? v : null; }
   },
 
   async save(id) {
     const l = this._leads.find(x => x.id === id); if (!l) return;
     const name = document.getElementById('lead-name')?.value || '';
+    const qv = parseFloat(document.getElementById('lead-quoted')?.value);
     try {
       // Notes are saved per-entry via addNote — never send `notes` here, or a
       // blank value would wipe a pre-history lead's legacy free-text notes.
-      await db.leads.update(id, { name, status: l.status });
+      await db.leads.update(id, { name, status: l.status, quotedAmount: (Number.isFinite(qv) && qv > 0) ? qv : null });
       Modal.close(); toast('Lead saved ✓'); this.render();
     } catch(e) { toast(e.message || 'Could not save', 'error'); }
   },

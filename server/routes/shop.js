@@ -943,6 +943,89 @@ router.get('/api/shop/leads', requireAuth, requireRole('full','technician'), sho
   res.json(leads);
 }));
 
+// Pipeline stages: new → … → closed (won), with lost as the dead-end. The
+// middle stages are owner-configurable (settings.pipeline.stages), so accept
+// any configured key plus the built-in set — default shops carry no config.
+// closed used to double as "dead"; lost now holds that meaning, and a won
+// close is stamped with closedAt.
+function shopStageKeys(db) {
+  const builtinStages = ['new','contacted','quoted','booked','worked','closed','lost'];
+  const cfgStages = (((db.get('settings').value() || {}).pipeline) || {}).stages;
+  return new Set(builtinStages.concat(
+    Array.isArray(cfgStages) ? cfgStages.map(s => s && s.key).filter(Boolean) : []));
+}
+
+// Apply a (validated) pipeline status to a lead with all its bookkeeping —
+// shared by the single-lead update and the bulk clean-out endpoint so a bulk
+// move behaves exactly like tapping each lead by hand.
+function applyLeadStatus(lead, status) {
+  const now = new Date().toISOString();
+  const prevStage = lead.pipelineStatus || lead.status;
+  if (lead.channel === 'website') {
+    // Website-intake leads run the Response Center's richer status machine
+    // (routes/website-leads.router.js). Map the pipeline stages onto it and
+    // stamp the same first-response fields its endpoints stamp, so both
+    // views stay coherent whichever one the owner works from. The granular
+    // stage (quoted/worked…) survives in pipelineStatus, which the client's
+    // _normalizeLead prefers when rendering.
+    // Custom (owner-created) stages are always mid-funnel → CONTACTED.
+    const mapped = { new:'NEW_LEAD', contacted:'CONTACTED', quoted:'CONTACTED', booked:'APPOINTMENT_SET', worked:'APPOINTMENT_SET', closed:'COMPLETED', lost:'LOST' }[status] || 'CONTACTED';
+    if (lead.status === 'NEW_LEAD' && mapped !== 'NEW_LEAD' && !lead.first_response_at) {
+      lead.first_response_at = now;
+      lead.response_time_seconds = Math.max(0, Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 1000));
+      if (lead.contact_status === 'UNCONTACTED') lead.contact_status = 'ATTEMPTED';
+    }
+    lead.status = mapped;
+    lead.pipelineStatus = status;
+    lead.updated_at = now;
+  } else {
+    // Speed-to-lead metric: the first move off 'new' is the shop's first
+    // response (owner texted via the sms: deep link or called back, then set
+    // the status). Stamped once, server-side, so response times are durable.
+    if (lead.status === 'new' && status !== 'new' && !lead.firstResponseAt) lead.firstResponseAt = now;
+    lead.status = status;
+  }
+  // Stage timing, stamped server-side so the Pipeline board's follow-up
+  // intervals measure real time-in-stage across devices.
+  if (prevStage !== status) {
+    lead.stageChangedAt = now;
+    lead.stageLog = lead.stageLog || [];
+    lead.stageLog.push({ from: prevStage, to: status, at: now });
+    if (status === 'closed' && !lead.closedAt) lead.closedAt = now;
+  }
+}
+
+// Bulk clean-out (Pipeline → Select): move up to 500 leads to one stage in a
+// single call. Registered BEFORE /api/shop/leads/:id so "bulk-status" is never
+// captured as an :id.
+router.post('/api/shop/leads/bulk-status', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids.slice(0, 500) : [];
+  const status = req.body.status;
+  if (!ids.length || !shopStageKeys(db).has(status)) return res.status(400).json({ ok:false, error:'Bad request' });
+  let updated = 0;
+  ids.forEach(id => {
+    const lead = h.getById('leads', id);
+    if (lead) { applyLeadStatus(lead, status); h.upsert('leads', lead); updated++; }
+  });
+  res.json({ ok:true, updated });
+}));
+
+// Bulk delete (owner only, like single delete): removes the leads and their
+// call logs. The client confirms before calling — this is irreversible.
+router.post('/api/shop/leads/bulk-delete', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids.slice(0, 500) : [];
+  if (!ids.length) return res.status(400).json({ ok:false, error:'Bad request' });
+  let deleted = 0;
+  ids.forEach(id => {
+    if (h.getById('leads', id)) {
+      db.get('calls').remove({ leadId: id }).write();
+      h.remove('leads', id);
+      deleted++;
+    }
+  });
+  res.json({ ok:true, deleted });
+}));
+
 // Update editable lead fields (name, status, notes).
 router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const lead = h.getById('leads', req.params.id);
@@ -950,51 +1033,13 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   const { name, status, notes } = req.body;
   if (name   !== undefined) lead.name = String(name).slice(0,80);
   if (notes  !== undefined) lead.notes = String(notes).slice(0,2000);
-  // Pipeline stages: new → … → closed (won), with lost as the dead-end. The
-  // middle stages are owner-configurable (settings.pipeline.stages), so accept
-  // any configured key plus the built-in set — default shops carry no config.
-  // closed used to double as "dead"; lost now holds that meaning, and a won
-  // close is stamped with closedAt.
-  const builtinStages = ['new','contacted','quoted','booked','worked','closed','lost'];
-  const cfgStages = (((db.get('settings').value() || {}).pipeline) || {}).stages;
-  const stageKeys = new Set(builtinStages.concat(
-    Array.isArray(cfgStages) ? cfgStages.map(s => s && s.key).filter(Boolean) : []));
-  if (status !== undefined && stageKeys.has(status)) {
-    const now = new Date().toISOString();
-    const prevStage = lead.pipelineStatus || lead.status;
-    if (lead.channel === 'website') {
-      // Website-intake leads run the Response Center's richer status machine
-      // (routes/website-leads.router.js). Map the pipeline stages onto it and
-      // stamp the same first-response fields its endpoints stamp, so both
-      // views stay coherent whichever one the owner works from. The granular
-      // stage (quoted/worked…) survives in pipelineStatus, which the client's
-      // _normalizeLead prefers when rendering.
-      // Custom (owner-created) stages are always mid-funnel → CONTACTED.
-      const mapped = { new:'NEW_LEAD', contacted:'CONTACTED', quoted:'CONTACTED', booked:'APPOINTMENT_SET', worked:'APPOINTMENT_SET', closed:'COMPLETED', lost:'LOST' }[status] || 'CONTACTED';
-      if (lead.status === 'NEW_LEAD' && mapped !== 'NEW_LEAD' && !lead.first_response_at) {
-        lead.first_response_at = now;
-        lead.response_time_seconds = Math.max(0, Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 1000));
-        if (lead.contact_status === 'UNCONTACTED') lead.contact_status = 'ATTEMPTED';
-      }
-      lead.status = mapped;
-      lead.pipelineStatus = status;
-      lead.updated_at = now;
-    } else {
-      // Speed-to-lead metric: the first move off 'new' is the shop's first
-      // response (owner texted via the sms: deep link or called back, then set
-      // the status). Stamped once, server-side, so response times are durable.
-      if (lead.status === 'new' && status !== 'new' && !lead.firstResponseAt) lead.firstResponseAt = now;
-      lead.status = status;
-    }
-    // Stage timing, stamped server-side so the Pipeline board's follow-up
-    // intervals measure real time-in-stage across devices.
-    if (prevStage !== status) {
-      lead.stageChangedAt = now;
-      lead.stageLog = lead.stageLog || [];
-      lead.stageLog.push({ from: prevStage, to: status, at: now });
-      if (status === 'closed' && !lead.closedAt) lead.closedAt = now;
-    }
+  // Owner-entered quote value — drives the pipeline's per-column revenue
+  // totals. Overrides the AI receptionist's detected quotedPrice; null clears.
+  if (req.body.quotedAmount !== undefined) {
+    const q = Number(req.body.quotedAmount);
+    lead.quotedAmount = (Number.isFinite(q) && q > 0) ? Math.round(q * 100) / 100 : null;
   }
+  if (status !== undefined && shopStageKeys(db).has(status)) applyLeadStatus(lead, status);
   h.upsert('leads', lead);
   res.json({ ok:true, lead });
 }));

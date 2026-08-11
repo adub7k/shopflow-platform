@@ -67,6 +67,15 @@ const Pipeline = {
     return age > stage.interval ? 'over' : (age > stage.interval * 0.75 ? 'soon' : 'ok');
   },
 
+  // Effective quote value: the owner-entered amount wins; otherwise fall back
+  // to what the AI receptionist heard on the call. Drives the per-column
+  // revenue totals ("how much is sitting in Quoted / Booked").
+  _amt(l) {
+    if (l.quotedAmount != null) return Number(l.quotedAmount) || 0;
+    if (l.ai && l.ai.quotedPrice != null) return Number(l.ai.quotedPrice) || 0;
+    return null;
+  },
+
   async render() {
     const el = document.getElementById('page-pipeline');
     if (!el) return;
@@ -110,7 +119,10 @@ const Pipeline = {
       <div class="pipe-chips">${srcChip('all', 'All')}${srcChip('meta', 'Meta')}${srcChip('website', 'Website')}${srcChip('call', 'Calls')}</div>
       <div class="pipe-chips pipe-jump">${stages.map(jumpPill).join('')}</div>`;
 
-    const board = `<div class="pipe-board">${stages.map((s, i) => this._column(s, stages[i + 1] || null, byStage[s.key])).join('')}</div>`;
+    const board = `<div class="pipe-board">${stages.map((s, i) => {
+      const sum = byStage[s.key].reduce((t, l) => t + (this._amt(l) || 0), 0);
+      return this._column(s, stages[i + 1] || null, byStage[s.key], sum);
+    }).join('')}</div>`;
 
     // Keep the board's horizontal position across re-renders (advance, save…).
     const prev = el.querySelector('.pipe-board');
@@ -120,12 +132,13 @@ const Pipeline = {
     if (nb) nb.scrollLeft = scrollLeft;
   },
 
-  _column(stage, nextStage, list) {
+  _column(stage, nextStage, list, sum) {
     // Terminal columns can grow forever — cap the render, keep the real count.
     const shown = stage.terminal ? list.slice(0, 20) : list;
     const more = list.length - shown.length;
     const timing = (!stage.terminal && stage.interval)
       ? `<span class="pipe-col-iv" title="Flagged for follow-up after ${this._fmtAge(stage.interval)} in this stage">${this._fmtAge(stage.interval)}</span>` : '';
+    const money = sum > 0 ? `<span class="pipe-col-money" title="Total quoted value sitting in ${esc(stage.label)}">${fmtMoney(sum)}</span>` : '';
     const cards = shown.length
       ? shown.map(l => this._card(l, stage, nextStage)).join('') + (more > 0 ? `<div class="pipe-more">+ ${more} more</div>` : '')
       : `<div class="pipe-empty">No leads here yet</div>`;
@@ -134,7 +147,8 @@ const Pipeline = {
         <span class="pipe-dot" style="background:${stage.color};"></span>
         <span class="pipe-col-title">${esc(stage.label)}</span>
         <span class="pipe-col-count">${list.length}</span>
-        ${timing}
+        ${money}
+        <span class="pipe-col-right">${timing}<button class="pipe-col-sel" onclick="Pipeline.cleanup('${stage.key}')">Select</button></span>
       </div>
       <div class="pipe-col-body">${cards}</div>
     </div>`;
@@ -148,9 +162,14 @@ const Pipeline = {
     const name = l.name || l.phone || 'Unknown';
     const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model].filter(Boolean).join(' ') : '';
     const svc = (l.servicesInterested || []).join(', ');
-    const quoted = (l.ai && l.ai.quotedPrice != null) ? 'Quoted ' + fmtMoney(l.ai.quotedPrice) : '';
-    const sub = [veh, svc, quoted].filter(Boolean).join(' · ') || l.phone || '';
+    const sub = [veh, svc].filter(Boolean).join(' · ') || l.phone || '';
     const src = Leads._sourceMeta(l.source).label;
+    // Quote chip: set → the amount (tap to change); unset past intake → "+ $"
+    // so entering what a lead was quoted is one tap from the board.
+    const amt = this._amt(l);
+    const money = stage.fixed === 'intake' && amt == null ? '' : (amt != null
+      ? `<button class="pipe-money set" onclick="event.stopPropagation();Pipeline.quoteModal('${l.id}')" title="Quoted amount — tap to change">${fmtMoney(amt)}</button>`
+      : `<button class="pipe-money" onclick="event.stopPropagation();Pipeline.quoteModal('${l.id}')" title="Add what they were quoted">+ $</button>`);
 
     const ageChip = due === 'over'
       ? `<span class="pipe-age over" title="In ${esc(stage.label)} for ${age} — past your follow-up timing">${age} late</span>`
@@ -168,7 +187,7 @@ const Pipeline = {
         <div class="pipe-card-name">${esc(name)}</div>
         ${ageChip}
       </div>
-      <div class="pipe-card-sub">${src ? `<span class="pipe-src">${esc(src)}</span>` : ''}<span class="t" title="${esc(sub)}">${esc(sub)}</span></div>
+      <div class="pipe-card-sub">${src ? `<span class="pipe-src">${esc(src)}</span>` : ''}<span class="t" title="${esc(sub)}">${esc(sub)}</span>${money}</div>
       <div class="pipe-card-actions">${call}${text}${lose}${advance}</div>
     </div>`;
   },
@@ -215,6 +234,12 @@ const Pipeline = {
     const next = stages[idx + 1];
     if (idx < 0 || !next || next.fixed === 'lost') return;
     await this._setStatus(l, next.key, `${esc(l.name || l.phone || 'Lead')} moved to ${esc(next.label)}`, btn);
+    // Landing in Quoted without a dollar figure → ask for it right away, so
+    // the column's revenue total stays honest without a second trip.
+    if (next.key === 'quoted') {
+      const fresh = this._leads.find(x => x.id === id);
+      if (fresh && this._amt(fresh) == null) this.quoteModal(id);
+    }
   },
 
   async markLost(id) {
@@ -231,7 +256,159 @@ const Pipeline = {
     } catch (e) {
       toast(e.message || 'Could not update lead', 'error');
     }
-    this.render();
+    await this.render();
+  },
+
+  // ── Quoted amount (per-lead $, feeds the column revenue totals) ─────────────
+  quoteModal(id) {
+    const l = this._leads.find(x => x.id === id);
+    if (!l) return;
+    const ai = (l.quotedAmount == null && l.ai && l.ai.quotedPrice != null) ? Number(l.ai.quotedPrice) : null;
+    Modal.show(`
+      <div class="modal-title">Quoted amount — ${esc(l.name || l.phone || 'Lead')}</div>
+      <div class="form-group">
+        <label class="form-label">How much were they quoted?</label>
+        <input class="form-input" id="pq-amt" type="number" min="0" step="1" inputmode="decimal" placeholder="450"
+          value="${l.quotedAmount != null ? l.quotedAmount : (ai != null ? ai : '')}"
+          style="font-size:20px;font-weight:700;" onkeydown="if(event.key==='Enter')Pipeline.saveQuote('${l.id}')">
+      </div>
+      ${ai != null ? `<div style="font-size:12px;color:var(--muted);margin:-6px 0 12px;">Heard on the AI receptionist call — save to confirm, or change it.</div>` : ''}
+      <div class="modal-actions">
+        <button class="btn btn-primary btn-full" onclick="Pipeline.saveQuote('${l.id}')">Save</button>
+        ${l.quotedAmount != null ? `<button class="btn btn-full" onclick="Pipeline.saveQuote('${l.id}', true)">Remove amount</button>` : ''}
+        <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
+      </div>`);
+    setTimeout(() => document.getElementById('pq-amt')?.select(), 150);
+  },
+
+  async saveQuote(id, clear) {
+    const v = clear ? NaN : parseFloat(document.getElementById('pq-amt')?.value);
+    const ok = Number.isFinite(v) && v > 0;
+    try {
+      await db.leads.update(id, { quotedAmount: ok ? v : null });
+      Modal.close();
+      toast(ok ? 'Quote saved — ' + fmtMoney(v) : 'Amount cleared');
+      this.render();
+    } catch (e) {
+      toast(e.message || 'Could not save', 'error');
+    }
+  },
+
+  // ── Clean-out (bulk triage: Select on a column header) ──────────────────────
+  // A checklist of one column's leads, oldest first, with age filters — check a
+  // batch and move / mark lost / delete in one call. Built for sweeping a pile
+  // of stale leads so only the good ones stay on the board.
+  cleanup(stageKey) {
+    this._cl = { stage: stageKey, sel: new Set(), minAge: 0 };
+    this._clRender();
+  },
+
+  _clLeads() {
+    const cl = this._cl;
+    return this._leads
+      .filter(l => this._stage(l).key === cl.stage && this._matchSource(l))
+      .filter(l => !cl.minAge || this._ageMin(l) >= cl.minAge)
+      .sort((a, b) => this._ageMin(b) - this._ageMin(a));
+  },
+
+  _clRender() {
+    const cl = this._cl;
+    if (!cl) return;
+    const stage = this.stages().find(s => s.key === cl.stage);
+    if (!stage) { Modal.close(); return; }
+    const list = this._clLeads();
+    const shownIds = new Set(list.map(l => l.id));
+    cl.sel.forEach(id => { if (!shownIds.has(id)) cl.sel.delete(id); });
+    const n = cl.sel.size;
+
+    const ageChip = (min, label) => `<button class="lead-pill ${cl.minAge === min ? 'active' : ''}" onclick="Pipeline.clAge(${min})">${label}</button>`;
+    const rows = list.map(l => {
+      const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model].filter(Boolean).join(' ') : '';
+      const note = String((l.noteLog && l.noteLog[0] && l.noteLog[0].text) || l.notes || '').split('\n')[0];
+      const amt = this._amt(l);
+      const sub = [l.phone, veh || (l.servicesInterested || []).join(', '), amt != null ? fmtMoney(amt) : '', note].filter(Boolean).join(' · ');
+      return `<label class="pipe-cl-row">
+        <input type="checkbox" ${cl.sel.has(l.id) ? 'checked' : ''} onchange="Pipeline.clToggle('${l.id}')">
+        <span class="mid"><span class="nm">${esc(l.name || l.phone || 'Unknown')}</span><span class="sub">${esc(sub)}</span></span>
+        <span class="age">${this._fmtAge(this._ageMin(l))}</span>
+      </label>`;
+    }).join('') || '<div class="pipe-empty">Nothing matches this filter.</div>';
+
+    const moveOpts = this.stages().filter(s => s.key !== cl.stage)
+      .map(s => `<option value="${s.key}">${esc(s.label)}</option>`).join('');
+    const allSelected = list.length && n === list.length;
+    const nn = n ? ' ' + n : '';
+
+    const prevList = document.querySelector('.pipe-cl-list');
+    const scrollTop = prevList ? prevList.scrollTop : 0;
+    Modal.show(`
+      <div class="modal-title">Clean out — ${esc(stage.label)} <span style="font-weight:500;color:var(--muted);">${list.length}</span></div>
+      <div class="pipe-chips" style="padding:0 0 10px;">
+        ${ageChip(0, 'All')}${ageChip(10080, '7d+ old')}${ageChip(43200, '30d+ old')}
+        <button class="lead-pill" style="margin-left:auto;" onclick="Pipeline.clAll()">${allSelected ? 'Clear all' : 'Select all'}</button>
+      </div>
+      <div class="pipe-cl-list">${rows}</div>
+      <div class="pipe-cl-actions">
+        <div class="pipe-cl-move">
+          <select class="form-input" id="cl-move">${moveOpts}</select>
+          <button class="btn" id="cl-btn-move" onclick="Pipeline.clMove()" ${n ? '' : 'disabled'}>Move${nn}</button>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn" id="cl-btn-lost" style="flex:1;" onclick="Pipeline.clLost()" ${n ? '' : 'disabled'}>Mark lost${nn}</button>
+          ${Auth.getRole() === 'full' ? `<button class="btn btn-danger" id="cl-btn-del" style="flex:1;" onclick="Pipeline.clDelete()" ${n ? '' : 'disabled'}>Delete${nn}</button>` : ''}
+        </div>
+        <button class="btn btn-primary btn-full" style="margin-top:2px;" onclick="Pipeline.clDone()">Done</button>
+      </div>`);
+    const nl = document.querySelector('.pipe-cl-list');
+    if (nl) nl.scrollTop = scrollTop;
+  },
+
+  // Checkbox taps only refresh the footer buttons — a full re-render would
+  // reset the list scroll mid-triage.
+  clToggle(id) {
+    const s = this._cl.sel;
+    s.has(id) ? s.delete(id) : s.add(id);
+    const n = s.size, nn = n ? ' ' + n : '';
+    const set = (bid, label) => { const b = document.getElementById(bid); if (b) { b.disabled = !n; b.textContent = label + nn; } };
+    set('cl-btn-move', 'Move');
+    set('cl-btn-lost', 'Mark lost');
+    set('cl-btn-del', 'Delete');
+  },
+  clAll() {
+    const list = this._clLeads();
+    const all = list.length && list.every(l => this._cl.sel.has(l.id));
+    this._cl.sel = all ? new Set() : new Set(list.map(l => l.id));
+    this._clRender();
+  },
+  clAge(min) { this._cl.minAge = min; this._clRender(); },
+  clDone() { this._cl = null; Modal.close(); this.render(); },
+
+  clMove() {
+    const sel = document.getElementById('cl-move');
+    const to = sel && sel.value;
+    if (!to) return;
+    const s = this.stages().find(x => x.key === to);
+    return this._clApply(ids => db.leads.bulkStatus(ids, to), 'moved to ' + ((s && s.label) || to));
+  },
+  clLost() { return this._clApply(ids => db.leads.bulkStatus(ids, 'lost'), 'marked lost'); },
+  clDelete() {
+    const n = this._cl.sel.size;
+    if (!n) return;
+    if (!confirm(`Delete ${n} lead${n === 1 ? '' : 's'} and their call history? This can't be undone.`)) return;
+    return this._clApply(ids => db.leads.bulkDelete(ids), 'deleted');
+  },
+  async _clApply(fn, verb) {
+    const ids = [...this._cl.sel];
+    if (!ids.length) return;
+    try {
+      await fn(ids);
+      toast(`${ids.length} ${verb}`);
+      this._leads = await db.leads.all();
+      this._cl.sel.clear();
+      this._clRender();   // stay in the flow — keep cleaning until Done
+    } catch (e) {
+      toast(e.message || 'Bulk update failed', 'error');
+    }
   },
 
   // ── Stage editor (rename / recolor / reorder / add / remove + timing) ───────
