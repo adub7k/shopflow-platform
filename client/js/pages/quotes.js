@@ -85,6 +85,7 @@ const Quotes = {
       </div>
       <div class="form-group"><label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;margin:0;"><input type="checkbox" id="fq-dep-on" ${q?.depositRequired?'checked':''} onchange="Quotes._toggleDep()" /> Require a deposit to approve</label>
         <div id="fq-dep-row" style="display:${q?.depositRequired?'block':'none'};margin-top:8px;"><input class="form-input" id="fq-dep-amt" type="number" value="${q?.depositAmount||50}" placeholder="Deposit amount" /></div>
+        ${!(Shop.settings&&Shop.settings.stripe&&Shop.settings.stripe.onboardingComplete)?'<div style="font-size:12px;color:var(--faint);margin-top:6px;">Customers can still approve online — you collect the deposit directly until Stripe is connected in Settings → Payments.</div>':''}
       </div>
       <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="fq-notes" rows="2" placeholder="Scope, expectations, timeline...">${esc(q?.notes||'')}</textarea></div>
       <div class="modal-actions">

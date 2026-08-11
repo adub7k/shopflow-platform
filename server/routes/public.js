@@ -254,14 +254,21 @@ router.post('/api/public/:shopSlug/quote/:quoteId/approve', (req, res) => {
     const q = h.getById('quotes', req.params.quoteId);
     if (!q) return res.status(404).json({ ok: false, error: 'Quote not found' });
     if (q.status === 'declined') return res.status(400).json({ ok: false, error: 'This estimate was already declined.' });
-    const depositOutstanding = !!q.depositRequired && !q.depositPaid;
-    // Only finalize approval once any required deposit is actually paid. When a
-    // deposit is still owed, leave the status as-is and signal the client to
+    const s = ctx.db.get('settings').value() || {};
+    const stripeReady = !!(s.stripe && s.stripe.connectAccountId && s.stripe.onboardingComplete);
+    // Only block approval on the deposit when we can actually collect it online.
+    // Without Stripe Connect the estimate must still be approvable — the shop
+    // collects the deposit directly; otherwise a deposit-required estimate is a
+    // dead end the customer can never approve.
+    const depositOutstanding = !!q.depositRequired && !q.depositPaid && stripeReady;
+    // Only finalize approval once any collectable deposit is actually paid. When
+    // a deposit is still owed, leave the status as-is and signal the client to
     // collect it — the Stripe success callback flips the quote to 'approved'.
     if (!depositOutstanding && q.status !== 'approved' && q.status !== 'scheduled') {
       q.status = 'approved'; q.approvedAt = new Date().toISOString(); h.upsert('quotes', q);
     }
-    res.json({ ok: true, depositRequired: depositOutstanding, depositAmount: q.depositAmount || 0 });
+    res.json({ ok: true, depositRequired: depositOutstanding, depositAmount: q.depositAmount || 0,
+               collectDeposit: !!q.depositRequired && !q.depositPaid && !stripeReady });
   } catch(e) { res.status(500).json({ ok: false, error: 'Server error' }); }
 });
 router.post('/api/public/:shopSlug/quote/:quoteId/decline', (req, res) => {
