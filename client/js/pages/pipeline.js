@@ -31,6 +31,7 @@ const Pipeline = {
   ICONS: {
     phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.5c.9.3 1.9.6 2.9.7a2 2 0 0 1 1.7 2z"/></svg>',
     msg:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+    back:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>',
     x:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>',
   },
 
@@ -65,6 +66,23 @@ const Pipeline = {
     if (stage.terminal || !stage.interval) return 'ok';
     const age = this._ageMin(l);
     return age > stage.interval ? 'over' : (age > stage.interval * 0.75 ? 'soon' : 'ok');
+  },
+
+  // Where "move back" sends a lead. Mid-funnel: simply the previous stage in
+  // order. Terminal (Closed/Lost): back to the last non-terminal stage in its
+  // history — resurrecting a lead shouldn't dump it into whatever column
+  // happens to sit before the end states.
+  _backStage(l) {
+    const stages = this.stages();
+    const cur = this._stage(l);
+    const idx = stages.findIndex(s => s.key === cur.key);
+    if (!cur.terminal) return idx > 0 ? stages[idx - 1] : null;
+    const log = l.stageLog || [];
+    for (let i = log.length - 1; i >= 0; i--) {
+      const s = stages.find(x => x.key === log[i].from);
+      if (s && !s.terminal) return s;
+    }
+    return stages[0];
   },
 
   // Effective quote value: the owner-entered amount wins; otherwise fall back
@@ -178,6 +196,8 @@ const Pipeline = {
     const call = l.phone ? `<a class="pipe-act" href="tel:${esc(l.phone)}" onclick="event.stopPropagation()" title="Call" aria-label="Call">${this.ICONS.phone}</a>` : '';
     const text = l.phone ? `<button class="pipe-act" onclick="event.stopPropagation();Pipeline.text('${l.id}')" title="Text" aria-label="Text">${this.ICONS.msg}</button>` : '';
     const lose = !stage.terminal ? `<button class="pipe-act pipe-lose" onclick="event.stopPropagation();Pipeline.markLost('${l.id}')" title="Mark lost" aria-label="Mark lost">${this.ICONS.x}</button>` : '';
+    const prev = this._backStage(l);
+    const back = prev ? `<button class="pipe-act" onclick="event.stopPropagation();Pipeline.moveBack('${l.id}',this)" title="Back to ${esc(prev.label)}" aria-label="Back to ${esc(prev.label)}">${this.ICONS.back}</button>` : '';
     const advance = next
       ? `<button class="pipe-advance" onclick="event.stopPropagation();Pipeline.advance('${l.id}',this)">${esc(next.label)} →</button>`
       : `<button class="pipe-advance ghost" onclick="event.stopPropagation();Pipeline.openLead('${l.id}')">Details</button>`;
@@ -188,7 +208,7 @@ const Pipeline = {
         ${ageChip}
       </div>
       <div class="pipe-card-sub">${src ? `<span class="pipe-src">${esc(src)}</span>` : ''}<span class="t" title="${esc(sub)}">${esc(sub)}</span>${money}</div>
-      <div class="pipe-card-actions">${call}${text}${lose}${advance}</div>
+      <div class="pipe-card-actions">${call}${text}${lose}${back}${advance}</div>
     </div>`;
   },
 
@@ -240,6 +260,14 @@ const Pipeline = {
       const fresh = this._leads.find(x => x.id === id);
       if (fresh && this._amt(fresh) == null) this.quoteModal(id);
     }
+  },
+
+  async moveBack(id, btn) {
+    const l = this._leads.find(x => x.id === id);
+    if (!l) return;
+    const prev = this._backStage(l);
+    if (!prev) return;
+    await this._setStatus(l, prev.key, `${esc(l.name || l.phone || 'Lead')} back to ${esc(prev.label)}`, btn);
   },
 
   async markLost(id) {
