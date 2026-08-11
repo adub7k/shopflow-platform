@@ -56,6 +56,7 @@ function upsertLead(db, shop, f = {}) {
       vehicle, servicesInterested, status: 'new',
       callCount: 0, missedCount: 0, formSubmits: 1, customerId: null, notes,
       firstContactAt: now, lastContactAt: now, createdAt: now,
+      stageChangedAt: now,   // pipeline time-in-stage baseline
     };
   }
   h.upsert('leads', lead);
@@ -70,7 +71,7 @@ function upsertLead(db, shop, f = {}) {
     title: `🔔 New lead — ${lead.name || lead.phone || 'website'}`,
     body: [lead.phone, veh, (lead.servicesInterested || []).join(', '), lead.source && `via ${lead.source}`]
       .filter(Boolean).join(' · '),
-    url: '/leads',
+    url: '/pipeline',
     tag: `lead-${lead.id}`,
   }).catch(e => console.error('Lead push failed:', e.message));
 

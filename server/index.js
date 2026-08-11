@@ -153,9 +153,10 @@ app.get('/classic/*', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app.html
 // Push-notification deep link (sw-push.js opens /response-center?lead=…):
 // serve the app shell; the client boot lands on the Response Center page.
 app.get('/response-center', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app2.html')));
-// New-lead + missed-call push notifications deep-link here (sw-push opens /leads):
-// serve the app shell; the client boot lands on the Leads page.
-app.get(['/leads', '/leads/*'], (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app2.html')));
+// New-lead + missed-call push notifications deep-link to /pipeline (the lead
+// board); /leads is kept for older subscriptions' cached payloads and bookmarks.
+// Both serve the app shell; the client boot lands on the matching page.
+app.get(['/pipeline', '/leads', '/leads/*'], (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app2.html')));
 // Quote-first verticals (detail shops) get the opt-in lead-capture page at the
 // same /book/<slug> URL; scheduling verticals keep the calendar booking flow.
 // Per-shop override: settings.bookingMode ('booking' | 'leads').

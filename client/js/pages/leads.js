@@ -7,11 +7,57 @@ const Leads = {
   _leads: [],
   _filter: 'all',
 
-  _statusMeta: {
-    new:       { label: 'New',       bg: 'var(--green-lt)',  fg: 'var(--green)', dot: '#2563eb' },
-    contacted: { label: 'Contacted', bg: '#fef3c7',          fg: '#92400e',      dot: '#d97706' },
-    booked:    { label: 'Booked',    bg: 'var(--green-lt)',  fg: 'var(--green)', dot: '#16a34a' },
-    closed:    { label: 'Closed',    bg: '#f3f4f6',          fg: '#6b7280',      dot: '#9ca3af' },
+  // ── Pipeline stage configuration (shared with the Pipeline board) ───────────
+  // The owner can define their own stages (Pipeline → Edit stages), stored as
+  // settings.pipeline.stages [{key,label,color,interval,won,terminal,fixed}].
+  // Three anchors always exist: the intake stage (key 'new' — every lead lands
+  // there) and the two end states 'closed' (won) / 'lost' (dead). Keys are
+  // stable ids: renames only change labels, so lead records never migrate.
+  // `interval` = minutes a lead may sit in the stage before it's flagged.
+  DEFAULT_STAGES: [
+    { key: 'new',       label: 'New',       color: '#2563eb', interval: 15,   fixed: 'intake' },
+    { key: 'contacted', label: 'Contacted', color: '#d97706', interval: 1440 },
+    { key: 'quoted',    label: 'Quoted',    color: '#7c3aed', interval: 2880 },
+    { key: 'booked',    label: 'Booked',    color: '#16a34a', interval: 0,    won: true },
+    { key: 'worked',    label: 'Worked',    color: '#0891b2', interval: 2880, won: true },
+    { key: 'closed',    label: 'Closed',    color: '#374151', terminal: true, won: true, fixed: 'won' },
+    { key: 'lost',      label: 'Lost',      color: '#9ca3af', terminal: true, fixed: 'lost' },
+  ],
+  stageConfig() {
+    const p = (Shop.settings && Shop.settings.pipeline) || {};
+    let stages = (Array.isArray(p.stages) && p.stages.length)
+      ? p.stages.map(s => ({
+          key: String((s && s.key) || ''),
+          label: String((s && s.label) || 'Stage').slice(0, 24),
+          color: /^#[0-9a-fA-F]{6}$/.test((s && s.color) || '') ? s.color : '#64748b',
+          interval: Math.max(0, Number(s && s.interval) || 0),
+          won: !!(s && s.won), terminal: !!(s && s.terminal), fixed: s && s.fixed,
+        })).filter(s => s.key)
+      : null;
+    // The anchors must survive whatever was saved — a config missing one is
+    // treated as corrupt and rebuilt from the defaults.
+    if (!stages || !['new', 'closed', 'lost'].every(k => stages.some(s => s.key === k))) {
+      stages = this.DEFAULT_STAGES.map(s => ({ ...s }));
+      // An earlier build stored timing alone as settings.pipeline.intervals.
+      if (p.intervals) stages.forEach(s => { if (p.intervals[s.key] != null) s.interval = Math.max(0, Number(p.intervals[s.key]) || 0); });
+    }
+    return stages;
+  },
+  // Badge colors derived from the stage config so custom stages render
+  // everywhere: list badges, filter pills, and the modal's status picker.
+  get _statusMeta() {
+    const m = {};
+    this.stageConfig().forEach(s => { m[s.key] = { label: s.label, bg: s.color + '1a', fg: s.color, dot: s.color }; });
+    return m;
+  },
+  // A lead counts as won once it reaches any win-flagged stage. 'closed' is
+  // trusted only with server proof (closedAt / stage history): under the old
+  // semantics closed meant dead, and those legacy leads carry neither.
+  _isWon(l) {
+    const won = new Set(this.stageConfig().filter(s => s.won && !s.terminal).map(s => s.key));
+    return won.has(l.status)
+      || (l.stageLog || []).some(s => won.has(s.to))
+      || (l.status === 'closed' && (!!l.closedAt || (l.stageLog || []).length > 0));
   },
 
   // Display meta for a lead source. Known channels get an icon; anything else
@@ -35,7 +81,7 @@ const Leads = {
   // window is the ad-spend read; all-time rides along as the subtitle.
   _convStats() {
     const all = this._leads; if (!all.length) return '';
-    const isBooked = l => l.status === 'booked';
+    const isBooked = l => this._isWon(l);
     const last30 = all.filter(l => (Date.now() - new Date(l.createdAt || l.firstContactAt || 0)) < 30 * 86400000);
     const b30 = last30.filter(isBooked).length, bAll = all.filter(isBooked).length;
     const pct = (n, d) => d ? Math.round(n / d * 100) : 0;
@@ -61,7 +107,7 @@ const Leads = {
       const k = String(l.source || 'call').toLowerCase();
       bySrc[k] = bySrc[k] || { total: 0, booked: 0 };
       bySrc[k].total++;
-      if (l.status === 'booked') bySrc[k].booked++;
+      if (this._isWon(l)) bySrc[k].booked++;
     });
     const keys = Object.keys(bySrc);
     if (keys.length < 2 && keys[0] === 'call') return ''; // calls-only shops: nothing to compare yet
@@ -82,15 +128,20 @@ const Leads = {
   },
 
   async render() {
+    // Modal actions (save / status / note / convert) all funnel back through
+    // here — when the owner is working from the Pipeline board, repaint that
+    // instead of the hidden list.
+    if (typeof Pipeline !== 'undefined' && Pipeline.isActive()) return Pipeline.render();
     const el = document.getElementById('page-leads'); if (!el) return;
     try { this._leads = await db.leads.all(); } catch(e) { this._leads = []; }
 
-    const counts = { all: this._leads.length, new: 0, contacted: 0, booked: 0, closed: 0 };
+    const counts = { all: this._leads.length };
+    Object.keys(this._statusMeta).forEach(k => { counts[k] = 0; });
     this._leads.forEach(l => { counts[l.status] = (counts[l.status]||0) + 1; });
 
     const pill = (key, label) => `<button class="lead-pill ${this._filter===key?'active':''}" onclick="Leads.setFilter('${key}')">${label}${counts[key]?` <span class="lead-pill-count">${counts[key]}</span>`:''}</button>`;
     const filters = `<div class="lead-filters">
-      ${pill('all','All')}${pill('new','New')}${pill('contacted','Contacted')}${pill('booked','Booked')}${pill('closed','Closed')}
+      ${pill('all','All')}${Object.keys(this._statusMeta).map(k => pill(k, this._statusMeta[k].label)).join('')}
     </div>`;
 
     const tn = (Shop.settings && Shop.settings.trackingNumber) || '';

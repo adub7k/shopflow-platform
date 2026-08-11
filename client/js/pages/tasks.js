@@ -369,7 +369,9 @@ const Tasks = {
       c.dismissedRecs = (c.dismissedRecs || []).concat(t.recTitle);
       await this._persistCust(c, 'Dismissed');
     } else if (t.source === 'lead') {
-      await this._persistLead(t.leadId, { status: 'closed' }, 'Dismissed');
+      // 'lost', not 'closed' — closed now means WON on the pipeline (stamps
+      // closedAt and counts toward conversion); a dismissed lead is dead.
+      await this._persistLead(t.leadId, { status: 'lost' }, 'Dismissed');
     } else if (t.source === 'reminder') {
       this._remDone[t.apptId] = true; toast('Dismissed'); this.render();
     }

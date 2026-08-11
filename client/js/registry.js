@@ -12,6 +12,7 @@ const NavRegistry = {
   META: {
     dashboard:    { label: 'Dashboard',    icon: '🏠' },
     response:     { label: 'Response Center', icon: '⏱️' },
+    pipeline:     { label: 'Pipeline',     icon: '🎯' },
     leads:        { label: 'Leads',        icon: '📞' },
     clients:      { label: 'Clients',      icon: '👤' },
     messages:     { label: 'Messages',     icon: '💬', badge: 'sidebar-msg-badge' },
@@ -35,6 +36,7 @@ const NavRegistry = {
   SVGS: {
     dashboard:    '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
     response:     '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+    pipeline:     '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
     leads:        '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 2 .7 2.9a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.2-1.2a2 2 0 0 1 2.1-.5c.9.3 1.9.6 2.9.7a2 2 0 0 1 1.7 2z"/>',
     clients:      '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
     messages:     '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
@@ -62,7 +64,7 @@ const NavRegistry = {
   // Grouped layout. `industry: true` appends the active vertical's INDUSTRY_PAGES.
   GROUPS: [
     { title: 'Overview',   pages: ['dashboard'] },
-    { title: 'CRM',        pages: ['response', 'leads', 'clients', 'tasks', 'messages'] },
+    { title: 'CRM',        pages: ['response', 'pipeline', 'leads', 'clients', 'tasks', 'messages'] },
     { title: 'Operations', pages: ['appointments'], industry: true },
     { title: 'Money',      pages: ['quotes', 'revenue'] },
     { title: 'Growth',     pages: ['reviews', 'automations', 'newsletter'] },

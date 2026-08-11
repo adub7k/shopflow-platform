@@ -19,7 +19,10 @@ const Auth = {
 // kanban statuses back onto the website state machine server-side.
 function _normalizeLead(l) {
   if (!l || l.channel !== 'website') return l;
-  const status = ({ NEW_LEAD:'new', CONTACTED:'contacted', APPOINTMENT_SET:'booked', COMPLETED:'closed', LOST:'closed' })[l.status] || l.status;
+  // pipelineStatus (stamped by /api/shop/leads/:id) preserves the granular
+  // pipeline stage (quoted/worked…) that the website state machine can't hold.
+  const status = l.pipelineStatus
+    || ({ NEW_LEAD:'new', CONTACTED:'contacted', APPOINTMENT_SET:'booked', COMPLETED:'closed', LOST:'lost' })[l.status] || l.status;
   return {
     ...l,
     status,

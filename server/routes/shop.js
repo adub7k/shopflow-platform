@@ -950,26 +950,49 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   const { name, status, notes } = req.body;
   if (name   !== undefined) lead.name = String(name).slice(0,80);
   if (notes  !== undefined) lead.notes = String(notes).slice(0,2000);
-  if (status !== undefined && ['new','contacted','booked','closed'].includes(status)) {
+  // Pipeline stages: new → … → closed (won), with lost as the dead-end. The
+  // middle stages are owner-configurable (settings.pipeline.stages), so accept
+  // any configured key plus the built-in set — default shops carry no config.
+  // closed used to double as "dead"; lost now holds that meaning, and a won
+  // close is stamped with closedAt.
+  const builtinStages = ['new','contacted','quoted','booked','worked','closed','lost'];
+  const cfgStages = (((db.get('settings').value() || {}).pipeline) || {}).stages;
+  const stageKeys = new Set(builtinStages.concat(
+    Array.isArray(cfgStages) ? cfgStages.map(s => s && s.key).filter(Boolean) : []));
+  if (status !== undefined && stageKeys.has(status)) {
+    const now = new Date().toISOString();
+    const prevStage = lead.pipelineStatus || lead.status;
     if (lead.channel === 'website') {
       // Website-intake leads run the Response Center's richer status machine
-      // (routes/website-leads.router.js). Map the kanban's four statuses onto
-      // it and stamp the same first-response fields its endpoints stamp, so
-      // both views stay coherent whichever one the owner works from.
-      const mapped = { new:'NEW_LEAD', contacted:'CONTACTED', booked:'APPOINTMENT_SET', closed:'LOST' }[status];
+      // (routes/website-leads.router.js). Map the pipeline stages onto it and
+      // stamp the same first-response fields its endpoints stamp, so both
+      // views stay coherent whichever one the owner works from. The granular
+      // stage (quoted/worked…) survives in pipelineStatus, which the client's
+      // _normalizeLead prefers when rendering.
+      // Custom (owner-created) stages are always mid-funnel → CONTACTED.
+      const mapped = { new:'NEW_LEAD', contacted:'CONTACTED', quoted:'CONTACTED', booked:'APPOINTMENT_SET', worked:'APPOINTMENT_SET', closed:'COMPLETED', lost:'LOST' }[status] || 'CONTACTED';
       if (lead.status === 'NEW_LEAD' && mapped !== 'NEW_LEAD' && !lead.first_response_at) {
-        lead.first_response_at = new Date().toISOString();
+        lead.first_response_at = now;
         lead.response_time_seconds = Math.max(0, Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 1000));
         if (lead.contact_status === 'UNCONTACTED') lead.contact_status = 'ATTEMPTED';
       }
       lead.status = mapped;
-      lead.updated_at = new Date().toISOString();
+      lead.pipelineStatus = status;
+      lead.updated_at = now;
     } else {
       // Speed-to-lead metric: the first move off 'new' is the shop's first
       // response (owner texted via the sms: deep link or called back, then set
       // the status). Stamped once, server-side, so response times are durable.
-      if (lead.status === 'new' && status !== 'new' && !lead.firstResponseAt) lead.firstResponseAt = new Date().toISOString();
+      if (lead.status === 'new' && status !== 'new' && !lead.firstResponseAt) lead.firstResponseAt = now;
       lead.status = status;
+    }
+    // Stage timing, stamped server-side so the Pipeline board's follow-up
+    // intervals measure real time-in-stage across devices.
+    if (prevStage !== status) {
+      lead.stageChangedAt = now;
+      lead.stageLog = lead.stageLog || [];
+      lead.stageLog.push({ from: prevStage, to: status, at: now });
+      if (status === 'closed' && !lead.closedAt) lead.closedAt = now;
     }
   }
   h.upsert('leads', lead);
@@ -1011,7 +1034,21 @@ router.post('/api/shop/leads/:id/convert', requireAuth, requireRole('full','tech
     h.upsert('customers', cust);
   }
   lead.customerId = cust.id;
-  lead.status = lead.status === 'new' || lead.status === 'contacted' ? 'booked' : lead.status;
+  // Converting implies the work is booked: move the lead up to the pipeline's
+  // win line (first stage flagged won — 'booked' on a default pipeline) unless
+  // it's already at or past it, or explicitly lost.
+  {
+    const cfg = (((db.get('settings').value() || {}).pipeline) || {}).stages;
+    const stages = (Array.isArray(cfg) && cfg.length) ? cfg : null;
+    const keys = stages ? stages.map(s => s && s.key) : ['new','contacted','quoted','booked','worked','closed','lost'];
+    const wonKey = stages ? (((stages.find(s => s && s.won && !s.terminal)) || {}).key || 'closed') : 'booked';
+    const curIdx = keys.indexOf(lead.status);
+    if (lead.status !== 'lost' && (curIdx === -1 || curIdx < keys.indexOf(wonKey))) {
+      lead.stageLog = (lead.stageLog || []).concat({ from: lead.status, to: wonKey, at: new Date().toISOString() });
+      lead.status = wonKey;
+      lead.stageChangedAt = new Date().toISOString();
+    }
+  }
   h.upsert('leads', lead);
   res.json({ ok:true, customerId: cust.id });
 }));
