@@ -290,7 +290,7 @@ const Q = {
       : '';
     document.getElementById('total').textContent=fm(q.total);
     if(q.notes){ document.getElementById('note-wrap').style.display=''; document.getElementById('note').textContent=q.notes; }
-    const payOnline=this.info&&this.info.stripeConnected;
+    const payOnline=!!(this.info&&(this.info.paymentProvider||this.info.stripeConnected));
     if(q.depositRequired && !q.depositPaid){
       const d=document.getElementById('dep'); d.style.display='';
       document.getElementById('dep-cap').textContent='Deposit required';
@@ -334,7 +334,9 @@ const Q = {
       const r=await fetch('/api/public/'+this.slug+'/quote/'+this.id+'/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(r=>r.json());
       if(!r.ok){ this.err(r.error||'Could not approve. Please try again.'); if(btn){btn.disabled=false;btn.textContent='Approve this estimate';} return; }
       if(r.depositRequired){
-        const d=await fetch('/api/public/'+this.slug+'/quote-deposit-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({quoteId:this.id})}).then(r=>r.json());
+        // Square is the payment rail; Stripe stays only for legacy-connected shops.
+        const ep=(this.info&&this.info.paymentProvider)==='square'?'/square-quote-deposit-session':'/quote-deposit-session';
+        const d=await fetch('/api/public/'+this.slug+ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({quoteId:this.id})}).then(r=>r.json());
         if(d.ok&&d.url){ window.location.href=d.url; return; }
         this.err(d.error||'Could not start the deposit payment.'); if(btn){btn.disabled=false;btn.textContent='Approve this estimate';} return;
       }

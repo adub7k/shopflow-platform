@@ -11,6 +11,9 @@ const { upsertLead, resolveContact, recordLeadPayload } = require('../leads-core
 // that used to live here now live in ../booking — do not re-add them.)
 const { computeAvailability, createAppointment, inspoMode } = require('../booking');
 const { deliver } = require('../email');
+// Square is the payments direction (Stripe kept as legacy fallback for any
+// shop already onboarded there). squareConnected = per-shop OAuth or platform env.
+const { squareConnected, reconcileSquareQuoteDeposit } = require('./square');
 
 // ── Per-date availability overrides ───────────────────────────────────────────
 // When settings.availabilityMode === 'perDate', the shop hand-picks the open
@@ -216,7 +219,7 @@ function publicShopFromSlug(reqSlug) {
   if (!shop) return null;
   return { shop, db: getShopDb(shop.id) };
 }
-router.get('/api/public/:shopSlug/quote/:quoteId', (req, res) => {
+router.get('/api/public/:shopSlug/quote/:quoteId', async (req, res) => {
   try {
     const ctx = publicShopFromSlug(req.params.shopSlug);
     if (!ctx) return res.status(404).json({ error: 'Shop not found' });
@@ -224,9 +227,18 @@ router.get('/api/public/:shopSlug/quote/:quoteId', (req, res) => {
     const q = h.getById('quotes', req.params.quoteId);
     if (!q) return res.status(404).json({ error: 'Quote not found' });
     const s = ctx.db.get('settings').value() || {};
+    // Self-heal a paid-but-unflipped deposit (customer paid on Square but the
+    // success redirect was missed): every open of the estimate reconciles.
+    if (q.squareOrderId && q.depositRequired && !q.depositPaid) {
+      try { await reconcileSquareQuoteDeposit(ctx.db, s, h, q); } catch (e) {}
+    }
+    const stripeReady = !!(s.stripe && s.stripe.connectAccountId && s.stripe.onboardingComplete);
     res.json({
       shopName: s.shopName || ctx.shop.shopName,
       accentColor: s.accentColor || '#16a34a',
+      // Which processor collects the deposit online (null = none — customer can
+      // still approve; the shop collects directly). Square is preferred.
+      paymentProvider: squareConnected(s) ? 'square' : (stripeReady ? 'stripe' : null),
       // Letterhead fields — same shop-chosen contact info the estimate email
       // already shows this customer (never staff/internal numbers).
       tagline: s.tagline || '',
@@ -256,11 +268,12 @@ router.post('/api/public/:shopSlug/quote/:quoteId/approve', (req, res) => {
     if (q.status === 'declined') return res.status(400).json({ ok: false, error: 'This estimate was already declined.' });
     const s = ctx.db.get('settings').value() || {};
     const stripeReady = !!(s.stripe && s.stripe.connectAccountId && s.stripe.onboardingComplete);
+    const paymentsReady = squareConnected(s) || stripeReady;
     // Only block approval on the deposit when we can actually collect it online.
-    // Without Stripe Connect the estimate must still be approvable — the shop
-    // collects the deposit directly; otherwise a deposit-required estimate is a
-    // dead end the customer can never approve.
-    const depositOutstanding = !!q.depositRequired && !q.depositPaid && stripeReady;
+    // Without a payment processor the estimate must still be approvable — the
+    // shop collects the deposit directly; otherwise a deposit-required estimate
+    // is a dead end the customer can never approve.
+    const depositOutstanding = !!q.depositRequired && !q.depositPaid && paymentsReady;
     // Only finalize approval once any collectable deposit is actually paid. When
     // a deposit is still owed, leave the status as-is and signal the client to
     // collect it — the Stripe success callback flips the quote to 'approved'.
@@ -268,7 +281,7 @@ router.post('/api/public/:shopSlug/quote/:quoteId/approve', (req, res) => {
       q.status = 'approved'; q.approvedAt = new Date().toISOString(); h.upsert('quotes', q);
     }
     res.json({ ok: true, depositRequired: depositOutstanding, depositAmount: q.depositAmount || 0,
-               collectDeposit: !!q.depositRequired && !q.depositPaid && !stripeReady });
+               collectDeposit: !!q.depositRequired && !q.depositPaid && !paymentsReady });
   } catch(e) { res.status(500).json({ ok: false, error: 'Server error' }); }
 });
 router.post('/api/public/:shopSlug/quote/:quoteId/decline', (req, res) => {
