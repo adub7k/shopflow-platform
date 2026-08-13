@@ -4,6 +4,7 @@ const { requireAuth, requireRole } = require('../middleware');
 const { sendTest, sendQuoteEmail, shopReplyTo } = require('../email');
 const { resolveProfile } = require('../industries');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, shopOwnNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, deleteUpload, computeTax, computeApptCost } = require('../db');
+const { ensureQuoteCustomer } = require('../quotes-core');
 
 // ── PROTECTED: Settings ───────────────────────────────────────────────────────
 // Readable by any signed-in staff (needed for vocabulary/statuses), but sensitive
@@ -533,6 +534,10 @@ router.post('/api/shop/quotes', requireAuth, requireRole('full','technician'), s
     q.createdAt = new Date().toISOString();
   }
   h.upsert('quotes', q);
+  // Owner marked it approved (or edited an approved one): make sure the client
+  // profile exists + is linked. Idempotent — no-op once customerId resolves.
+  const merged = h.getById('quotes', q.id);
+  if (merged && merged.status === 'approved') { try { ensureQuoteCustomer(h, merged); } catch (e) {} }
   res.json({ id: q.id, number: q.number });
 }));
 router.delete('/api/shop/quotes/:id', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {

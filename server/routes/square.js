@@ -11,6 +11,7 @@ const jwt = require('jsonwebtoken');
 const { master, getShopDb, shopHelpers, genId, JWT_SECRET } = require('../db');
 const { requireAuth, requireRole } = require('../middleware');
 const sq = require('../payments/square');
+const { ensureQuoteCustomer } = require('../quotes-core');
 
 const APP_URL      = process.env.APP_URL || 'https://shopflowio.up.railway.app';
 const REDIRECT_URI = APP_URL + '/api/square/oauth/callback';
@@ -263,6 +264,7 @@ function fulfillSquareQuoteDeposit(h, q) {
   q.depositPaid = true; q.depositPaidAt = new Date().toISOString();
   if (q.status !== 'approved' && q.status !== 'scheduled') { q.status = 'approved'; q.approvedAt = q.depositPaidAt; }
   h.upsert('quotes', q);
+  try { ensureQuoteCustomer(h, q); } catch (e) {} // approved = real client in the CRM
   return true;
 }
 // Called from the public quote GET too, so a missed redirect (closed tab)

@@ -14,6 +14,7 @@ const { deliver } = require('../email');
 // Square is the payments direction (Stripe kept as legacy fallback for any
 // shop already onboarded there). squareConnected = per-shop OAuth or platform env.
 const { squareConnected, reconcileSquareQuoteDeposit } = require('./square');
+const { ensureQuoteCustomer } = require('../quotes-core');
 
 // ── Per-date availability overrides ───────────────────────────────────────────
 // When settings.availabilityMode === 'perDate', the shop hand-picks the open
@@ -279,6 +280,8 @@ router.post('/api/public/:shopSlug/quote/:quoteId/approve', (req, res) => {
     // collect it — the Stripe success callback flips the quote to 'approved'.
     if (!depositOutstanding && q.status !== 'approved' && q.status !== 'scheduled') {
       q.status = 'approved'; q.approvedAt = new Date().toISOString(); h.upsert('quotes', q);
+      // An approved estimate is a real client — create/link their CRM profile.
+      try { ensureQuoteCustomer(h, q); } catch (e) {}
     }
     res.json({ ok: true, depositRequired: depositOutstanding, depositAmount: q.depositAmount || 0,
                collectDeposit: !!q.depositRequired && !q.depositPaid && !paymentsReady });

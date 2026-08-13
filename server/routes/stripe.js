@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { requireAuth, requireRole } = require('../middleware');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, computeTax } = require('../db');
+const { ensureQuoteCustomer } = require('../quotes-core');
 
 // ── Stripe helpers ────────────────────────────────────────────────────────────
 function getStripe() {
@@ -34,6 +35,7 @@ function fulfillQuoteDeposit(shopId, quoteId, session) {
     if (q.status !== 'scheduled') q.status = 'approved';
     q.approvedAt = q.approvedAt || new Date().toISOString();
     h.upsert('quotes', q);
+    try { ensureQuoteCustomer(h, q); } catch (e) {} // approved = real client in the CRM
   }
 }
 function fulfillMembership(shopId, custId, planId, session) {
