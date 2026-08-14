@@ -1038,6 +1038,16 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   const { name, status, notes } = req.body;
   if (name   !== undefined) lead.name = String(name).slice(0,80);
   if (notes  !== undefined) lead.notes = String(notes).slice(0,2000);
+  // Source is editable so mis-attributed leads (e.g. a Meta lead that came in
+  // as a bare call) can be fixed — it drives the channel split + Meta filter.
+  // utm.source is kept in sync so both attribution reads stay coherent.
+  if (req.body.source !== undefined) {
+    const src = String(req.body.source).trim().toLowerCase().slice(0, 40);
+    if (src) {
+      lead.source = src;
+      if (lead.utm && typeof lead.utm === 'object') lead.utm.source = src;
+    }
+  }
   // Owner-entered quote value — drives the pipeline's per-column revenue
   // totals. Overrides the AI receptionist's detected quotedPrice; null clears.
   if (req.body.quotedAmount !== undefined) {

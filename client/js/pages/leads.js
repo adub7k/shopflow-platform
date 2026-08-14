@@ -284,6 +284,11 @@ const Leads = {
       </div>
 
       <div class="form-group">
+        <label class="form-label">Source</label>
+        ${this._sourcePicker(l)}
+      </div>
+
+      <div class="form-group">
         <label class="form-label">Status</label>
         <div class="lead-status-row">${statusPills}</div>
       </div>
@@ -426,6 +431,35 @@ const Leads = {
     this.open(id); // re-render modal to reflect selection
   },
 
+  // Editable source picker: the known channels plus the lead's current value
+  // (if custom) and a Custom… escape hatch. Fixing a mis-attributed lead here
+  // corrects the channel split and the pipeline's Meta/Website/Calls filters.
+  _KNOWN_SOURCES: ['call','website','facebook','instagram','google','tiktok','nextdoor','yelp','referral','walk-in'],
+  _sourcePicker(l) {
+    const cur = String(l.source || 'call').toLowerCase();
+    const opts = this._KNOWN_SOURCES.includes(cur) ? this._KNOWN_SOURCES : [cur].concat(this._KNOWN_SOURCES);
+    return `<select class="form-input" id="lead-source" onchange="Leads._sourceCustomToggle()">
+        ${opts.map(s => { const m = this._sourceMeta(s); return `<option value="${esc(s)}" ${s === cur ? 'selected' : ''}>${m.icon} ${esc(m.label)}</option>`; }).join('')}
+        <option value="__custom">Custom…</option>
+      </select>
+      <input class="form-input" id="lead-source-custom" placeholder="e.g. car show" style="display:none;margin-top:8px;"/>`;
+  },
+  _sourceCustomToggle() {
+    const sel = document.getElementById('lead-source');
+    const box = document.getElementById('lead-source-custom');
+    if (sel && box) {
+      box.style.display = sel.value === '__custom' ? '' : 'none';
+      if (sel.value === '__custom') box.focus();
+    }
+  },
+  _sourceValue(fallback) {
+    const sel = document.getElementById('lead-source');
+    if (!sel) return fallback;
+    if (sel.value !== '__custom') return sel.value;
+    const custom = document.getElementById('lead-source-custom')?.value.trim().toLowerCase();
+    return custom || fallback;
+  },
+
   // Pull the current modal field values into the in-memory lead so a re-render
   // (or a convert) doesn't lose what the user just typed.
   _captureModalEdits(l) {
@@ -433,16 +467,18 @@ const Leads = {
     if (nameEl) l.name = nameEl.value;
     const qEl = document.getElementById('lead-quoted');
     if (qEl) { const v = parseFloat(qEl.value); l.quotedAmount = (Number.isFinite(v) && v > 0) ? v : null; }
+    l.source = this._sourceValue(l.source);
   },
 
   async save(id) {
     const l = this._leads.find(x => x.id === id); if (!l) return;
     const name = document.getElementById('lead-name')?.value || '';
     const qv = parseFloat(document.getElementById('lead-quoted')?.value);
+    const source = this._sourceValue(l.source);
     try {
       // Notes are saved per-entry via addNote — never send `notes` here, or a
       // blank value would wipe a pre-history lead's legacy free-text notes.
-      await db.leads.update(id, { name, status: l.status, quotedAmount: (Number.isFinite(qv) && qv > 0) ? qv : null });
+      await db.leads.update(id, { name, status: l.status, source, quotedAmount: (Number.isFinite(qv) && qv > 0) ? qv : null });
       Modal.close(); toast('Lead saved ✓'); this.render();
     } catch(e) { toast(e.message || 'Could not save', 'error'); }
   },
