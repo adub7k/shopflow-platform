@@ -7,21 +7,31 @@ const { requireAdmin } = require('../middleware');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb } = require('../db');
 const { upsertLead, getLeadPayloads } = require('../leads-core');
 
+// Legacy plan tiers, kept ONLY as a rate fallback for shops that predate custom
+// billing. The real number is shop.monthlyRate — owner-editable per shop in the
+// admin UI; every metric below uses the effective rate, never the tier table.
+const planPrices = { starter: 19.99, pro: 99, shop: 200 };
+const shopRate = (s) => (s.monthlyRate != null && s.monthlyRate !== '') ? (Number(s.monthlyRate) || 0) : (planPrices[s.plan] || 0);
+
 // ── ADMIN: overview stats ─────────────────────────────────────────────────────
 router.get('/api/admin/stats', requireAdmin, (req, res) => {
   const shops = master.get('shops').value() || [];
-  const planPrices = { starter: 19.99, pro: 99, shop: 200 };
   const MRR_GOAL = 25000;
 
   const activeShops  = shops.filter(s => s.active);
   const churned      = shops.filter(s => !s.active);
 
-  // Plan counts (active only for MRR)
-  const planCounts = {}, allPlanCounts = {};
-  activeShops.forEach(s => { planCounts[s.plan]    = (planCounts[s.plan]    || 0) + 1; });
-  shops.forEach(s       => { allPlanCounts[s.plan] = (allPlanCounts[s.plan] || 0) + 1; });
+  // Per-plan-label rollup from ACTUAL per-shop rates (active shops only).
+  const planStats = {};
+  activeShops.forEach(s => {
+    const label = s.plan || 'custom';
+    planStats[label] = planStats[label] || { count: 0, revenue: 0 };
+    planStats[label].count++; planStats[label].revenue += shopRate(s);
+  });
+  const planCounts = {};
+  Object.entries(planStats).forEach(([k, v]) => { planCounts[k] = v.count; });
 
-  const mrr = Object.entries(planCounts).reduce((sum, [plan, count]) => sum + (planPrices[plan] || 0) * count, 0);
+  const mrr = activeShops.reduce((sum, s) => sum + shopRate(s), 0);
 
   // Month-over-month: shops created this month vs last month
   const now = new Date();
@@ -31,24 +41,25 @@ router.get('/api/admin/stats', requireAdmin, (req, res) => {
 
   const newThisMonth  = activeShops.filter(s => (s.createdAt||'').startsWith(thisMonthStr));
   const newLastMonth  = activeShops.filter(s => (s.createdAt||'').startsWith(lastMonthStr));
-  const newMrrThisMonth = newThisMonth.reduce((s, shop) => s + (planPrices[shop.plan] || 0), 0);
-  const newMrrLastMonth = newLastMonth.reduce((s, shop) => s + (planPrices[shop.plan] || 0), 0);
+  const newMrrThisMonth = newThisMonth.reduce((sum, s) => sum + shopRate(s), 0);
+  const newMrrLastMonth = newLastMonth.reduce((sum, s) => sum + shopRate(s), 0);
 
   // Last month's implied MRR (shops active before this month)
   const lastMonthShops = shops.filter(s => s.active && (s.createdAt||'') < thisMonthStr + '-01');
-  const lastMrr = lastMonthShops.reduce((sum, s) => sum + (planPrices[s.plan] || 0), 0);
+  const lastMrr = lastMonthShops.reduce((sum, s) => sum + shopRate(s), 0);
   const mrrGrowth = lastMrr > 0 ? Math.round(((mrr - lastMrr) / lastMrr) * 100) : null;
 
   // Churn rate (inactive / total ever)
   const churnRate = shops.length > 0 ? Math.round((churned.length / shops.length) * 100) : 0;
 
-  // How many shops needed to hit $25k MRR
+  // How many more shops to hit the goal — per existing plan label (at that
+  // label's average real rate) so the "path" reflects what you actually charge.
   const mrrToGoal = Math.max(0, MRR_GOAL - mrr);
-  const shopsNeeded = {
-    starter: Math.ceil(mrrToGoal / planPrices.starter),
-    pro:     Math.ceil(mrrToGoal / planPrices.pro),
-    shop:    Math.ceil(mrrToGoal / planPrices.shop),
-  };
+  const shopsNeeded = {};
+  Object.entries(planStats).forEach(([label, v]) => {
+    const avgRate = v.count ? v.revenue / v.count : 0;
+    if (avgRate > 0) shopsNeeded[label] = { rate: Math.round(avgRate * 100) / 100, needed: Math.ceil(mrrToGoal / avgRate) };
+  });
 
   // Avg revenue per shop
   const avgMrr = activeShops.length ? (mrr / activeShops.length) : 0;
@@ -77,8 +88,9 @@ router.get('/api/admin/stats', requireAdmin, (req, res) => {
     mrrPct: Math.min(100, Math.round((mrr / MRR_GOAL) * 100)),
     shopsNeeded,
     planBreakdown: planCounts,
+    planStats,
     recentShops: [...shops].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 8).map(s => ({
-      id: s.id, shopName: s.shopName, plan: s.plan, email: s.email, createdAt: s.createdAt, active: s.active,
+      id: s.id, shopName: s.shopName, plan: s.plan, rate: shopRate(s), email: s.email, createdAt: s.createdAt, active: s.active,
     })),
   });
 });
@@ -99,7 +111,7 @@ router.get('/api/admin/shops', requireAdmin, (req, res) => {
       twilioConfigured = !!(twilioClient && shopFromNumber(s.id));
       bookingEnabled   = settings.bookingEnabled !== false;
     } catch(e) {}
-    return { id: s.id, shopName: s.shopName, slug: s.slug, email: s.email, phone: s.phone, plan: s.plan, active: s.active, createdAt: s.createdAt, lastActivity: s.lastActivity, customers, appointments, barbers, services, stripeConnected, twilioConfigured, bookingEnabled };
+    return { id: s.id, shopName: s.shopName, slug: s.slug, email: s.email, phone: s.phone, plan: s.plan, monthlyRate: s.monthlyRate != null ? s.monthlyRate : null, rate: shopRate(s), notes: s.notes || '', features: s.features || {}, active: s.active, createdAt: s.createdAt, lastActivity: s.lastActivity, customers, appointments, barbers, services, stripeConnected, twilioConfigured, bookingEnabled };
   });
   res.json(result);
 });
@@ -129,7 +141,7 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
 // ── ADMIN: create shop ────────────────────────────────────────────────────────
 router.post('/api/admin/shops/create', requireAdmin, async (req, res) => {
   try {
-    const { shopName, email, password, phone, plan, industry } = req.body;
+    const { shopName, email, password, phone, plan, monthlyRate, industry } = req.body;
     if (!shopName || !email || !password) return res.status(400).json({ ok: false, error: 'shopName, email, password required' });
     const existing = master.get('accounts').find({ email: email.toLowerCase() }).value();
     if (existing) return res.status(400).json({ ok: false, error: 'Email already exists' });
@@ -139,21 +151,25 @@ router.post('/api/admin/shops/create', requireAdmin, async (req, res) => {
     const finalSlug = slugExists ? shopSlug + '-' + genId('') : shopSlug;
     const passwordHash = await bcrypt.hash(password, 10);
     const accountId = uuidv4();
+    const rate = (monthlyRate != null && monthlyRate !== '') ? (Number(monthlyRate) || 0) : null;
     master.get('accounts').push({ id: accountId, shopId, email: email.toLowerCase(), passwordHash, createdAt: new Date().toISOString(), plan: plan || 'pro', active: true }).write();
-    master.get('shops').push({ id: shopId, accountId, shopName, slug: finalSlug, email: email.toLowerCase(), phone: phone || '', plan: plan || 'pro', active: true, createdAt: new Date().toISOString(), lastActivity: new Date().toISOString() }).write();
+    master.get('shops').push({ id: shopId, accountId, shopName, slug: finalSlug, email: email.toLowerCase(), phone: phone || '', plan: plan || 'pro', monthlyRate: rate, active: true, createdAt: new Date().toISOString(), lastActivity: new Date().toISOString() }).write();
     const shopDb = getShopDb(shopId);
     initShopDb(shopDb, { shopName, email, phone, industry });
     res.json({ ok: true, shopId, shopSlug: finalSlug, shopName, crmUrl: '/shop/' + finalSlug, bookUrl: '/book/' + finalSlug });
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-// ── ADMIN: update shop (plan, active, name) ───────────────────────────────────
+// ── ADMIN: update shop (plan, rate, active, name, contact, notes) ─────────────
 router.patch('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   const shop = master.get('shops').find({ id: req.params.shopId }).value();
   if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
-  const allowed = ['plan', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber', 'features', 'notes'];
+  const allowed = ['plan', 'monthlyRate', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber', 'features', 'notes'];
   const updates = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
+  // Custom rate: number, or null/'' to clear back to the plan-tier fallback.
+  if (updates.monthlyRate !== undefined) updates.monthlyRate = (updates.monthlyRate === null || updates.monthlyRate === '') ? null : (Number(updates.monthlyRate) || 0);
+  if (updates.plan !== undefined) updates.plan = String(updates.plan).trim().slice(0, 40) || 'custom';
   master.get('shops').find({ id: req.params.shopId }).assign(updates).write();
   master.get('accounts').find({ id: shop.accountId }).assign(updates.plan ? { plan: updates.plan } : {}).assign(updates.active !== undefined ? { active: updates.active } : {}).write();
   res.json({ ok: true });

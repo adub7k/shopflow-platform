@@ -157,6 +157,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 .badge-starter{background:#f3f4f6;color:#374151;}
 .badge-pro{background:var(--blue-lt);color:var(--blue);}
 .badge-shop{background:var(--green-lt);color:var(--green);}
+.badge-plan{background:var(--green-lt);color:var(--green);}
 .badge-active{background:var(--green-lt);color:var(--green);}
 .badge-inactive{background:#f3f4f6;color:var(--faint);}
 .badge-yes{background:var(--green-lt);color:var(--green);}
@@ -231,6 +232,10 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 .drawer-info-val{color:var(--text);font-weight:500;text-align:right;max-width:260px;word-break:break-all;}
 .drawer-actions{display:flex;gap:8px;flex-wrap:wrap;}
 .plan-select{padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:var(--font);outline:none;background:var(--white);cursor:pointer;}
+/* Inline-editable drawer fields: read like values, edit like inputs */
+.drawer-edit{padding:5px 9px;border:1px solid transparent;border-radius:7px;font-size:13px;font-weight:600;font-family:var(--font);color:var(--text);background:transparent;outline:none;text-align:right;max-width:190px;width:100%;transition:border .12s,background .12s;}
+.drawer-edit:hover{border-color:var(--border);background:var(--off);}
+.drawer-edit:focus{border-color:var(--green);background:var(--white);}
 
 /* ── Modal ── */
 #modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:none;align-items:center;justify-content:center;padding:16px;}
@@ -482,6 +487,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
               <tr>
                 <th>Shop</th>
                 <th>Plan</th>
+                <th>Rate</th>
                 <th>Clients</th>
                 <th>Appts</th>
                 <th>Status</th>
@@ -489,7 +495,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
               </tr>
             </thead>
             <tbody id="shops-tbody">
-              <tr><td colspan="6"><div class="empty-state"><span class="spinner"></span>Loading…</div></td></tr>
+              <tr><td colspan="7"><div class="empty-state"><span class="spinner"></span>Loading…</div></td></tr>
             </tbody>
           </table>
         </div>
@@ -589,40 +595,12 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         </div>
       </div>
 
-      <!-- Path to $25k -->
+      <!-- Path to $25k — rows built from the plans you actually sell, at the
+           average real rate you charge for each -->
       <div class="path-card">
         <div class="path-title">Path to $25,000 MRR</div>
         <div class="path-sub" id="path-sub">How many shops you need to hit the goal from here</div>
-        <div class="path-row">
-          <div>
-            <div class="path-plan">Starter plan</div>
-            <div class="path-price">$19.99/mo per shop</div>
-          </div>
-          <div style="text-align:right;">
-            <div class="path-needed" id="path-starter">—</div>
-            <div class="path-note">more shops needed</div>
-          </div>
-        </div>
-        <div class="path-row">
-          <div>
-            <div class="path-plan">Pro plan</div>
-            <div class="path-price">$99/mo per shop</div>
-          </div>
-          <div style="text-align:right;">
-            <div class="path-needed" id="path-pro">—</div>
-            <div class="path-note">more shops needed</div>
-          </div>
-        </div>
-        <div class="path-row">
-          <div>
-            <div class="path-plan">Shop plan</div>
-            <div class="path-price">$200/mo per shop</div>
-          </div>
-          <div style="text-align:right;">
-            <div class="path-needed" id="path-shop">—</div>
-            <div class="path-note">more shops needed</div>
-          </div>
-        </div>
+        <div id="path-rows"><div class="empty-state">Loading…</div></div>
       </div>
 
       <div class="card">
@@ -930,17 +908,18 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div class="form-row-2">
       <div class="form-row">
         <label class="form-label">Shop Name *</label>
-        <input class="form-input" id="new-shopname" placeholder="Your Barbershop"/>
+        <input class="form-input" id="new-shopname" placeholder="e.g. Mad Detailing"/>
       </div>
       <div class="form-row">
-        <label class="form-label">Plan</label>
-        <select class="form-input" id="new-plan">
-          <option value="starter">Starter — $19.99/mo</option>
-          <option value="pro" selected>Pro — $99/mo</option>
-          <option value="shop">Shop — $200/mo</option>
-        </select>
+        <label class="form-label">Plan label</label>
+        <input class="form-input" id="new-plan" list="plan-suggestions" placeholder="e.g. Receptionist"/>
       </div>
     </div>
+    <div class="form-row">
+      <label class="form-label">Monthly rate ($/mo)</label>
+      <input class="form-input" id="new-rate" type="number" min="0" step="1" placeholder="e.g. 349"/>
+    </div>
+    <datalist id="plan-suggestions"></datalist>
     <div class="form-row">
       <label class="form-label">Email *</label>
       <input class="form-input" id="new-email" type="email" placeholder="owner@shop.com"/>
@@ -970,8 +949,17 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 let adminKey = '';
 let allShops = [];
 let statsData = {};
+// Legacy tier prices — ONLY the fallback for shops without a custom rate.
+// The editable per-shop monthlyRate is the real number everywhere.
 const planPrices = { starter: 19.99, pro: 99, shop: 200 };
 const planColors = { starter: '#9ca3af', pro: '#2563eb', shop: '#16a34a' };
+const PALETTE = ['#16a34a','#2563eb','#d97706','#7c3aed','#dc2626','#0891b2','#9ca3af'];
+const effRate = (s) => (s && s.rate != null) ? Number(s.rate) : ((s && s.monthlyRate != null && s.monthlyRate !== '') ? (Number(s.monthlyRate)||0) : (planPrices[s?.plan]||0));
+const planColor = (label, i) => planColors[label] || PALETTE[i % PALETTE.length];
+const planBadge = (plan) => `<span class="badge ${['starter','pro','shop'].includes(plan)?'badge-'+plan:'badge-plan'}">${esc(plan||'custom')}</span>`;
+const fmtRate = (n) => '$' + (Number(n)||0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+// Distinct plan labels across shops — feeds datalists + the filter dropdown.
+const planLabels = () => [...new Set(allShops.map(s => s.plan).filter(Boolean))];
 
 // ── Mobile sidebar ────────────────────────────────────────────────────────────
 function toggleAdminSidebar() { document.body.classList.toggle('admin-sidebar-open'); }
@@ -1085,20 +1073,20 @@ function renderOverview(d) {
   document.getElementById('m-churn').className = 'metric-value ' + (d.churnRate > 5 ? 'red' : '');
   document.getElementById('m-churned').textContent = (d.churnedShops || 0) + ' shops lost';
 
-  // Plan bars
+  // Plan bars — dynamic labels + revenue from real per-shop rates
   const total = d.activeShops || 1;
-  const pb = d.planBreakdown || {};
-  document.getElementById('plan-bars').innerHTML = ['starter','pro','shop'].map(plan => {
-    const count = pb[plan] || 0;
-    const rev = planPrices[plan] * count;
-    const pct = Math.round((count / total) * 100);
+  const ps = d.planStats || {};
+  const psEntries = Object.entries(ps).sort((a,b) => b[1].revenue - a[1].revenue);
+  document.getElementById('plan-bars').innerHTML = psEntries.length ? psEntries.map(([plan, v], i) => {
+    const pct = Math.round((v.count / total) * 100);
+    const color = planColor(plan, i);
     return `<div class="plan-row">
-      <div class="plan-label" style="color:${planColors[plan]};">${plan}</div>
-      <div class="plan-bar-wrap"><div class="plan-bar" style="width:${pct}%;background:${planColors[plan]};"></div></div>
-      <div class="plan-count">${count}</div>
-      <div class="plan-rev">$${fmtK(rev)}</div>
+      <div class="plan-label" style="color:${color};min-width:52px;width:auto;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(plan)}</div>
+      <div class="plan-bar-wrap"><div class="plan-bar" style="width:${pct}%;background:${color};"></div></div>
+      <div class="plan-count">${v.count}</div>
+      <div class="plan-rev">$${fmtK(v.revenue)}</div>
     </div>`;
-  }).join('');
+  }).join('') : '<div class="empty-state">No active shops yet.</div>';
 
   // Recent signups
   const shops = d.recentShops || [];
@@ -1110,7 +1098,7 @@ function renderOverview(d) {
             <div style="font-size:13px;font-weight:600;">${esc(s.shopName)}</div>
             <div style="font-size:11px;color:var(--muted);">${esc(s.email||'')}</div>
           </td>
-          <td style="padding:10px 14px;"><span class="badge badge-${s.plan}">${s.plan}</span></td>
+          <td style="padding:10px 14px;">${planBadge(s.plan)}<div style="font-size:10px;color:var(--faint);margin-top:2px;">${fmtRate(s.rate)}/mo</div></td>
           <td style="padding:10px 14px;font-size:11px;color:var(--faint);white-space:nowrap;">${relTime(s.createdAt)}</td>
         </tr>`).join('')}
     </table>` : '<div class="empty-state">No shops yet.</div>';
@@ -1129,9 +1117,18 @@ function renderGrowth() {
   document.getElementById('path-sub').textContent = toGoal <= 0
     ? '🎉 You\'ve hit $25k MRR! Time to sell.'
     : `$${fmt(toGoal)} to go — here's what it takes:`;
-  document.getElementById('path-starter').textContent = (d.shopsNeeded?.starter || '—') + ' shops';
-  document.getElementById('path-pro').textContent     = (d.shopsNeeded?.pro     || '—') + ' shops';
-  document.getElementById('path-shop').textContent    = (d.shopsNeeded?.shop    || '—') + ' shops';
+  const needed = Object.entries(d.shopsNeeded || {}).sort((a,b) => a[1].rate - b[1].rate);
+  document.getElementById('path-rows').innerHTML = needed.length ? needed.map(([label, v]) => `
+    <div class="path-row">
+      <div>
+        <div class="path-plan">${esc(label)}</div>
+        <div class="path-price">${fmtRate(v.rate)}/mo avg per shop</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="path-needed">${v.needed} shops</div>
+        <div class="path-note">more shops needed</div>
+      </div>
+    </div>`).join('') : '<div class="empty-state" style="padding:14px 0;">Set monthly rates on your shops to see the path.</div>';
 
   // Engagement
   document.getElementById('g-engagement').innerHTML = `
@@ -1155,6 +1152,16 @@ async function loadShops() {
     const res = await fetch('/api/admin/shops', { headers: { 'x-admin-key': adminKey } });
     allShops = await res.json();
     document.getElementById('shops-count-label').textContent = allShops.length + ' total shops';
+    // Plan filter + datalist suggestions from the labels actually in use.
+    const labels = planLabels();
+    const filter = document.getElementById('shop-filter-plan');
+    if (filter) {
+      const cur = filter.value;
+      filter.innerHTML = '<option value="">All plans</option>' + labels.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
+      if (labels.includes(cur)) filter.value = cur;
+    }
+    const dl = document.getElementById('plan-suggestions');
+    if (dl) dl.innerHTML = [...new Set([...labels, 'Receptionist', 'Ads', 'Full Engine'])].map(l => `<option value="${esc(l)}"></option>`).join('');
     filterShops();
   } catch(e) {}
 }
@@ -1174,7 +1181,7 @@ function filterShops() {
 
 function renderShopsTable(shops) {
   const tbody = document.getElementById('shops-tbody');
-  if (!shops.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No shops found.</div></td></tr>'; return; }
+  if (!shops.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No shops found.</div></td></tr>'; return; }
   tbody.innerHTML = shops.map(s => `
     <tr class="clickable" onclick="openDrawer('${s.id}')">
       <td>
@@ -1182,7 +1189,8 @@ function renderShopsTable(shops) {
         <div style="font-size:11px;color:var(--muted);">${esc(s.email||'')}</div>
         <div style="font-size:11px;color:var(--faint);font-family:monospace;">/book/${esc(s.slug||'')}</div>
       </td>
-      <td><span class="badge badge-${s.plan}">${s.plan}</span></td>
+      <td>${planBadge(s.plan)}</td>
+      <td style="font-weight:700;color:var(--green);white-space:nowrap;">${fmtRate(effRate(s))}<span style="font-size:10px;color:var(--faint);font-weight:400;">/mo</span></td>
       <td style="font-weight:600;">${s.customers}</td>
       <td style="color:var(--muted);">${s.appointments}</td>
       <td><span class="badge badge-${s.active?'active':'inactive'}">${s.active?'Active':'Inactive'}</span></td>
@@ -1218,16 +1226,19 @@ function renderDrawer(d) {
         <div class="drawer-stat"><div class="drawer-stat-val green">${stats.totalCustomers}</div><div class="drawer-stat-label">Clients</div></div>
         <div class="drawer-stat"><div class="drawer-stat-val">${stats.totalAppointments}</div><div class="drawer-stat-label">Appts</div></div>
         <div class="drawer-stat"><div class="drawer-stat-val">${stats.apptThisMonth}</div><div class="drawer-stat-label">This Month</div></div>
-        <div class="drawer-stat"><div class="drawer-stat-val">${stats.activeBarbers}</div><div class="drawer-stat-label">Barbers</div></div>
+        <div class="drawer-stat"><div class="drawer-stat-val">${stats.activeBarbers}</div><div class="drawer-stat-label">Staff</div></div>
       </div>
     </div>
 
     <div class="drawer-section">
-      <div class="drawer-section-title">Shop Info</div>
+      <div class="drawer-section-title">Shop Info <span style="font-weight:400;color:var(--faint);font-size:11px;">(click to edit — saves on blur)</span></div>
       <div>
-        <div class="drawer-info-row"><span class="drawer-info-label">Shop Name</span><span class="drawer-info-val">${esc(shop.shopName)}</span></div>
-        <div class="drawer-info-row"><span class="drawer-info-label">Email</span><span class="drawer-info-val">${esc(shop.email||'—')}</span></div>
-        <div class="drawer-info-row"><span class="drawer-info-label">Phone</span><span class="drawer-info-val">${esc(shop.phone||'—')}</span></div>
+        <div class="drawer-info-row"><span class="drawer-info-label">Shop Name</span>
+          <input class="drawer-edit" value="${esc(shop.shopName||'')}" onblur="if(this.value.trim()&&this.value.trim()!==${JSON.stringify(shop.shopName||'').replace(/"/g,'&quot;')})updateShop('${shop.id}','shopName',this.value.trim())" onkeydown="if(event.key==='Enter')this.blur()"/></div>
+        <div class="drawer-info-row"><span class="drawer-info-label">Email</span>
+          <input class="drawer-edit" type="email" value="${esc(shop.email||'')}" placeholder="owner@shop.com" onblur="if(this.value.trim()!==${JSON.stringify(shop.email||'').replace(/"/g,'&quot;')})updateShop('${shop.id}','email',this.value.trim())" onkeydown="if(event.key==='Enter')this.blur()"/></div>
+        <div class="drawer-info-row"><span class="drawer-info-label">Phone</span>
+          <input class="drawer-edit" value="${esc(shop.phone||'')}" placeholder="(555) 000-0000" onblur="if(this.value.trim()!==${JSON.stringify(shop.phone||'').replace(/"/g,'&quot;')})updateShop('${shop.id}','phone',this.value.trim())" onkeydown="if(event.key==='Enter')this.blur()"/></div>
         <div class="drawer-info-row"><span class="drawer-info-label">Booking URL</span><span class="drawer-info-val" style="color:var(--green);font-family:monospace;font-size:12px;">/book/${esc(shop.slug)}</span></div>
         <div class="drawer-info-row"><span class="drawer-info-label">Joined</span><span class="drawer-info-val">${fmtDate(shop.createdAt)}</span></div>
         <div class="drawer-info-row"><span class="drawer-info-label">Last Active</span><span class="drawer-info-val">${shop.lastActivity ? relTime(shop.lastActivity) : 'Never'}</span></div>
@@ -1235,15 +1246,21 @@ function renderDrawer(d) {
     </div>
 
     <div class="drawer-section">
-      <div class="drawer-section-title">Plan & Status</div>
+      <div class="drawer-section-title">Billing</div>
       <div>
         <div class="drawer-info-row">
-          <span class="drawer-info-label">Plan</span>
-          <select class="plan-select" onchange="updateShop('${shop.id}','plan',this.value)">
-            <option value="starter" ${shop.plan==='starter'?'selected':''}>Starter — $19.99/mo</option>
-            <option value="pro"     ${shop.plan==='pro'?'selected':''}>Pro — $99/mo</option>
-            <option value="shop"    ${shop.plan==='shop'?'selected':''}>Shop — $200/mo</option>
-          </select>
+          <span class="drawer-info-label">Plan label</span>
+          <input class="drawer-edit" list="plan-suggestions" value="${esc(shop.plan||'')}" placeholder="e.g. Receptionist"
+            onblur="if(this.value.trim()&&this.value.trim()!==${JSON.stringify(shop.plan||'').replace(/"/g,'&quot;')})updateShop('${shop.id}','plan',this.value.trim())" onkeydown="if(event.key==='Enter')this.blur()"/>
+        </div>
+        <div class="drawer-info-row">
+          <span class="drawer-info-label">Monthly rate</span>
+          <div style="display:flex;align-items:center;gap:5px;justify-content:flex-end;">
+            <span style="color:var(--muted);font-size:13px;">$</span>
+            <input class="drawer-edit" type="number" min="0" step="1" style="width:90px;text-align:right;" value="${shop.monthlyRate != null ? shop.monthlyRate : ''}" placeholder="${planPrices[shop.plan]||0}"
+              onblur="updateShop('${shop.id}','monthlyRate',this.value.trim()===''?null:this.value)" onkeydown="if(event.key==='Enter')this.blur()"/>
+            <span style="color:var(--faint);font-size:12px;">/mo</span>
+          </div>
         </div>
         <div class="drawer-info-row">
           <span class="drawer-info-label">Account Status</span>
@@ -1251,7 +1268,7 @@ function renderDrawer(d) {
         </div>
         <div class="drawer-info-row">
           <span class="drawer-info-label">MRR Contribution</span>
-          <span style="font-weight:700;color:var(--green);">$${planPrices[shop.plan]||0}/mo</span>
+          <span id="drawer-mrr-contrib" style="font-weight:700;color:var(--green);">${fmtRate((shop.monthlyRate != null && shop.monthlyRate !== '') ? shop.monthlyRate : (planPrices[shop.plan]||0))}/mo</span>
         </div>
       </div>
     </div>
@@ -1564,7 +1581,16 @@ async function updateShop(shopId, field, value) {
     if (!res.ok) throw new Error();
     toast('Updated ✓');
     const idx = allShops.findIndex(s => s.id === shopId);
-    if (idx >= 0) allShops[idx][field] = value;
+    if (idx >= 0) {
+      allShops[idx][field] = value;
+      // Keep the effective rate in sync so the table + drawer stay truthful.
+      if (field === 'monthlyRate' || field === 'plan') {
+        const s = allShops[idx];
+        s.rate = (s.monthlyRate != null && s.monthlyRate !== '') ? (Number(s.monthlyRate)||0) : (planPrices[s.plan]||0);
+        const mrrEl = document.getElementById('drawer-mrr-contrib');
+        if (mrrEl && currentShopId === shopId) mrrEl.textContent = fmtRate(s.rate) + '/mo';
+      }
+    }
     filterShops(); loadStats();
   } catch(e) { toast('Update failed'); }
 }
@@ -1601,8 +1627,7 @@ async function deleteShop(shopId, shopName) {
 
 // ── Create shop ───────────────────────────────────────────────────────────────
 function openCreateModal() {
-  ['new-shopname','new-email','new-password','new-phone'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
-  document.getElementById('new-plan').value = 'pro';
+  ['new-shopname','new-email','new-password','new-phone','new-plan','new-rate'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
   document.getElementById('modal-err').style.display = 'none';
   document.getElementById('modal-overlay').classList.add('open');
   setTimeout(()=>document.getElementById('new-shopname').focus(),100);
@@ -1614,7 +1639,8 @@ async function createShop() {
   const email    = document.getElementById('new-email').value.trim();
   const password = document.getElementById('new-password').value;
   const phone    = document.getElementById('new-phone').value.trim();
-  const plan     = document.getElementById('new-plan').value;
+  const plan     = document.getElementById('new-plan').value.trim() || 'custom';
+  const monthlyRate = document.getElementById('new-rate').value.trim();
   const errEl    = document.getElementById('modal-err');
   errEl.style.display = 'none';
   if (!shopName || !email || !password) { errEl.textContent = 'Shop name, email, and password are required.'; errEl.style.display = 'block'; return; }
@@ -1625,7 +1651,7 @@ async function createShop() {
     const res = await fetch('/api/admin/shops/create', {
       method: 'POST',
       headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shopName, email, password, phone, plan }),
+      body: JSON.stringify({ shopName, email, password, phone, plan, monthlyRate: monthlyRate || null }),
     });
     const data = await res.json();
     if (!data.ok) { errEl.textContent = data.error || 'Failed to create shop.'; errEl.style.display = 'block'; return; }
@@ -1644,37 +1670,33 @@ function renderBilling() {
   document.getElementById('b-mrr').textContent = '$' + fmt(d.mrr);
   document.getElementById('b-arr').textContent = '$' + fmtK(d.arr);
   document.getElementById('b-avg').textContent = '$' + fmt(avgRev);
-  const pb = d.planBreakdown || {};
+  // Dynamic: every plan label you actually use, revenue from real per-shop rates.
   const total = d.activeShops || 1;
-  const planData = [
-    { plan:'Shop',    key:'shop',    price:200,   color:'#16a34a' },
-    { plan:'Pro',     key:'pro',     price:99,    color:'#2563eb' },
-    { plan:'Starter', key:'starter', price:19.99, color:'#9ca3af' },
-  ];
-  document.getElementById('billing-plan-detail').innerHTML = planData.map(p => {
-    const count = pb[p.key] || 0;
-    const rev = count * p.price;
+  const entries = Object.entries(d.planStats || {}).sort((a,b) => b[1].revenue - a[1].revenue);
+  document.getElementById('billing-plan-detail').innerHTML = entries.length ? entries.map(([plan, v], i) => {
+    const color = planColor(plan, i);
+    const avg = v.count ? v.revenue / v.count : 0;
     return `<div style="padding:12px 0;border-bottom:.5px solid var(--border);">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         <div style="display:flex;align-items:center;gap:8px;">
-          <div style="width:10px;height:10px;border-radius:50%;background:${p.color};flex-shrink:0;"></div>
-          <span style="font-size:14px;font-weight:700;">${p.plan}</span>
+          <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;"></div>
+          <span style="font-size:14px;font-weight:700;">${esc(plan)}</span>
         </div>
-        <span style="font-size:16px;font-weight:800;color:${p.color};">$${fmtK(rev)}<span style="font-size:11px;color:var(--muted);font-weight:400;">/mo</span></span>
+        <span style="font-size:16px;font-weight:800;color:${color};">$${fmtK(v.revenue)}<span style="font-size:11px;color:var(--muted);font-weight:400;">/mo</span></span>
       </div>
-      <div style="font-size:12px;color:var(--muted);">${count} shop${count!==1?'s':''} × $${p.price}/mo</div>
+      <div style="font-size:12px;color:var(--muted);">${v.count} shop${v.count!==1?'s':''} × ${fmtRate(avg)}/mo avg</div>
     </div>`;
-  }).join('');
-  document.getElementById('billing-plan-bars').innerHTML = planData.map(p => {
-    const count = pb[p.key] || 0;
-    const pct = Math.round((count / total) * 100);
+  }).join('') : '<div class="empty-state">No active shops yet.</div>';
+  document.getElementById('billing-plan-bars').innerHTML = entries.length ? entries.map(([plan, v], i) => {
+    const color = planColor(plan, i);
+    const pct = Math.round((v.count / total) * 100);
     return `<div class="plan-row">
-      <div class="plan-label" style="color:${p.color};">${p.plan}</div>
-      <div class="plan-bar-wrap"><div class="plan-bar" style="width:${pct}%;background:${p.color};"></div></div>
-      <div class="plan-count">${count}</div>
+      <div class="plan-label" style="color:${color};min-width:52px;width:auto;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(plan)}</div>
+      <div class="plan-bar-wrap"><div class="plan-bar" style="width:${pct}%;background:${color};"></div></div>
+      <div class="plan-count">${v.count}</div>
       <div class="plan-rev">${pct}%</div>
     </div>`;
-  }).join('');
+  }).join('') : '<div class="empty-state">No active shops yet.</div>';
 }
 
 // ── Feature toggles ───────────────────────────────────────────────────────────
