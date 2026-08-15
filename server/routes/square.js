@@ -164,7 +164,7 @@ router.post('/api/public/:shopSlug/square-deposit-session', async (req, res) => 
     const amountCents = Math.round(Number(amount || s.deposit?.amount || 10) * 100);
     const link = await sq.createPaymentLink({
       name: 'Deposit — ' + (appt.service || 'Appointment'),
-      description: (s.shopName || '') + ' · ' + appt.date + ' at ' + appt.time,
+      description: (s.shopName || '') + ' · ' + appt.date + ' at ' + appt.time + ' · non-refundable deposit',
       amountCents,
       redirectUrl: APP_URL + '/sq/booking-deposit-success?appt=' + appointmentId + '&shop=' + shop.id,
       // Key by appointment + amount so re-sending the same amount is idempotent,
@@ -217,7 +217,7 @@ router.post('/api/shop/square/customer-deposit', requireAuth, requireRole('full'
     const depId = genId('dep');
     const link = await sq.createPaymentLink({
       name: 'Deposit — ' + (s.shopName || 'Detail'),
-      description: (s.shopName || '') + ' deposit',
+      description: (s.shopName || '') + ' · non-refundable deposit',
       amountCents,
       redirectUrl: APP_URL + '/sq/customer-deposit-success?cust=' + req.body.customerId + '&shop=' + shop.id + '&dep=' + depId,
       idempotencyKey: 'cdep-' + depId,
@@ -290,7 +290,7 @@ router.post('/api/public/:shopSlug/square-quote-deposit-session', async (req, re
     if (amountCents < 100) return res.status(400).json({ ok: false, error: 'No deposit configured for this estimate' });
     const link = await sq.createPaymentLink({
       name: 'Deposit — ' + (q.number || 'Estimate'),
-      description: (s.shopName || '') + ' · approved estimate',
+      description: (s.shopName || '') + ' · non-refundable deposit, applied toward your total',
       amountCents,
       redirectUrl: APP_URL + '/sq/quote-deposit-success?quote=' + q.id + '&shop=' + shop.id,
       idempotencyKey: 'qdep-' + q.id + '-' + amountCents,

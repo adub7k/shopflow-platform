@@ -295,8 +295,8 @@ const Q = {
       const d=document.getElementById('dep'); d.style.display='';
       document.getElementById('dep-cap').textContent='Deposit required';
       document.getElementById('dep-text').textContent=payOnline
-        ? 'A '+fm(q.depositAmount)+' deposit reserves your spot and is applied toward the total.'
-        : 'A '+fm(q.depositAmount)+' deposit reserves your spot — the shop will collect it with you directly.';
+        ? 'A '+fm(q.depositAmount)+' non-refundable deposit reserves your spot and is applied toward the total.'
+        : 'A '+fm(q.depositAmount)+' non-refundable deposit reserves your spot — the shop will collect it with you directly.';
     }
     if(q.depositPaid){
       const d=document.getElementById('dep'); d.style.display=''; d.className='dep paid';
