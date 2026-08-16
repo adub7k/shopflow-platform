@@ -126,15 +126,70 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   const services    = db.get('services').value()     || [];
   const customers   = db.get('customers').value()    || [];
   const appointments = db.get('appointments').value() || [];
+  const leads  = db.get('leads').value()  || [];
+  const quotes = db.get('quotes').value() || [];
+  const calls  = db.get('calls').value()  || [];
   const now = new Date();
+  const today = now.toISOString().slice(0, 10);
   const thisMonth = now.toISOString().slice(0, 7);
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 7);
   const apptThisMonth = appointments.filter(a => a.date && a.date.startsWith(thisMonth)).length;
   const recentAppts = [...appointments].sort((a, b) => new Date(b.date + 'T' + (b.time || '00:00')) - new Date(a.date + 'T' + (a.time || '00:00'))).slice(0, 10);
+
+  // ── Account-management insights: how is this client's business doing, and is
+  // ShopFlow visibly earning its keep? Everything the account-review needs.
+  const leadCreated = l => l.createdAt || l.created_at || '';
+  const leadWon = l => ['booked', 'closed', 'APPOINTMENT_SET', 'COMPLETED'].includes(l.status);
+  const leadsThisMonth = leads.filter(l => leadCreated(l).startsWith(thisMonth));
+  const leadsLastMonth = leads.filter(l => leadCreated(l).startsWith(lastMonth));
+  // Avg first-response time in minutes, across leads that have one recorded.
+  const respTimes = leads.map(l => {
+    if (l.response_time_seconds != null) return l.response_time_seconds / 60;
+    if (l.firstResponseAt && leadCreated(l)) return Math.max(0, (new Date(l.firstResponseAt) - new Date(leadCreated(l))) / 60000);
+    return null;
+  }).filter(v => v != null && isFinite(v));
+
+  const doneRevenue = (list) => list.filter(a => a.status === 'done').reduce((s, a) => s + (Number(a.price) || 0), 0);
+  const revenueThisMonth = doneRevenue(appointments.filter(a => (a.date || '').startsWith(thisMonth)));
+  const revenueLastMonth = doneRevenue(appointments.filter(a => (a.date || '').startsWith(lastMonth)));
+  // Forecast: booked future work + approved-but-unscheduled estimates, plus the
+  // open estimate pipeline weighted by this shop's real acceptance rate.
+  const upcomingBooked = appointments
+    .filter(a => (a.date || '') >= today && !['done', 'cancelled', 'no-show'].includes(a.status))
+    .reduce((s, a) => s + (Number(a.price) || 0), 0);
+  const approvedEstimates = quotes.filter(q => q.status === 'approved').reduce((s, q) => s + (Number(q.total) || 0), 0);
+  const openEstimates     = quotes.filter(q => q.status === 'sent').reduce((s, q) => s + (Number(q.total) || 0), 0);
+  const decided = quotes.filter(q => ['approved', 'scheduled', 'declined'].includes(q.status));
+  const wonQuotes = quotes.filter(q => ['approved', 'scheduled'].includes(q.status));
+  const estAcceptRate = decided.length ? wonQuotes.length / decided.length : null;
+  const forecast = Math.round(upcomingBooked + approvedEstimates + openEstimates * (estAcceptRate != null ? estAcceptRate : 0.5));
+
+  const quota = Number(shop.monthlyQuota) || 0;
+  const sources = {};
+  leads.forEach(l => { const src = l.channel || l.source || 'call'; sources[src] = (sources[src] || 0) + 1; });
+
+  const insights = {
+    leads: {
+      total: leads.length, thisMonth: leadsThisMonth.length, lastMonth: leadsLastMonth.length,
+      converted: leads.filter(leadWon).length,
+      conversionRate: leads.length ? Math.round(leads.filter(leadWon).length / leads.length * 100) : null,
+      avgResponseMins: respTimes.length ? Math.round(respTimes.reduce((a, b) => a + b, 0) / respTimes.length) : null,
+      sources,
+      callsThisMonth: calls.filter(c => (c.startedAt || '').startsWith(thisMonth)).length,
+    },
+    revenue: { thisMonth: revenueThisMonth, lastMonth: revenueLastMonth },
+    forecast: { total: forecast, upcomingBooked, approvedEstimates, openEstimates, estAcceptRate: estAcceptRate != null ? Math.round(estAcceptRate * 100) : null },
+    estimates: { open: quotes.filter(q => q.status === 'sent').length, approved: wonQuotes.length, total: quotes.length },
+    quota: { monthly: quota, pct: quota > 0 ? Math.round(revenueThisMonth / quota * 100) : null },
+    billing: { rate: shopRate(shop) },
+  };
+
   res.json({
-    shop, settings: { shopName: settings.shopName, tagline: settings.tagline, phone: settings.phone, address: settings.address, bookingEnabled: settings.bookingEnabled, accentColor: settings.accentColor, googleReviewLink: settings.googleReviewLink, loyalty: settings.loyalty, deposit: settings.deposit, stripeConnected: !!(settings.stripe?.connectAccountId && settings.stripe?.onboardingComplete), twilioConfigured: !!(twilioClient && shopFromNumber(shop.id)) },
+    shop, settings: { shopName: settings.shopName, tagline: settings.tagline, phone: settings.phone, address: settings.address, bookingEnabled: settings.bookingEnabled, accentColor: settings.accentColor, googleReviewLink: settings.googleReviewLink, loyalty: settings.loyalty, deposit: settings.deposit, stripeConnected: !!(settings.stripe?.connectAccountId && settings.stripe?.onboardingComplete), squareConnected: !!((settings.square && settings.square.accessToken) ), twilioConfigured: !!(twilioClient && shopFromNumber(shop.id)) },
     barbers, services,
     stats: { totalCustomers: customers.length, totalAppointments: appointments.length, apptThisMonth, activeBarbers: barbers.filter(b => b.active !== false).length },
     recentAppointments: recentAppts,
+    insights,
   });
 });
 
@@ -164,11 +219,13 @@ router.post('/api/admin/shops/create', requireAdmin, async (req, res) => {
 router.patch('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   const shop = master.get('shops').find({ id: req.params.shopId }).value();
   if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
-  const allowed = ['plan', 'monthlyRate', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber', 'features', 'notes'];
+  const allowed = ['plan', 'monthlyRate', 'monthlyQuota', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber', 'features', 'notes'];
   const updates = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
   // Custom rate: number, or null/'' to clear back to the plan-tier fallback.
   if (updates.monthlyRate !== undefined) updates.monthlyRate = (updates.monthlyRate === null || updates.monthlyRate === '') ? null : (Number(updates.monthlyRate) || 0);
+  // Monthly revenue quota for the shop (drives %-to-quota on the profile).
+  if (updates.monthlyQuota !== undefined) updates.monthlyQuota = (updates.monthlyQuota === null || updates.monthlyQuota === '') ? null : (Number(updates.monthlyQuota) || 0);
   if (updates.plan !== undefined) updates.plan = String(updates.plan).trim().slice(0, 40) || 'custom';
   master.get('shops').find({ id: req.params.shopId }).assign(updates).write();
   master.get('accounts').find({ id: shop.accountId }).assign(updates.plan ? { plan: updates.plan } : {}).assign(updates.active !== undefined ? { active: updates.active } : {}).write();
