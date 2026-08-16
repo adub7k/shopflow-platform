@@ -336,10 +336,10 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 
     <!-- MRR goal widget -->
     <div class="sb-goal">
-      <div class="sb-goal-label">Path to $25k MRR</div>
+      <div class="sb-goal-label" id="sb-goal-label">Path to goal</div>
       <div class="sb-goal-nums">
         <div class="sb-goal-mrr" id="sb-mrr">$0</div>
-        <div class="sb-goal-target">$25,000</div>
+        <div class="sb-goal-target" id="sb-goal-target">—</div>
       </div>
       <div class="sb-goal-bar"><div class="sb-goal-fill" id="sb-goal-fill" style="width:0%"></div></div>
       <div class="sb-goal-pct" id="sb-goal-pct">0% there</div>
@@ -397,9 +397,9 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         </div>
       </div>
 
-      <!-- Goal banner -->
+      <!-- Goal banner (goal itself is editable on the Growth page) -->
       <div class="goal-banner" id="goal-banner">
-        <div class="goal-banner-label">🎯 Goal: $25,000 MRR</div>
+        <div class="goal-banner-label" id="banner-goal-label">🎯 MRR Goal</div>
         <div class="goal-banner-row">
           <div>
             <div class="goal-banner-mrr" id="banner-mrr">$0</div>
@@ -407,18 +407,13 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
           </div>
           <div class="goal-banner-right">
             <div class="goal-banner-pct" id="banner-pct">0%</div>
-            <div class="goal-banner-of">of $25k goal</div>
+            <div class="goal-banner-of" id="banner-goal-of">of goal</div>
           </div>
         </div>
         <div class="goal-bar-wrap">
           <div class="goal-bar-fill" id="banner-bar" style="width:0%"></div>
         </div>
-        <div class="goal-milestones">
-          <span class="goal-milestone" id="ms-1k">$1k</span>
-          <span class="goal-milestone" id="ms-5k">$5k</span>
-          <span class="goal-milestone" id="ms-10k">$10k</span>
-          <span class="goal-milestone" id="ms-25k">$25k ✓</span>
-        </div>
+        <div class="goal-milestones" id="goal-milestones"></div>
       </div>
 
       <!-- Metrics -->
@@ -582,7 +577,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       <div class="page-header">
         <div>
           <div class="page-title">Growth</div>
-          <div class="page-sub">Track your path to $25k MRR and sale-readiness</div>
+          <div class="page-sub" id="growth-sub">Track your path to your MRR goal</div>
         </div>
       </div>
 
@@ -605,10 +600,19 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         </div>
       </div>
 
-      <!-- Path to $25k — rows built from the plans you actually sell, at the
-           average real rate you charge for each -->
+      <!-- Path to goal — rows built from the plans you actually sell, at the
+           average real rate you charge for each. The goal itself is editable. -->
       <div class="path-card">
-        <div class="path-title">Path to $25,000 MRR</div>
+        <div class="path-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span>Path to</span>
+          <span style="display:inline-flex;align-items:center;gap:3px;">
+            <span style="color:var(--muted);font-weight:600;">$</span>
+            <input class="drawer-edit" id="mrr-goal-input" type="number" min="1" step="500" style="width:96px;text-align:left;font-size:14px;font-weight:700;border-color:var(--border);" placeholder="25000"
+              onblur="saveMrrGoal(this.value)" onkeydown="if(event.key==='Enter')this.blur()"/>
+          </span>
+          <span>MRR</span>
+          <span style="font-size:11px;font-weight:500;color:var(--faint);">(edit the goal — everything recalculates)</span>
+        </div>
         <div class="path-sub" id="path-sub">How many shops you need to hit the goal from here</div>
         <div id="path-rows"><div class="empty-state">Loading…</div></div>
       </div>
@@ -959,14 +963,12 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 let adminKey = '';
 let allShops = [];
 let statsData = {};
-// Legacy tier prices — ONLY the fallback for shops without a custom rate.
-// The editable per-shop monthlyRate is the real number everywhere.
-const planPrices = { starter: 19.99, pro: 99, shop: 200 };
-const planColors = { starter: '#9ca3af', pro: '#2563eb', shop: '#16a34a' };
-const PALETTE = ['#16a34a','#2563eb','#d97706','#7c3aed','#dc2626','#0891b2','#9ca3af'];
-const effRate = (s) => (s && s.rate != null) ? Number(s.rate) : ((s && s.monthlyRate != null && s.monthlyRate !== '') ? (Number(s.monthlyRate)||0) : (planPrices[s?.plan]||0));
-const planColor = (label, i) => planColors[label] || PALETTE[i % PALETTE.length];
-const planBadge = (plan) => `<span class="badge ${['starter','pro','shop'].includes(plan)?'badge-'+plan:'badge-plan'}">${esc(plan||'custom')}</span>`;
+// A shop's rate is ONLY its editable monthlyRate — no tier fallback. Shops
+// without a rate contribute $0 until one is entered.
+const PALETTE = ['#0E9F6E','#155EEF','#B45309','#7c3aed','#B42318','#0891b2','#93A29A'];
+const effRate = (s) => (s && s.rate != null) ? Number(s.rate) : (Number(s && s.monthlyRate) || 0);
+const planColor = (label, i) => PALETTE[i % PALETTE.length];
+const planBadge = (plan) => `<span class="badge badge-plan">${esc(plan||'custom')}</span>`;
 const fmtRate = (n) => '$' + (Number(n)||0).toLocaleString('en-US', { maximumFractionDigits: 2 });
 // Distinct plan labels across shops — feeds datalists + the filter dropdown.
 const planLabels = () => [...new Set(allShops.map(s => s.plan).filter(Boolean))];
@@ -1042,13 +1044,27 @@ async function loadOverviewSmsStatus() {
 }
 
 function updateSidebarGoal(d) {
-  const pct = d.mrrPct || 0;
+  const pct = d.mrrPct || 0, goal = d.mrrGoal || 25000;
   const el = document.getElementById('sb-mrr');
   const fill = document.getElementById('sb-goal-fill');
   const pctEl = document.getElementById('sb-goal-pct');
+  const label = document.getElementById('sb-goal-label');
+  const target = document.getElementById('sb-goal-target');
   if (el) el.textContent = '$' + fmtK(d.mrr || 0);
   if (fill) fill.style.width = pct + '%';
   if (pctEl) pctEl.textContent = pct + '% there';
+  if (label) label.textContent = 'Path to $' + fmtK(goal) + ' MRR';
+  if (target) target.textContent = fmtRate(goal);
+}
+// Save the platform MRR goal (editable on the Growth page) and recalculate.
+async function saveMrrGoal(value) {
+  const goal = Number(value);
+  if (!goal || goal <= 0 || goal === (statsData.mrrGoal || 25000)) return;
+  try {
+    await fetch('/api/admin/platform-settings', { method: 'PATCH', headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ mrrGoal: goal }) });
+    toast('Goal updated ✓');
+    await loadStats(); renderGrowth(); renderBilling();
+  } catch(e) { toast('Could not save goal'); }
 }
 
 function renderOverview(d) {
@@ -1061,12 +1077,15 @@ function renderOverview(d) {
   document.getElementById('banner-pct').textContent = (d.mrrPct || 0) + '%';
   document.getElementById('banner-bar').style.width = (d.mrrPct || 0) + '%';
 
-  // Milestones
-  const mrr = d.mrr || 0;
-  [['ms-1k',1000],['ms-5k',5000],['ms-10k',10000],['ms-25k',25000]].forEach(([id,v]) => {
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle('reached', mrr >= v);
-  });
+  // Banner goal labels + milestones at quarters of the (editable) goal
+  const goal = d.mrrGoal || 25000, mrr = d.mrr || 0;
+  const bl = document.getElementById('banner-goal-label'); if (bl) bl.textContent = '🎯 Goal: ' + fmtRate(goal) + ' MRR';
+  const bo = document.getElementById('banner-goal-of'); if (bo) bo.textContent = 'of $' + fmtK(goal) + ' goal';
+  const ms = document.getElementById('goal-milestones');
+  if (ms) ms.innerHTML = [.25, .5, .75, 1].map(f => {
+    const v = Math.round(goal * f);
+    return `<span class="goal-milestone${mrr >= v ? ' reached' : ''}">$${fmtK(v)}${f === 1 ? ' ✓' : ''}</span>`;
+  }).join('');
 
   // Metric cards
   document.getElementById('m-mrr').textContent = '$' + fmt(d.mrr);
@@ -1123,9 +1142,12 @@ function renderGrowth() {
   document.getElementById('g-avg').textContent = '$' + fmt(d.avgMrr || 0);
   document.getElementById('g-ltv').textContent = '$' + fmtK(d.ltv || 0);
 
+  const goal = d.mrrGoal || 25000;
+  const gsub = document.getElementById('growth-sub'); if (gsub) gsub.textContent = 'Track your path to $' + fmtK(goal) + ' MRR and sale-readiness';
+  const gin = document.getElementById('mrr-goal-input'); if (gin && document.activeElement !== gin) gin.value = goal;
   const toGoal = d.mrrToGoal || 0;
   document.getElementById('path-sub').textContent = toGoal <= 0
-    ? '🎉 You\'ve hit $25k MRR! Time to sell.'
+    ? `🎉 You've hit $${fmtK(goal)} MRR! Time to raise the goal.`
     : `$${fmt(toGoal)} to go — here's what it takes:`;
   const needed = Object.entries(d.shopsNeeded || {}).sort((a,b) => a[1].rate - b[1].rate);
   document.getElementById('path-rows').innerHTML = needed.length ? needed.map(([label, v]) => `
@@ -1237,7 +1259,7 @@ function renderDrawer(d) {
   const L = ins.leads || {}, R = ins.revenue || {}, F = ins.forecast || {}, Qo = ins.quota || {}, E = ins.estimates || {};
   const accent = s.accentColor || '#0E9F6E';
   const initials = (shop.shopName || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  const rate = (shop.monthlyRate != null && shop.monthlyRate !== '') ? Number(shop.monthlyRate) : (planPrices[shop.plan] || 0);
+  const rate = Number(shop.monthlyRate) || 0;
   // Month-over-month revenue + quota pacing
   const rev = Number(R.thisMonth) || 0, revLast = Number(R.lastMonth) || 0;
   const momPct = revLast > 0 ? Math.round((rev - revLast) / revLast * 100) : null;
@@ -1353,9 +1375,19 @@ function renderDrawer(d) {
           <div style="padding:16px 18px;">
             <div class="drawer-info-row"><span class="drawer-info-label">Booked (upcoming)</span><span class="drawer-info-val">$${fmt(F.upcomingBooked||0)}</span></div>
             <div class="drawer-info-row"><span class="drawer-info-label">Approved estimates</span><span class="drawer-info-val">$${fmt(F.approvedEstimates||0)}</span></div>
-            <div class="drawer-info-row"><span class="drawer-info-label">Open estimates</span><span class="drawer-info-val">$${fmt(F.openEstimates||0)}${F.estAcceptRate!=null?` <span style="color:var(--faint);font-weight:400;">× ${F.estAcceptRate}% accept</span>`:''}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Open estimates</span><span class="drawer-info-val">$${fmt(F.openEstimates||0)}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Lead pipeline (open quotes)</span><span class="drawer-info-val">$${fmt(F.leadPipelineValue||0)} <span style="color:var(--faint);font-weight:400;">(${F.leadPipelineCount||0} lead${(F.leadPipelineCount||0)!==1?'s':''})</span></span></div>
+            <div class="drawer-info-row">
+              <span class="drawer-info-label">Accept rate</span>
+              <div style="display:flex;align-items:center;gap:5px;justify-content:flex-end;">
+                <input class="drawer-edit" type="number" min="0" max="100" step="1" style="width:64px;text-align:right;border-color:var(--border);" value="${shop.estAcceptRate!=null?shop.estAcceptRate:''}" placeholder="${F.estAcceptRate!=null?F.estAcceptRate:50}"
+                  onblur="updateShop('${shop.id}','estAcceptRate',this.value.trim()===''?null:this.value).then(()=>openDrawer('${shop.id}'))" onkeydown="if(event.key==='Enter')this.blur()"/>
+                <span style="color:var(--faint);font-size:12px;">%</span>
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--faint);margin-bottom:4px;text-align:right;">${F.acceptSource==='manual'?('your override — their estimate history says '+(F.computedAcceptRate!=null?F.computedAcceptRate+'%':'n/a')):F.acceptSource==='computed'?'auto from their estimate history (blank = auto)':'default — no decided estimates yet'}</div>
             <div class="drawer-info-row" style="border-top:2px solid var(--border-md);"><span class="drawer-info-label" style="font-weight:700;color:var(--text);">Forecasted revenue</span><span class="drawer-info-val" style="color:var(--green-deep);font-size:15px;">$${fmt(F.total||0)}</span></div>
-            <div style="font-size:11px;color:var(--faint);margin-top:8px;">${E.open||0} open · ${E.approved||0} won of ${E.total||0} estimates all-time</div>
+            <div style="font-size:11px;color:var(--faint);margin-top:8px;">booked + approved + (open estimates + lead pipeline) × ${F.estAcceptRate!=null?F.estAcceptRate:50}% · ${E.open||0} open / ${E.approved||0} won of ${E.total||0} estimates</div>
           </div>
         </div>
 
@@ -1391,7 +1423,7 @@ function renderDrawer(d) {
           <span class="drawer-info-label">Monthly rate</span>
           <div style="display:flex;align-items:center;gap:5px;justify-content:flex-end;">
             <span style="color:var(--muted);font-size:13px;">$</span>
-            <input class="drawer-edit" type="number" min="0" step="1" style="width:90px;text-align:right;" value="${shop.monthlyRate != null ? shop.monthlyRate : ''}" placeholder="${planPrices[shop.plan]||0}"
+            <input class="drawer-edit" type="number" min="0" step="1" style="width:90px;text-align:right;" value="${shop.monthlyRate != null ? shop.monthlyRate : ''}" placeholder="0"
               onblur="updateShop('${shop.id}','monthlyRate',this.value.trim()===''?null:this.value)" onkeydown="if(event.key==='Enter')this.blur()"/>
             <span style="color:var(--faint);font-size:12px;">/mo</span>
           </div>
@@ -1402,7 +1434,7 @@ function renderDrawer(d) {
         </div>
         <div class="drawer-info-row">
           <span class="drawer-info-label">MRR Contribution</span>
-          <span id="drawer-mrr-contrib" style="font-weight:700;color:var(--green-deep);">${fmtRate((shop.monthlyRate != null && shop.monthlyRate !== '') ? shop.monthlyRate : (planPrices[shop.plan]||0))}/mo</span>
+          <span id="drawer-mrr-contrib" style="font-weight:700;color:var(--green-deep);">${fmtRate(rate)}/mo</span>
         </div>
       </div>
     </div>
@@ -1712,7 +1744,7 @@ async function updateShop(shopId, field, value) {
       // Keep the effective rate in sync so the table + drawer stay truthful.
       if (field === 'monthlyRate' || field === 'plan') {
         const s = allShops[idx];
-        s.rate = (s.monthlyRate != null && s.monthlyRate !== '') ? (Number(s.monthlyRate)||0) : (planPrices[s.plan]||0);
+        s.rate = Number(s.monthlyRate) || 0;
         const mrrEl = document.getElementById('drawer-mrr-contrib');
         if (mrrEl && currentShopId === shopId) mrrEl.textContent = fmtRate(s.rate) + '/mo';
       }

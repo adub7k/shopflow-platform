@@ -7,16 +7,15 @@ const { requireAdmin } = require('../middleware');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb } = require('../db');
 const { upsertLead, getLeadPayloads } = require('../leads-core');
 
-// Legacy plan tiers, kept ONLY as a rate fallback for shops that predate custom
-// billing. The real number is shop.monthlyRate — owner-editable per shop in the
-// admin UI; every metric below uses the effective rate, never the tier table.
-const planPrices = { starter: 19.99, pro: 99, shop: 200 };
-const shopRate = (s) => (s.monthlyRate != null && s.monthlyRate !== '') ? (Number(s.monthlyRate) || 0) : (planPrices[s.plan] || 0);
+// A shop's rate is ONLY its editable monthlyRate — the old barbershop tier
+// table (starter/pro/shop) is gone; a shop with no rate set contributes $0
+// until one is entered in the admin UI.
+const shopRate = (s) => Number(s.monthlyRate) || 0;
 
 // ── ADMIN: overview stats ─────────────────────────────────────────────────────
 router.get('/api/admin/stats', requireAdmin, (req, res) => {
   const shops = master.get('shops').value() || [];
-  const MRR_GOAL = 25000;
+  const MRR_GOAL = Number((master.get('platformSettings').value() || {}).mrrGoal) || 25000;
 
   const activeShops  = shops.filter(s => s.active);
   const churned      = shops.filter(s => !s.active);
@@ -161,8 +160,19 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   const openEstimates     = quotes.filter(q => q.status === 'sent').reduce((s, q) => s + (Number(q.total) || 0), 0);
   const decided = quotes.filter(q => ['approved', 'scheduled', 'declined'].includes(q.status));
   const wonQuotes = quotes.filter(q => ['approved', 'scheduled'].includes(q.status));
-  const estAcceptRate = decided.length ? wonQuotes.length / decided.length : null;
-  const forecast = Math.round(upcomingBooked + approvedEstimates + openEstimates * (estAcceptRate != null ? estAcceptRate : 0.5));
+  // Accept rate: the owner's manual override wins (they know their real-world
+  // close rate); else this shop's computed estimate history; else 50%.
+  const computedAccept = decided.length ? Math.round(wonQuotes.length / decided.length * 100) : null;
+  const manualAccept = (shop.estAcceptRate != null && shop.estAcceptRate !== '') ? Math.min(100, Math.max(0, Number(shop.estAcceptRate) || 0)) : null;
+  const acceptRate = manualAccept != null ? manualAccept : (computedAccept != null ? computedAccept : 50);
+  // Open lead pipeline: quoted value sitting on non-terminal pipeline stages
+  // (owner-entered quotedAmount, falling back to what the AI quoted on the call).
+  const cfgStages = ((settings.pipeline || {}).stages) || [];
+  const terminalKeys = new Set((Array.isArray(cfgStages) && cfgStages.length ? cfgStages.filter(st => st.terminal).map(st => st.key) : ['closed', 'lost']).concat(['closed', 'lost', 'COMPLETED', 'LOST']));
+  const leadQuoted = l => l.quotedAmount != null ? (Number(l.quotedAmount) || 0) : (l.ai && l.ai.quotedPrice != null ? (Number(l.ai.quotedPrice) || 0) : 0);
+  const openPipeLeads = leads.filter(l => !terminalKeys.has(l.pipelineStatus || l.status) && leadQuoted(l) > 0);
+  const leadPipelineValue = openPipeLeads.reduce((s, l) => s + leadQuoted(l), 0);
+  const forecast = Math.round(upcomingBooked + approvedEstimates + (openEstimates + leadPipelineValue) * acceptRate / 100);
 
   const quota = Number(shop.monthlyQuota) || 0;
   const sources = {};
@@ -178,7 +188,10 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
       callsThisMonth: calls.filter(c => (c.startedAt || '').startsWith(thisMonth)).length,
     },
     revenue: { thisMonth: revenueThisMonth, lastMonth: revenueLastMonth },
-    forecast: { total: forecast, upcomingBooked, approvedEstimates, openEstimates, estAcceptRate: estAcceptRate != null ? Math.round(estAcceptRate * 100) : null },
+    forecast: { total: forecast, upcomingBooked, approvedEstimates, openEstimates,
+                leadPipelineValue, leadPipelineCount: openPipeLeads.length,
+                estAcceptRate: acceptRate, acceptSource: manualAccept != null ? 'manual' : (computedAccept != null ? 'computed' : 'default'),
+                computedAcceptRate: computedAccept },
     estimates: { open: quotes.filter(q => q.status === 'sent').length, approved: wonQuotes.length, total: quotes.length },
     quota: { monthly: quota, pct: quota > 0 ? Math.round(revenueThisMonth / quota * 100) : null },
     billing: { rate: shopRate(shop) },
@@ -219,13 +232,15 @@ router.post('/api/admin/shops/create', requireAdmin, async (req, res) => {
 router.patch('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   const shop = master.get('shops').find({ id: req.params.shopId }).value();
   if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
-  const allowed = ['plan', 'monthlyRate', 'monthlyQuota', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber', 'features', 'notes'];
+  const allowed = ['plan', 'monthlyRate', 'monthlyQuota', 'estAcceptRate', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber', 'features', 'notes'];
   const updates = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
-  // Custom rate: number, or null/'' to clear back to the plan-tier fallback.
+  // Custom rate: number, or null/'' to clear.
   if (updates.monthlyRate !== undefined) updates.monthlyRate = (updates.monthlyRate === null || updates.monthlyRate === '') ? null : (Number(updates.monthlyRate) || 0);
   // Monthly revenue quota for the shop (drives %-to-quota on the profile).
   if (updates.monthlyQuota !== undefined) updates.monthlyQuota = (updates.monthlyQuota === null || updates.monthlyQuota === '') ? null : (Number(updates.monthlyQuota) || 0);
+  // Manual estimate-accept-rate override (0–100); null/'' clears back to computed.
+  if (updates.estAcceptRate !== undefined) updates.estAcceptRate = (updates.estAcceptRate === null || updates.estAcceptRate === '') ? null : Math.min(100, Math.max(0, Number(updates.estAcceptRate) || 0));
   if (updates.plan !== undefined) updates.plan = String(updates.plan).trim().slice(0, 40) || 'custom';
   master.get('shops').find({ id: req.params.shopId }).assign(updates).write();
   master.get('accounts').find({ id: shop.accountId }).assign(updates.plan ? { plan: updates.plan } : {}).assign(updates.active !== undefined ? { active: updates.active } : {}).write();
@@ -520,14 +535,15 @@ function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
 // ── ADMIN: platform settings (get) ───────────────────────────────────────────
 router.get('/api/admin/platform-settings', requireAdmin, (req, res) => {
   const ps = master.get('platformSettings').value() || {};
-  res.json({ requirePayment: ps.requirePayment !== false });
+  res.json({ requirePayment: ps.requirePayment !== false, mrrGoal: Number(ps.mrrGoal) || 25000 });
 });
 
 // ── ADMIN: platform settings (update) ────────────────────────────────────────
 router.patch('/api/admin/platform-settings', requireAdmin, (req, res) => {
-  const allowed = ['requirePayment'];
+  const allowed = ['requirePayment', 'mrrGoal'];
   const updates = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
+  if (updates.mrrGoal !== undefined) updates.mrrGoal = Math.max(1, Number(updates.mrrGoal) || 25000);
   master.get('platformSettings').assign(updates).write();
   res.json({ ok: true });
 });
