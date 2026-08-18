@@ -1019,6 +1019,11 @@ const Settings = {
 
   // ── Message-template manager ──────────────────────────────────────────────────
   MERGE_FIELDS: ['{first}','{name}','{shop}','{date}','{time}','{service}','{link}'],
+  // Built-in prompts that auto-pick a template (see SMS_TEMPLATE_INTENTS).
+  TEMPLATE_USES: [
+    { id: 'review',   label: 'Used for review requests' },
+    { id: 'reminder', label: 'Used for appointment reminders' },
+  ],
 
   // Render the editable list of templates into #s-tpl-list.
   _renderTemplateList() {
@@ -1026,11 +1031,22 @@ const Settings = {
     if (!tpls.length) {
       return '<div style="font-size:12px;color:var(--faint);padding:6px 0 12px;">No templates yet — add one to get started.</div>';
     }
+    // Show which template each built-in prompt will pull, so renaming a row makes
+    // its role obvious instead of silently re-pointing the review/reminder texts.
+    const uses = {};
+    this.TEMPLATE_USES.forEach(u => {
+      const hit = _smsTemplateFor(u.id, tpls);
+      if (hit && hit.id) (uses[hit.id] = uses[hit.id] || []).push(u.label);
+    });
     return tpls.map((t,i) => {
       const chips = this.MERGE_FIELDS.map(f =>
         `<button type="button" class="btn btn-xs" style="padding:2px 7px;font-size:11px;" onclick="Settings._insertVar(${i},'${f}')">${f}</button>`
       ).join(' ');
+      const used = (uses[t.id] || []).map(l =>
+        `<span style="font-size:10px;font-weight:700;color:var(--green);background:var(--green-lt);padding:2px 8px;border-radius:20px;">${esc(l)}</span>`
+      ).join(' ');
       return '<div class="card" style="padding:12px;margin-bottom:10px;background:var(--off,#f9fafb);">'
+        + (used ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;">${used}</div>` : '')
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
         +   '<label class="form-label" style="margin:0;">Template name</label>'
         +   `<button class="btn btn-sm btn-danger" style="padding:2px 10px;" onclick="Settings.delTemplate(${i})" title="Delete template">✕</button>`

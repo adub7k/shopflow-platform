@@ -80,10 +80,15 @@ const Reviews = {
     if(!a || !a.customerPhone){ toast('No phone number on file','warning'); return; }
     // Manual review request: open the owner's Messages prefilled from the review
     // template (no Twilio/A2P). The {link} points at this shop's review page tied to
-    // the visit, so the rating lands back in-app.
+    // the visit, so the rating lands back in-app. _smsTemplateBody resolves the
+    // owner's own "Review request" template by name, so renaming or re-creating it
+    // in Settings keeps this prompt correct.
     const slug = (typeof Auth!=='undefined' && Auth.getShopSlug && Auth.getShopSlug()) || '';
     const link = location.origin + '/review/' + slug + (slug?('?a='+a.id):'');
-    const body = _smsFill(_smsTemplateBody('review'), {
+    // A review text without the link is useless — append it if the template omits it.
+    let tpl = _smsTemplateBody('review');
+    if (!/\{link\}/.test(tpl)) tpl = (tpl.trim() + ' {link}').trim();
+    const body = _smsFill(tpl, {
       first: (a.customerName||'there').split(' ')[0],
       name:  a.customerName || 'there',
       shop:  (Shop.settings && Shop.settings.shopName) || 'us',
