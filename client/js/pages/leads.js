@@ -490,12 +490,9 @@ const Leads = {
     const l = this._leads.find(x => x.id === id);
     if (!l || !l.phone) { toast('No phone number on file', 'warning'); return; }
     // Manual send via the iPhone Messages deep link (no Twilio/A2P).
+    // Texting does NOT move the stage — the owner advances leads explicitly
+    // (a stray auto-move here was silently reshuffling the pipeline).
     _cpSms(l.phone, body);
-    // Texting a new lead counts as the first touch → move it to "contacted".
-    if (l.status === 'new') {
-      l.status = 'contacted';
-      db.leads.update(id, { status: 'contacted' }).catch(() => {});
-    }
   },
 
   async convert(id) {

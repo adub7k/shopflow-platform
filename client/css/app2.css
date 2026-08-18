@@ -452,3 +452,12 @@ table.v2-table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:68
 .pipe-cl-actions{display:flex;flex-direction:column;gap:8px;}
 .pipe-cl-move{display:flex;gap:8px;}
 .pipe-cl-move select{flex:1;}
+
+.pipe-top{flex-wrap:wrap;}
+.pipe-top-actions{display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.pipe-view{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.pipe-view button{border:none;background:var(--surface);color:var(--muted);font-size:12px;font-weight:600;padding:6px 11px;cursor:pointer;font-family:var(--font);}
+.pipe-view button.on{background:var(--text);color:#fff;}
+.pipe-view button+button{border-left:1px solid var(--border);}
+.pipe-ed-row textarea{margin-top:8px;}
+.pipe-ed-daylbl{font-size:13px;font-weight:600;color:var(--muted);flex-shrink:0;}

@@ -19,8 +19,41 @@
 const Pipeline = {
   _leads: [],
   _source: 'all', // all | meta | website | call
+  _view: localStorage.getItem('sf_pipeView') || 'stages', // 'stages' | 'days'
 
   stages() { return Leads.stageConfig(); },
+
+  // Follow-up day markers for the By-day view (owner-defined, any count).
+  // Stored as settings.pipeline.touchDays [{day, sms}]; sms is the optional
+  // auto-text the drip engine (server/automation/engine.js) sends when a lead
+  // crosses that day. Older numeric-only arrays normalize transparently.
+  days() {
+    const p = (Shop.settings && Shop.settings.pipeline) || {};
+    let arr = (Array.isArray(p.touchDays) ? p.touchDays : [])
+      .map(e => (typeof e === 'number' ? { day: e, sms: '' } : { day: Number(e && e.day) || 0, sms: String((e && e.sms) || '') }))
+      .filter(e => e.day > 0)
+      .sort((a, b) => a.day - b.day)
+      .filter((e, i, a) => i === 0 || e.day !== a[i - 1].day);
+    return arr.length ? arr : [{ day: 1, sms: '' }, { day: 3, sms: '' }, { day: 5, sms: '' }, { day: 10, sms: '' }];
+  },
+  dripEnabled() {
+    const p = (Shop.settings && Shop.settings.pipeline) || {};
+    return !!p.dripEnabled;
+  },
+
+  setView(v) {
+    this._view = v === 'days' ? 'days' : 'stages';
+    try { localStorage.setItem('sf_pipeView', this._view); } catch (e) {}
+    this.render();
+  },
+  _viewToggle() {
+    const seg = (v, label) => `<button class="${this._view === v ? 'on' : ''}" onclick="Pipeline.setView('${v}')">${label}</button>`;
+    return `<div class="pipe-view">${seg('stages', 'Stages')}${seg('days', 'By day')}</div>`;
+  },
+  _srcChips() {
+    const chip = (key, label) => `<button class="lead-pill ${this._source === key ? 'active' : ''}" onclick="Pipeline.setSource('${key}')">${label}</button>`;
+    return chip('all', 'All') + chip('meta', 'Meta') + chip('website', 'Website') + chip('call', 'Calls');
+  },
 
   isActive() {
     const el = document.getElementById('page-pipeline');
@@ -98,6 +131,7 @@ const Pipeline = {
     const el = document.getElementById('page-pipeline');
     if (!el) return;
     try { this._leads = await db.leads.all(); } catch (e) { this._leads = []; }
+    if (this._view === 'days') return this._renderDays(el);
 
     const stages = this.stages();
     const leads = this._leads.filter(l => this._matchSource(l));
@@ -119,7 +153,6 @@ const Pipeline = {
     const openCount = stages.filter(s => !s.terminal).reduce((n, s) => n + byStage[s.key].length, 0);
     const overdue = leads.filter(l => this._dueState(l) === 'over').length;
 
-    const srcChip = (key, label) => `<button class="lead-pill ${this._source === key ? 'active' : ''}" onclick="Pipeline.setSource('${key}')">${label}</button>`;
     const jumpPill = (s) => {
       const n = byStage[s.key].length;
       const over = byStage[s.key].filter(l => this._dueState(l) === 'over').length;
@@ -132,9 +165,9 @@ const Pipeline = {
     const head = `
       <div class="pipe-top">
         <div class="pipe-summary"><strong>${openCount}</strong> open lead${openCount === 1 ? '' : 's'}${overdue ? ` · <span style="color:var(--red);font-weight:700;">${overdue} need${overdue === 1 ? 's' : ''} follow-up</span>` : ''}</div>
-        <button class="btn btn-sm" onclick="Pipeline.stagesModal()">Edit stages</button>
+        <div class="pipe-top-actions">${this._viewToggle()}<button class="btn btn-sm" onclick="Pipeline.stagesModal()">Edit stages</button></div>
       </div>
-      <div class="pipe-chips">${srcChip('all', 'All')}${srcChip('meta', 'Meta')}${srcChip('website', 'Website')}${srcChip('call', 'Calls')}</div>
+      <div class="pipe-chips">${this._srcChips()}</div>
       <div class="pipe-chips pipe-jump">${stages.map(jumpPill).join('')}</div>`;
 
     const board = `<div class="pipe-board">${stages.map((s, i) => {
@@ -172,11 +205,81 @@ const Pipeline = {
     </div>`;
   },
 
-  _card(l, stage, nextStage) {
+  // ── By-day view: leads bucketed by age since they came in ───────────────────
+  // No stored state — a lead "moves" between day columns purely as time passes.
+  // Only chaseable leads appear (non-terminal, non-won stages): booked/closed/
+  // lost work doesn't need a day cadence.
+  _leadAgeDays(l) {
+    const t = Date.parse(l.createdAt || l.firstContactAt || l.lastContactAt || '');
+    return isNaN(t) ? 0 : (Date.now() - t) / 86400000;
+  },
+  _renderDays(el) {
+    const entries = this.days();
+    const chase = this._leads.filter(l => this._matchSource(l)).filter(l => {
+      const s = this._stage(l);
+      return !s.terminal && !s.won;
+    });
+    const buckets = entries.map(() => []);
+    chase.forEach(l => {
+      const a = this._leadAgeDays(l);
+      let idx = 0;
+      for (let i = 1; i < entries.length; i++) if (a >= entries[i].day) idx = i;
+      buckets[idx].push(l);
+    });
+    buckets.forEach(b => b.sort((x, y) => this._leadAgeDays(y) - this._leadAgeDays(x)));
+    const drip = this.dripEnabled();
+
+    const jump = entries.map((e, i) => `<button class="pipe-jump-pill" onclick="Pipeline.jumpTo('day-${i}')">
+        Day ${e.day}${i === entries.length - 1 ? '+' : ''}
+        <span class="lead-pill-count">${buckets[i].length}</span>
+        ${e.sms ? `<span class="pipe-jump-over" style="color:var(--green);background:var(--green-lt);">auto</span>` : ''}
+      </button>`).join('');
+
+    const head = `
+      <div class="pipe-top">
+        <div class="pipe-summary"><strong>${chase.length}</strong> lead${chase.length === 1 ? '' : 's'} in follow-up · <span style="font-weight:700;color:${drip ? 'var(--green)' : 'var(--faint)'};">auto-texts ${drip ? 'on' : 'off'}</span></div>
+        <div class="pipe-top-actions">${this._viewToggle()}<button class="btn btn-sm" onclick="Pipeline.daysModal()">Edit days</button></div>
+      </div>
+      <div class="pipe-chips">${this._srcChips()}</div>
+      <div class="pipe-chips pipe-jump">${jump}</div>`;
+
+    const cols = entries.map((e, i) => this._dayColumn(e, i, entries[i + 1], buckets[i], drip)).join('');
+
+    const prev = el.querySelector('.pipe-board');
+    const scrollLeft = prev ? prev.scrollLeft : 0;
+    el.innerHTML = head + `<div class="pipe-board">${cols}</div>`;
+    const nb = el.querySelector('.pipe-board');
+    if (nb) nb.scrollLeft = scrollLeft;
+  },
+
+  _dayColumn(entry, i, nextEntry, list, drip) {
+    const label = 'Day ' + entry.day + (nextEntry ? '' : '+');
+    const range = nextEntry ? `${entry.day}–${nextEntry.day} days in` : `${entry.day}+ days in`;
+    const auto = entry.sms ? `<span class="pipe-col-iv" title="${esc(entry.sms)}">${drip ? 'auto-text on' : 'auto-text off'}</span>` : '';
+    const stages = this.stages();
+    const cards = list.length
+      ? list.map(l => {
+          const stage = this._stage(l);
+          const idx = stages.findIndex(s => s.key === stage.key);
+          return this._card(l, stage, stages[idx + 1] || null, { timeView: true });
+        }).join('')
+      : `<div class="pipe-empty">No leads ${range}</div>`;
+    return `<div class="pipe-col" id="pipe-col-day-${i}">
+      <div class="pipe-col-head">
+        <span class="pipe-col-title" title="${range}">${label}</span>
+        <span class="pipe-col-count">${list.length}</span>
+        <span class="pipe-col-right">${auto}</span>
+      </div>
+      <div class="pipe-col-body">${cards}</div>
+    </div>`;
+  },
+
+  _card(l, stage, nextStage, o) {
+    o = o || {};
     // Never advance a lead into Lost — that's an explicit choice (the × button).
     const next = (!stage.terminal && nextStage && nextStage.fixed !== 'lost') ? nextStage : null;
-    const due = this._dueState(l);
-    const age = this._fmtAge(this._ageMin(l));
+    const due = o.timeView ? 'ok' : this._dueState(l);
+    const age = o.timeView ? this._fmtAge(Math.max(1, this._leadAgeDays(l) * 1440)) : this._fmtAge(this._ageMin(l));
     const name = l.name || l.phone || 'Unknown';
     const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model].filter(Boolean).join(' ') : '';
     const svc = (l.servicesInterested || []).join(', ');
@@ -189,9 +292,17 @@ const Pipeline = {
       ? `<button class="pipe-money set" onclick="event.stopPropagation();Pipeline.quoteModal('${l.id}')" title="Quoted amount — tap to change">${fmtMoney(amt)}</button>`
       : `<button class="pipe-money" onclick="event.stopPropagation();Pipeline.quoteModal('${l.id}')" title="Add what they were quoted">+ $</button>`);
 
-    const ageChip = due === 'over'
-      ? `<span class="pipe-age over" title="In ${esc(stage.label)} for ${age} — past your follow-up timing">${age} late</span>`
-      : `<span class="pipe-age ${due === 'soon' ? 'soon' : ''}" title="In ${esc(stage.label)} for ${age}">${age}</span>`;
+    const ageChip = o.timeView
+      ? `<span class="pipe-age" title="Came in ${age} ago">${age}</span>`
+      : (due === 'over'
+        ? `<span class="pipe-age over" title="In ${esc(stage.label)} for ${age} — past your follow-up timing">${age} late</span>`
+        : `<span class="pipe-age ${due === 'soon' ? 'soon' : ''}" title="In ${esc(stage.label)} for ${age}">${age}</span>`);
+    // By-day cards lead with the stage (colored) instead of the source, plus a
+    // marker when the drip has already texted this lead.
+    const tag = o.timeView
+      ? `<span class="pipe-src" style="color:${stage.color};border-color:${stage.color}55;background:${stage.color}14;">${esc(stage.label)}</span>`
+        + (l.dripLog && Object.keys(l.dripLog).length ? `<span class="pipe-src" style="color:var(--green);" title="Auto-texted: ${esc(Object.keys(l.dripLog).join(', '))}">auto-texted</span>` : '')
+      : (src ? `<span class="pipe-src">${esc(src)}</span>` : '');
 
     const call = l.phone ? `<a class="pipe-act" href="tel:${esc(l.phone)}" onclick="event.stopPropagation()" title="Call" aria-label="Call">${this.ICONS.phone}</a>` : '';
     const text = l.phone ? `<button class="pipe-act" onclick="event.stopPropagation();Pipeline.text('${l.id}')" title="Text" aria-label="Text">${this.ICONS.msg}</button>` : '';
@@ -207,7 +318,7 @@ const Pipeline = {
         <div class="pipe-card-name">${esc(name)}</div>
         ${ageChip}
       </div>
-      <div class="pipe-card-sub">${src ? `<span class="pipe-src">${esc(src)}</span>` : ''}<span class="t" title="${esc(sub)}">${esc(sub)}</span>${money}</div>
+      <div class="pipe-card-sub">${tag}<span class="t" title="${esc(sub)}">${esc(sub)}</span>${money}</div>
       <div class="pipe-card-actions">${call}${text}${lose}${back}${advance}</div>
     </div>`;
   },
@@ -436,6 +547,89 @@ const Pipeline = {
       this._clRender();   // stay in the flow — keep cleaning until Done
     } catch (e) {
       toast(e.message || 'Bulk update failed', 'error');
+    }
+  },
+
+  // ── Follow-up days editor (By-day columns + per-day auto-texts) ─────────────
+  daysModal() {
+    this._dEdit = this.days().map(e => ({ ...e }));
+    this._dOn = this.dripEnabled();
+    this._dRender();
+  },
+  _dRender() {
+    const rows = this._dEdit.map((e, i) => `
+      <div class="pipe-ed-row">
+        <div class="pipe-ed-main">
+          <span class="pipe-ed-daylbl">Day</span>
+          <input class="form-input" id="dd-day-${i}" type="number" min="1" inputmode="numeric" value="${e.day}" style="width:74px;flex:none;">
+          <span class="pipe-ed-note" style="flex:1;">after the lead comes in</span>
+          <div class="pipe-ed-ctl"><button type="button" class="danger" onclick="Pipeline.dRemove(${i})" title="Remove day">${this.ICONS.x}</button></div>
+        </div>
+        <textarea class="form-input" id="dd-sms-${i}" rows="2" maxlength="320" placeholder="Auto-text for day ${e.day} — leave blank for no text. {first} and {shop} fill in.">${esc(e.sms)}</textarea>
+      </div>`).join('');
+    Modal.show(`
+      <div class="modal-title">Follow-up days</div>
+      <div style="font-size:13px;color:var(--muted);margin:-6px 0 14px;line-height:1.5;">
+        The columns of the By-day view — add as many as you want. Give a day a
+        message and it texts the lead automatically when they reach that day.
+        Only leads you're still chasing get texted (never booked, won, or lost),
+        once per day marker, between 9am–7pm.
+      </div>
+      ${rows}
+      <button class="btn btn-full" onclick="Pipeline.dAdd()" style="margin-top:2px;">+ Add a day</button>
+      <label class="pipe-ed-win" style="justify-content:flex-start;margin:12px 0 4px;font-size:13px;color:var(--text);">
+        <input type="checkbox" id="dd-on" ${this._dOn ? 'checked' : ''}> Send auto-texts automatically
+      </label>
+      <div style="font-size:12px;color:var(--faint);line-height:1.5;margin-bottom:4px;">
+        Sends from your tracking number — replies land there, not in your iPhone
+        thread, so write messages that invite a call. Leads already past a day
+        when you turn this on are skipped, never blasted.
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-primary btn-full" onclick="Pipeline.saveDays(this)">Save days</button>
+        <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
+      </div>`);
+  },
+  _dSync() {
+    this._dEdit.forEach((e, i) => {
+      const d = document.getElementById('dd-day-' + i);
+      if (d) e.day = Math.max(1, parseInt(d.value, 10) || e.day);
+      const s = document.getElementById('dd-sms-' + i);
+      if (s) e.sms = s.value.trim().slice(0, 320);
+    });
+    const on = document.getElementById('dd-on');
+    if (on) this._dOn = on.checked;
+  },
+  dAdd() {
+    this._dSync();
+    const last = this._dEdit[this._dEdit.length - 1];
+    this._dEdit.push({ day: (last ? last.day : 0) + 2, sms: '' });
+    this._dRender();
+  },
+  dRemove(i) {
+    this._dSync();
+    this._dEdit.splice(i, 1);
+    this._dRender();
+  },
+  async saveDays(btn) {
+    this._dSync();
+    let touchDays = this._dEdit
+      .filter(e => e.day > 0)
+      .sort((a, b) => a.day - b.day)
+      .filter((e, i, a) => i === 0 || e.day !== a[i - 1].day)
+      .map(e => ({ day: e.day, sms: e.sms }));
+    if (!touchDays.length) touchDays = [{ day: 1, sms: '' }];
+    disableBtn(btn);
+    try {
+      const pipeline = { ...((Shop.settings && Shop.settings.pipeline) || {}), touchDays, dripEnabled: this._dOn };
+      await db.settings.save({ pipeline });
+      Shop.settings.pipeline = pipeline;
+      Modal.close();
+      toast(this._dOn ? 'Days saved — auto-texts on' : 'Days saved');
+      this.render();
+    } catch (e) {
+      enableBtn(btn);
+      toast(e.message || 'Could not save days', 'error');
     }
   },
 

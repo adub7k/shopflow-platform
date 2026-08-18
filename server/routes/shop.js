@@ -1127,14 +1127,12 @@ router.post('/api/shop/leads/:id/sms', requireAuth, requireRole('full','technici
     await twilioClient.messages.create({ from: fromNum, to: toNum, body });
     h.upsert('conversations', { id: genId('msg'), customerId: lead.customerId || null, leadId: lead.id,
       customerName: lead.name || lead.phone, type:'sms', direction:'outbound', body, sentAt:new Date().toISOString(), read:true });
-    if (lead.status === 'new') { lead.status = 'contacted'; }
-    if (lead.channel === 'website' && lead.status === 'NEW_LEAD') {
-      // Website-intake lead: advance its own status machine + response stamps.
-      lead.status = 'CONTACTED';
-      if (!lead.first_response_at) {
-        lead.first_response_at = new Date().toISOString();
-        lead.response_time_seconds = Math.max(0, Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 1000));
-      }
+    // Texting does NOT move the pipeline stage — stage moves are always the
+    // owner's explicit call (advance/back buttons, status pills, bulk move).
+    // Response-time metrics still get stamped: the text IS the first response.
+    if (lead.channel === 'website' && !lead.first_response_at) {
+      lead.first_response_at = new Date().toISOString();
+      lead.response_time_seconds = Math.max(0, Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 1000));
       if (lead.contact_status === 'UNCONTACTED') lead.contact_status = 'ATTEMPTED';
       lead.updated_at = new Date().toISOString();
     }

@@ -253,7 +253,9 @@ const Response = {
     if (!body.trim()) return;
     _cpSms(l.phone, body.trim());
     Modal.close();
-    this.markContacted(id, true);
+    // No auto status move — "Mark responded" is its own explicit button, so a
+    // sent text never silently reshuffles the pipeline.
+    this.render();
   },
 
   async markContacted(id, silent) {
