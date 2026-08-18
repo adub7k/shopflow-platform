@@ -1054,6 +1054,20 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
     const q = Number(req.body.quotedAmount);
     lead.quotedAmount = (Number.isFinite(q) && q > 0) ? Math.round(q * 100) / 100 : null;
   }
+  // By-day follow-up bookkeeping: the owner tapped the day-N text button (the
+  // sms: deep link opened Messages prefilled on their phone). Stamps the marker
+  // so the card shows "texted" and logs it in the lead's note history.
+  if (req.body.dripDay !== undefined) {
+    const d = parseInt(req.body.dripDay, 10);
+    if (d > 0) {
+      const now = new Date().toISOString();
+      lead.dripLog = lead.dripLog || {};
+      lead.dripLog['d' + d] = now;
+      lead.lastContactAt = now;
+      lead.noteLog = lead.noteLog || [];
+      lead.noteLog.unshift({ id: genId('note'), text: `Day-${d} follow-up text sent`, at: now, by: String(req.body.by || '').slice(0, 60) });
+    }
+  }
   if (status !== undefined && shopStageKeys(db).has(status)) applyLeadStatus(lead, status);
   h.upsert('leads', lead);
   res.json({ ok:true, lead });

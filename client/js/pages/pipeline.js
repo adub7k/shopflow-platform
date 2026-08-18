@@ -36,11 +36,6 @@ const Pipeline = {
       .filter((e, i, a) => i === 0 || e.day !== a[i - 1].day);
     return arr.length ? arr : [{ day: 1, sms: '' }, { day: 3, sms: '' }, { day: 5, sms: '' }, { day: 10, sms: '' }];
   },
-  dripEnabled() {
-    const p = (Shop.settings && Shop.settings.pipeline) || {};
-    return !!p.dripEnabled;
-  },
-
   setView(v) {
     this._view = v === 'days' ? 'days' : 'stages';
     try { localStorage.setItem('sf_pipeView', this._view); } catch (e) {}
@@ -227,23 +222,21 @@ const Pipeline = {
       buckets[idx].push(l);
     });
     buckets.forEach(b => b.sort((x, y) => this._leadAgeDays(y) - this._leadAgeDays(x)));
-    const drip = this.dripEnabled();
 
     const jump = entries.map((e, i) => `<button class="pipe-jump-pill" onclick="Pipeline.jumpTo('day-${i}')">
         Day ${e.day}${i === entries.length - 1 ? '+' : ''}
         <span class="lead-pill-count">${buckets[i].length}</span>
-        ${e.sms ? `<span class="pipe-jump-over" style="color:var(--green);background:var(--green-lt);">auto</span>` : ''}
       </button>`).join('');
 
     const head = `
       <div class="pipe-top">
-        <div class="pipe-summary"><strong>${chase.length}</strong> lead${chase.length === 1 ? '' : 's'} in follow-up · <span style="font-weight:700;color:${drip ? 'var(--green)' : 'var(--faint)'};">auto-texts ${drip ? 'on' : 'off'}</span></div>
+        <div class="pipe-summary"><strong>${chase.length}</strong> lead${chase.length === 1 ? '' : 's'} in follow-up</div>
         <div class="pipe-top-actions">${this._viewToggle()}<button class="btn btn-sm" onclick="Pipeline.daysModal()">Edit days</button></div>
       </div>
       <div class="pipe-chips">${this._srcChips()}</div>
       <div class="pipe-chips pipe-jump">${jump}</div>`;
 
-    const cols = entries.map((e, i) => this._dayColumn(e, i, entries[i + 1], buckets[i], drip)).join('');
+    const cols = entries.map((e, i) => this._dayColumn(e, i, entries[i + 1], buckets[i])).join('');
 
     const prev = el.querySelector('.pipe-board');
     const scrollLeft = prev ? prev.scrollLeft : 0;
@@ -252,16 +245,16 @@ const Pipeline = {
     if (nb) nb.scrollLeft = scrollLeft;
   },
 
-  _dayColumn(entry, i, nextEntry, list, drip) {
+  _dayColumn(entry, i, nextEntry, list) {
     const label = 'Day ' + entry.day + (nextEntry ? '' : '+');
     const range = nextEntry ? `${entry.day}–${nextEntry.day} days in` : `${entry.day}+ days in`;
-    const auto = entry.sms ? `<span class="pipe-col-iv" title="${esc(entry.sms)}">${drip ? 'auto-text on' : 'auto-text off'}</span>` : '';
+    const auto = entry.sms ? `<span class="pipe-col-iv" title="Day-${entry.day} text: ${esc(entry.sms)}">text ready</span>` : '';
     const stages = this.stages();
     const cards = list.length
       ? list.map(l => {
           const stage = this._stage(l);
           const idx = stages.findIndex(s => s.key === stage.key);
-          return this._card(l, stage, stages[idx + 1] || null, { timeView: true });
+          return this._card(l, stage, stages[idx + 1] || null, { timeView: true, entry });
         }).join('')
       : `<div class="pipe-empty">No leads ${range}</div>`;
     return `<div class="pipe-col" id="pipe-col-day-${i}">
@@ -298,20 +291,36 @@ const Pipeline = {
         ? `<span class="pipe-age over" title="In ${esc(stage.label)} for ${age} — past your follow-up timing">${age} late</span>`
         : `<span class="pipe-age ${due === 'soon' ? 'soon' : ''}" title="In ${esc(stage.label)} for ${age}">${age}</span>`);
     // By-day cards lead with the stage (colored) instead of the source, plus a
-    // marker when the drip has already texted this lead.
+    // marker showing which day follow-ups have already been texted.
     const tag = o.timeView
       ? `<span class="pipe-src" style="color:${stage.color};border-color:${stage.color}55;background:${stage.color}14;">${esc(stage.label)}</span>`
-        + (l.dripLog && Object.keys(l.dripLog).length ? `<span class="pipe-src" style="color:var(--green);" title="Auto-texted: ${esc(Object.keys(l.dripLog).join(', '))}">auto-texted</span>` : '')
+        + (l.dripLog && Object.keys(l.dripLog).length ? `<span class="pipe-src" style="color:var(--green);" title="Follow-ups texted: ${esc(Object.keys(l.dripLog).map(k => 'day ' + k.slice(1)).join(', '))}">texted ${Object.keys(l.dripLog).length}×</span>` : '')
       : (src ? `<span class="pipe-src">${esc(src)}</span>` : '');
 
     const call = l.phone ? `<a class="pipe-act" href="tel:${esc(l.phone)}" onclick="event.stopPropagation()" title="Call" aria-label="Call">${this.ICONS.phone}</a>` : '';
-    const text = l.phone ? `<button class="pipe-act" onclick="event.stopPropagation();Pipeline.text('${l.id}')" title="Text" aria-label="Text">${this.ICONS.msg}</button>` : '';
     const lose = !stage.terminal ? `<button class="pipe-act pipe-lose" onclick="event.stopPropagation();Pipeline.markLost('${l.id}')" title="Mark lost" aria-label="Mark lost">${this.ICONS.x}</button>` : '';
-    const prev = this._backStage(l);
-    const back = prev ? `<button class="pipe-act" onclick="event.stopPropagation();Pipeline.moveBack('${l.id}',this)" title="Back to ${esc(prev.label)}" aria-label="Back to ${esc(prev.label)}">${this.ICONS.back}</button>` : '';
-    const advance = next
-      ? `<button class="pipe-advance" onclick="event.stopPropagation();Pipeline.advance('${l.id}',this)">${esc(next.label)} →</button>`
-      : `<button class="pipe-advance ghost" onclick="event.stopPropagation();Pipeline.openLead('${l.id}')">Details</button>`;
+
+    let actions;
+    if (o.timeView) {
+      // By-day cards: the primary action IS the day's text — one tap opens the
+      // owner's Messages app prefilled with that day's message (no auto-send).
+      const e = o.entry;
+      const texted = !!(e && l.dripLog && l.dripLog['d' + e.day]);
+      const primary = (l.phone && e && e.sms)
+        ? `<button class="pipe-advance ${texted ? 'ghost' : ''}" onclick="event.stopPropagation();Pipeline.dayText('${l.id}',${e.day})">${texted ? 'Texted — send again' : `Text day-${e.day} message`}</button>`
+        : (l.phone
+          ? `<button class="pipe-advance" onclick="event.stopPropagation();Pipeline.text('${l.id}')">Text</button>`
+          : `<button class="pipe-advance ghost" onclick="event.stopPropagation();Pipeline.openLead('${l.id}')">Details</button>`);
+      actions = `${call}${lose}${primary}`;
+    } else {
+      const text = l.phone ? `<button class="pipe-act" onclick="event.stopPropagation();Pipeline.text('${l.id}')" title="Text" aria-label="Text">${this.ICONS.msg}</button>` : '';
+      const prev = this._backStage(l);
+      const back = prev ? `<button class="pipe-act" onclick="event.stopPropagation();Pipeline.moveBack('${l.id}',this)" title="Back to ${esc(prev.label)}" aria-label="Back to ${esc(prev.label)}">${this.ICONS.back}</button>` : '';
+      const advance = next
+        ? `<button class="pipe-advance" onclick="event.stopPropagation();Pipeline.advance('${l.id}',this)">${esc(next.label)} →</button>`
+        : `<button class="pipe-advance ghost" onclick="event.stopPropagation();Pipeline.openLead('${l.id}')">Details</button>`;
+      actions = `${call}${text}${lose}${back}${advance}`;
+    }
 
     return `<div class="pipe-card ${due === 'over' ? 'overdue' : ''}" onclick="Pipeline.openLead('${l.id}')">
       <div class="pipe-card-top">
@@ -319,8 +328,27 @@ const Pipeline = {
         ${ageChip}
       </div>
       <div class="pipe-card-sub">${tag}<span class="t" title="${esc(sub)}">${esc(sub)}</span>${money}</div>
-      <div class="pipe-card-actions">${call}${text}${lose}${back}${advance}</div>
+      <div class="pipe-card-actions">${actions}</div>
     </div>`;
+  },
+
+  // One-tap day follow-up: opens iPhone Messages prefilled with the day's
+  // template (merge fields resolved), then stamps the lead so the card flips to
+  // "Texted" — same manual sms: flow as everywhere else, nothing auto-sends.
+  dayText(id, day) {
+    const l = this._leads.find(x => x.id === id);
+    if (!l || !l.phone) { toast('No phone number on file', 'warning'); return; }
+    const entry = this.days().find(e => e.day === day);
+    if (!entry || !entry.sms) return this.text(id);
+    const first = String(l.name || '').trim().split(/\s+/)[0];
+    const body = entry.sms
+      .replace(/\{first\}/gi, first || 'there')
+      .replace(/\{name\}/gi, l.name || 'there')
+      .replace(/\{shop\}/gi, (Shop.settings && Shop.settings.shopName) || '');
+    _cpSms(l.phone, body);
+    db.leads.update(id, { dripDay: day, by: (Auth.getName && Auth.getName()) || '' })
+      .then(() => this.render())
+      .catch(() => {});
   },
 
   setSource(s) { this._source = s; this.render(); },
@@ -553,7 +581,6 @@ const Pipeline = {
   // ── Follow-up days editor (By-day columns + per-day auto-texts) ─────────────
   daysModal() {
     this._dEdit = this.days().map(e => ({ ...e }));
-    this._dOn = this.dripEnabled();
     this._dRender();
   },
   _dRender() {
@@ -571,20 +598,12 @@ const Pipeline = {
       <div class="modal-title">Follow-up days</div>
       <div style="font-size:13px;color:var(--muted);margin:-6px 0 14px;line-height:1.5;">
         The columns of the By-day view — add as many as you want. Give a day a
-        message and it texts the lead automatically when they reach that day.
-        Only leads you're still chasing get texted (never booked, won, or lost),
-        once per day marker, between 9am–7pm.
+        message and every lead in that column gets a one-tap
+        <strong>Text day-N message</strong> button that opens your Messages app
+        with it prefilled — you hit send, nothing sends itself.
       </div>
       ${rows}
       <button class="btn btn-full" onclick="Pipeline.dAdd()" style="margin-top:2px;">+ Add a day</button>
-      <label class="pipe-ed-win" style="justify-content:flex-start;margin:12px 0 4px;font-size:13px;color:var(--text);">
-        <input type="checkbox" id="dd-on" ${this._dOn ? 'checked' : ''}> Send auto-texts automatically
-      </label>
-      <div style="font-size:12px;color:var(--faint);line-height:1.5;margin-bottom:4px;">
-        Sends from your tracking number — replies land there, not in your iPhone
-        thread, so write messages that invite a call. Leads already past a day
-        when you turn this on are skipped, never blasted.
-      </div>
       <div class="modal-actions">
         <button class="btn btn-primary btn-full" onclick="Pipeline.saveDays(this)">Save days</button>
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
@@ -597,8 +616,6 @@ const Pipeline = {
       const s = document.getElementById('dd-sms-' + i);
       if (s) e.sms = s.value.trim().slice(0, 320);
     });
-    const on = document.getElementById('dd-on');
-    if (on) this._dOn = on.checked;
   },
   dAdd() {
     this._dSync();
@@ -621,11 +638,12 @@ const Pipeline = {
     if (!touchDays.length) touchDays = [{ day: 1, sms: '' }];
     disableBtn(btn);
     try {
-      const pipeline = { ...((Shop.settings && Shop.settings.pipeline) || {}), touchDays, dripEnabled: this._dOn };
+      // dripEnabled forced off: day messages are one-tap manual sends only.
+      const pipeline = { ...((Shop.settings && Shop.settings.pipeline) || {}), touchDays, dripEnabled: false };
       await db.settings.save({ pipeline });
       Shop.settings.pipeline = pipeline;
       Modal.close();
-      toast(this._dOn ? 'Days saved — auto-texts on' : 'Days saved');
+      toast('Days saved');
       this.render();
     } catch (e) {
       enableBtn(btn);
