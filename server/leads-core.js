@@ -12,6 +12,22 @@ const { master, shopHelpers, genId } = require('./db');
 const { notifyNewLead } = require('./email');
 const { sendPush } = require('./push-instance');
 
+// How long after alerting on a lead a re-submit of the same lead stays quiet.
+// Covers the site's two-stage post (partial + final) and integration retries;
+// long enough to swallow a visitor who resubmits after a typo, short enough
+// that someone inquiring again later still gets through. Minutes, tunable in
+// prod without a deploy.
+const NOTIFY_COOLDOWN_MS = (Number(process.env.LEAD_NOTIFY_COOLDOWN_MIN) || 15) * 60 * 1000;
+
+// A re-submit of the same inquiry repeats most of its note lines (service,
+// vehicle, timeline) and adds a few (requested appointment, photos). Merge
+// line-wise so the lead reads as one note instead of the same block twice.
+function mergeNotes(prev, next) {
+  const seen = new Set(String(prev || '').split('\n').map(l => l.trim()).filter(Boolean));
+  const add = String(next || '').split('\n').map(l => l.trim()).filter(l => l && !seen.has(l));
+  return [prev, ...add].filter(Boolean).join('\n');
+}
+
 // db/shop: the target shop's lowdb handle + master shop record.
 // f: { name, phone, email, notes, vehicle, servicesInterested, utm, source, referrer }
 // Returns { lead, isNew }.
@@ -45,7 +61,7 @@ function upsertLead(db, shop, f = {}) {
     if (email) lead.email = email;
     if (vehicle) lead.vehicle = vehicle;
     if (servicesInterested.length) lead.servicesInterested = servicesInterested;
-    if (notes) lead.notes = [lead.notes, notes].filter(Boolean).join('\n');
+    if (notes) lead.notes = mergeNotes(lead.notes, notes);
     if (utm) lead.utm = utm;                 // latest campaign, for reference
     lead.formSubmits = (lead.formSubmits || 0) + 1;
     lead.lastContactAt = now;
@@ -59,23 +75,37 @@ function upsertLead(db, shop, f = {}) {
       stageChangedAt: now,   // pipeline time-in-stage baseline
     };
   }
+  // One inquiry, one alert. A single website inquiry legitimately posts more
+  // than once — the site captures the lead as soon as contact details are valid
+  // (speed-to-lead) and posts again with the appointment request at the end —
+  // and Make/Zapier retries and double-tapped submit buttons do the same. The
+  // lead is already deduped by phone above; without this the owner's phone
+  // buzzed once per POST. Re-submits inside the window are recorded silently
+  // (formSubmits, merged notes) and the owner sees the full picture in the CRM;
+  // a genuine second inquiry hours later still alerts, as "submitted again".
+  const lastNotified = lead.notifiedAt ? Date.parse(lead.notifiedAt) : 0;
+  const quiet = lastNotified && (Date.now() - lastNotified) < NOTIFY_COOLDOWN_MS;
+  if (!quiet) lead.notifiedAt = now;
+
   h.upsert('leads', lead);
   master.get('shops').find({ id: shop.id }).assign({ lastActivity: now }).write();
 
-  // Owner email ping (fire-and-forget — a mail failure never breaks the write).
-  notifyNewLead({ shop, settings: s, lead, kind: existing ? 'form-repeat' : 'form' });
+  if (!quiet) {
+    // Owner email ping (fire-and-forget — a mail failure never breaks the write).
+    notifyNewLead({ shop, settings: s, lead, kind: existing ? 'form-repeat' : 'form' });
 
-  // Mobile push to the owner's phone (free, instant) — mirrors the email.
-  const veh = lead.vehicle && [lead.vehicle.year, lead.vehicle.make, lead.vehicle.model].filter(Boolean).join(' ');
-  sendPush(shop.id, {
-    title: `🔔 New lead — ${lead.name || lead.phone || 'website'}`,
-    body: [lead.phone, veh, (lead.servicesInterested || []).join(', '), lead.source && `via ${lead.source}`]
-      .filter(Boolean).join(' · '),
-    url: '/pipeline',
-    tag: `lead-${lead.id}`,
-  }).catch(e => console.error('Lead push failed:', e.message));
+    // Mobile push to the owner's phone (free, instant) — mirrors the email.
+    const veh = lead.vehicle && [lead.vehicle.year, lead.vehicle.make, lead.vehicle.model].filter(Boolean).join(' ');
+    sendPush(shop.id, {
+      title: `🔔 New lead — ${lead.name || lead.phone || 'website'}`,
+      body: [lead.phone, veh, (lead.servicesInterested || []).join(', '), lead.source && `via ${lead.source}`]
+        .filter(Boolean).join(' · '),
+      url: '/pipeline',
+      tag: `lead-${lead.id}`,
+    }).catch(e => console.error('Lead push failed:', e.message));
+  }
 
-  return { lead, isNew: !existing };
+  return { lead, isNew: !existing, notified: !quiet };
 }
 
 // ── Contact-field resolution (Meta/Make robustness) ───────────────────────────
