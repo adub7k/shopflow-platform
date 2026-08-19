@@ -215,8 +215,8 @@
     try {
       [this._data, this._services] = await Promise.all([db.quotes.all(), db.services.all()]);
       const open = this._data.filter(q => q.status === 'sent');
-      const won = this._data.filter(q => q.status === 'approved' || q.status === 'scheduled');
-      const decided = won.length + this._data.filter(q => q.status === 'declined').length;
+      const won = this._data.filter(q => ['approved', 'scheduled', 'completed'].includes(q.status));
+      const decided = won.length + this._data.filter(q => ['declined', 'lost'].includes(q.status)).length;
       const rate = decided ? Math.round(won.length / decided * 100) : null;
 
       const html = [];
@@ -226,18 +226,18 @@
 
       html.push(`<div class="v2-mgrid" style="grid-template-columns:repeat(3,1fr);">
         <div class="metric-card"><div class="metric-label">Awaiting response</div><div class="metric-value">${fmtMoney(open.reduce((s, q) => s + (Number(q.total) || 0), 0))}</div><div class="metric-sub">${open.length} estimate${open.length !== 1 ? 's' : ''} out</div></div>
-        <div class="metric-card"><div class="metric-label">Approved value</div><div class="metric-value green">${fmtMoney(won.reduce((s, q) => s + (Number(q.total) || 0), 0))}</div><div class="metric-sub">${won.length} approved or scheduled</div></div>
+        <div class="metric-card"><div class="metric-label">Won value</div><div class="metric-value green">${fmtMoney(won.reduce((s, q) => s + (Number(q.total) || 0), 0))}</div><div class="metric-sub">${won.length} approved, scheduled or completed</div></div>
         <div class="metric-card"><div class="metric-label">Acceptance rate</div><div class="metric-value">${rate != null ? rate + '%' : '—'}</div><div class="metric-sub">of decided estimates</div></div></div>`);
 
-      const tabs = [['', 'All'], ['sent', 'Sent'], ['approved', 'Approved'], ['scheduled', 'Scheduled'], ['declined', 'Declined']];
+      const tabs = [['open', 'Open'], ['sent', 'Sent'], ['approved', 'Approved'], ['scheduled', 'Scheduled'], ['completed', 'Completed'], ['lost', 'Lost'], ['', 'All']];
       html.push(`<div class="v2-chips" style="margin-bottom:12px;">${tabs.map(([v, lb]) =>
         `<button class="v2-chip${this._filter === v ? ' on' : ''}" onclick="Quotes._filter='${v}';Quotes.render()">${lb}</button>`).join('')}</div>`);
 
-      const filtered = this._data.filter(q => !this._filter || q.status === this._filter);
+      const filtered = this._data.filter(q => this._matches(q, this._filter));
       if (!filtered.length) {
         html.push(`<div class="v2-card"><div class="empty-state"><div class="empty-icon">📄</div>
-          <div class="empty-text">No estimates${this._filter ? ' here' : ' yet'}</div>
-          ${!this._filter && canWrite() ? '<div class="list-sub" style="margin-top:2px;">Create one to quote a ceramic, PPF, or correction job.</div>' : ''}</div></div>`);
+          <div class="empty-text">No ${this._filter === 'open' && this._data.length ? 'open ' : ''}estimates${this._data.length ? ' here' : ' yet'}</div>
+          ${!this._data.length && canWrite() ? '<div class="list-sub" style="margin-top:2px;">Create one to quote a ceramic, PPF, or correction job.</div>' : ''}</div></div>`);
       } else {
         html.push(`<div class="v2-card v2-tablewrap"><table class="v2-table">
           <thead><tr><th>Estimate</th><th>Customer</th><th>Vehicle</th><th class="r">Items</th><th class="r">Total</th><th>Status</th></tr></thead><tbody>`);
@@ -440,10 +440,15 @@
       const reviews = data.reviews || [];
       const st = data.stats || { count: 0, avg: 0, dist: [0, 0, 0, 0, 0] };
       const link = location.origin + '/review/' + (Auth.getShopSlug() || '');
+      // Text requests send the Google link when Settings has one — show that as
+      // the link to copy, with the in-app rating page (which feeds the stars
+      // below) as the secondary.
+      const google = ((Shop.settings && Shop.settings.googleReviewLink) || '').trim();
+      const primary = google || link;
       const html = [];
 
       html.push(`<div class="v2-pagehd"><div><h1>Reviews</h1><div class="sub">Collect ratings through your review link and feature the best on your booking page</div></div>
-        <div class="sp"></div><button class="btn" onclick="navigator.clipboard.writeText('${esc(link)}');toast('Review link copied ✓')">Copy review link</button></div>`);
+        <div class="sp"></div><button class="btn" onclick="navigator.clipboard.writeText('${esc(primary)}');toast('Review link copied ✓')">Copy review link</button></div>`);
 
       html.push(`<div class="v2-card"><div style="display:flex;gap:26px;align-items:center;padding:18px 20px;flex-wrap:wrap;">`);
       if (st.count) {
@@ -463,10 +468,10 @@
         html.push(`<div style="flex:1;text-align:center;padding:8px 0;"><div style="font-size:28px;margin-bottom:6px;">⭐</div>
           <div style="font-weight:650;">No reviews yet</div><div style="font-size:12.5px;color:var(--muted);margin-top:2px;">Share your review link to start collecting feedback.</div></div>`);
       }
-      html.push(`<div style="min-width:230px;flex:1;"><div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">Your review link</div>
-        <div style="display:flex;gap:6px;"><input class="form-input" readonly value="${esc(link)}" style="flex:1;font-size:11.5px;height:32px;" onclick="this.select()" />
-        <button class="btn btn-sm btn-green" style="height:32px;" onclick="navigator.clipboard.writeText('${esc(link)}');toast('Link copied ✓')">Copy</button></div>
-        <div style="font-size:11px;color:var(--faint);margin-top:5px;">Send after a visit — they rate you in seconds.</div></div></div></div>`);
+      html.push(`<div style="min-width:230px;flex:1;"><div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">${google ? 'Your Google review link' : 'Your review link'}</div>
+        <div style="display:flex;gap:6px;"><input class="form-input" readonly value="${esc(primary)}" style="flex:1;font-size:11.5px;height:32px;" onclick="this.select()" />
+        <button class="btn btn-sm btn-green" style="height:32px;" onclick="navigator.clipboard.writeText('${esc(primary)}');toast('Link copied ✓')">Copy</button></div>
+        <div style="font-size:11px;color:var(--faint);margin-top:5px;">${google ? 'This is what the text requests below send. In-app rating page: ' + esc(link) : 'Send after a visit — they rate you in seconds. Add a Google review link in Settings to send clients straight to Google.'}</div></div></div></div>`);
 
       const done = (appts || []).filter(a => a.status === 'done' && a.customerPhone && !a.reviewId)
         .sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 6);
