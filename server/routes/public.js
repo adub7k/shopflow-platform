@@ -267,6 +267,9 @@ router.post('/api/public/:shopSlug/quote/:quoteId/approve', (req, res) => {
     const q = h.getById('quotes', req.params.quoteId);
     if (!q) return res.status(404).json({ ok: false, error: 'Quote not found' });
     if (q.status === 'declined') return res.status(400).json({ ok: false, error: 'This estimate was already declined.' });
+    // The shop already closed this one out as done — an old link shouldn't
+    // reopen it. ('lost' stays approvable: a late yes is still a win.)
+    if (q.status === 'completed') return res.status(400).json({ ok: false, error: 'This estimate has already been completed. Please contact the shop.' });
     const s = ctx.db.get('settings').value() || {};
     const stripeReady = !!(s.stripe && s.stripe.connectAccountId && s.stripe.onboardingComplete);
     const paymentsReady = squareConnected(s) || stripeReady;
@@ -279,7 +282,8 @@ router.post('/api/public/:shopSlug/quote/:quoteId/approve', (req, res) => {
     // a deposit is still owed, leave the status as-is and signal the client to
     // collect it — the Stripe success callback flips the quote to 'approved'.
     if (!depositOutstanding && q.status !== 'approved' && q.status !== 'scheduled') {
-      q.status = 'approved'; q.approvedAt = new Date().toISOString(); h.upsert('quotes', q);
+      // A late yes on one the shop wrote off clears the close-out stamp too.
+      q.status = 'approved'; q.approvedAt = new Date().toISOString(); q.lostAt = null; h.upsert('quotes', q);
       // An approved estimate is a real client — create/link their CRM profile.
       try { ensureQuoteCustomer(h, q); } catch (e) {}
     }
@@ -294,7 +298,8 @@ router.post('/api/public/:shopSlug/quote/:quoteId/decline', (req, res) => {
     const h = shopHelpers(ctx.db);
     const q = h.getById('quotes', req.params.quoteId);
     if (!q) return res.status(404).json({ ok: false, error: 'Quote not found' });
-    if (q.status !== 'scheduled') { q.status = 'declined'; q.declinedAt = new Date().toISOString(); h.upsert('quotes', q); }
+    // Scheduled or already closed out by the shop — leave the record alone.
+    if (q.status !== 'scheduled' && q.status !== 'completed') { q.status = 'declined'; q.declinedAt = new Date().toISOString(); h.upsert('quotes', q); }
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ ok: false, error: 'Server error' }); }
 });

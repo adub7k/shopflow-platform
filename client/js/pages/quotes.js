@@ -2,13 +2,36 @@
 // Send a customer a line-item estimate for high-ticket work; they approve (and
 // optionally pay a deposit) on a public page, then the shop schedules it.
 const Quotes = {
-  _data: [], _services: [], _filter: '', _lines: [],
+  _data: [], _services: [], _filter: 'open', _lines: [],
+
+  // Lifecycle: sent → approved → scheduled, then the owner closes it out as
+  // 'completed' (work done) or 'lost' (didn't get it). 'declined' is the same
+  // dead end but reached by the customer on the public page, so both file under
+  // "Lost" in the UI. Closed estimates drop off the default Open list and can be
+  // reopened if closed by mistake.
+  STATUS_META: {
+    sent:      { label:'Sent',      cls:'badge-yellow' },
+    approved:  { label:'Approved',  cls:'badge-green'  },
+    scheduled: { label:'Scheduled', cls:'badge-blue'   },
+    completed: { label:'Completed', cls:'badge-green'  },
+    declined:  { label:'Declined',  cls:'badge-red'    },
+    lost:      { label:'Lost',      cls:'badge-gray'   },
+  },
+  CLOSED_STATUSES: ['completed','declined','lost'],
+  isClosed(st){ return this.CLOSED_STATUSES.includes(st); },
+  // Tab value → predicate. 'open' is everything still in play; 'lost' groups the
+  // owner's close-out with the customer's decline.
+  _matches(q, filter){
+    if(!filter) return true;                               // All
+    if(filter==='open') return !this.isClosed(q.status);
+    if(filter==='lost') return q.status==='lost' || q.status==='declined';
+    return q.status===filter;
+  },
 
   _vkey(fieldKey){ return fieldKey.replace(/^vehicle/,'').toLowerCase(); },
   _badge(st){
-    const m={sent:'badge-yellow',approved:'badge-green',scheduled:'badge-blue',declined:'badge-red'};
-    const lb={sent:'Sent',approved:'Approved',scheduled:'Scheduled',declined:'Declined'};
-    return `<span class="badge ${m[st]||'badge-gray'}" style="margin-top:3px;">${lb[st]||st}</span>`;
+    const m=this.STATUS_META[st]||{};
+    return `<span class="badge ${m.cls||'badge-gray'}" style="margin-top:3px;">${m.label||st}</span>`;
   },
   // Delivery/open indicator for an emailed estimate. Empty until it's been
   // emailed; then shows whether the customer has opened it (tracking pixel).
@@ -29,13 +52,17 @@ const Quotes = {
       [this._data, this._services] = await Promise.all([db.quotes.all(), db.services.all()]);
       const html=[];
       html.push(`<div class="section-header"><span>Estimates</span>${canWrite()?'<button class="btn btn-sm btn-green" onclick="Quotes.openForm(null)">+ New</button>':''}</div>`);
-      const tabs=[['','All'],['sent','Sent'],['approved','Approved'],['scheduled','Scheduled'],['declined','Declined']];
+      const tabs=[['open','Open'],['sent','Sent'],['approved','Approved'],['scheduled','Scheduled'],['completed','Completed'],['lost','Lost'],['','All']];
       html.push('<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:14px;padding-bottom:2px;">');
-      tabs.forEach(([v,lb])=>html.push(`<button class="btn btn-sm${this._filter===v?' btn-primary':''}" style="white-space:nowrap;" onclick="Quotes._filter='${v}';Quotes.render()">${lb}</button>`));
+      tabs.forEach(([v,lb])=>{
+        const n=this._data.filter(q=>this._matches(q,v)).length;
+        html.push(`<button class="btn btn-sm${this._filter===v?' btn-primary':''}" style="white-space:nowrap;" onclick="Quotes._filter='${v}';Quotes.render()">${lb}${n?` <span style="opacity:.6;">${n}</span>`:''}</button>`);
+      });
       html.push('</div>');
-      const filtered=this._data.filter(q=>!this._filter||q.status===this._filter);
+      const filtered=this._data.filter(q=>this._matches(q,this._filter));
       if(!filtered.length){
-        html.push(`<div class="card"><div class="empty-state"><div class="empty-icon">📄</div><div class="empty-text">No estimates${this._filter?' here':' yet'}</div>${!this._filter&&canWrite()?'<div class="empty-sub">Create one to quote a ceramic, PPF, or correction job.</div>':''}</div></div>`);
+        const none=!this._data.length;   // nothing at all vs. nothing in this tab
+        html.push(`<div class="card"><div class="empty-state"><div class="empty-icon">📄</div><div class="empty-text">No ${this._filter==='open'&&!none?'open ':''}estimates${none?' yet':' here'}</div>${none&&canWrite()?'<div class="empty-sub">Create one to quote a ceramic, PPF, or correction job.</div>':''}</div></div>`);
       } else {
         html.push('<div class="list-card">');
         filtered.forEach(q=>{
@@ -183,6 +210,7 @@ const Quotes = {
         <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${this._badge(q.status)} ${q.depositPaid?'<span class="badge badge-green">Deposit paid</span>':''}${this._openTag(q)}</div>
         ${q.emailSentAt?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">${q.emailOpenedAt?'Customer opened the email':'Emailed — not opened yet'}${(q.reminderCount||0)>0?` · ${q.reminderCount} reminder${q.reminderCount>1?'s':''} sent`:''}</div>`:''}
         ${q.smsSentAt?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">📱 Texted ${(()=>{try{return new Date(q.smsSentAt).toLocaleDateString(undefined,{month:'short',day:'numeric'});}catch(e){return '';}})()}</div>`:''}
+        ${this.isClosed(q.status)?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">Closed out as ${esc((this.STATUS_META[q.status]||{}).label||q.status).toLowerCase()}${(()=>{const d=q.completedAt||q.lostAt||q.declinedAt;try{return d?' · '+new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'';}catch(e){return '';}})()}</div>`:''}
       </div>
       <div class="list-card" style="margin-bottom:14px;">
         ${(q.lineItems||[]).map(l=>`<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:14px;">${esc(l.name)}</div></div><div style="font-weight:700;">${fmtMoney(l.price)}</div></div>`).join('')}
@@ -197,6 +225,9 @@ const Quotes = {
         ${(q.customerPhone||q.customerId)?`<button class="btn btn-full" onclick="Quotes.sendLink('${q.id}')">📱 Text to customer</button>`:''}
         ${q.status==='approved'?`<button class="btn btn-green btn-full" onclick="Quotes.schedule('${q.id}')">📅 Schedule appointment</button>`:''}
         ${q.status==='sent'?`<button class="btn btn-full" onclick="Quotes.mark('${q.id}','approved')">Mark approved</button>`:''}
+        ${canWrite()&&!this.isClosed(q.status)?`<button class="btn btn-green btn-full" onclick="Quotes.mark('${q.id}','completed')">✓ Close out — completed</button>`:''}
+        ${canWrite()&&!this.isClosed(q.status)?`<button class="btn btn-full" onclick="Quotes.mark('${q.id}','lost')">✕ Close out — lost</button>`:''}
+        ${canWrite()&&this.isClosed(q.status)?`<button class="btn btn-full" onclick="Quotes.reopen('${q.id}')">↩ Reopen estimate</button>`:''}
         ${canWrite()?`<button class="btn btn-full" onclick="Quotes.openForm('${q.id}')">Edit</button>`:''}
         ${canWrite()?`<button class="btn btn-danger btn-full" onclick="Quotes.delete('${q.id}')">Delete</button>`:''}
         <button class="btn btn-full" onclick="Modal.close()">Close</button>
@@ -223,7 +254,16 @@ const Quotes = {
     catch(e){ toast(e.message||'Could not send','error'); }
   },
   async mark(id, status){
-    try{ await db.quotes.save({id,status}); Modal.close(); toast('Marked '+status+' ✓'); await this.render(); }
+    const lb=(this.STATUS_META[status]||{}).label||status;
+    try{ await db.quotes.save({id,status}); Modal.close(); toast('Marked '+lb.toLowerCase()+' ✓'); await this.render(); }
+    catch(e){ toast('Could not update','error'); }
+  },
+  // Undo a close-out: back to where the estimate actually got to, so a mis-click
+  // doesn't dump a scheduled job back into "Sent".
+  async reopen(id){
+    const q=this._data.find(x=>x.id===id); if(!q)return;
+    const status = (q.appointmentId || q.scheduledAt) ? 'scheduled' : (q.approvedAt ? 'approved' : 'sent');
+    try{ await db.quotes.save({id,status}); Modal.close(); toast('Estimate reopened ✓'); await this.render(); }
     catch(e){ toast('Could not update','error'); }
   },
   schedule(id){

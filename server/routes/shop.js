@@ -538,6 +538,22 @@ router.post('/api/shop/quotes', requireAuth, requireRole('full','technician'), s
   // profile exists + is linked. Idempotent — no-op once customerId resolves.
   const merged = h.getById('quotes', q.id);
   if (merged && merged.status === 'approved') { try { ensureQuoteCustomer(h, merged); } catch (e) {} }
+  // Owner closed the estimate out ('completed' = work won, 'lost' = it died) or
+  // reopened it. Stamp the transition server-side so reporting can tell won work
+  // from dead work, and clear the stamps on a reopen.
+  if (merged && typeof q.status === 'string') {
+    const now = new Date().toISOString();
+    const stamp = {};
+    if (q.status === 'completed') { if (!merged.completedAt) stamp.completedAt = now; }
+    else if (q.status === 'lost') { if (!merged.lostAt)      stamp.lostAt      = now; }
+    else if (q.status === 'scheduled' && !merged.scheduledAt) { stamp.scheduledAt = now; }
+    if (!['completed','lost','declined'].includes(q.status)) {
+      if (merged.completedAt) stamp.completedAt = null;
+      if (merged.lostAt)      stamp.lostAt      = null;
+      if (merged.declinedAt)  stamp.declinedAt  = null;
+    }
+    if (Object.keys(stamp).length) h.upsert('quotes', { id: merged.id, ...stamp });
+  }
   res.json({ id: q.id, number: q.number });
 }));
 router.delete('/api/shop/quotes/:id', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {

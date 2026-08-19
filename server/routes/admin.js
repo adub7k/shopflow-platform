@@ -158,8 +158,10 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
     .reduce((s, a) => s + (Number(a.price) || 0), 0);
   const approvedEstimates = quotes.filter(q => q.status === 'approved').reduce((s, q) => s + (Number(q.total) || 0), 0);
   const openEstimates     = quotes.filter(q => q.status === 'sent').reduce((s, q) => s + (Number(q.total) || 0), 0);
-  const decided = quotes.filter(q => ['approved', 'scheduled', 'declined'].includes(q.status));
-  const wonQuotes = quotes.filter(q => ['approved', 'scheduled'].includes(q.status));
+  // 'completed' = the shop closed the work out as won; 'lost' = they closed it
+  // out as dead (the owner-side twin of a customer 'declined'). Both are decided.
+  const decided = quotes.filter(q => ['approved', 'scheduled', 'completed', 'declined', 'lost'].includes(q.status));
+  const wonQuotes = quotes.filter(q => ['approved', 'scheduled', 'completed'].includes(q.status));
   // Accept rate: the owner's manual override wins (they know their real-world
   // close rate); else this shop's computed estimate history; else 50%.
   const computedAccept = decided.length ? Math.round(wonQuotes.length / decided.length * 100) : null;
