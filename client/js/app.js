@@ -84,6 +84,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     Shop.settings = s; Shop.industry = s.industry||'barbershop'; Shop.vocab = s.vocab||{}; Shop.fields = s.customFields||[]; Shop.statuses = s.statuses||[]; Shop.sizes = s.vehicleSizes||[]; Shop.addons = s.addons||[]; Shop.membershipPlans = s.membershipPlans||[]; Shop.serviceCategories = s.serviceCategories||[]; Shop.supportsQuotes = !!s.supportsQuotes; Shop.tax = s.tax||{enabled:false,rate:0,label:'Sales Tax'};
     const tt=document.getElementById('topbar-title'); if(tt)tt.textContent=s.shopName||'ShopFlow';
     const sn=document.getElementById('sidebar-shop-name'); if(sn&&s.shopName)sn.textContent=s.shopName;
+    // Who's signed in + Sign out, in the sidebar footer. Sign-out also lives in
+    // Settings, but technicians and view-only staff can't open Settings — this is
+    // their only way off the device.
+    const un=document.getElementById('sidebar-user-name');
+    const ur=document.getElementById('sidebar-user-role');
+    if(un)un.textContent=Auth.getName()||'Signed in';
+    if(ur)ur.textContent={full:'Owner',technician:'Technician',viewonly:'View only'}[Auth.getRole()]||'';
     const ts=document.getElementById('topbar-sub');   if(ts&&s.tagline)ts.textContent=s.tagline;
 
     // Build the grouped, industry-aware sidebar from the nav registry, then apply

@@ -58,6 +58,13 @@
     </div>
     <div id="sidebar-nav"></div>
     <div id="sidebar-footer">
+      <div id="sidebar-user" style="display:flex;align-items:center;gap:8px;margin-bottom:9px;text-align:left;">
+        <div style="flex:1;min-width:0;">
+          <div id="sidebar-user-name" style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Signed in</div>
+          <div id="sidebar-user-role" style="font-size:11px;color:var(--faint);"></div>
+        </div>
+        <button class="btn btn-sm" onclick="Auth.logout()" title="Sign out">Sign out</button>
+      </div>
       <div style="font-size:11px;color:var(--faint);">Powered by <strong style="color:var(--green);">ShopFlow</strong></div>
     </div>
   </div>
