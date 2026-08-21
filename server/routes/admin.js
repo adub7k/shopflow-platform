@@ -199,8 +199,12 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
     billing: { rate: shopRate(shop) },
   };
 
+  // metaPageToken is a long-lived Meta page access token — never ship it to the
+  // browser. Same stance as settings.twilio.authToken / emailSmtp.pass in
+  // routes/shop.js: the panel only needs to know whether one is configured.
+  const shopSafe = { ...shop, metaPageToken: undefined, metaPageTokenSet: !!shop.metaPageToken };
   res.json({
-    shop, settings: { shopName: settings.shopName, tagline: settings.tagline, phone: settings.phone, address: settings.address, bookingEnabled: settings.bookingEnabled, accentColor: settings.accentColor, googleReviewLink: settings.googleReviewLink, loyalty: settings.loyalty, deposit: settings.deposit, stripeConnected: !!(settings.stripe?.connectAccountId && settings.stripe?.onboardingComplete), squareConnected: !!((settings.square && settings.square.accessToken) ), twilioConfigured: !!(twilioClient && shopFromNumber(shop.id)) },
+    shop: shopSafe, settings: { shopName: settings.shopName, tagline: settings.tagline, phone: settings.phone, address: settings.address, bookingEnabled: settings.bookingEnabled, accentColor: settings.accentColor, googleReviewLink: settings.googleReviewLink, loyalty: settings.loyalty, deposit: settings.deposit, stripeConnected: !!(settings.stripe?.connectAccountId && settings.stripe?.onboardingComplete), squareConnected: !!((settings.square && settings.square.accessToken) ), twilioConfigured: !!(twilioClient && shopFromNumber(shop.id)) },
     barbers, services,
     stats: { totalCustomers: customers.length, totalAppointments: appointments.length, apptThisMonth, activeBarbers: barbers.filter(b => b.active !== false).length },
     recentAppointments: recentAppts,
@@ -234,7 +238,9 @@ router.post('/api/admin/shops/create', requireAdmin, async (req, res) => {
 router.patch('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   const shop = master.get('shops').find({ id: req.params.shopId }).value();
   if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
-  const allowed = ['plan', 'monthlyRate', 'monthlyQuota', 'estAcceptRate', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber', 'features', 'notes'];
+  // metaPageId routes inbound Meta lead-ad webhooks to this tenant; metaPageToken
+  // is that page's long-lived access token (falls back to META_PAGE_ACCESS_TOKEN).
+  const allowed = ['plan', 'monthlyRate', 'monthlyQuota', 'estAcceptRate', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber', 'metaPageId', 'metaPageToken', 'features', 'notes'];
   const updates = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
   // Custom rate: number, or null/'' to clear.
@@ -244,6 +250,17 @@ router.patch('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   // Manual estimate-accept-rate override (0–100); null/'' clears back to computed.
   if (updates.estAcceptRate !== undefined) updates.estAcceptRate = (updates.estAcceptRate === null || updates.estAcceptRate === '') ? null : Math.min(100, Math.max(0, Number(updates.estAcceptRate) || 0));
   if (updates.plan !== undefined) updates.plan = String(updates.plan).trim().slice(0, 40) || 'custom';
+  // Trimmed so a value pasted from the Meta dashboard with stray whitespace
+  // still matches the page_id on an inbound webhook. '' clears the mapping.
+  if (updates.metaPageId !== undefined) updates.metaPageId = String(updates.metaPageId || '').trim().slice(0, 40);
+  // The GET above returns the token blanked, so a client that echoes the profile
+  // back would otherwise wipe it. '' means "leave as-is"; clearing is explicit
+  // (send null). metaPageId has no such hazard — it's never redacted.
+  if (updates.metaPageToken !== undefined) {
+    if (updates.metaPageToken === null) updates.metaPageToken = '';
+    else if (!String(updates.metaPageToken).trim()) delete updates.metaPageToken;
+    else updates.metaPageToken = String(updates.metaPageToken).trim();
+  }
   master.get('shops').find({ id: req.params.shopId }).assign(updates).write();
   master.get('accounts').find({ id: shop.accountId }).assign(updates.plan ? { plan: updates.plan } : {}).assign(updates.active !== undefined ? { active: updates.active } : {}).write();
   res.json({ ok: true });

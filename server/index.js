@@ -46,7 +46,17 @@ app.use(cors({ origin: '*' }));
 // Stripe webhook needs the raw, unparsed body for signature verification, so it
 // must be mounted BEFORE express.json().
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), require('./routes/stripe').stripeWebhook);
-app.use(express.json({ limit: '5mb' }));
+// Meta's X-Hub-Signature-256 is an HMAC over the RAW bytes, so /webhooks/meta
+// needs the unparsed buffer. Capturing it in express.json's verify hook keeps
+// one JSON parser for the whole app (no ordering trap like the Stripe route
+// above), and the buffer is stashed for that path ONLY so ordinary requests
+// don't each retain a copy of their body.
+app.use(express.json({
+  limit: '5mb',
+  verify: (req, res, buf) => {
+    if (req.originalUrl && req.originalUrl.split('?')[0] === '/webhooks/meta') req.rawBody = buf;
+  },
+}));
 app.use(express.urlencoded({ extended: false })); // Twilio webhooks POST form-encoded
 app.use(express.static(CLIENT_DIR));
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '30d' }));
@@ -87,6 +97,9 @@ app.use(require('./routes/admin'));
 app.use(require('./routes/sales'));
 app.use(require('./routes/stripe'));
 app.use(require('./routes/square'));
+// Native Meta Lead Ads ingestion (GET verify handshake + POST leadgen). Mounted
+// after express.json so req.rawBody (above) and req.body are both available.
+app.use(require('./routes/meta-webhook'));
 
 // ── Website lead intake + Response Center + platform + push + automations ─────
 // Drop-in modules (docs/website-leads/) wired through server/integrations.js

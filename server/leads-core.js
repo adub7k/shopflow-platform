@@ -29,7 +29,8 @@ function mergeNotes(prev, next) {
 }
 
 // db/shop: the target shop's lowdb handle + master shop record.
-// f: { name, phone, email, notes, vehicle, servicesInterested, utm, source, referrer }
+// f: { name, phone, email, notes, vehicle, servicesInterested, utm, source, referrer,
+//      metaLeadgenId?, metaCustomFields? }
 // Returns { lead, isNew }.
 function upsertLead(db, shop, f = {}) {
   const h = shopHelpers(db);
@@ -45,6 +46,12 @@ function upsertLead(db, shop, f = {}) {
   const utm = (f.utm && Object.keys(f.utm).length) ? f.utm : null;
   const referrer = f.referrer || '';
   const source = (f.source || 'website');
+  // Native Meta lead-ads (routes/meta-webhook.js) pass the Graph leadgen_id so a
+  // re-delivery of the same lead can be recognised and skipped, plus whatever
+  // extra Instant Form answers the shop asked for. Both are optional — every
+  // other caller omits them and is unaffected.
+  const metaLeadgenId = f.metaLeadgenId || null;
+  const metaCustomFields = (f.metaCustomFields && Object.keys(f.metaCustomFields).length) ? f.metaCustomFields : null;
 
   // Dedupe by phone digits — an existing lead is enriched, not duplicated, so
   // re-running a recovery batch that overlaps leads already in the system is
@@ -63,6 +70,12 @@ function upsertLead(db, shop, f = {}) {
     if (servicesInterested.length) lead.servicesInterested = servicesInterested;
     if (notes) lead.notes = mergeNotes(lead.notes, notes);
     if (utm) lead.utm = utm;                 // latest campaign, for reference
+    // First leadgen_id wins: if this caller already exists as a website lead and
+    // then fills out a Meta form, the lead is stamped so the Meta side is
+    // idempotent from then on; a later, different Meta lead for the same phone
+    // doesn't overwrite the stamp (it's already deduped as one person).
+    if (metaLeadgenId && !lead.metaLeadgenId) lead.metaLeadgenId = metaLeadgenId;
+    if (metaCustomFields) lead.metaCustomFields = { ...(lead.metaCustomFields || {}), ...metaCustomFields };
     lead.formSubmits = (lead.formSubmits || 0) + 1;
     lead.lastContactAt = now;
   } else {
@@ -74,6 +87,8 @@ function upsertLead(db, shop, f = {}) {
       firstContactAt: now, lastContactAt: now, createdAt: now,
       stageChangedAt: now,   // pipeline time-in-stage baseline
     };
+    if (metaLeadgenId) lead.metaLeadgenId = metaLeadgenId;
+    if (metaCustomFields) lead.metaCustomFields = metaCustomFields;
   }
   // One inquiry, one alert. A single website inquiry legitimately posts more
   // than once — the site captures the lead as soon as contact details are valid
