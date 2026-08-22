@@ -171,6 +171,21 @@
     out.push(`<div class="v2-pagehd"><div><h1>Tasks</h1>
       <div class="sub">${total ? total + ' follow-up' + (total !== 1 ? 's' : '') + ' queued — win-backs, service due, uncontacted leads, tomorrow’s reminders' : 'Win-backs, service reminders, and uncontacted leads land here'}</div></div>
       <div class="sp"></div><button class="btn" onclick="Tasks.cadenceModal()">Edit cadence</button></div>`);
+    // 30-day Meta-lead sequence: metrics strip + enrollment prompt.
+    const fs = this._fuStats || {};
+    if (fs.entered || (this._fuUnenrolled || []).length) {
+      const rate = fs.entered ? Math.round((fs.booked / fs.entered) * 100) : 0;
+      const cell = (v, label, cls) => `<div style="flex:1;min-width:78px;"><div class="metric-value${cls ? ' ' + cls : ''}" style="font-size:20px;">${v}</div><div class="metric-sub">${label}</div></div>`;
+      out.push(`<div class="metric-card" style="margin-bottom:14px;">
+        <div class="metric-label">30-day sequence</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">
+          ${cell(fs.due || 0, 'due today')}${cell(fs.sentToday || 0, 'sent today')}${cell(fs.active || 0, 'in sequence')}${cell(fs.paused || 0, 'paused')}${cell((fs.booked || 0) + (fs.entered ? ' (' + rate + '%)' : ''), 'booked', 'green')}
+        </div>
+        ${(this._fuUnenrolled || []).length ? `<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+          <div style="flex:1;font-size:12.5px;color:var(--muted);">${this._fuUnenrolled.length} Meta lead${this._fuUnenrolled.length === 1 ? '' : 's'} not in the sequence yet.</div>
+          <button class="btn btn-sm btn-green" onclick="Tasks.fuEnrollAll(this)">Start sequence</button></div>` : ''}
+      </div>`);
+    }
     if (!total) {
       out.push(`<div class="v2-card"><div class="empty-state"><div class="empty-icon">✓</div>
         <div class="empty-text">You’re all caught up</div>
@@ -187,6 +202,26 @@
   };
 
   Tasks._card = function (t) {
+    // 30-day sequence rows: the step is the task — one green button sends it.
+    if (t.source === 'sequence') {
+      const acts = [
+        `<button class="btn btn-sm btn-green" onclick="Tasks.fuSend('${t.id}')">Send follow-up</button>`,
+        t.phone ? `<button class="btn btn-sm" onclick="Tasks.call('${t.id}')">Call</button>` : '',
+        `<button class="btn btn-sm" onclick="Tasks.fuMark('${t.id}','replied')">Replied</button>`,
+        `<button class="btn btn-sm" onclick="Tasks.fuMark('${t.id}','skip')">Skip</button>`,
+      ].filter(Boolean).join('');
+      return `<div class="list-row" style="align-items:flex-start;">
+        <span onclick="Tasks.fuOpen('${t.id}')" style="cursor:pointer;">${avatarEl(t.name, 36)}</span>
+        <div class="list-main">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;" onclick="Tasks.fuOpen('${t.id}')">
+            <span class="list-name">${esc(t.name)}</span>
+            <span class="badge badge-yellow">${esc(t.step.label)}</span>
+            <span style="font-size:11.5px;font-weight:700;color:${t.detail === 'Due today' ? 'var(--green-deep,var(--green))' : 'var(--red)'};">${esc(t.detail)}</span>
+          </div>
+          ${t.reason ? `<div class="list-sub">${esc(t.reason)}</div>` : ''}
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${acts}</div>
+        </div></div>`;
+    }
     const SRC = {
       winback: ['badge-blue', 'Win-back'], service: ['badge-green', 'Service due'],
       lead: ['badge-yellow', 'New lead'], reminder: ['badge-green', 'Reminder'],

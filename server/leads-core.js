@@ -87,6 +87,12 @@ function upsertLead(db, shop, f = {}) {
       firstContactAt: now, lastContactAt: now, createdAt: now,
       stageChangedAt: now,   // pipeline time-in-stage baseline
     };
+    // Meta ad leads auto-enter the 30-day follow-up sequence: Day 0 lands in
+    // the Tasks queue immediately. Enrollment only — every send stays manual
+    // (owner taps through their Messages app); nothing is texted from here.
+    if (['facebook', 'instagram', 'meta', 'fb', 'ig'].includes(String(source).toLowerCase())) {
+      lead.followUp = { idx: 0, status: 'active', nextAt: now, startedAt: now, log: [] };
+    }
     if (metaLeadgenId) lead.metaLeadgenId = metaLeadgenId;
     if (metaCustomFields) lead.metaCustomFields = metaCustomFields;
   }

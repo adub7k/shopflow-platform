@@ -1013,7 +1013,38 @@ function applyLeadStatus(lead, status) {
     lead.stageLog = lead.stageLog || [];
     lead.stageLog.push({ from: prevStage, to: status, at: now });
     if (status === 'closed' && !lead.closedAt) lead.closedAt = now;
+    // Booking/losing a lead ends its 30-day follow-up sequence automatically
+    // (built-in stage keys; custom won stages are hidden from the queue by the
+    // client's chaseable check either way). Manually resumable from the modal.
+    const fu = lead.followUp;
+    if (fu && (fu.status === 'active' || fu.status === 'paused')) {
+      if (['booked', 'worked', 'closed'].includes(status)) fu.status = 'completed';
+      else if (status === 'lost') fu.status = 'stopped';
+    }
   }
+}
+
+// Sanitize a client-sent followUp state (the 30-day sequence bookkeeping).
+// Bounded shapes only — never trust free-form structures into the db.
+function cleanFollowUp(v) {
+  if (!v || typeof v !== 'object') return undefined;
+  const statuses = ['active', 'paused', 'completed', 'stopped', 'done'];
+  const iso = (x) => (x && !isNaN(Date.parse(x))) ? new Date(x).toISOString() : null;
+  return {
+    idx: Math.max(0, Math.min(200, parseInt(v.idx, 10) || 0)),
+    status: statuses.includes(v.status) ? v.status : 'active',
+    nextAt: iso(v.nextAt),
+    startedAt: iso(v.startedAt) || new Date().toISOString(),
+    pausedReason: v.pausedReason ? String(v.pausedReason).slice(0, 30) : null,
+    log: (Array.isArray(v.log) ? v.log.slice(0, 100) : []).map(e => ({
+      step: String((e && e.step) || '').slice(0, 40),
+      day: Math.max(0, Number(e && e.day) || 0),
+      body: e && e.body ? String(e.body).slice(0, 500) : undefined,
+      at: iso(e && e.at) || new Date().toISOString(),
+      by: String((e && e.by) || '').slice(0, 60),
+      skipped: e && e.skipped ? true : undefined,
+    })),
+  };
 }
 
 // Bulk clean-out (Pipeline → Select): move up to 500 leads to one stage in a
@@ -1069,6 +1100,17 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   if (req.body.quotedAmount !== undefined) {
     const q = Number(req.body.quotedAmount);
     lead.quotedAmount = (Number.isFinite(q) && q > 0) ? Math.round(q * 100) / 100 : null;
+  }
+  // 30-day sequence state (Tasks page queue). Sends are manual (sms: deep link
+  // client-side); this just persists the bookkeeping. A grown log = a text was
+  // sent → refresh lastContactAt.
+  if (req.body.followUp !== undefined) {
+    const fu = cleanFollowUp(req.body.followUp);
+    if (fu) {
+      const prevLen = ((lead.followUp || {}).log || []).length;
+      if (fu.log.length > prevLen) lead.lastContactAt = new Date().toISOString();
+      lead.followUp = fu;
+    }
   }
   // By-day follow-up bookkeeping: the owner tapped the day-N text button (the
   // sms: deep link opened Messages prefilled on their phone). Stamps the marker

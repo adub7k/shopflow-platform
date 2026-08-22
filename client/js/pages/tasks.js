@@ -98,6 +98,44 @@ const Tasks = {
     let n = 0;
     const add = (task, bucket) => { task.id = 'task' + (n++); this._tasks[task.id] = task; groups[bucket].push(task); };
 
+    // 0. 30-day follow-up sequence (Meta leads) — the TODAY queue. A lead shows
+    //    only while its next step is due; sending (or skipping) pushes nextAt
+    //    forward and the card disappears until the next step comes due. Config
+    //    + per-lead state live in leads.js (Leads.followUpSeq / lead.followUp).
+    const fuSeq = Leads.followUpSeq();
+    const nowIso = new Date().toISOString();
+    const fuStats = { entered: 0, active: 0, paused: 0, booked: 0, done: 0, due: 0, sentToday: 0 };
+    const stageCfg = Leads.stageConfig();
+    const chaseable = (l) => { const s = stageCfg.find(x => x.key === l.status); return !s || (!s.terminal && !s.won); };
+    const META_SRC = ['facebook', 'instagram', 'meta', 'fb', 'ig'];
+    this._fuUnenrolled = this._leads.filter(l => !l.followUp && chaseable(l) && META_SRC.includes(String(l.source || '').toLowerCase()));
+    this._leads.forEach(l => {
+      const fu = l.followUp;
+      if (!fu || !fu.status) return;
+      fuStats.entered++;
+      if (fu.status === 'paused') fuStats.paused++;
+      if (fu.status === 'completed') fuStats.booked++;
+      if (fu.status === 'done') fuStats.done++;
+      (fu.log || []).forEach(e => { if (!e.skipped && String(e.at || '').slice(0, 10) === t0) fuStats.sentToday++; });
+      if (fu.status !== 'active') return;
+      fuStats.active++;
+      if (!chaseable(l)) return;
+      const step = fuSeq[fu.idx];
+      if (!step) return;
+      const due = fu.nextAt || l.createdAt || nowIso;
+      if (due > nowIso) return;                          // not due yet — resurfaces on its date
+      fuStats.due++;
+      const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model].filter(Boolean).join(' ') : '';
+      const dueDate = String(due).split('T')[0];
+      add({
+        source: 'sequence', leadId: l.id, name: l.name || l.phone || 'Lead', phone: l.phone,
+        step, reason: [veh, l.phone].filter(Boolean).join(' · '),
+        detail: dueDate < t0 ? 'Overdue — was due ' + fmtDateShort(dueDate) : 'Due today',
+        dueDate,
+      }, dueDate < t0 ? 'overdue' : 'today');
+    });
+    this._fuStats = fuStats;
+
     // 1. At-risk win-backs (owner-configurable cadence).
     const wb = this._wb;
     this._customers.forEach(c => {
@@ -146,8 +184,9 @@ const Tasks = {
       });
     });
 
-    // 3. Uncontacted leads (status 'new' from call tracking).
-    this._leads.filter(l => l.status === 'new').forEach(l => {
+    // 3. Uncontacted leads (status 'new' from call tracking). Leads in the
+    //    30-day sequence are excluded — the sequence queue above owns them.
+    this._leads.filter(l => l.status === 'new' && !(l.followUp && l.followUp.status)).forEach(l => {
       const name = l.name || l.phone || 'Unknown caller';
       const ld = ((l.createdAt || l.firstContactAt || l.lastContactAt || '') + '').split('T')[0] || t0;
       const ctx = { first: _tFirst(l.name) || 'there', name: l.name || 'there', shop };
@@ -197,6 +236,29 @@ const Tasks = {
       + '<div class="section-header" style="margin:0;">Follow-ups</div>'
       + '<button class="btn btn-sm" onclick="Tasks.cadenceModal()">⚙ Cadence</button></div>');
 
+    // 30-day sequence metrics + enrollment prompt (only once any lead is in it,
+    // or there are Meta leads waiting to be enrolled).
+    const fs = this._fuStats || {};
+    if (fs.entered || (this._fuUnenrolled || []).length) {
+      const rate = fs.entered ? Math.round((fs.booked / fs.entered) * 100) : 0;
+      const stat = (v, label, color) => '<div style="flex:1;min-width:78px;"><div style="font-size:19px;font-weight:800;letter-spacing:-.02em;color:' + (color || 'var(--text)') + ';">' + v + '</div><div style="font-size:11px;color:var(--faint);">' + label + '</div></div>';
+      out.push('<div class="card" style="margin-bottom:12px;">'
+        + '<div style="font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.05em;margin-bottom:8px;">30-DAY SEQUENCE</div>'
+        + '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+        +   stat(fs.due || 0, 'due today', fs.due ? 'var(--red)' : 'var(--text)')
+        +   stat(fs.sentToday || 0, 'sent today')
+        +   stat(fs.active || 0, 'in sequence')
+        +   stat(fs.paused || 0, 'paused', fs.paused ? 'var(--orange)' : 'var(--text)')
+        +   stat((fs.booked || 0) + (fs.entered ? ' (' + rate + '%)' : ''), 'booked', 'var(--green)')
+        + '</div>'
+        + ((this._fuUnenrolled || []).length
+          ? '<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+            + '<div style="flex:1;font-size:13px;color:var(--muted);">' + this._fuUnenrolled.length + ' Meta lead' + (this._fuUnenrolled.length === 1 ? '' : 's') + ' not in the sequence yet.</div>'
+            + '<button class="btn btn-sm btn-green" onclick="Tasks.fuEnrollAll(this)">Start sequence</button></div>'
+          : '')
+        + '</div>');
+    }
+
     if (!total) {
       out.push('<div class="card empty-state"><div class="empty-icon">✓</div>'
         + '<div class="empty-text">You\'re all caught up. New win-backs, service reminders, and uncontacted leads will show up here.</div></div>');
@@ -219,6 +281,29 @@ const Tasks = {
   },
 
   _card(t) {
+    // 30-day sequence cards: the step IS the task — one green button sends it.
+    if (t.source === 'sequence') {
+      const acts = [
+        '<button class="btn btn-sm btn-green" onclick="Tasks.fuSend(\'' + t.id + '\')">Send follow-up</button>',
+        t.phone ? '<button class="btn btn-sm" onclick="Tasks.call(\'' + t.id + '\')">Call</button>' : '',
+        '<button class="btn btn-sm" onclick="Tasks.fuMark(\'' + t.id + '\',\'replied\')">Replied</button>',
+        '<button class="btn btn-sm" onclick="Tasks.fuMark(\'' + t.id + '\',\'skip\')">Skip</button>',
+      ].filter(Boolean).join('');
+      return '<div class="card" style="margin-bottom:10px;">'
+        + '<div style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;" onclick="Tasks.fuOpen(\'' + t.id + '\')">'
+        +   avatarEl(t.name, 40)
+        +   '<div style="flex:1;min-width:0;">'
+        +     '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">'
+        +       '<div style="font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(t.name) + '</div>'
+        +       '<span class="badge badge-yellow" style="flex:none;">' + esc(t.step.label) + '</span>'
+        +     '</div>'
+        +     (t.reason ? '<div style="font-size:13px;color:var(--muted);margin-top:2px;">' + esc(t.reason) + '</div>' : '')
+        +     '<div style="font-size:12px;font-weight:600;color:' + (t.detail === 'Due today' ? 'var(--green)' : 'var(--red)') + ';margin-top:2px;">' + esc(t.detail) + '</div>'
+        +   '</div>'
+        + '</div>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">' + acts + '</div>'
+        + '</div>';
+    }
     const SRC = {
       winback:  ['badge-blue', 'Win-back'],
       service:  ['badge-green', 'Service due'],
@@ -258,6 +343,84 @@ const Tasks = {
   // ── Lookups + persistence helpers ───────────────────────────────────────────
   _cust(id) { return this._customers.find(c => c.id === id); },
   _ensureFollowup(c) { if (!c.followup) c.followup = { completedStep: -1, snoozeUntil: null, status: 'active' }; return c.followup; },
+
+  // ── 30-day sequence actions ─────────────────────────────────────────────────
+  _fuLead(taskId) {
+    const t = this._tasks[taskId];
+    return t ? this._leads.find(x => x.id === t.leadId) : null;
+  },
+  fuOpen(taskId) {
+    const l = this._fuLead(taskId); if (!l) return;
+    Leads._leads = this._leads;    // full lead modal (history card included)
+    Leads.open(l.id);
+  },
+  // Preview → edit → send: opens Messages prefilled (manual send, like all
+  // texting here), then advances the sequence so the card leaves today's queue.
+  _fuTask: null,
+  fuSend(taskId) {
+    const l = this._fuLead(taskId); if (!l) return;
+    if (!l.phone) { toast('No phone number on file', 'warning'); return; }
+    const step = Leads.followUpSeq()[(l.followUp || {}).idx];
+    if (!step) return;
+    this._fuTask = taskId;
+    Modal.show(
+      '<div class="modal-title">' + esc(step.label) + ' — ' + esc(l.name || l.phone) + '</div>'
+      + '<div class="form-group"><label class="form-label">Message <span style="font-weight:400;color:var(--muted);">(edit before sending)</span></label>'
+      +   '<textarea class="form-input" id="fu-body" rows="5">' + esc(Leads.fuFill(step.sms, l)) + '</textarea></div>'
+      + '<div style="font-size:12px;color:var(--faint);margin:-6px 0 10px;">Opens your Messages app prefilled — you hit send.</div>'
+      + '<button class="btn btn-green btn-full" onclick="Tasks.fuSendConfirm()">Send</button>'
+      + '<div class="modal-actions"><button class="btn btn-full" onclick="Modal.close()">Cancel</button></div>'
+    );
+  },
+  async fuSendConfirm() {
+    const l = this._fuLead(this._fuTask);
+    if (!l || !l.followUp) return;
+    const body = (document.getElementById('fu-body') || {}).value || '';
+    if (!body.trim()) { toast('Message is empty', 'warning'); return; }
+    Modal.close();
+    _cpSms(l.phone, body.trim());
+    const seq = Leads.followUpSeq();
+    const fu = l.followUp;
+    const step = seq[fu.idx];
+    if (!step) return;
+    const now = new Date().toISOString();
+    fu.log = (fu.log || []).concat({ step: step.label, day: step.day, body: body.trim().slice(0, 500), at: now, by: (Auth.getName && Auth.getName()) || '' });
+    fu.idx += 1;
+    fu.nextAt = Leads.fuNextAt(seq, fu.idx - 1, now);
+    let msg;
+    if (fu.idx >= seq.length) { fu.status = 'done'; fu.nextAt = null; msg = '✓ Sent — sequence finished (day 30)'; }
+    else msg = '✓ Follow-up sent · Next: ' + seq[fu.idx].label + ' — ' + fmtDateShort(fu.nextAt.split('T')[0]);
+    try { await db.leads.update(l.id, { followUp: fu }); } catch (e) { toast(e.message || 'Could not save', 'error'); return; }
+    toast(msg);
+    this.render();   // the card leaves today's queue
+  },
+  async fuMark(taskId, act) {
+    const l = this._fuLead(taskId);
+    if (!l || !l.followUp) return;
+    const fu = l.followUp;
+    const seq = Leads.followUpSeq();
+    const now = new Date().toISOString();
+    if (act === 'replied') { fu.status = 'paused'; fu.pausedReason = 'replied'; }
+    else if (act === 'skip') {
+      const step = seq[fu.idx]; if (!step) return;
+      fu.log = (fu.log || []).concat({ step: step.label, day: step.day, at: now, by: (Auth.getName && Auth.getName()) || '', skipped: true });
+      fu.idx += 1;
+      fu.nextAt = Leads.fuNextAt(seq, fu.idx - 1, now);
+      if (fu.idx >= seq.length) { fu.status = 'done'; fu.nextAt = null; }
+    } else return;
+    try { await db.leads.update(l.id, { followUp: fu }); toast(act === 'replied' ? 'Paused — customer replied' : 'Skipped ✓'); } catch (e) { toast(e.message || 'Could not save', 'error'); }
+    this.render();
+  },
+  async fuEnrollAll(btn) {
+    const list = this._fuUnenrolled || [];
+    if (!list.length) return;
+    disableBtn(btn);
+    try {
+      await Promise.all(list.map(l => db.leads.update(l.id, { followUp: Leads.fuFreshState() })));
+      toast(list.length + ' lead' + (list.length === 1 ? '' : 's') + ' enrolled — Day 0 due now');
+    } catch (e) { toast(e.message || 'Could not enroll', 'error'); }
+    this.render();
+  },
 
   // ── Card actions ────────────────────────────────────────────────────────────
   // Hitting Text opens a template picker: the tailored suggestion is preselected,
