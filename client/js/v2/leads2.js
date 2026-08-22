@@ -195,7 +195,7 @@
         if (vehicle) reqLines.push(`<div style="color:var(--muted);font-size:12px;">${esc(vehicle)}</div>`);
         if (note) reqLines.push(`<div style="color:var(--muted);font-size:12px;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">“${esc(note)}”</div>`);
         if (!reqLines.length) { const act = activitySummary(l); reqLines.push(`<div style="color:var(--faint);">${act ? esc(act) : '—'}</div>`); }
-        const when = l.lastContactAt || l.createdAt;
+        const when = l.createdAt || l.firstContactAt || l.lastContactAt;
         const email = l.email ? `<div style="color:var(--muted);font-size:12px;">${esc(l.email)}</div>` : '';
         html.push(`<tr onclick="Leads.open('${l.id}')">
           <td><div style="display:flex;align-items:center;gap:8px;"><span class="v2-src">${sm.icon} ${esc(sm.label)}</span></div>
@@ -221,7 +221,7 @@
         const name = l.name || l.phone || 'Unknown caller';
         const { services, vehicle } = requested(l);
         const sub = [services, vehicle].filter(Boolean).join(' · ') || l.phone || '';
-        const when = l.lastContactAt || l.createdAt;
+        const when = l.createdAt || l.firstContactAt || l.lastContactAt;
         html.push(`<div class="msg-inbox-row" onclick="Leads.open('${l.id}')">
           ${avatarEl(name, 42)}
           <div style="flex:1;min-width:0;">

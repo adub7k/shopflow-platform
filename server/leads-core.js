@@ -68,6 +68,21 @@ function upsertLead(db, shop, f = {}) {
     ? h.getAll('leads').find(l => phoneKey(l.phone) === digits)
     : null;
 
+  // A Meta webhook re-delivery of the SAME leadgen submission is pure
+  // transport (Meta retries after timeouts/restarts) — never a new contact.
+  // Leave the lead completely untouched: no formSubmits bump, no
+  // lastContactAt bump, no notification, no "re-submitted" appearance.
+  if (existing && metaLeadgenId && existing.metaLeadgenId === metaLeadgenId) {
+    return { lead: existing, isNew: false, notified: false };
+  }
+
+  // Transport echo: the same inquiry arriving again inside the notify cooldown
+  // (Make + the native webhook both delivering, double-tapped submits, Make
+  // retries). Fields still merge below, but the lead's activity clock doesn't
+  // move — only a genuine later inquiry should bump it back to the top.
+  const lastNotified = (existing && existing.notifiedAt) ? Date.parse(existing.notifiedAt) : 0;
+  const echo = !!(existing && lastNotified && (Date.now() - lastNotified) < NOTIFY_COOLDOWN_MS);
+
   let lead;
   if (existing) {
     lead = existing;
@@ -84,7 +99,7 @@ function upsertLead(db, shop, f = {}) {
     if (metaLeadgenId && !lead.metaLeadgenId) lead.metaLeadgenId = metaLeadgenId;
     if (metaCustomFields) lead.metaCustomFields = { ...(lead.metaCustomFields || {}), ...metaCustomFields };
     lead.formSubmits = (lead.formSubmits || 0) + 1;
-    lead.lastContactAt = now;
+    if (!echo) lead.lastContactAt = now;
   } else {
     lead = {
       id: genId('lead'), name, phone, email,
@@ -111,8 +126,7 @@ function upsertLead(db, shop, f = {}) {
   // buzzed once per POST. Re-submits inside the window are recorded silently
   // (formSubmits, merged notes) and the owner sees the full picture in the CRM;
   // a genuine second inquiry hours later still alerts, as "submitted again".
-  const lastNotified = lead.notifiedAt ? Date.parse(lead.notifiedAt) : 0;
-  const quiet = lastNotified && (Date.now() - lastNotified) < NOTIFY_COOLDOWN_MS;
+  const quiet = echo;   // same cooldown window computed above, pre-mutation
   if (!quiet) lead.notifiedAt = now;
 
   h.upsert('leads', lead);
