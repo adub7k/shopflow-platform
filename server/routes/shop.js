@@ -1062,6 +1062,74 @@ router.post('/api/shop/leads/bulk-status', requireAuth, requireRole('full','tech
   res.json({ ok:true, updated });
 }));
 
+// Merge duplicate leads (owner only). Groups by last-10-digit phone
+// (leads-core.phoneKey) — the E.164-vs-national format mismatch let the Meta
+// webhook, Twilio calls, and the website form each create their own copy of
+// the same person. The oldest record survives; every other copy's history
+// (notes, stage log, calls, conversations, follow-up sequence, quote) is
+// folded into it and the copy is removed. Website-channel leads are skipped
+// (different schema — the Response Center owns those).
+function mergeLeadInto(p, d, stageOrder) {
+  const rank = (s) => stageOrder.indexOf(s);
+  p.name = p.name || d.name;
+  p.phone = p.phone || d.phone;
+  p.email = p.email || d.email;
+  p.vehicle = p.vehicle || d.vehicle;
+  p.location = p.location || d.location;
+  p.utm = p.utm || d.utm;
+  p.referrer = p.referrer || d.referrer;
+  if (d.notes) p.notes = [p.notes, d.notes].filter(Boolean).join('\n');
+  p.noteLog = (p.noteLog || []).concat(d.noteLog || []).sort((a, b) => new Date(b.at) - new Date(a.at));
+  p.servicesInterested = Array.from(new Set([...(p.servicesInterested || []), ...(d.servicesInterested || [])]));
+  p.stageLog = (p.stageLog || []).concat(d.stageLog || []).sort((a, b) => new Date(a.at) - new Date(b.at));
+  p.callCount = (p.callCount || 0) + (d.callCount || 0);
+  p.missedCount = (p.missedCount || 0) + (d.missedCount || 0);
+  p.formSubmits = (p.formSubmits || 0) + (d.formSubmits || 0);
+  if (d.quotedAmount != null && p.quotedAmount == null) p.quotedAmount = d.quotedAmount;
+  p.ai = p.ai || d.ai;
+  p.customerId = p.customerId || d.customerId;
+  // Keep whichever copy is furthest down the pipeline, and prefer a real ad
+  // channel over the bare 'call' attribution.
+  if (rank(d.status) > rank(p.status)) { p.status = d.status; p.stageChangedAt = d.stageChangedAt || p.stageChangedAt; }
+  if ((p.source || 'call') === 'call' && d.source && d.source !== 'call') p.source = d.source;
+  if (d.followUp && (!p.followUp || (d.followUp.idx || 0) > (p.followUp.idx || 0))) p.followUp = d.followUp;
+  p.dripLog = Object.assign({}, d.dripLog || {}, p.dripLog || {});
+  if (d.createdAt && (!p.createdAt || d.createdAt < p.createdAt)) p.createdAt = d.createdAt;
+  if (d.firstContactAt && (!p.firstContactAt || d.firstContactAt < p.firstContactAt)) p.firstContactAt = d.firstContactAt;
+  if (d.lastContactAt && (!p.lastContactAt || d.lastContactAt > p.lastContactAt)) p.lastContactAt = d.lastContactAt;
+  if (d.firstResponseAt && (!p.firstResponseAt || d.firstResponseAt < p.firstResponseAt)) p.firstResponseAt = d.firstResponseAt;
+  if (d.closedAt && !p.closedAt) p.closedAt = d.closedAt;
+}
+
+router.post('/api/shop/leads/dedupe', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
+  const { phoneKey } = require('../leads-core');
+  const stageOrder = Array.from(shopStageKeys(db));
+  const groups = {};
+  h.getAll('leads').forEach(l => {
+    if (!l || l.channel === 'website') return;
+    const k = phoneKey(l.phone);
+    if (k) (groups[k] = groups[k] || []).push(l);
+  });
+  let merged = 0;
+  Object.values(groups).forEach(g => {
+    if (g.length < 2) return;
+    g.sort((a, b) => new Date(a.createdAt || a.firstContactAt || 0) - new Date(b.createdAt || b.firstContactAt || 0));
+    const primary = g[0];
+    for (let i = 1; i < g.length; i++) {
+      const dup = g[i];
+      mergeLeadInto(primary, dup, stageOrder);
+      // Re-home the duplicate's call and message history before it goes.
+      (db.get('calls').value() || []).forEach(c => { if (c.leadId === dup.id) c.leadId = primary.id; });
+      (db.get('conversations').value() || []).forEach(c => { if (c.leadId === dup.id) c.leadId = primary.id; });
+      h.remove('leads', dup.id);
+      merged++;
+    }
+    h.upsert('leads', primary);
+  });
+  db.get('calls').write();
+  res.json({ ok: true, merged });
+}));
+
 // Bulk delete (owner only, like single delete): removes the leads and their
 // call logs. The client confirms before calling — this is irreversible.
 router.post('/api/shop/leads/bulk-delete', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
@@ -1156,8 +1224,8 @@ router.post('/api/shop/leads/:id/convert', requireAuth, requireRole('full','tech
   if (!lead) return res.status(404).json({ ok:false, error:'Lead not found' });
   let cust = lead.customerId ? h.getById('customers', lead.customerId) : null;
   if (!cust) {
-    const digits = String(lead.phone||'').replace(/\D/g,'');
-    cust = h.getAll('customers').find(c => String(c.phone||'').replace(/\D/g,'') === digits && digits);
+    const digits = String(lead.phone||'').replace(/\D/g,'').slice(-10);
+    cust = h.getAll('customers').find(c => String(c.phone||'').replace(/\D/g,'').slice(-10) === digits && digits);
   }
   if (!cust) {
     cust = { id: genId('c'), name: lead.name || lead.phone, phone: lead.phone, email: lead.email || '', source: lead.source || 'call',

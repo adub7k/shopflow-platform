@@ -12,6 +12,10 @@ const { master, shopHelpers, genId } = require('./db');
 const { notifyNewLead } = require('./email');
 const { sendPush } = require('./push-instance');
 
+// Canonical phone identity: last 10 digits. "+1 (505) 555-0129",
+// "505-555-0129" and "15055550129" all produce the same key.
+const phoneKey = (p) => String(p || '').replace(/\D/g, '').slice(-10);
+
 // How long after alerting on a lead a re-submit of the same lead stays quiet.
 // Covers the site's two-stage post (partial + final) and integration retries;
 // long enough to swallow a visitor who resubmits after a typo, short enough
@@ -53,12 +57,15 @@ function upsertLead(db, shop, f = {}) {
   const metaLeadgenId = f.metaLeadgenId || null;
   const metaCustomFields = (f.metaCustomFields && Object.keys(f.metaCustomFields).length) ? f.metaCustomFields : null;
 
-  // Dedupe by phone digits — an existing lead is enriched, not duplicated, so
+  // Dedupe by phone — an existing lead is enriched, not duplicated, so
   // re-running a recovery batch that overlaps leads already in the system is
   // safe. A lead with no phone (rare, admin-entered) always creates fresh.
-  const digits = String(phone).replace(/\D/g, '');
+  // Matching uses the LAST 10 digits (phoneKey): the Meta webhook and Twilio
+  // send E.164 (+1505…) while the website form and hand entry send national
+  // format — an exact digit-string compare let the same person in twice.
+  const digits = phoneKey(phone);
   const existing = digits
-    ? h.getAll('leads').find(l => String(l.phone || '').replace(/\D/g, '') === digits)
+    ? h.getAll('leads').find(l => phoneKey(l.phone) === digits)
     : null;
 
   let lead;
@@ -194,4 +201,4 @@ function recordLeadPayload(shopSlug, body) {
 }
 function getLeadPayloads() { return _payloads; }
 
-module.exports = { upsertLead, resolveContact, recordLeadPayload, getLeadPayloads };
+module.exports = { upsertLead, resolveContact, recordLeadPayload, getLeadPayloads, phoneKey };

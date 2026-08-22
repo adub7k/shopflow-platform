@@ -127,8 +127,35 @@
     // Phone-vs-Meta channel split, above both views.
     html.push(channelMetrics(leads));
 
+    // Duplicate detector: same person under two phone formats (E.164 vs
+    // national) — the server merge folds histories together, oldest wins.
+    const pk = (p) => String(p || '').replace(/\D/g, '').slice(-10);
+    const seen = {};
+    let dupes = 0;
+    leads.forEach(l => {
+      if (l.channel === 'website') return;
+      const k = pk(l.phone);
+      if (!k) return;
+      if (seen[k]) dupes++; else seen[k] = true;
+    });
+    if (dupes) {
+      html.push(`<div style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--orange);border-radius:10px;padding:10px 12px;margin-bottom:12px;">
+        <div style="flex:1;font-size:13px;color:var(--muted);"><strong style="color:var(--text);">${dupes} duplicate lead${dupes === 1 ? '' : 's'}</strong> — same phone number saved twice (different formats). Merging keeps every note, call, and follow-up on one record.</div>
+        <button class="btn btn-sm" onclick="Leads.mergeDupes(this)">Merge duplicates</button>
+      </div>`);
+    }
+
     renderList.call(this, html, leads, counts);
     el.innerHTML = html.join('');
+  };
+
+  Leads.mergeDupes = async function (btn) {
+    disableBtn(btn);
+    try {
+      const r = await db.leads.dedupe();
+      toast((r.merged || 0) + ' duplicate' + (r.merged === 1 ? '' : 's') + ' merged ✓');
+    } catch (e) { toast(e.message || 'Merge failed', 'error'); }
+    this.render();
   };
 
   // The board is its own page now (full stage set + follow-up timing).
