@@ -107,8 +107,7 @@ router.post('/api/twilio/voice/:shopId', verifyTwilio, (req, res) => {
   // call straight to it instead of dialing the shop. (Fallback mode dials first
   // and only routes to the AI on a miss; see the complete handler.)
   if (voice.voiceModeActive(ctx.settings, { missed: false })) {
-    vr.redirect({ method: 'POST' }, `/api/twilio/voice/ai/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`);
-    return res.type('text/xml').send(vr.toString());
+    return answerWithAi(res, ctx, callSid); // greet inline — no <Redirect> dead air
   }
 
   // Ring the real phone. answerOnBridge → caller hears ringing, not silence.
@@ -212,8 +211,7 @@ router.post('/api/twilio/voice/complete/:shopId', verifyTwilio, (req, res) => {
     call.aiHandled = true;
     ctx.h.upsert('calls', call);
     if (lead) ctx.h.upsert('leads', lead);
-    vr.redirect({ method: 'POST' }, `/api/twilio/voice/ai/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`);
-    return res.type('text/xml').send(vr.toString());
+    return answerWithAi(res, ctx, callSid); // greet inline — no <Redirect> dead air
   }
 
   // Speed-to-lead: email the owner about the missed call (A2P isn't registered,
@@ -428,10 +426,13 @@ function voicemailFallback(vr, ctx, callSid, res) {
 
 // AI answers: greet + open the first listen. Entered by 'always' mode (from the
 // inbound handler) and 'fallback' mode (redirect from complete/ on a miss).
-router.post('/api/twilio/voice/ai/:shopId', verifyTwilio, (req, res) => {
+// Answer the live call with the AI receptionist — relay stream or gather loop.
+// Called INLINE from the entry ("always" mode) and complete ("missed" mode)
+// handlers so the caller hears the greeting immediately, instead of eating a
+// <Redirect> round-trip of dead air first (callers were hanging up in that gap).
+// Still exposed as the /ai route below for Twilio retries / any external hop.
+function answerWithAi(res, ctx, callSid) {
   const vr = new VoiceResponse();
-  const ctx = shopCtx(req.params.shopId);
-  const callSid = req.query.callSid || req.body.CallSid;
   if (!ctx || !callSid || !voice.voiceAvailable()) return voicemailFallback(vr, ctx, callSid, res);
   const call = ctx.h.getById('calls', callSid);
   if (!call) return voicemailFallback(vr, ctx, callSid, res);
@@ -454,6 +455,12 @@ router.post('/api/twilio/voice/ai/:shopId', verifyTwilio, (req, res) => {
   ctx.h.upsert('calls', call);
   aiGather(vr, ctx, callSid, hello);
   res.type('text/xml').send(vr.toString());
+}
+
+router.post('/api/twilio/voice/ai/:shopId', verifyTwilio, (req, res) => {
+  const ctx = shopCtx(req.params.shopId);
+  const callSid = req.query.callSid || req.body.CallSid;
+  answerWithAi(res, ctx, callSid);
 });
 
 // AI turn: receive the caller's speech, run one conversational turn, reply.
