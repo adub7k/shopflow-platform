@@ -6,40 +6,44 @@
 <title>ShopFlow Admin</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
+/* Tokens mirror the client CRM (css/app2.css) so admin feels like the same
+   product: white surfaces on soft green-gray, emerald accent, deep-green
+   primary actions, hairline borders, tabular numbers. */
 :root{
-  --black:#0a0a0a;--white:#fff;--off:#f5f5f7;--border:#e5e7eb;
-  --muted:#6b7280;--faint:#9ca3af;--text:#111827;
-  --green:#16a34a;--green-lt:#f0fdf4;--green-md:#bbf7d0;
-  --blue:#2563eb;--blue-lt:#eff6ff;
-  --red:#dc2626;--red-lt:#fef2f2;
-  --yellow:#d97706;--yellow-lt:#fffbeb;
-  --sidebar-w:220px;
+  --black:#141F1A;--white:#fff;--off:#F5F7F6;--border:#E5EAE7;--border-md:#D7DEDA;
+  --muted:#5C6B63;--faint:#93A29A;--text:#141F1A;
+  --green:#0E9F6E;--green-lt:#E7F6EF;--green-md:#BBE5D2;--green-deep:#065F41;
+  --blue:#155EEF;--blue-lt:#EFF4FF;
+  --red:#B42318;--red-lt:#FEF3F2;
+  --yellow:#B45309;--yellow-lt:#FFFAEB;
+  --shadow:0 1px 2px rgba(20,31,26,.05),0 1px 3px rgba(20,31,26,.04);
+  --sidebar-w:224px;
   --topbar-h:56px;
-  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  --radius:10px;--radius-lg:14px;
+  --font:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,sans-serif;
+  --radius:10px;--radius-lg:10px;
 }
-body{font-family:var(--font);background:var(--off);min-height:100vh;-webkit-font-smoothing:antialiased;color:var(--text);}
+body{font-family:var(--font);background:var(--off);min-height:100vh;-webkit-font-smoothing:antialiased;color:var(--text);font-variant-numeric:tabular-nums;}
 
 /* ── Auth ── */
-.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--black);}
-.auth-card{background:#111;border:1px solid #222;border-radius:20px;padding:44px 40px;width:380px;max-width:calc(100vw - 32px);}
+.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--off);}
+.auth-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:44px 40px;width:380px;max-width:calc(100vw - 32px);box-shadow:var(--shadow);}
 .auth-logo{display:flex;align-items:center;gap:10px;margin-bottom:32px;}
-.auth-logo-mark{width:36px;height:36px;background:var(--green);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;}
-.auth-logo-text{font-size:20px;font-weight:800;color:#fff;letter-spacing:-.03em;}
-.auth-badge{font-size:10px;font-weight:700;background:#1f2937;color:#9ca3af;padding:3px 8px;border-radius:100px;letter-spacing:.06em;margin-left:4px;}
-.auth-h2{font-size:24px;font-weight:800;color:#fff;letter-spacing:-.03em;margin-bottom:6px;}
-.auth-sub{font-size:13px;color:#6b7280;margin-bottom:28px;}
-.auth-input{width:100%;padding:13px 16px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:10px;font-size:15px;font-family:var(--font);color:#fff;outline:none;margin-bottom:10px;transition:border .15s;}
-.auth-input:focus{border-color:#333;}
-.auth-btn{width:100%;padding:14px;background:var(--green);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--font);transition:opacity .15s;}
+.auth-logo-mark{width:36px;height:36px;background:var(--green-deep);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:18px;color:#fff;}
+.auth-logo-text{font-size:20px;font-weight:800;color:var(--text);letter-spacing:-.03em;}
+.auth-badge{font-size:10px;font-weight:700;background:var(--green-lt);color:var(--green-deep);padding:3px 8px;border-radius:100px;letter-spacing:.06em;margin-left:4px;}
+.auth-h2{font-size:24px;font-weight:800;color:var(--text);letter-spacing:-.03em;margin-bottom:6px;}
+.auth-sub{font-size:13px;color:var(--muted);margin-bottom:28px;}
+.auth-input{width:100%;padding:13px 16px;background:var(--off);border:1px solid var(--border-md);border-radius:10px;font-size:15px;font-family:var(--font);color:var(--text);outline:none;margin-bottom:10px;transition:border .15s;}
+.auth-input:focus{border-color:var(--green);background:var(--white);}
+.auth-btn{width:100%;padding:14px;background:var(--green-deep);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;font-family:var(--font);transition:opacity .15s;}
 .auth-btn:hover{opacity:.9;}
-.auth-err{font-size:13px;color:#f87171;margin-top:8px;display:none;}
+.auth-err{font-size:13px;color:var(--red);margin-top:8px;display:none;}
 
 /* ── Mobile topbar ── */
-#mobile-topbar{display:none;position:fixed;top:0;left:0;right:0;height:var(--topbar-h);background:#0a0a0a;border-bottom:1px solid #1a1a1a;align-items:center;padding:0 16px;gap:12px;z-index:60;}
-#mobile-topbar-title{font-size:15px;font-weight:800;color:#fff;letter-spacing:-.03em;flex:1;}
-.mobile-topbar-badge{font-size:9px;font-weight:700;background:#1a3a1a;color:var(--green);padding:2px 7px;border-radius:100px;letter-spacing:.06em;}
-#hamburger-btn{background:none;border:none;color:#9ca3af;cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;justify-content:center;}
+#mobile-topbar{display:none;position:fixed;top:0;left:0;right:0;height:var(--topbar-h);background:rgba(245,247,246,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--border);align-items:center;padding:0 16px;gap:12px;z-index:60;}
+#mobile-topbar-title{font-size:15px;font-weight:800;color:var(--text);letter-spacing:-.03em;flex:1;}
+.mobile-topbar-badge{font-size:9px;font-weight:700;background:var(--green-lt);color:var(--green-deep);padding:2px 7px;border-radius:100px;letter-spacing:.06em;}
+#hamburger-btn{background:none;border:none;color:var(--muted);cursor:pointer;padding:6px;border-radius:8px;display:flex;align-items:center;justify-content:center;}
 
 /* ── Sidebar backdrop ── */
 #sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:90;backdrop-filter:blur(1px);}
@@ -49,32 +53,32 @@ body.admin-sidebar-open #sidebar-backdrop{display:block;}
 #app{display:none;min-height:100vh;}
 #app-inner{display:grid;grid-template-columns:var(--sidebar-w) 1fr;min-height:100vh;}
 
-/* ── Sidebar ── */
-#sidebar{background:#0a0a0a;border-right:1px solid #1a1a1a;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;}
-.sb-header{padding:20px 16px 16px;border-bottom:1px solid #1a1a1a;display:flex;align-items:center;gap:10px;}
-.sb-logo-mark{width:30px;height:30px;background:var(--green);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
-.sb-logo-text{font-size:15px;font-weight:800;color:#fff;letter-spacing:-.03em;}
-.sb-badge{font-size:9px;font-weight:700;background:#1a3a1a;color:var(--green);padding:2px 7px;border-radius:100px;letter-spacing:.06em;margin-left:2px;}
-.sb-section{font-size:10px;font-weight:700;color:#444;text-transform:uppercase;letter-spacing:.08em;padding:16px 16px 6px;}
-.sb-item{display:flex;align-items:center;gap:9px;padding:9px 14px;margin:1px 8px;border-radius:8px;font-size:13px;font-weight:500;color:#9ca3af;cursor:pointer;transition:all .15s;}
-.sb-item:hover{background:#141414;color:#e5e7eb;}
-.sb-item.active{background:#1a3a1a;color:var(--green);}
+/* ── Sidebar (white, like the client CRM) ── */
+#sidebar{background:var(--white);border-right:1px solid var(--border);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;}
+.sb-header{padding:20px 16px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;}
+.sb-logo-mark{width:30px;height:30px;background:var(--green-deep);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;color:#fff;}
+.sb-logo-text{font-size:15px;font-weight:800;color:var(--text);letter-spacing:-.03em;}
+.sb-badge{font-size:9px;font-weight:700;background:var(--green-lt);color:var(--green-deep);padding:2px 7px;border-radius:100px;letter-spacing:.06em;margin-left:2px;}
+.sb-section{font-size:10px;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;padding:16px 16px 6px;}
+.sb-item{display:flex;align-items:center;gap:9px;padding:8px 12px;margin:1px 8px;border-radius:7px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;transition:all .12s;}
+.sb-item:hover{background:var(--off);color:var(--text);}
+.sb-item.active{background:var(--green-lt);color:var(--green-deep);font-weight:600;}
 .sb-item-icon{font-size:14px;width:18px;text-align:center;flex-shrink:0;}
 
 /* ── MRR goal in sidebar ── */
-.sb-goal{margin:12px 8px;background:#111;border:1px solid #1f2937;border-radius:10px;padding:12px;}
-.sb-goal-label{font-size:10px;font-weight:700;color:#444;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
+.sb-goal{margin:12px 8px;background:var(--off);border:1px solid var(--border);border-radius:10px;padding:12px;}
+.sb-goal-label{font-size:10px;font-weight:600;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
 .sb-goal-nums{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}
-.sb-goal-mrr{font-size:15px;font-weight:800;color:var(--green);}
-.sb-goal-target{font-size:11px;color:#555;}
-.sb-goal-bar{height:5px;background:#1f2937;border-radius:100px;overflow:hidden;}
+.sb-goal-mrr{font-size:15px;font-weight:800;color:var(--green-deep);}
+.sb-goal-target{font-size:11px;color:var(--faint);}
+.sb-goal-bar{height:5px;background:var(--green-md);border-radius:100px;overflow:hidden;}
 .sb-goal-fill{height:100%;background:var(--green);border-radius:100px;transition:width .6s ease;}
-.sb-goal-pct{font-size:11px;color:#555;margin-top:5px;}
+.sb-goal-pct{font-size:11px;color:var(--faint);margin-top:5px;}
 
-.sb-footer{margin-top:auto;padding:16px;border-top:1px solid #1a1a1a;}
-.sb-footer-text{font-size:11px;color:#333;}
-.sb-signout{font-size:12px;color:#555;cursor:pointer;margin-top:6px;padding:6px 0;}
-.sb-signout:hover{color:#888;}
+.sb-footer{margin-top:auto;padding:16px;border-top:1px solid var(--border);}
+.sb-footer-text{font-size:11px;color:var(--faint);}
+.sb-signout{font-size:12px;color:var(--muted);cursor:pointer;margin-top:6px;padding:6px 0;}
+.sb-signout:hover{color:var(--text);}
 
 /* ── Main area ── */
 #main{background:var(--off);overflow-y:auto;min-height:100vh;}
@@ -86,25 +90,26 @@ body.admin-sidebar-open #sidebar-backdrop{display:block;}
 .page-title{font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.03em;}
 .page-sub{font-size:13px;color:var(--muted);margin-top:2px;}
 
-/* ── Goal banner ── */
-.goal-banner{background:linear-gradient(135deg,#0a1a0a 0%,#0f2a0f 100%);border:1px solid #1a3a1a;border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:24px;position:relative;overflow:hidden;}
-.goal-banner::before{content:'';position:absolute;top:-30px;right:-30px;width:120px;height:120px;background:var(--green);opacity:.06;border-radius:50%;}
-.goal-banner-label{font-size:11px;font-weight:700;color:#4ade80;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;}
+/* ── Goal banner (deep-green card, same accent family as the CRM) ── */
+.goal-banner{background:var(--green-deep);border:1px solid var(--green-deep);border-radius:var(--radius-lg);padding:20px 24px;margin-bottom:24px;position:relative;overflow:hidden;}
+.goal-banner::before{content:'';position:absolute;top:-30px;right:-30px;width:120px;height:120px;background:#fff;opacity:.05;border-radius:50%;}
+.goal-banner-label{font-size:11px;font-weight:700;color:var(--green-md);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;}
 .goal-banner-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;}
 .goal-banner-mrr{font-size:32px;font-weight:900;color:#fff;letter-spacing:-.04em;line-height:1;}
-.goal-banner-sub{font-size:13px;color:#4ade80;margin-top:3px;}
+.goal-banner-sub{font-size:13px;color:var(--green-md);margin-top:3px;}
 .goal-banner-right{text-align:right;}
-.goal-banner-pct{font-size:24px;font-weight:800;color:#4ade80;}
-.goal-banner-of{font-size:12px;color:#4b7a4b;}
-.goal-bar-wrap{height:8px;background:#1a3a1a;border-radius:100px;overflow:hidden;}
-.goal-bar-fill{height:100%;background:linear-gradient(90deg,#16a34a,#4ade80);border-radius:100px;transition:width .8s ease;}
+.goal-banner-pct{font-size:24px;font-weight:800;color:#fff;}
+.goal-banner-of{font-size:12px;color:var(--green-md);}
+.goal-bar-wrap{height:8px;background:rgba(255,255,255,.18);border-radius:100px;overflow:hidden;}
+.goal-bar-fill{height:100%;background:#fff;border-radius:100px;transition:width .8s ease;}
 .goal-milestones{display:flex;justify-content:space-between;margin-top:8px;}
-.goal-milestone{font-size:10px;color:#4b7a4b;}
-.goal-milestone.reached{color:#4ade80;font-weight:700;}
+.goal-milestone{font-size:10px;color:var(--green-md);opacity:.75;}
+.goal-milestone.reached{color:#fff;font-weight:700;opacity:1;}
 
 /* ── Metric cards ── */
 .metrics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
-.metric-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;}
+.metric-card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px 20px;box-shadow:var(--shadow);transition:border-color .12s;}
+.metric-card:hover{border-color:var(--border-md);}
 .metric-label{font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;}
 .metric-value{font-size:26px;font-weight:800;color:var(--text);letter-spacing:-.04em;line-height:1;}
 .metric-value.green{color:var(--green);}
@@ -129,7 +134,7 @@ body.admin-sidebar-open #sidebar-backdrop{display:block;}
 .path-note{font-size:11px;color:var(--muted);margin-top:2px;text-align:right;}
 
 /* ── Section cards ── */
-.card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px;}
+.card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:16px;box-shadow:var(--shadow);}
 .card-header{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
 .card-title{font-size:14px;font-weight:700;color:var(--text);letter-spacing:-.02em;}
 .card-sub{font-size:12px;color:var(--muted);}
@@ -157,6 +162,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 .badge-starter{background:#f3f4f6;color:#374151;}
 .badge-pro{background:var(--blue-lt);color:var(--blue);}
 .badge-shop{background:var(--green-lt);color:var(--green);}
+.badge-plan{background:var(--green-lt);color:var(--green);}
 .badge-active{background:var(--green-lt);color:var(--green);}
 .badge-inactive{background:#f3f4f6;color:var(--faint);}
 .badge-yes{background:var(--green-lt);color:var(--green);}
@@ -172,10 +178,10 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 .btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:600;font-family:var(--font);cursor:pointer;border:none;transition:opacity .15s,background .15s;}
 .btn:hover{opacity:.88;}
 .btn:disabled{opacity:.5;cursor:not-allowed;}
-.btn-green{background:var(--green);color:#fff;}
+.btn-green{background:var(--green-deep);color:#fff;}
 .btn-dark{background:var(--text);color:#fff;}
-.btn-outline{background:var(--white);color:var(--text);border:1px solid var(--border);}
-.btn-red{background:var(--red-lt);color:var(--red);border:1px solid #fecaca;}
+.btn-outline{background:var(--white);color:var(--text);border:1px solid var(--border-md);}
+.btn-red{background:var(--red-lt);color:var(--red);border:1px solid #F4C7C3;}
 .btn-sm{padding:6px 12px;font-size:12px;}
 
 /* ── Checklist ── */
@@ -231,6 +237,10 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 .drawer-info-val{color:var(--text);font-weight:500;text-align:right;max-width:260px;word-break:break-all;}
 .drawer-actions{display:flex;gap:8px;flex-wrap:wrap;}
 .plan-select{padding:6px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:var(--font);outline:none;background:var(--white);cursor:pointer;}
+/* Inline-editable drawer fields: read like values, edit like inputs */
+.drawer-edit{padding:5px 9px;border:1px solid transparent;border-radius:7px;font-size:13px;font-weight:600;font-family:var(--font);color:var(--text);background:transparent;outline:none;text-align:right;max-width:190px;width:100%;transition:border .12s,background .12s;}
+.drawer-edit:hover{border-color:var(--border);background:var(--off);}
+.drawer-edit:focus{border-color:var(--green);background:var(--white);}
 
 /* ── Modal ── */
 #modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;display:none;align-items:center;justify-content:center;padding:16px;}
@@ -326,10 +336,10 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 
     <!-- MRR goal widget -->
     <div class="sb-goal">
-      <div class="sb-goal-label">Path to $25k MRR</div>
+      <div class="sb-goal-label" id="sb-goal-label">Path to goal</div>
       <div class="sb-goal-nums">
         <div class="sb-goal-mrr" id="sb-mrr">$0</div>
-        <div class="sb-goal-target">$25,000</div>
+        <div class="sb-goal-target" id="sb-goal-target">—</div>
       </div>
       <div class="sb-goal-bar"><div class="sb-goal-fill" id="sb-goal-fill" style="width:0%"></div></div>
       <div class="sb-goal-pct" id="sb-goal-pct">0% there</div>
@@ -387,9 +397,9 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         </div>
       </div>
 
-      <!-- Goal banner -->
+      <!-- Goal banner (goal itself is editable on the Growth page) -->
       <div class="goal-banner" id="goal-banner">
-        <div class="goal-banner-label">🎯 Goal: $25,000 MRR</div>
+        <div class="goal-banner-label" id="banner-goal-label">🎯 MRR Goal</div>
         <div class="goal-banner-row">
           <div>
             <div class="goal-banner-mrr" id="banner-mrr">$0</div>
@@ -397,18 +407,13 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
           </div>
           <div class="goal-banner-right">
             <div class="goal-banner-pct" id="banner-pct">0%</div>
-            <div class="goal-banner-of">of $25k goal</div>
+            <div class="goal-banner-of" id="banner-goal-of">of goal</div>
           </div>
         </div>
         <div class="goal-bar-wrap">
           <div class="goal-bar-fill" id="banner-bar" style="width:0%"></div>
         </div>
-        <div class="goal-milestones">
-          <span class="goal-milestone" id="ms-1k">$1k</span>
-          <span class="goal-milestone" id="ms-5k">$5k</span>
-          <span class="goal-milestone" id="ms-10k">$10k</span>
-          <span class="goal-milestone" id="ms-25k">$25k ✓</span>
-        </div>
+        <div class="goal-milestones" id="goal-milestones"></div>
       </div>
 
       <!-- Metrics -->
@@ -482,6 +487,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
               <tr>
                 <th>Shop</th>
                 <th>Plan</th>
+                <th>Rate</th>
                 <th>Clients</th>
                 <th>Appts</th>
                 <th>Status</th>
@@ -489,11 +495,16 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
               </tr>
             </thead>
             <tbody id="shops-tbody">
-              <tr><td colspan="6"><div class="empty-state"><span class="spinner"></span>Loading…</div></td></tr>
+              <tr><td colspan="7"><div class="empty-state"><span class="spinner"></span>Loading…</div></td></tr>
             </tbody>
           </table>
         </div>
       </div>
+    </div>
+
+    <!-- Shop profile: the in-depth client-management view -->
+    <div id="page-shopprofile" class="page">
+      <div id="sp-body"><div class="empty-state"><span class="spinner"></span>Loading…</div></div>
     </div>
 
     <!-- Add Lead page (manual fallback for a broken lead pipeline) -->
@@ -566,7 +577,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       <div class="page-header">
         <div>
           <div class="page-title">Growth</div>
-          <div class="page-sub">Track your path to $25k MRR and sale-readiness</div>
+          <div class="page-sub" id="growth-sub">Track your path to your MRR goal</div>
         </div>
       </div>
 
@@ -589,40 +600,21 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         </div>
       </div>
 
-      <!-- Path to $25k -->
+      <!-- Path to goal — rows built from the plans you actually sell, at the
+           average real rate you charge for each. The goal itself is editable. -->
       <div class="path-card">
-        <div class="path-title">Path to $25,000 MRR</div>
+        <div class="path-title" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span>Path to</span>
+          <span style="display:inline-flex;align-items:center;gap:3px;">
+            <span style="color:var(--muted);font-weight:600;">$</span>
+            <input class="drawer-edit" id="mrr-goal-input" type="number" min="1" step="500" style="width:96px;text-align:left;font-size:14px;font-weight:700;border-color:var(--border);" placeholder="25000"
+              onblur="saveMrrGoal(this.value)" onkeydown="if(event.key==='Enter')this.blur()"/>
+          </span>
+          <span>MRR</span>
+          <span style="font-size:11px;font-weight:500;color:var(--faint);">(edit the goal — everything recalculates)</span>
+        </div>
         <div class="path-sub" id="path-sub">How many shops you need to hit the goal from here</div>
-        <div class="path-row">
-          <div>
-            <div class="path-plan">Starter plan</div>
-            <div class="path-price">$19.99/mo per shop</div>
-          </div>
-          <div style="text-align:right;">
-            <div class="path-needed" id="path-starter">—</div>
-            <div class="path-note">more shops needed</div>
-          </div>
-        </div>
-        <div class="path-row">
-          <div>
-            <div class="path-plan">Pro plan</div>
-            <div class="path-price">$99/mo per shop</div>
-          </div>
-          <div style="text-align:right;">
-            <div class="path-needed" id="path-pro">—</div>
-            <div class="path-note">more shops needed</div>
-          </div>
-        </div>
-        <div class="path-row">
-          <div>
-            <div class="path-plan">Shop plan</div>
-            <div class="path-price">$200/mo per shop</div>
-          </div>
-          <div style="text-align:right;">
-            <div class="path-needed" id="path-shop">—</div>
-            <div class="path-note">more shops needed</div>
-          </div>
-        </div>
+        <div id="path-rows"><div class="empty-state">Loading…</div></div>
       </div>
 
       <div class="card">
@@ -930,17 +922,18 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div class="form-row-2">
       <div class="form-row">
         <label class="form-label">Shop Name *</label>
-        <input class="form-input" id="new-shopname" placeholder="Your Barbershop"/>
+        <input class="form-input" id="new-shopname" placeholder="e.g. Mad Detailing"/>
       </div>
       <div class="form-row">
-        <label class="form-label">Plan</label>
-        <select class="form-input" id="new-plan">
-          <option value="starter">Starter — $19.99/mo</option>
-          <option value="pro" selected>Pro — $99/mo</option>
-          <option value="shop">Shop — $200/mo</option>
-        </select>
+        <label class="form-label">Plan label</label>
+        <input class="form-input" id="new-plan" list="plan-suggestions" placeholder="e.g. Receptionist"/>
       </div>
     </div>
+    <div class="form-row">
+      <label class="form-label">Monthly rate ($/mo)</label>
+      <input class="form-input" id="new-rate" type="number" min="0" step="1" placeholder="e.g. 349"/>
+    </div>
+    <datalist id="plan-suggestions"></datalist>
     <div class="form-row">
       <label class="form-label">Email *</label>
       <input class="form-input" id="new-email" type="email" placeholder="owner@shop.com"/>
@@ -970,8 +963,15 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 let adminKey = '';
 let allShops = [];
 let statsData = {};
-const planPrices = { starter: 19.99, pro: 99, shop: 200 };
-const planColors = { starter: '#9ca3af', pro: '#2563eb', shop: '#16a34a' };
+// A shop's rate is ONLY its editable monthlyRate — no tier fallback. Shops
+// without a rate contribute $0 until one is entered.
+const PALETTE = ['#0E9F6E','#155EEF','#B45309','#7c3aed','#B42318','#0891b2','#93A29A'];
+const effRate = (s) => (s && s.rate != null) ? Number(s.rate) : (Number(s && s.monthlyRate) || 0);
+const planColor = (label, i) => PALETTE[i % PALETTE.length];
+const planBadge = (plan) => `<span class="badge badge-plan">${esc(plan||'custom')}</span>`;
+const fmtRate = (n) => '$' + (Number(n)||0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+// Distinct plan labels across shops — feeds datalists + the filter dropdown.
+const planLabels = () => [...new Set(allShops.map(s => s.plan).filter(Boolean))];
 
 // ── Mobile sidebar ────────────────────────────────────────────────────────────
 function toggleAdminSidebar() { document.body.classList.toggle('admin-sidebar-open'); }
@@ -1044,13 +1044,27 @@ async function loadOverviewSmsStatus() {
 }
 
 function updateSidebarGoal(d) {
-  const pct = d.mrrPct || 0;
+  const pct = d.mrrPct || 0, goal = d.mrrGoal || 25000;
   const el = document.getElementById('sb-mrr');
   const fill = document.getElementById('sb-goal-fill');
   const pctEl = document.getElementById('sb-goal-pct');
+  const label = document.getElementById('sb-goal-label');
+  const target = document.getElementById('sb-goal-target');
   if (el) el.textContent = '$' + fmtK(d.mrr || 0);
   if (fill) fill.style.width = pct + '%';
   if (pctEl) pctEl.textContent = pct + '% there';
+  if (label) label.textContent = 'Path to $' + fmtK(goal) + ' MRR';
+  if (target) target.textContent = fmtRate(goal);
+}
+// Save the platform MRR goal (editable on the Growth page) and recalculate.
+async function saveMrrGoal(value) {
+  const goal = Number(value);
+  if (!goal || goal <= 0 || goal === (statsData.mrrGoal || 25000)) return;
+  try {
+    await fetch('/api/admin/platform-settings', { method: 'PATCH', headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ mrrGoal: goal }) });
+    toast('Goal updated ✓');
+    await loadStats(); renderGrowth(); renderBilling();
+  } catch(e) { toast('Could not save goal'); }
 }
 
 function renderOverview(d) {
@@ -1063,12 +1077,15 @@ function renderOverview(d) {
   document.getElementById('banner-pct').textContent = (d.mrrPct || 0) + '%';
   document.getElementById('banner-bar').style.width = (d.mrrPct || 0) + '%';
 
-  // Milestones
-  const mrr = d.mrr || 0;
-  [['ms-1k',1000],['ms-5k',5000],['ms-10k',10000],['ms-25k',25000]].forEach(([id,v]) => {
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle('reached', mrr >= v);
-  });
+  // Banner goal labels + milestones at quarters of the (editable) goal
+  const goal = d.mrrGoal || 25000, mrr = d.mrr || 0;
+  const bl = document.getElementById('banner-goal-label'); if (bl) bl.textContent = '🎯 Goal: ' + fmtRate(goal) + ' MRR';
+  const bo = document.getElementById('banner-goal-of'); if (bo) bo.textContent = 'of $' + fmtK(goal) + ' goal';
+  const ms = document.getElementById('goal-milestones');
+  if (ms) ms.innerHTML = [.25, .5, .75, 1].map(f => {
+    const v = Math.round(goal * f);
+    return `<span class="goal-milestone${mrr >= v ? ' reached' : ''}">$${fmtK(v)}${f === 1 ? ' ✓' : ''}</span>`;
+  }).join('');
 
   // Metric cards
   document.getElementById('m-mrr').textContent = '$' + fmt(d.mrr);
@@ -1085,20 +1102,20 @@ function renderOverview(d) {
   document.getElementById('m-churn').className = 'metric-value ' + (d.churnRate > 5 ? 'red' : '');
   document.getElementById('m-churned').textContent = (d.churnedShops || 0) + ' shops lost';
 
-  // Plan bars
+  // Plan bars — dynamic labels + revenue from real per-shop rates
   const total = d.activeShops || 1;
-  const pb = d.planBreakdown || {};
-  document.getElementById('plan-bars').innerHTML = ['starter','pro','shop'].map(plan => {
-    const count = pb[plan] || 0;
-    const rev = planPrices[plan] * count;
-    const pct = Math.round((count / total) * 100);
+  const ps = d.planStats || {};
+  const psEntries = Object.entries(ps).sort((a,b) => b[1].revenue - a[1].revenue);
+  document.getElementById('plan-bars').innerHTML = psEntries.length ? psEntries.map(([plan, v], i) => {
+    const pct = Math.round((v.count / total) * 100);
+    const color = planColor(plan, i);
     return `<div class="plan-row">
-      <div class="plan-label" style="color:${planColors[plan]};">${plan}</div>
-      <div class="plan-bar-wrap"><div class="plan-bar" style="width:${pct}%;background:${planColors[plan]};"></div></div>
-      <div class="plan-count">${count}</div>
-      <div class="plan-rev">$${fmtK(rev)}</div>
+      <div class="plan-label" style="color:${color};min-width:52px;width:auto;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(plan)}</div>
+      <div class="plan-bar-wrap"><div class="plan-bar" style="width:${pct}%;background:${color};"></div></div>
+      <div class="plan-count">${v.count}</div>
+      <div class="plan-rev">$${fmtK(v.revenue)}</div>
     </div>`;
-  }).join('');
+  }).join('') : '<div class="empty-state">No active shops yet.</div>';
 
   // Recent signups
   const shops = d.recentShops || [];
@@ -1110,7 +1127,7 @@ function renderOverview(d) {
             <div style="font-size:13px;font-weight:600;">${esc(s.shopName)}</div>
             <div style="font-size:11px;color:var(--muted);">${esc(s.email||'')}</div>
           </td>
-          <td style="padding:10px 14px;"><span class="badge badge-${s.plan}">${s.plan}</span></td>
+          <td style="padding:10px 14px;">${planBadge(s.plan)}<div style="font-size:10px;color:var(--faint);margin-top:2px;">${fmtRate(s.rate)}/mo</div></td>
           <td style="padding:10px 14px;font-size:11px;color:var(--faint);white-space:nowrap;">${relTime(s.createdAt)}</td>
         </tr>`).join('')}
     </table>` : '<div class="empty-state">No shops yet.</div>';
@@ -1125,13 +1142,25 @@ function renderGrowth() {
   document.getElementById('g-avg').textContent = '$' + fmt(d.avgMrr || 0);
   document.getElementById('g-ltv').textContent = '$' + fmtK(d.ltv || 0);
 
+  const goal = d.mrrGoal || 25000;
+  const gsub = document.getElementById('growth-sub'); if (gsub) gsub.textContent = 'Track your path to $' + fmtK(goal) + ' MRR and sale-readiness';
+  const gin = document.getElementById('mrr-goal-input'); if (gin && document.activeElement !== gin) gin.value = goal;
   const toGoal = d.mrrToGoal || 0;
   document.getElementById('path-sub').textContent = toGoal <= 0
-    ? '🎉 You\'ve hit $25k MRR! Time to sell.'
+    ? `🎉 You've hit $${fmtK(goal)} MRR! Time to raise the goal.`
     : `$${fmt(toGoal)} to go — here's what it takes:`;
-  document.getElementById('path-starter').textContent = (d.shopsNeeded?.starter || '—') + ' shops';
-  document.getElementById('path-pro').textContent     = (d.shopsNeeded?.pro     || '—') + ' shops';
-  document.getElementById('path-shop').textContent    = (d.shopsNeeded?.shop    || '—') + ' shops';
+  const needed = Object.entries(d.shopsNeeded || {}).sort((a,b) => a[1].rate - b[1].rate);
+  document.getElementById('path-rows').innerHTML = needed.length ? needed.map(([label, v]) => `
+    <div class="path-row">
+      <div>
+        <div class="path-plan">${esc(label)}</div>
+        <div class="path-price">${fmtRate(v.rate)}/mo avg per shop</div>
+      </div>
+      <div style="text-align:right;">
+        <div class="path-needed">${v.needed} shops</div>
+        <div class="path-note">more shops needed</div>
+      </div>
+    </div>`).join('') : '<div class="empty-state" style="padding:14px 0;">Set monthly rates on your shops to see the path.</div>';
 
   // Engagement
   document.getElementById('g-engagement').innerHTML = `
@@ -1155,6 +1184,16 @@ async function loadShops() {
     const res = await fetch('/api/admin/shops', { headers: { 'x-admin-key': adminKey } });
     allShops = await res.json();
     document.getElementById('shops-count-label').textContent = allShops.length + ' total shops';
+    // Plan filter + datalist suggestions from the labels actually in use.
+    const labels = planLabels();
+    const filter = document.getElementById('shop-filter-plan');
+    if (filter) {
+      const cur = filter.value;
+      filter.innerHTML = '<option value="">All plans</option>' + labels.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
+      if (labels.includes(cur)) filter.value = cur;
+    }
+    const dl = document.getElementById('plan-suggestions');
+    if (dl) dl.innerHTML = [...new Set([...labels, 'Receptionist', 'Ads', 'Full Engine'])].map(l => `<option value="${esc(l)}"></option>`).join('');
     filterShops();
   } catch(e) {}
 }
@@ -1174,7 +1213,7 @@ function filterShops() {
 
 function renderShopsTable(shops) {
   const tbody = document.getElementById('shops-tbody');
-  if (!shops.length) { tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No shops found.</div></td></tr>'; return; }
+  if (!shops.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No shops found.</div></td></tr>'; return; }
   tbody.innerHTML = shops.map(s => `
     <tr class="clickable" onclick="openDrawer('${s.id}')">
       <td>
@@ -1182,7 +1221,8 @@ function renderShopsTable(shops) {
         <div style="font-size:11px;color:var(--muted);">${esc(s.email||'')}</div>
         <div style="font-size:11px;color:var(--faint);font-family:monospace;">/book/${esc(s.slug||'')}</div>
       </td>
-      <td><span class="badge badge-${s.plan}">${s.plan}</span></td>
+      <td>${planBadge(s.plan)}</td>
+      <td style="font-weight:700;color:var(--green);white-space:nowrap;">${fmtRate(effRate(s))}<span style="font-size:10px;color:var(--faint);font-weight:400;">/mo</span></td>
       <td style="font-weight:600;">${s.customers}</td>
       <td style="color:var(--muted);">${s.appointments}</td>
       <td><span class="badge badge-${s.active?'active':'inactive'}">${s.active?'Active':'Inactive'}</span></td>
@@ -1190,60 +1230,203 @@ function renderShopsTable(shops) {
     </tr>`).join('');
 }
 
-// ── Drawer ────────────────────────────────────────────────────────────────────
+// ── Shop profile (full page — the client-management view) ─────────────────────
+// openDrawer keeps its name (every callsite routes here) but now opens the
+// in-depth profile page instead of the old slide-over drawer.
 let currentShopId = null;
 async function openDrawer(shopId) {
   currentShopId = shopId;
-  document.getElementById('drawer-overlay').style.display = 'block';
-  document.getElementById('drawer').classList.add('open');
-  document.getElementById('drawer-body').innerHTML = '<div class="empty-state"><span class="spinner"></span>Loading…</div>';
-  document.getElementById('drawer-shop-name').textContent = 'Loading…';
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
+  document.getElementById('page-shopprofile').classList.add('active');
+  const sb = document.querySelector('.sb-item[data-page="shops"]'); if (sb) sb.classList.add('active');
+  document.getElementById('sp-body').innerHTML = '<div class="empty-state"><span class="spinner"></span>Loading…</div>';
+  document.getElementById('main').scrollTop = 0; window.scrollTo(0, 0);
   try {
     const res = await fetch('/api/admin/shop/' + shopId, { headers: { 'x-admin-key': adminKey } });
     const d = await res.json();
     renderDrawer(d);
   } catch(e) {
-    document.getElementById('drawer-body').innerHTML = '<div class="empty-state">Failed to load shop.</div>';
+    document.getElementById('sp-body').innerHTML = '<div class="empty-state">Failed to load shop.</div>';
   }
 }
+const fmtMins = (m) => m == null ? '—' : (m < 90 ? Math.round(m) + 'm' : (m / 60).toFixed(1) + 'h');
 
 function renderDrawer(d) {
   const shop = d.shop, s = d.settings, stats = d.stats;
   const appts = d.recentAppointments || [];
-  document.getElementById('drawer-shop-name').textContent = shop.shopName;
-  document.getElementById('drawer-body').innerHTML = `
-    <div class="drawer-section">
-      <div class="drawer-section-title">Stats</div>
-      <div class="drawer-stat-grid">
-        <div class="drawer-stat"><div class="drawer-stat-val green">${stats.totalCustomers}</div><div class="drawer-stat-label">Clients</div></div>
-        <div class="drawer-stat"><div class="drawer-stat-val">${stats.totalAppointments}</div><div class="drawer-stat-label">Appts</div></div>
-        <div class="drawer-stat"><div class="drawer-stat-val">${stats.apptThisMonth}</div><div class="drawer-stat-label">This Month</div></div>
-        <div class="drawer-stat"><div class="drawer-stat-val">${stats.activeBarbers}</div><div class="drawer-stat-label">Barbers</div></div>
+  const ins = d.insights || {};
+  const L = ins.leads || {}, R = ins.revenue || {}, F = ins.forecast || {}, Qo = ins.quota || {}, E = ins.estimates || {};
+  const accent = s.accentColor || '#0E9F6E';
+  const initials = (shop.shopName || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+  const rate = Number(shop.monthlyRate) || 0;
+  // Month-over-month revenue + quota pacing
+  const rev = Number(R.thisMonth) || 0, revLast = Number(R.lastMonth) || 0;
+  const momPct = revLast > 0 ? Math.round((rev - revLast) / revLast * 100) : null;
+  const now = new Date(), dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const pace = Math.round(rev / Math.max(1, now.getDate()) * dim);
+  const quota = Number(Qo.monthly) || 0;
+  const quotaPct = quota > 0 ? Math.min(999, Math.round(rev / quota * 100)) : null;
+  const srcEntries = Object.entries(L.sources || {}).sort((a, b) => b[1] - a[1]);
+  const srcTotal = srcEntries.reduce((t, [, c]) => t + c, 0) || 1;
+  const roi = rate > 0 && rev > 0 ? Math.round(rev / rate * 10) / 10 : null;
+
+  document.getElementById('sp-body').innerHTML = `
+    <button class="btn btn-outline btn-sm" style="margin-bottom:16px;" onclick="nav('shops')">← All shops</button>
+
+    <!-- Header -->
+    <div class="card" style="margin-bottom:20px;">
+      <div style="display:flex;align-items:center;gap:16px;padding:20px;flex-wrap:wrap;">
+        <div style="width:54px;height:54px;border-radius:14px;background:${accent};display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;flex-shrink:0;">${initials}</div>
+        <div style="flex:1;min-width:220px;">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span style="font-size:20px;font-weight:800;letter-spacing:-.02em;">${esc(shop.shopName)}</span>
+            ${planBadge(shop.plan)}
+            <span class="badge badge-${shop.active?'active':'inactive'}">${shop.active?'Active':'Inactive'}</span>
+          </div>
+          <div style="font-size:12.5px;color:var(--muted);margin-top:3px;">${esc(shop.email||'')}${shop.phone?' · '+esc(shop.phone):''} · <span style="font-family:monospace;font-size:11.5px;">/book/${esc(shop.slug)}</span> · joined ${fmtDate(shop.createdAt)} · last active ${shop.lastActivity?relTime(shop.lastActivity):'never'}</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <a href="/shop/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Open App</a>
+          <a href="/book/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Booking Page</a>
+          <button class="btn btn-outline btn-sm" onclick="resetPassword('${shop.id}','${esc(shop.email||'')}')">🔑 Reset</button>
+          <button class="btn btn-red btn-sm" onclick="deleteShop('${shop.id}','${esc(shop.shopName)}')">Delete</button>
+        </div>
       </div>
     </div>
 
-    <div class="drawer-section">
-      <div class="drawer-section-title">Shop Info</div>
-      <div>
-        <div class="drawer-info-row"><span class="drawer-info-label">Shop Name</span><span class="drawer-info-val">${esc(shop.shopName)}</span></div>
-        <div class="drawer-info-row"><span class="drawer-info-label">Email</span><span class="drawer-info-val">${esc(shop.email||'—')}</span></div>
-        <div class="drawer-info-row"><span class="drawer-info-label">Phone</span><span class="drawer-info-val">${esc(shop.phone||'—')}</span></div>
-        <div class="drawer-info-row"><span class="drawer-info-label">Booking URL</span><span class="drawer-info-val" style="color:var(--green);font-family:monospace;font-size:12px;">/book/${esc(shop.slug)}</span></div>
-        <div class="drawer-info-row"><span class="drawer-info-label">Joined</span><span class="drawer-info-val">${fmtDate(shop.createdAt)}</span></div>
-        <div class="drawer-info-row"><span class="drawer-info-label">Last Active</span><span class="drawer-info-val">${shop.lastActivity ? relTime(shop.lastActivity) : 'Never'}</span></div>
+    <!-- Top metrics -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <div class="metric-label">You Charge</div>
+        <div class="metric-value green">${fmtRate(rate)}<span style="font-size:13px;color:var(--faint);font-weight:600;">/mo</span></div>
+        <div class="metric-sub">${roi != null ? 'they made ' + roi + '× that this month' : (esc(shop.plan||'custom') + ' plan')}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Their Revenue (Mo)</div>
+        <div class="metric-value">$${fmt(rev)}</div>
+        <div class="metric-sub ${momPct==null?'':(momPct>=0?'up':'down')}">${momPct==null?'last month: $'+fmt(revLast):((momPct>=0?'↑ +':'↓ ')+momPct+'% vs last month')}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Leads This Month</div>
+        <div class="metric-value">${L.thisMonth != null ? L.thisMonth : '—'}</div>
+        <div class="metric-sub">${L.conversionRate != null ? L.conversionRate + '% convert all-time' : (L.total || 0) + ' all-time'}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Forecast</div>
+        <div class="metric-value green">$${fmt(F.total || 0)}</div>
+        <div class="metric-sub">booked + estimate pipeline</div>
       </div>
     </div>
 
-    <div class="drawer-section">
-      <div class="drawer-section-title">Plan & Status</div>
+    <!-- Quota -->
+    <div class="card" style="margin-bottom:20px;">
+      <div style="padding:18px 20px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+          <div>
+            <span style="font-size:14px;font-weight:700;">Monthly quota</span>
+            <span style="font-size:12px;color:var(--muted);margin-left:8px;">their revenue goal — how you prove ShopFlow is working</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;">
+            <span style="color:var(--muted);font-size:13px;">$</span>
+            <input class="drawer-edit" type="number" min="0" step="100" style="width:100px;text-align:right;border-color:var(--border);" value="${quota||''}" placeholder="e.g. 10000"
+              onblur="updateShop('${shop.id}','monthlyQuota',this.value.trim()===''?null:this.value).then(()=>openDrawer('${shop.id}'))" onkeydown="if(event.key==='Enter')this.blur()"/>
+            <span style="color:var(--faint);font-size:12px;">/mo</span>
+          </div>
+        </div>
+        ${quota>0?`
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+          <span style="font-size:24px;font-weight:800;color:${quotaPct>=100?'var(--green-deep)':'var(--text)'};">${quotaPct}%</span>
+          <span style="font-size:12px;color:var(--muted);">$${fmt(rev)} of $${fmt(quota)} · on pace for $${fmt(pace)}</span>
+        </div>
+        <div style="height:8px;background:var(--off);border-radius:100px;overflow:hidden;">
+          <div style="height:100%;width:${Math.min(100,quotaPct)}%;background:${quotaPct>=100?'var(--green)':quotaPct>=60?'var(--green)':'var(--yellow)'};border-radius:100px;transition:width .6s ease;"></div>
+        </div>`
+        :`<div style="font-size:12.5px;color:var(--faint);">Set a quota to track what percent of their goal this shop is hitting each month.</div>`}
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px;align-items:start;">
       <div>
+        <!-- Lead performance -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Lead performance</div></div>
+          <div style="padding:16px 18px;">
+            <div class="drawer-info-row"><span class="drawer-info-label">Leads this month</span><span class="drawer-info-val">${L.thisMonth||0} <span style="color:var(--faint);font-weight:400;">(${L.lastMonth||0} last mo)</span></span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Total leads</span><span class="drawer-info-val">${L.total||0}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Converted</span><span class="drawer-info-val">${L.converted||0}${L.conversionRate!=null?` <span style="color:var(--green-deep);font-weight:700;">(${L.conversionRate}%)</span>`:''}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Avg response time</span><span class="drawer-info-val">${fmtMins(L.avgResponseMins)}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Calls this month</span><span class="drawer-info-val">${L.callsThisMonth||0}</span></div>
+            ${srcEntries.length?`<div style="margin-top:12px;">
+              <div style="font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Lead sources</div>
+              ${srcEntries.map(([src,count],i)=>`
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                  <span style="font-size:11.5px;font-weight:600;width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:${PALETTE[i%PALETTE.length]};">${esc(src)}</span>
+                  <div style="flex:1;height:6px;background:var(--off);border-radius:100px;overflow:hidden;"><div style="height:100%;width:${Math.round(count/srcTotal*100)}%;background:${PALETTE[i%PALETTE.length]};border-radius:100px;"></div></div>
+                  <span style="font-size:11.5px;font-weight:700;width:24px;text-align:right;">${count}</span>
+                </div>`).join('')}
+            </div>`:''}
+          </div>
+        </div>
+
+        <!-- Pipeline & forecast -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Pipeline & forecast</div><div class="card-sub">what their next weeks look like</div></div>
+          <div style="padding:16px 18px;">
+            <div class="drawer-info-row"><span class="drawer-info-label">Booked (upcoming)</span><span class="drawer-info-val">$${fmt(F.upcomingBooked||0)}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Approved estimates</span><span class="drawer-info-val">$${fmt(F.approvedEstimates||0)}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Open estimates</span><span class="drawer-info-val">$${fmt(F.openEstimates||0)}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Lead pipeline (open quotes)</span><span class="drawer-info-val">$${fmt(F.leadPipelineValue||0)} <span style="color:var(--faint);font-weight:400;">(${F.leadPipelineCount||0} lead${(F.leadPipelineCount||0)!==1?'s':''})</span></span></div>
+            <div class="drawer-info-row">
+              <span class="drawer-info-label">Accept rate</span>
+              <div style="display:flex;align-items:center;gap:5px;justify-content:flex-end;">
+                <input class="drawer-edit" type="number" min="0" max="100" step="1" style="width:64px;text-align:right;border-color:var(--border);" value="${shop.estAcceptRate!=null?shop.estAcceptRate:''}" placeholder="${F.estAcceptRate!=null?F.estAcceptRate:50}"
+                  onblur="updateShop('${shop.id}','estAcceptRate',this.value.trim()===''?null:this.value).then(()=>openDrawer('${shop.id}'))" onkeydown="if(event.key==='Enter')this.blur()"/>
+                <span style="color:var(--faint);font-size:12px;">%</span>
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--faint);margin-bottom:4px;text-align:right;">${F.acceptSource==='manual'?('your override — their estimate history says '+(F.computedAcceptRate!=null?F.computedAcceptRate+'%':'n/a')):F.acceptSource==='computed'?'auto from their estimate history (blank = auto)':'default — no decided estimates yet'}</div>
+            <div class="drawer-info-row" style="border-top:2px solid var(--border-md);"><span class="drawer-info-label" style="font-weight:700;color:var(--text);">Forecasted revenue</span><span class="drawer-info-val" style="color:var(--green-deep);font-size:15px;">$${fmt(F.total||0)}</span></div>
+            <div style="font-size:11px;color:var(--faint);margin-top:8px;">booked + approved + (open estimates + lead pipeline) × ${F.estAcceptRate!=null?F.estAcceptRate:50}% · ${E.open||0} open / ${E.approved||0} won of ${E.total||0} estimates</div>
+          </div>
+        </div>
+
+        <!-- Usage -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Usage</div></div>
+          <div style="padding:16px 18px;">
+            <div class="drawer-info-row"><span class="drawer-info-label">Clients</span><span class="drawer-info-val">${stats.totalCustomers}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Appointments</span><span class="drawer-info-val">${stats.totalAppointments} <span style="color:var(--faint);font-weight:400;">(${stats.apptThisMonth} this mo)</span></span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Staff</span><span class="drawer-info-val">${stats.activeBarbers}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Services</span><span class="drawer-info-val">${d.services.length}</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <!-- Account & billing (everything editable) -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Account & billing</div><div class="card-sub">click any value to edit — saves on blur</div></div>
+          <div style="padding:8px 18px 14px;">
+        <div class="drawer-info-row"><span class="drawer-info-label">Shop Name</span>
+          <input class="drawer-edit" value="${esc(shop.shopName||'')}" onblur="if(this.value.trim()&&this.value.trim()!==${JSON.stringify(shop.shopName||'').replace(/"/g,'&quot;')})updateShop('${shop.id}','shopName',this.value.trim())" onkeydown="if(event.key==='Enter')this.blur()"/></div>
+        <div class="drawer-info-row"><span class="drawer-info-label">Email</span>
+          <input class="drawer-edit" type="email" value="${esc(shop.email||'')}" placeholder="owner@shop.com" onblur="if(this.value.trim()!==${JSON.stringify(shop.email||'').replace(/"/g,'&quot;')})updateShop('${shop.id}','email',this.value.trim())" onkeydown="if(event.key==='Enter')this.blur()"/></div>
+        <div class="drawer-info-row"><span class="drawer-info-label">Phone</span>
+          <input class="drawer-edit" value="${esc(shop.phone||'')}" placeholder="(555) 000-0000" onblur="if(this.value.trim()!==${JSON.stringify(shop.phone||'').replace(/"/g,'&quot;')})updateShop('${shop.id}','phone',this.value.trim())" onkeydown="if(event.key==='Enter')this.blur()"/></div>
         <div class="drawer-info-row">
-          <span class="drawer-info-label">Plan</span>
-          <select class="plan-select" onchange="updateShop('${shop.id}','plan',this.value)">
-            <option value="starter" ${shop.plan==='starter'?'selected':''}>Starter — $19.99/mo</option>
-            <option value="pro"     ${shop.plan==='pro'?'selected':''}>Pro — $99/mo</option>
-            <option value="shop"    ${shop.plan==='shop'?'selected':''}>Shop — $200/mo</option>
-          </select>
+          <span class="drawer-info-label">Plan label</span>
+          <input class="drawer-edit" list="plan-suggestions" value="${esc(shop.plan||'')}" placeholder="e.g. Receptionist"
+            onblur="if(this.value.trim()&&this.value.trim()!==${JSON.stringify(shop.plan||'').replace(/"/g,'&quot;')})updateShop('${shop.id}','plan',this.value.trim())" onkeydown="if(event.key==='Enter')this.blur()"/>
+        </div>
+        <div class="drawer-info-row">
+          <span class="drawer-info-label">Monthly rate</span>
+          <div style="display:flex;align-items:center;gap:5px;justify-content:flex-end;">
+            <span style="color:var(--muted);font-size:13px;">$</span>
+            <input class="drawer-edit" type="number" min="0" step="1" style="width:90px;text-align:right;" value="${shop.monthlyRate != null ? shop.monthlyRate : ''}" placeholder="0"
+              onblur="updateShop('${shop.id}','monthlyRate',this.value.trim()===''?null:this.value)" onkeydown="if(event.key==='Enter')this.blur()"/>
+            <span style="color:var(--faint);font-size:12px;">/mo</span>
+          </div>
         </div>
         <div class="drawer-info-row">
           <span class="drawer-info-label">Account Status</span>
@@ -1251,14 +1434,36 @@ function renderDrawer(d) {
         </div>
         <div class="drawer-info-row">
           <span class="drawer-info-label">MRR Contribution</span>
-          <span style="font-weight:700;color:var(--green);">$${planPrices[shop.plan]||0}/mo</span>
+          <span id="drawer-mrr-contrib" style="font-weight:700;color:var(--green-deep);">${fmtRate(rate)}/mo</span>
         </div>
       </div>
     </div>
 
-    <div class="drawer-section">
-      <div class="drawer-section-title">Features</div>
-      <div>
+    <!-- Integrations & features -->
+    <div class="card">
+      <div class="card-header"><div class="card-title">Integrations & features</div></div>
+      <div style="padding:8px 18px 14px;">
+        <div class="drawer-info-row">
+          <span class="drawer-info-label">Square</span>
+          <span class="badge badge-${s.squareConnected?'yes':'no'}">${s.squareConnected?'✓ Connected':'Not connected'}</span>
+        </div>
+        <div class="drawer-info-row">
+          <span class="drawer-info-label">Stripe (legacy)</span>
+          <span class="badge badge-${s.stripeConnected?'yes':'no'}">${s.stripeConnected?'✓ Connected':'Not connected'}</span>
+        </div>
+        <div class="drawer-info-row" style="align-items:center;gap:8px;">
+          <span class="drawer-info-label">SMS From #</span>
+          <div style="display:flex;align-items:center;gap:6px;flex:1;justify-content:flex-end;">
+            <input id="drawer-twilio-from" type="text" value="${esc(d.shop.twilioFromNumber||'')}" placeholder="+15055550100"
+              style="padding:5px 9px;border:1px solid var(--border);border-radius:7px;font-size:12px;width:130px;font-family:inherit;"
+              onkeydown="if(event.key==='Enter')saveTwilioFrom('${esc(d.shop.id)}')" />
+            <button onclick="saveTwilioFrom('${esc(d.shop.id)}')" style="padding:5px 10px;background:var(--green-deep);color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">Save</button>
+          </div>
+        </div>
+        <div class="drawer-info-row">
+          <span class="drawer-info-label">Deposit</span>
+          <span class="badge badge-${s.deposit?.enabled?'yes':'no'}">${s.deposit?.enabled?('$'+(s.deposit.amount||0)+' required'):'Off'}</span>
+        </div>
         <div class="drawer-info-row">
           <div>
             <div style="font-size:13px;font-weight:600;color:var(--text);">Manual Messaging</div>
@@ -1272,81 +1477,51 @@ function renderDrawer(d) {
       </div>
     </div>
 
-    <div class="drawer-section">
-      <div class="drawer-section-title">Integrations</div>
-      <div>
-        <div class="drawer-info-row">
-          <span class="drawer-info-label">Stripe</span>
-          <span class="badge badge-${s.stripeConnected?'yes':'no'}">${s.stripeConnected?'✓ Connected':'Not connected'}</span>
-        </div>
-        <div class="drawer-info-row" style="align-items:center;gap:8px;">
-          <span class="drawer-info-label">SMS From #</span>
-          <div style="display:flex;align-items:center;gap:6px;flex:1;justify-content:flex-end;">
-            <input id="drawer-twilio-from" type="text" value="${esc(d.shop.twilioFromNumber||'')}" placeholder="+15055550100"
-              style="padding:5px 9px;border:1px solid var(--border);border-radius:7px;font-size:12px;width:130px;font-family:inherit;"
-              onkeydown="if(event.key==='Enter')saveTwilioFrom('${esc(d.shop.id)}')" />
-            <button onclick="saveTwilioFrom('${esc(d.shop.id)}')" style="padding:5px 10px;background:var(--green);color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">Save</button>
-          </div>
-        </div>
-        <div class="drawer-info-row">
-          <span class="drawer-info-label">Deposit</span>
-          <span class="badge badge-${s.deposit?.enabled?'yes':'no'}">${s.deposit?.enabled?('$'+(s.deposit.amount||0)+' required'):'Off'}</span>
+    <!-- Team & services -->
+    <div class="card">
+      <div class="card-header"><div class="card-title">Team & services</div><div class="card-sub">${d.barbers.length} staff · ${d.services.length} services</div></div>
+      <div style="padding:12px 18px 16px;">
+        ${d.barbers.map(b => `
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0;">
+            <div style="width:26px;height:26px;border-radius:50%;background:${b.color||'#93A29A'};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;flex-shrink:0;">${(b.name||'?').slice(0,2).toUpperCase()}</div>
+            <div style="flex:1;font-size:13px;font-weight:600;">${esc(b.name)}</div>
+            <span class="badge badge-${b.active!==false?'active':'inactive'}" style="font-size:10px;">${b.active!==false?'Active':'Off'}</span>
+          </div>`).join('')}
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">
+          ${d.services.map(sv => `<span style="background:var(--off);border:1px solid var(--border);border-radius:100px;padding:4px 10px;font-size:11px;font-weight:600;">${esc(sv.name)} — $${sv.price}</span>`).join('')}
         </div>
       </div>
     </div>
 
-    <div class="drawer-section">
-      <div class="drawer-section-title">Team (${d.barbers.length})</div>
-      ${d.barbers.map(b => `
-        <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:.5px solid var(--border);">
-          <div style="width:26px;height:26px;border-radius:50%;background:${b.color||'#9ca3af'};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;flex-shrink:0;">${(b.name||'?').slice(0,2).toUpperCase()}</div>
-          <div style="flex:1;font-size:13px;font-weight:600;">${esc(b.name)}</div>
-          <span class="badge badge-${b.active!==false?'active':'inactive'}" style="font-size:10px;">${b.active!==false?'Active':'Off'}</span>
-        </div>`).join('')}
-    </div>
-
-    <div class="drawer-section">
-      <div class="drawer-section-title">Services (${d.services.length})</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;">
-        ${d.services.map(sv => `<span style="background:var(--off);border:1px solid var(--border);border-radius:100px;padding:4px 10px;font-size:11px;font-weight:600;">${esc(sv.name)} — $${sv.price}</span>`).join('')}
-      </div>
-    </div>
-
-    ${appts.length ? `
-    <div class="drawer-section">
-      <div class="drawer-section-title">Recent Appointments</div>
-      ${appts.slice(0,6).map(a => `
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:.5px solid var(--border);font-size:12px;">
-          <div>
-            <div style="font-weight:600;">${esc(a.customerName||'Client')}</div>
-            <div style="color:var(--muted);">${esc(a.serviceName||a.service||'—')} · ${esc(a.barberName||'—')}</div>
-          </div>
-          <div style="text-align:right;">
-            <div style="font-weight:600;">$${a.price||0}</div>
-            <div style="color:var(--faint);">${a.date||''}</div>
-          </div>
-        </div>`).join('')}
-    </div>` : ''}
-
-    <div class="drawer-section">
-      <div class="drawer-section-title">Internal Notes</div>
-      <div>
-        <textarea id="drawer-notes" placeholder="Deal notes, discount, trial dates, anything…"
+    <!-- Notes -->
+    <div class="card">
+      <div class="card-header"><div class="card-title">Internal notes</div><div class="card-sub">only visible to you</div></div>
+      <div style="padding:14px 18px 16px;">
+        <textarea id="drawer-notes" placeholder="Deal notes, discount, trial dates, renewal risk, anything…"
           style="width:100%;padding:10px 12px;background:var(--off);border:1px solid var(--border);border-radius:10px;font-size:13px;font-family:inherit;color:var(--text);resize:vertical;min-height:90px;outline:none;line-height:1.5;"
           onblur="saveNotes('${shop.id}')"
           onkeydown="if(event.key==='Enter'&&event.metaKey)saveNotes('${shop.id}')"
         >${esc(shop.notes||'')}</textarea>
-        <div style="font-size:11px;color:var(--faint);margin-top:5px;">Only visible to you in admin. Blur or ⌘+Enter to save.</div>
       </div>
     </div>
 
-    <div class="drawer-section">
-      <div class="drawer-section-title">Actions</div>
-      <div class="drawer-actions">
-        <a href="/shop/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Open App</a>
-        <a href="/book/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Booking Page</a>
-        <button class="btn btn-outline btn-sm" onclick="resetPassword('${shop.id}','${esc(shop.email||'')}')">🔑 Reset Password</button>
-        <button class="btn btn-red btn-sm" onclick="deleteShop('${shop.id}','${esc(shop.shopName)}')">🗑 Delete</button>
+    ${appts.length ? `
+    <div class="card">
+      <div class="card-header"><div class="card-title">Recent appointments</div></div>
+      <div style="padding:8px 18px 12px;">
+        ${appts.slice(0,6).map(a => `
+          <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:12px;">
+            <div>
+              <div style="font-weight:600;">${esc(a.customerName||'Client')}</div>
+              <div style="color:var(--muted);">${esc(a.serviceName||a.service||'—')} · ${esc(a.barberName||'—')}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-weight:600;">$${a.price||0}</div>
+              <div style="color:var(--faint);">${a.date||''}</div>
+            </div>
+          </div>`).join('')}
+      </div>
+    </div>` : ''}
       </div>
     </div>`;
 }
@@ -1564,7 +1739,16 @@ async function updateShop(shopId, field, value) {
     if (!res.ok) throw new Error();
     toast('Updated ✓');
     const idx = allShops.findIndex(s => s.id === shopId);
-    if (idx >= 0) allShops[idx][field] = value;
+    if (idx >= 0) {
+      allShops[idx][field] = value;
+      // Keep the effective rate in sync so the table + drawer stay truthful.
+      if (field === 'monthlyRate' || field === 'plan') {
+        const s = allShops[idx];
+        s.rate = Number(s.monthlyRate) || 0;
+        const mrrEl = document.getElementById('drawer-mrr-contrib');
+        if (mrrEl && currentShopId === shopId) mrrEl.textContent = fmtRate(s.rate) + '/mo';
+      }
+    }
     filterShops(); loadStats();
   } catch(e) { toast('Update failed'); }
 }
@@ -1596,13 +1780,13 @@ async function deleteShop(shopId, shopName) {
     closeDrawer();
     allShops = allShops.filter(s => s.id !== shopId);
     filterShops(); loadStats();
+    if (document.getElementById('page-shopprofile').classList.contains('active')) nav('shops');
   } catch(e) { toast('Delete failed'); }
 }
 
 // ── Create shop ───────────────────────────────────────────────────────────────
 function openCreateModal() {
-  ['new-shopname','new-email','new-password','new-phone'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
-  document.getElementById('new-plan').value = 'pro';
+  ['new-shopname','new-email','new-password','new-phone','new-plan','new-rate'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
   document.getElementById('modal-err').style.display = 'none';
   document.getElementById('modal-overlay').classList.add('open');
   setTimeout(()=>document.getElementById('new-shopname').focus(),100);
@@ -1614,7 +1798,8 @@ async function createShop() {
   const email    = document.getElementById('new-email').value.trim();
   const password = document.getElementById('new-password').value;
   const phone    = document.getElementById('new-phone').value.trim();
-  const plan     = document.getElementById('new-plan').value;
+  const plan     = document.getElementById('new-plan').value.trim() || 'custom';
+  const monthlyRate = document.getElementById('new-rate').value.trim();
   const errEl    = document.getElementById('modal-err');
   errEl.style.display = 'none';
   if (!shopName || !email || !password) { errEl.textContent = 'Shop name, email, and password are required.'; errEl.style.display = 'block'; return; }
@@ -1625,7 +1810,7 @@ async function createShop() {
     const res = await fetch('/api/admin/shops/create', {
       method: 'POST',
       headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shopName, email, password, phone, plan }),
+      body: JSON.stringify({ shopName, email, password, phone, plan, monthlyRate: monthlyRate || null }),
     });
     const data = await res.json();
     if (!data.ok) { errEl.textContent = data.error || 'Failed to create shop.'; errEl.style.display = 'block'; return; }
@@ -1644,37 +1829,33 @@ function renderBilling() {
   document.getElementById('b-mrr').textContent = '$' + fmt(d.mrr);
   document.getElementById('b-arr').textContent = '$' + fmtK(d.arr);
   document.getElementById('b-avg').textContent = '$' + fmt(avgRev);
-  const pb = d.planBreakdown || {};
+  // Dynamic: every plan label you actually use, revenue from real per-shop rates.
   const total = d.activeShops || 1;
-  const planData = [
-    { plan:'Shop',    key:'shop',    price:200,   color:'#16a34a' },
-    { plan:'Pro',     key:'pro',     price:99,    color:'#2563eb' },
-    { plan:'Starter', key:'starter', price:19.99, color:'#9ca3af' },
-  ];
-  document.getElementById('billing-plan-detail').innerHTML = planData.map(p => {
-    const count = pb[p.key] || 0;
-    const rev = count * p.price;
+  const entries = Object.entries(d.planStats || {}).sort((a,b) => b[1].revenue - a[1].revenue);
+  document.getElementById('billing-plan-detail').innerHTML = entries.length ? entries.map(([plan, v], i) => {
+    const color = planColor(plan, i);
+    const avg = v.count ? v.revenue / v.count : 0;
     return `<div style="padding:12px 0;border-bottom:.5px solid var(--border);">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
         <div style="display:flex;align-items:center;gap:8px;">
-          <div style="width:10px;height:10px;border-radius:50%;background:${p.color};flex-shrink:0;"></div>
-          <span style="font-size:14px;font-weight:700;">${p.plan}</span>
+          <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0;"></div>
+          <span style="font-size:14px;font-weight:700;">${esc(plan)}</span>
         </div>
-        <span style="font-size:16px;font-weight:800;color:${p.color};">$${fmtK(rev)}<span style="font-size:11px;color:var(--muted);font-weight:400;">/mo</span></span>
+        <span style="font-size:16px;font-weight:800;color:${color};">$${fmtK(v.revenue)}<span style="font-size:11px;color:var(--muted);font-weight:400;">/mo</span></span>
       </div>
-      <div style="font-size:12px;color:var(--muted);">${count} shop${count!==1?'s':''} × $${p.price}/mo</div>
+      <div style="font-size:12px;color:var(--muted);">${v.count} shop${v.count!==1?'s':''} × ${fmtRate(avg)}/mo avg</div>
     </div>`;
-  }).join('');
-  document.getElementById('billing-plan-bars').innerHTML = planData.map(p => {
-    const count = pb[p.key] || 0;
-    const pct = Math.round((count / total) * 100);
+  }).join('') : '<div class="empty-state">No active shops yet.</div>';
+  document.getElementById('billing-plan-bars').innerHTML = entries.length ? entries.map(([plan, v], i) => {
+    const color = planColor(plan, i);
+    const pct = Math.round((v.count / total) * 100);
     return `<div class="plan-row">
-      <div class="plan-label" style="color:${p.color};">${p.plan}</div>
-      <div class="plan-bar-wrap"><div class="plan-bar" style="width:${pct}%;background:${p.color};"></div></div>
-      <div class="plan-count">${count}</div>
+      <div class="plan-label" style="color:${color};min-width:52px;width:auto;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(plan)}</div>
+      <div class="plan-bar-wrap"><div class="plan-bar" style="width:${pct}%;background:${color};"></div></div>
+      <div class="plan-count">${v.count}</div>
       <div class="plan-rev">${pct}%</div>
     </div>`;
-  }).join('');
+  }).join('') : '<div class="empty-state">No active shops yet.</div>';
 }
 
 // ── Feature toggles ───────────────────────────────────────────────────────────

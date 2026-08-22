@@ -27,10 +27,21 @@ const Reviews = {
       }
       html.push('</div>');
 
-      // Review link
+      // Review link. The text requests below send the Google link when one is
+      // set in Settings, so show that as the primary link and keep the in-app
+      // rating page as the secondary (it's what feeds the stars on this page).
+      const google = ((Shop.settings && Shop.settings.googleReviewLink) || '').trim();
+      const primary = google || link;
       html.push('<div class="section-header">Your Review Link</div><div class="card">');
-      html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Send this to clients after their visit — they rate you in seconds.</div>');
-      html.push('<div style="display:flex;gap:8px;align-items:center;"><input class="form-input" id="rev-link" readonly value="'+esc(link)+'" style="flex:1;font-size:12px;" onclick="this.select()" /><button class="btn btn-green" onclick="navigator.clipboard.writeText(\''+esc(link)+'\');toast(\'Link copied ✓\')">Copy</button></div>');
+      html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:10px;">'
+        + (google ? 'Your Google review link — this is what the text requests below send.'
+                  : 'Send this to clients after their visit — they rate you in seconds.') + '</div>');
+      html.push('<div style="display:flex;gap:8px;align-items:center;"><input class="form-input" id="rev-link" readonly value="'+esc(primary)+'" style="flex:1;font-size:12px;" onclick="this.select()" /><button class="btn btn-green" onclick="navigator.clipboard.writeText(\''+esc(primary)+'\');toast(\'Link copied ✓\')">Copy</button></div>');
+      if (google) {
+        html.push('<div style="font-size:12px;color:var(--faint);margin-top:10px;">In-app rating page (feeds the stars above): <span style="font-family:monospace;">'+esc(link)+'</span></div>');
+      } else {
+        html.push('<div style="font-size:12px;color:var(--faint);margin-top:10px;">Add your Google review link in Settings to send clients straight to Google instead.</div>');
+      }
       html.push('</div>');
 
       // Ask recent clients (completed, has phone, not yet reviewed)
@@ -80,10 +91,19 @@ const Reviews = {
     if(!a || !a.customerPhone){ toast('No phone number on file','warning'); return; }
     // Manual review request: open the owner's Messages prefilled from the review
     // template (no Twilio/A2P). The {link} points at this shop's review page tied to
-    // the visit, so the rating lands back in-app.
+    // the visit, so the rating lands back in-app. _smsTemplateBody resolves the
+    // owner's own "Review request" template by name, so renaming or re-creating it
+    // in Settings keeps this prompt correct.
+    // {link} = the shop's Google review link (Settings → Google Review Link) —
+    // same as the Messages composer, Tasks and the client profile. Without one
+    // configured, fall back to the in-app rating page tied to this visit.
     const slug = (typeof Auth!=='undefined' && Auth.getShopSlug && Auth.getShopSlug()) || '';
-    const link = location.origin + '/review/' + slug + (slug?('?a='+a.id):'');
-    const body = _smsFill(_smsTemplateBody('review'), {
+    const google = ((Shop.settings && Shop.settings.googleReviewLink) || '').trim();
+    const link = google || (location.origin + '/review/' + slug + (slug?('?a='+a.id):''));
+    // A review text without the link is useless — append it if the template omits it.
+    let tpl = _smsTemplateBody('review');
+    if (!/\{link\}/.test(tpl)) tpl = (tpl.trim() + ' {link}').trim();
+    const body = _smsFill(tpl, {
       first: (a.customerName||'there').split(' ')[0],
       name:  a.customerName || 'there',
       shop:  (Shop.settings && Shop.settings.shopName) || 'us',

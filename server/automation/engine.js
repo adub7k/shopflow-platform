@@ -7,6 +7,10 @@
 //   • reminders → the Tasks tab "Text tomorrow's appointments" worklist
 //   • rebook    → the Tasks tab win-back cadence (already overlapped this)
 //   • review    → the Reviews page "Text request" buttons (one tap per visit)
+//   • lead drip → the Pipeline "By day" view: per-day templates (settings.
+//     pipeline.touchDays) become one-tap prefilled text buttons on each card —
+//     deliberately NOT server-sent (owner said no texting from the tracking
+//     number; everything goes through their own phone).
 // This module is kept as a no-op so the scheduler's call site is unchanged; the
 // per-campaign toggles in Settings still persist for when A2P is added back.
 //

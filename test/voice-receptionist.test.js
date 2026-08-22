@@ -178,7 +178,11 @@ console.log('\n— voice helpers —');
   check('system prompt: read-back names key fields', /callback number/.test(sys) && /service, and vehicle/.test(sys));
   check('system prompt: requires the first name + never save without it', /FIRST NAME/.test(sys) && /never call capture_lead without one/.test(sys));
   // Change 1: per-service pricing + slot-driving + objection logic.
-  check('system prompt: tint = starting-at range, no ceramic/PPF quote', /STARTING-AT range/.test(sys) && /do NOT quote a price at all/.test(sys));
+  check('system prompt: tint = two film levels w/ value stats + starting-at pricing, no ceramic/PPF quote',
+    /TWO levels of film/.test(sys) && /CARBON film/.test(sys) && /CERAMIC film/.test(sys)
+    && /forty-five percent of the heat/.test(sys) && /ninety-five percent of the heat/.test(sys)
+    && /STARTING-AT numbers/.test(sys) && /carbon starts around \$X and ceramic around \$Y/.test(sys)
+    && /do NOT quote a price at all/.test(sys));
   check('system prompt: never volunteer / flat / bundled price', /Never bring up price unprompted/.test(sys) && /never give a single bundled total/.test(sys));
   check('system prompt: offers two named times (not open-ended)', /TWO TIMES TO OFFER/.test(sys) && /at least 3 days out/.test(sys));
   check('system prompt: objection = one attempt, no budget, no discount', /PRICE OBJECTION/.test(sys) && /NEVER ask their budget/.test(sys) && /NEVER offer, hint at, or agree to a discount/.test(sys));

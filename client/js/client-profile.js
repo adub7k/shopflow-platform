@@ -79,12 +79,43 @@ function _smsTemplates(explicit) {
   });
   return list;
 }
-// Look up one template body by id, falling back to the matching default.
+// Built-in prompts (review request, appointment reminder…) ask for a template by
+// intent, not by row. Owners rename, delete, and re-create templates freely, so a
+// bare id lookup grabs whatever body happens to sit on that id — e.g. a repurposed
+// "review" row — while the owner's real "Review request" template is ignored.
+// Match on the name first, then fall back to the id, then to the built-in default.
+const SMS_TEMPLATE_INTENTS = {
+  review:       /review|feedback|rating/i,
+  reminder:     /remind/i,
+  confirmation: /confirm/i,
+  rebook:       /rebook|re-?book|win.?back|come\s*back|due/i,
+};
+
+// Resolve one intent to a template object ({id,label,body}) — the owner's own row
+// whenever we can identify it, otherwise the built-in default. Scored rather than
+// first-match so a freshly created "Review request" beats a renamed/repurposed row
+// that still sits on the legacy id.
+// Pass `explicit` to resolve against an unsaved list (Settings' live editor).
+function _smsTemplateFor(id, explicit) {
+  const list = (arguments.length > 1 ? _smsTemplates(explicit) : _smsTemplates()).filter(t => (t.body || '').trim());
+  const rx  = SMS_TEMPLATE_INTENTS[id];
+  const def = SMS_TEMPLATE_DEFAULTS.find(t => t.id === id) || null;
+  const defLabel = (def && def.label || '').trim().toLowerCase();
+  let best = null, bestScore = 0;
+  list.forEach(t => {
+    const label = (t.label || '').trim();
+    let score = 0;
+    if (defLabel && label.toLowerCase() === defLabel) score += 4;   // named exactly like the built-in
+    if (rx && rx.test(label))                          score += 2;  // named for this job
+    if (t.id === id)                                   score += 1;  // sitting on the legacy id
+    if (score > bestScore) { best = t; bestScore = score; }
+  });
+  return best || def;
+}
+// Look up one template body by intent/id, falling back to the matching default.
 function _smsTemplateBody(id) {
-  const found = _smsTemplates().find(t => t.id === id);
-  if (found) return found.body;
-  const def = SMS_TEMPLATE_DEFAULTS.find(t => t.id === id);
-  return def ? def.body : '';
+  const t = _smsTemplateFor(id);
+  return t ? t.body : '';
 }
 // Pure merge-field substitution (no formatting — pass already-formatted date/time).
 function _smsFill(body, vars) {

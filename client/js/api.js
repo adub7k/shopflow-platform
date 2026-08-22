@@ -19,7 +19,10 @@ const Auth = {
 // kanban statuses back onto the website state machine server-side.
 function _normalizeLead(l) {
   if (!l || l.channel !== 'website') return l;
-  const status = ({ NEW_LEAD:'new', CONTACTED:'contacted', APPOINTMENT_SET:'booked', COMPLETED:'closed', LOST:'closed' })[l.status] || l.status;
+  // pipelineStatus (stamped by /api/shop/leads/:id) preserves the granular
+  // pipeline stage (quoted/worked…) that the website state machine can't hold.
+  const status = l.pipelineStatus
+    || ({ NEW_LEAD:'new', CONTACTED:'contacted', APPOINTMENT_SET:'booked', COMPLETED:'closed', LOST:'lost' })[l.status] || l.status;
   return {
     ...l,
     status,
@@ -63,13 +66,14 @@ const db = {
   features:      { get: () => apiFetch('/features') },
   conversations: { all: () => apiFetch('/conversations'), forCustomer: (cid) => apiFetch('/conversations/customer/'+cid), markRead: (cid) => apiFetch('/conversations/read/'+cid,{method:'POST'}), save: (c) => apiFetch('/conversations',{method:'POST',body:c}) },
   sms:           { send: (o) => apiFetch('/sms/send',{method:'POST',body:o}) },
-  leads:         { all: async () => ((await apiFetch('/leads')) || []).map(_normalizeLead), update: (id,d) => apiFetch('/leads/'+id,{method:'POST',body:d}), delete: (id) => apiFetch('/leads/'+id,{method:'DELETE'}), convert: (id) => apiFetch('/leads/'+id+'/convert',{method:'POST'}), note: (id,text) => apiFetch('/leads/'+id+'/note',{method:'POST',body:{text,by:(typeof Auth!=='undefined'&&Auth.getName&&Auth.getName())||''}}), sms: (id,body) => apiFetch('/leads/'+id+'/sms',{method:'POST',body:{body}}), aiIntake: (id,transcript) => apiFetch('/leads/'+id+'/ai-intake',{method:'POST',body:{transcript}}) },
+  leads:         { all: async () => ((await apiFetch('/leads')) || []).map(_normalizeLead), update: (id,d) => apiFetch('/leads/'+id,{method:'POST',body:d}), bulkStatus: (ids,status) => apiFetch('/leads/bulk-status',{method:'POST',body:{ids,status}}), bulkDelete: (ids) => apiFetch('/leads/bulk-delete',{method:'POST',body:{ids}}), dedupe: () => apiFetch('/leads/dedupe',{method:'POST'}), delete: (id) => apiFetch('/leads/'+id,{method:'DELETE'}), convert: (id) => apiFetch('/leads/'+id+'/convert',{method:'POST'}), note: (id,text) => apiFetch('/leads/'+id+'/note',{method:'POST',body:{text,by:(typeof Auth!=='undefined'&&Auth.getName&&Auth.getName())||''}}), sms: (id,body) => apiFetch('/leads/'+id+'/sms',{method:'POST',body:{body}}), aiIntake: (id,transcript) => apiFetch('/leads/'+id+'/ai-intake',{method:'POST',body:{transcript}}) },
   auth:          { verifyPin: (pin) => apiFetch('/auth/verify-pin',{method:'POST',body:{pin}}), changePin: (cur,n) => apiFetch('/auth/change-pin',{method:'POST',body:{currentPin:cur,newPin:n}}) },
   blockedDates:  { all: () => apiFetch('/blocked-dates'), block: (date,reason) => apiFetch('/blocked-dates',{method:'POST',body:{date,reason}}), unblock: (date) => apiFetch('/blocked-dates/'+date,{method:'DELETE'}) },
   checkout:      { cash: (o) => apiFetch('/checkout/cash',{method:'POST',body:o}), session: (o) => apiFetch('/checkout/session',{method:'POST',body:o}), verify: (sid,aid) => apiFetch('/checkout/verify/'+sid+'?apptId='+aid) },
   stripe:        { status: () => apiFetch('/stripe/connect/status'), onboard: () => apiFetch('/stripe/connect/onboard',{method:'POST'}), disconnect: () => apiFetch('/stripe/connect/disconnect',{method:'POST'}) },
   square:        { status: () => apiFetch('/square/connect/status'), onboard: () => apiFetch('/square/connect/onboard',{method:'POST'}), disconnect: () => apiFetch('/square/connect/disconnect',{method:'POST'}), reconcileDeposits: (customerId) => apiFetch('/square/reconcile-deposits',{method:'POST',body:{customerId}}) },
   staff:         { all: () => apiFetch('/staff'), save: (u) => apiFetch('/staff',{method:'POST',body:u}), delete: (id) => apiFetch('/staff/'+id,{method:'DELETE'}) },
+  clientActivity:{ get: () => apiFetch('/client-activity') },
   gallery:       { add: (image,caption) => apiFetch('/gallery',{method:'POST',body:{image,caption}}), remove: (id) => apiFetch('/gallery/'+id,{method:'DELETE'}) },
   siteImage:     { set: (key,image) => apiFetch('/site-image',{method:'POST',body:{key,image}}), reset: (key) => apiFetch('/site-image/'+key,{method:'DELETE'}) },
   siteTeam:      { save: (m) => apiFetch('/site-team',{method:'POST',body:m}), remove: (id) => apiFetch('/site-team/'+id,{method:'DELETE'}) },

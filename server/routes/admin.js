@@ -7,21 +7,30 @@ const { requireAdmin } = require('../middleware');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb } = require('../db');
 const { upsertLead, getLeadPayloads } = require('../leads-core');
 
+// A shop's rate is ONLY its editable monthlyRate — the old barbershop tier
+// table (starter/pro/shop) is gone; a shop with no rate set contributes $0
+// until one is entered in the admin UI.
+const shopRate = (s) => Number(s.monthlyRate) || 0;
+
 // ── ADMIN: overview stats ─────────────────────────────────────────────────────
 router.get('/api/admin/stats', requireAdmin, (req, res) => {
   const shops = master.get('shops').value() || [];
-  const planPrices = { starter: 19.99, pro: 99, shop: 200 };
-  const MRR_GOAL = 25000;
+  const MRR_GOAL = Number((master.get('platformSettings').value() || {}).mrrGoal) || 25000;
 
   const activeShops  = shops.filter(s => s.active);
   const churned      = shops.filter(s => !s.active);
 
-  // Plan counts (active only for MRR)
-  const planCounts = {}, allPlanCounts = {};
-  activeShops.forEach(s => { planCounts[s.plan]    = (planCounts[s.plan]    || 0) + 1; });
-  shops.forEach(s       => { allPlanCounts[s.plan] = (allPlanCounts[s.plan] || 0) + 1; });
+  // Per-plan-label rollup from ACTUAL per-shop rates (active shops only).
+  const planStats = {};
+  activeShops.forEach(s => {
+    const label = s.plan || 'custom';
+    planStats[label] = planStats[label] || { count: 0, revenue: 0 };
+    planStats[label].count++; planStats[label].revenue += shopRate(s);
+  });
+  const planCounts = {};
+  Object.entries(planStats).forEach(([k, v]) => { planCounts[k] = v.count; });
 
-  const mrr = Object.entries(planCounts).reduce((sum, [plan, count]) => sum + (planPrices[plan] || 0) * count, 0);
+  const mrr = activeShops.reduce((sum, s) => sum + shopRate(s), 0);
 
   // Month-over-month: shops created this month vs last month
   const now = new Date();
@@ -31,24 +40,25 @@ router.get('/api/admin/stats', requireAdmin, (req, res) => {
 
   const newThisMonth  = activeShops.filter(s => (s.createdAt||'').startsWith(thisMonthStr));
   const newLastMonth  = activeShops.filter(s => (s.createdAt||'').startsWith(lastMonthStr));
-  const newMrrThisMonth = newThisMonth.reduce((s, shop) => s + (planPrices[shop.plan] || 0), 0);
-  const newMrrLastMonth = newLastMonth.reduce((s, shop) => s + (planPrices[shop.plan] || 0), 0);
+  const newMrrThisMonth = newThisMonth.reduce((sum, s) => sum + shopRate(s), 0);
+  const newMrrLastMonth = newLastMonth.reduce((sum, s) => sum + shopRate(s), 0);
 
   // Last month's implied MRR (shops active before this month)
   const lastMonthShops = shops.filter(s => s.active && (s.createdAt||'') < thisMonthStr + '-01');
-  const lastMrr = lastMonthShops.reduce((sum, s) => sum + (planPrices[s.plan] || 0), 0);
+  const lastMrr = lastMonthShops.reduce((sum, s) => sum + shopRate(s), 0);
   const mrrGrowth = lastMrr > 0 ? Math.round(((mrr - lastMrr) / lastMrr) * 100) : null;
 
   // Churn rate (inactive / total ever)
   const churnRate = shops.length > 0 ? Math.round((churned.length / shops.length) * 100) : 0;
 
-  // How many shops needed to hit $25k MRR
+  // How many more shops to hit the goal — per existing plan label (at that
+  // label's average real rate) so the "path" reflects what you actually charge.
   const mrrToGoal = Math.max(0, MRR_GOAL - mrr);
-  const shopsNeeded = {
-    starter: Math.ceil(mrrToGoal / planPrices.starter),
-    pro:     Math.ceil(mrrToGoal / planPrices.pro),
-    shop:    Math.ceil(mrrToGoal / planPrices.shop),
-  };
+  const shopsNeeded = {};
+  Object.entries(planStats).forEach(([label, v]) => {
+    const avgRate = v.count ? v.revenue / v.count : 0;
+    if (avgRate > 0) shopsNeeded[label] = { rate: Math.round(avgRate * 100) / 100, needed: Math.ceil(mrrToGoal / avgRate) };
+  });
 
   // Avg revenue per shop
   const avgMrr = activeShops.length ? (mrr / activeShops.length) : 0;
@@ -77,8 +87,9 @@ router.get('/api/admin/stats', requireAdmin, (req, res) => {
     mrrPct: Math.min(100, Math.round((mrr / MRR_GOAL) * 100)),
     shopsNeeded,
     planBreakdown: planCounts,
+    planStats,
     recentShops: [...shops].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 8).map(s => ({
-      id: s.id, shopName: s.shopName, plan: s.plan, email: s.email, createdAt: s.createdAt, active: s.active,
+      id: s.id, shopName: s.shopName, plan: s.plan, rate: shopRate(s), email: s.email, createdAt: s.createdAt, active: s.active,
     })),
   });
 });
@@ -99,7 +110,7 @@ router.get('/api/admin/shops', requireAdmin, (req, res) => {
       twilioConfigured = !!(twilioClient && shopFromNumber(s.id));
       bookingEnabled   = settings.bookingEnabled !== false;
     } catch(e) {}
-    return { id: s.id, shopName: s.shopName, slug: s.slug, email: s.email, phone: s.phone, plan: s.plan, active: s.active, createdAt: s.createdAt, lastActivity: s.lastActivity, customers, appointments, barbers, services, stripeConnected, twilioConfigured, bookingEnabled };
+    return { id: s.id, shopName: s.shopName, slug: s.slug, email: s.email, phone: s.phone, plan: s.plan, monthlyRate: s.monthlyRate != null ? s.monthlyRate : null, rate: shopRate(s), notes: s.notes || '', features: s.features || {}, active: s.active, createdAt: s.createdAt, lastActivity: s.lastActivity, customers, appointments, barbers, services, stripeConnected, twilioConfigured, bookingEnabled };
   });
   res.json(result);
 });
@@ -114,22 +125,97 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   const services    = db.get('services').value()     || [];
   const customers   = db.get('customers').value()    || [];
   const appointments = db.get('appointments').value() || [];
+  const leads  = db.get('leads').value()  || [];
+  const quotes = db.get('quotes').value() || [];
+  const calls  = db.get('calls').value()  || [];
   const now = new Date();
+  const today = now.toISOString().slice(0, 10);
   const thisMonth = now.toISOString().slice(0, 7);
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 7);
   const apptThisMonth = appointments.filter(a => a.date && a.date.startsWith(thisMonth)).length;
   const recentAppts = [...appointments].sort((a, b) => new Date(b.date + 'T' + (b.time || '00:00')) - new Date(a.date + 'T' + (a.time || '00:00'))).slice(0, 10);
+
+  // ── Account-management insights: how is this client's business doing, and is
+  // ShopFlow visibly earning its keep? Everything the account-review needs.
+  const leadCreated = l => l.createdAt || l.created_at || '';
+  const leadWon = l => ['booked', 'closed', 'APPOINTMENT_SET', 'COMPLETED'].includes(l.status);
+  const leadsThisMonth = leads.filter(l => leadCreated(l).startsWith(thisMonth));
+  const leadsLastMonth = leads.filter(l => leadCreated(l).startsWith(lastMonth));
+  // Avg first-response time in minutes, across leads that have one recorded.
+  const respTimes = leads.map(l => {
+    if (l.response_time_seconds != null) return l.response_time_seconds / 60;
+    if (l.firstResponseAt && leadCreated(l)) return Math.max(0, (new Date(l.firstResponseAt) - new Date(leadCreated(l))) / 60000);
+    return null;
+  }).filter(v => v != null && isFinite(v));
+
+  const doneRevenue = (list) => list.filter(a => a.status === 'done').reduce((s, a) => s + (Number(a.price) || 0), 0);
+  const revenueThisMonth = doneRevenue(appointments.filter(a => (a.date || '').startsWith(thisMonth)));
+  const revenueLastMonth = doneRevenue(appointments.filter(a => (a.date || '').startsWith(lastMonth)));
+  // Forecast: booked future work + approved-but-unscheduled estimates, plus the
+  // open estimate pipeline weighted by this shop's real acceptance rate.
+  const upcomingBooked = appointments
+    .filter(a => (a.date || '') >= today && !['done', 'cancelled', 'no-show'].includes(a.status))
+    .reduce((s, a) => s + (Number(a.price) || 0), 0);
+  const approvedEstimates = quotes.filter(q => q.status === 'approved').reduce((s, q) => s + (Number(q.total) || 0), 0);
+  const openEstimates     = quotes.filter(q => q.status === 'sent').reduce((s, q) => s + (Number(q.total) || 0), 0);
+  // 'completed' = the shop closed the work out as won; 'lost' = they closed it
+  // out as dead (the owner-side twin of a customer 'declined'). Both are decided.
+  const decided = quotes.filter(q => ['approved', 'scheduled', 'completed', 'declined', 'lost'].includes(q.status));
+  const wonQuotes = quotes.filter(q => ['approved', 'scheduled', 'completed'].includes(q.status));
+  // Accept rate: the owner's manual override wins (they know their real-world
+  // close rate); else this shop's computed estimate history; else 50%.
+  const computedAccept = decided.length ? Math.round(wonQuotes.length / decided.length * 100) : null;
+  const manualAccept = (shop.estAcceptRate != null && shop.estAcceptRate !== '') ? Math.min(100, Math.max(0, Number(shop.estAcceptRate) || 0)) : null;
+  const acceptRate = manualAccept != null ? manualAccept : (computedAccept != null ? computedAccept : 50);
+  // Open lead pipeline: quoted value sitting on non-terminal pipeline stages
+  // (owner-entered quotedAmount, falling back to what the AI quoted on the call).
+  const cfgStages = ((settings.pipeline || {}).stages) || [];
+  const terminalKeys = new Set((Array.isArray(cfgStages) && cfgStages.length ? cfgStages.filter(st => st.terminal).map(st => st.key) : ['closed', 'lost']).concat(['closed', 'lost', 'COMPLETED', 'LOST']));
+  const leadQuoted = l => l.quotedAmount != null ? (Number(l.quotedAmount) || 0) : (l.ai && l.ai.quotedPrice != null ? (Number(l.ai.quotedPrice) || 0) : 0);
+  const openPipeLeads = leads.filter(l => !terminalKeys.has(l.pipelineStatus || l.status) && leadQuoted(l) > 0);
+  const leadPipelineValue = openPipeLeads.reduce((s, l) => s + leadQuoted(l), 0);
+  const forecast = Math.round(upcomingBooked + approvedEstimates + (openEstimates + leadPipelineValue) * acceptRate / 100);
+
+  const quota = Number(shop.monthlyQuota) || 0;
+  const sources = {};
+  leads.forEach(l => { const src = l.channel || l.source || 'call'; sources[src] = (sources[src] || 0) + 1; });
+
+  const insights = {
+    leads: {
+      total: leads.length, thisMonth: leadsThisMonth.length, lastMonth: leadsLastMonth.length,
+      converted: leads.filter(leadWon).length,
+      conversionRate: leads.length ? Math.round(leads.filter(leadWon).length / leads.length * 100) : null,
+      avgResponseMins: respTimes.length ? Math.round(respTimes.reduce((a, b) => a + b, 0) / respTimes.length) : null,
+      sources,
+      callsThisMonth: calls.filter(c => (c.startedAt || '').startsWith(thisMonth)).length,
+    },
+    revenue: { thisMonth: revenueThisMonth, lastMonth: revenueLastMonth },
+    forecast: { total: forecast, upcomingBooked, approvedEstimates, openEstimates,
+                leadPipelineValue, leadPipelineCount: openPipeLeads.length,
+                estAcceptRate: acceptRate, acceptSource: manualAccept != null ? 'manual' : (computedAccept != null ? 'computed' : 'default'),
+                computedAcceptRate: computedAccept },
+    estimates: { open: quotes.filter(q => q.status === 'sent').length, approved: wonQuotes.length, total: quotes.length },
+    quota: { monthly: quota, pct: quota > 0 ? Math.round(revenueThisMonth / quota * 100) : null },
+    billing: { rate: shopRate(shop) },
+  };
+
+  // metaPageToken is a long-lived Meta page access token — never ship it to the
+  // browser. Same stance as settings.twilio.authToken / emailSmtp.pass in
+  // routes/shop.js: the panel only needs to know whether one is configured.
+  const shopSafe = { ...shop, metaPageToken: undefined, metaPageTokenSet: !!shop.metaPageToken };
   res.json({
-    shop, settings: { shopName: settings.shopName, tagline: settings.tagline, phone: settings.phone, address: settings.address, bookingEnabled: settings.bookingEnabled, accentColor: settings.accentColor, googleReviewLink: settings.googleReviewLink, loyalty: settings.loyalty, deposit: settings.deposit, stripeConnected: !!(settings.stripe?.connectAccountId && settings.stripe?.onboardingComplete), twilioConfigured: !!(twilioClient && shopFromNumber(shop.id)) },
+    shop: shopSafe, settings: { shopName: settings.shopName, tagline: settings.tagline, phone: settings.phone, address: settings.address, bookingEnabled: settings.bookingEnabled, accentColor: settings.accentColor, googleReviewLink: settings.googleReviewLink, loyalty: settings.loyalty, deposit: settings.deposit, stripeConnected: !!(settings.stripe?.connectAccountId && settings.stripe?.onboardingComplete), squareConnected: !!((settings.square && settings.square.accessToken) ), twilioConfigured: !!(twilioClient && shopFromNumber(shop.id)) },
     barbers, services,
     stats: { totalCustomers: customers.length, totalAppointments: appointments.length, apptThisMonth, activeBarbers: barbers.filter(b => b.active !== false).length },
     recentAppointments: recentAppts,
+    insights,
   });
 });
 
 // ── ADMIN: create shop ────────────────────────────────────────────────────────
 router.post('/api/admin/shops/create', requireAdmin, async (req, res) => {
   try {
-    const { shopName, email, password, phone, plan, industry } = req.body;
+    const { shopName, email, password, phone, plan, monthlyRate, industry } = req.body;
     if (!shopName || !email || !password) return res.status(400).json({ ok: false, error: 'shopName, email, password required' });
     const existing = master.get('accounts').find({ email: email.toLowerCase() }).value();
     if (existing) return res.status(400).json({ ok: false, error: 'Email already exists' });
@@ -139,21 +225,42 @@ router.post('/api/admin/shops/create', requireAdmin, async (req, res) => {
     const finalSlug = slugExists ? shopSlug + '-' + genId('') : shopSlug;
     const passwordHash = await bcrypt.hash(password, 10);
     const accountId = uuidv4();
+    const rate = (monthlyRate != null && monthlyRate !== '') ? (Number(monthlyRate) || 0) : null;
     master.get('accounts').push({ id: accountId, shopId, email: email.toLowerCase(), passwordHash, createdAt: new Date().toISOString(), plan: plan || 'pro', active: true }).write();
-    master.get('shops').push({ id: shopId, accountId, shopName, slug: finalSlug, email: email.toLowerCase(), phone: phone || '', plan: plan || 'pro', active: true, createdAt: new Date().toISOString(), lastActivity: new Date().toISOString() }).write();
+    master.get('shops').push({ id: shopId, accountId, shopName, slug: finalSlug, email: email.toLowerCase(), phone: phone || '', plan: plan || 'pro', monthlyRate: rate, active: true, createdAt: new Date().toISOString(), lastActivity: new Date().toISOString() }).write();
     const shopDb = getShopDb(shopId);
     initShopDb(shopDb, { shopName, email, phone, industry });
     res.json({ ok: true, shopId, shopSlug: finalSlug, shopName, crmUrl: '/shop/' + finalSlug, bookUrl: '/book/' + finalSlug });
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
 });
 
-// ── ADMIN: update shop (plan, active, name) ───────────────────────────────────
+// ── ADMIN: update shop (plan, rate, active, name, contact, notes) ─────────────
 router.patch('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   const shop = master.get('shops').find({ id: req.params.shopId }).value();
   if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
-  const allowed = ['plan', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber', 'features', 'notes'];
+  // metaPageId routes inbound Meta lead-ad webhooks to this tenant; metaPageToken
+  // is that page's long-lived access token (falls back to META_PAGE_ACCESS_TOKEN).
+  const allowed = ['plan', 'monthlyRate', 'monthlyQuota', 'estAcceptRate', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber', 'metaPageId', 'metaPageToken', 'features', 'notes'];
   const updates = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
+  // Custom rate: number, or null/'' to clear.
+  if (updates.monthlyRate !== undefined) updates.monthlyRate = (updates.monthlyRate === null || updates.monthlyRate === '') ? null : (Number(updates.monthlyRate) || 0);
+  // Monthly revenue quota for the shop (drives %-to-quota on the profile).
+  if (updates.monthlyQuota !== undefined) updates.monthlyQuota = (updates.monthlyQuota === null || updates.monthlyQuota === '') ? null : (Number(updates.monthlyQuota) || 0);
+  // Manual estimate-accept-rate override (0–100); null/'' clears back to computed.
+  if (updates.estAcceptRate !== undefined) updates.estAcceptRate = (updates.estAcceptRate === null || updates.estAcceptRate === '') ? null : Math.min(100, Math.max(0, Number(updates.estAcceptRate) || 0));
+  if (updates.plan !== undefined) updates.plan = String(updates.plan).trim().slice(0, 40) || 'custom';
+  // Trimmed so a value pasted from the Meta dashboard with stray whitespace
+  // still matches the page_id on an inbound webhook. '' clears the mapping.
+  if (updates.metaPageId !== undefined) updates.metaPageId = String(updates.metaPageId || '').trim().slice(0, 40);
+  // The GET above returns the token blanked, so a client that echoes the profile
+  // back would otherwise wipe it. '' means "leave as-is"; clearing is explicit
+  // (send null). metaPageId has no such hazard — it's never redacted.
+  if (updates.metaPageToken !== undefined) {
+    if (updates.metaPageToken === null) updates.metaPageToken = '';
+    else if (!String(updates.metaPageToken).trim()) delete updates.metaPageToken;
+    else updates.metaPageToken = String(updates.metaPageToken).trim();
+  }
   master.get('shops').find({ id: req.params.shopId }).assign(updates).write();
   master.get('accounts').find({ id: shop.accountId }).assign(updates.plan ? { plan: updates.plan } : {}).assign(updates.active !== undefined ? { active: updates.active } : {}).write();
   res.json({ ok: true });
@@ -447,14 +554,15 @@ function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
 // ── ADMIN: platform settings (get) ───────────────────────────────────────────
 router.get('/api/admin/platform-settings', requireAdmin, (req, res) => {
   const ps = master.get('platformSettings').value() || {};
-  res.json({ requirePayment: ps.requirePayment !== false });
+  res.json({ requirePayment: ps.requirePayment !== false, mrrGoal: Number(ps.mrrGoal) || 25000 });
 });
 
 // ── ADMIN: platform settings (update) ────────────────────────────────────────
 router.patch('/api/admin/platform-settings', requireAdmin, (req, res) => {
-  const allowed = ['requirePayment'];
+  const allowed = ['requirePayment', 'mrrGoal'];
   const updates = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
+  if (updates.mrrGoal !== undefined) updates.mrrGoal = Math.max(1, Number(updates.mrrGoal) || 25000);
   master.get('platformSettings').assign(updates).write();
   res.json({ ok: true });
 });
@@ -557,6 +665,37 @@ router.post('/api/admin/accounts/set-password', requireAdmin, async (req, res) =
   } catch(e) {
     console.error('Admin set-password error:', e.message);
     res.status(500).json({ ok: false, error: 'Failed to set password' });
+  }
+});
+
+// ── ADMIN: create a client-portal login for a shop ────────────────────────────
+// A client account is bound to exactly one shop and can ONLY use /api/client/*
+// (see middleware.js). Meant for outside collaborators — e.g. a marketing
+// vendor — so the owner hands over a credential we generate, no self-serve.
+router.post('/api/admin/accounts/create-client', requireAdmin, async (req, res) => {
+  try {
+    const { shop: shopKey, email, password, name } = req.body || {};
+    if (!shopKey || !email || !password) return res.status(400).json({ ok: false, error: 'shop, email, and password required' });
+    if (password.length < 6) return res.status(400).json({ ok: false, error: 'Password must be at least 6 characters' });
+    const shop = master.get('shops').find(s => s.slug === shopKey || s.id === shopKey).value();
+    if (!shop) return res.status(404).json({ ok: false, error: 'No shop matches ' + shopKey });
+    const existing = master.get('accounts').find({ email: String(email).toLowerCase() }).value();
+    if (existing) return res.status(400).json({ ok: false, error: 'An account with this email already exists' });
+    const passwordHash = await bcrypt.hash(password, 10);
+    master.get('accounts').push({
+      id: uuidv4(),
+      shopId: shop.id,
+      email: String(email).toLowerCase(),
+      passwordHash,
+      name: String(name || 'Client').slice(0, 60),
+      role: 'client',
+      createdAt: new Date().toISOString(),
+      active: true,
+    }).write();
+    res.json({ ok: true, email: String(email).toLowerCase(), shopSlug: shop.slug, portalUrl: '/portal' });
+  } catch(e) {
+    console.error('Admin create-client error:', e.message);
+    res.status(500).json({ ok: false, error: 'Failed to create client account' });
   }
 });
 

@@ -171,6 +171,21 @@
     out.push(`<div class="v2-pagehd"><div><h1>Tasks</h1>
       <div class="sub">${total ? total + ' follow-up' + (total !== 1 ? 's' : '') + ' queued — win-backs, service due, uncontacted leads, tomorrow’s reminders' : 'Win-backs, service reminders, and uncontacted leads land here'}</div></div>
       <div class="sp"></div><button class="btn" onclick="Tasks.cadenceModal()">Edit cadence</button></div>`);
+    // 30-day Meta-lead sequence: metrics strip + enrollment prompt.
+    const fs = this._fuStats || {};
+    if (fs.entered || (this._fuUnenrolled || []).length) {
+      const rate = fs.entered ? Math.round((fs.booked / fs.entered) * 100) : 0;
+      const cell = (v, label, cls) => `<div style="flex:1;min-width:78px;"><div class="metric-value${cls ? ' ' + cls : ''}" style="font-size:20px;">${v}</div><div class="metric-sub">${label}</div></div>`;
+      out.push(`<div class="metric-card" style="margin-bottom:14px;">
+        <div class="metric-label">30-day sequence</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">
+          ${cell(fs.due || 0, 'due today')}${cell(fs.sentToday || 0, 'sent today')}${cell(fs.active || 0, 'in sequence')}${cell(fs.paused || 0, 'paused')}${cell((fs.booked || 0) + (fs.entered ? ' (' + rate + '%)' : ''), 'booked', 'green')}
+        </div>
+        ${(this._fuUnenrolled || []).length ? `<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
+          <div style="flex:1;font-size:12.5px;color:var(--muted);">${this._fuUnenrolled.length} Meta lead${this._fuUnenrolled.length === 1 ? '' : 's'} not in the sequence yet.</div>
+          <button class="btn btn-sm btn-green" onclick="Tasks.fuEnrollAll(this)">Start sequence</button></div>` : ''}
+      </div>`);
+    }
     if (!total) {
       out.push(`<div class="v2-card"><div class="empty-state"><div class="empty-icon">✓</div>
         <div class="empty-text">You’re all caught up</div>
@@ -187,6 +202,26 @@
   };
 
   Tasks._card = function (t) {
+    // 30-day sequence rows: the step is the task — one green button sends it.
+    if (t.source === 'sequence') {
+      const acts = [
+        `<button class="btn btn-sm btn-green" onclick="Tasks.fuSend('${t.id}')">Send follow-up</button>`,
+        t.phone ? `<button class="btn btn-sm" onclick="Tasks.call('${t.id}')">Call</button>` : '',
+        `<button class="btn btn-sm" onclick="Tasks.fuMark('${t.id}','replied')">Replied</button>`,
+        `<button class="btn btn-sm" onclick="Tasks.fuMark('${t.id}','skip')">Skip</button>`,
+      ].filter(Boolean).join('');
+      return `<div class="list-row" style="align-items:flex-start;">
+        <span onclick="Tasks.fuOpen('${t.id}')" style="cursor:pointer;">${avatarEl(t.name, 36)}</span>
+        <div class="list-main">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;" onclick="Tasks.fuOpen('${t.id}')">
+            <span class="list-name">${esc(t.name)}</span>
+            <span class="badge badge-yellow">${esc(t.step.label)}</span>
+            <span style="font-size:11.5px;font-weight:700;color:${t.detail === 'Due today' ? 'var(--green-deep,var(--green))' : 'var(--red)'};">${esc(t.detail)}</span>
+          </div>
+          ${t.reason ? `<div class="list-sub">${esc(t.reason)}</div>` : ''}
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${acts}</div>
+        </div></div>`;
+    }
     const SRC = {
       winback: ['badge-blue', 'Win-back'], service: ['badge-green', 'Service due'],
       lead: ['badge-yellow', 'New lead'], reminder: ['badge-green', 'Reminder'],
@@ -215,8 +250,8 @@
     try {
       [this._data, this._services] = await Promise.all([db.quotes.all(), db.services.all()]);
       const open = this._data.filter(q => q.status === 'sent');
-      const won = this._data.filter(q => q.status === 'approved' || q.status === 'scheduled');
-      const decided = won.length + this._data.filter(q => q.status === 'declined').length;
+      const won = this._data.filter(q => ['approved', 'scheduled', 'completed'].includes(q.status));
+      const decided = won.length + this._data.filter(q => ['declined', 'lost'].includes(q.status)).length;
       const rate = decided ? Math.round(won.length / decided * 100) : null;
 
       const html = [];
@@ -226,18 +261,18 @@
 
       html.push(`<div class="v2-mgrid" style="grid-template-columns:repeat(3,1fr);">
         <div class="metric-card"><div class="metric-label">Awaiting response</div><div class="metric-value">${fmtMoney(open.reduce((s, q) => s + (Number(q.total) || 0), 0))}</div><div class="metric-sub">${open.length} estimate${open.length !== 1 ? 's' : ''} out</div></div>
-        <div class="metric-card"><div class="metric-label">Approved value</div><div class="metric-value green">${fmtMoney(won.reduce((s, q) => s + (Number(q.total) || 0), 0))}</div><div class="metric-sub">${won.length} approved or scheduled</div></div>
+        <div class="metric-card"><div class="metric-label">Won value</div><div class="metric-value green">${fmtMoney(won.reduce((s, q) => s + (Number(q.total) || 0), 0))}</div><div class="metric-sub">${won.length} approved, scheduled or completed</div></div>
         <div class="metric-card"><div class="metric-label">Acceptance rate</div><div class="metric-value">${rate != null ? rate + '%' : '—'}</div><div class="metric-sub">of decided estimates</div></div></div>`);
 
-      const tabs = [['', 'All'], ['sent', 'Sent'], ['approved', 'Approved'], ['scheduled', 'Scheduled'], ['declined', 'Declined']];
+      const tabs = [['open', 'Open'], ['sent', 'Sent'], ['approved', 'Approved'], ['scheduled', 'Scheduled'], ['completed', 'Completed'], ['lost', 'Lost'], ['', 'All']];
       html.push(`<div class="v2-chips" style="margin-bottom:12px;">${tabs.map(([v, lb]) =>
         `<button class="v2-chip${this._filter === v ? ' on' : ''}" onclick="Quotes._filter='${v}';Quotes.render()">${lb}</button>`).join('')}</div>`);
 
-      const filtered = this._data.filter(q => !this._filter || q.status === this._filter);
+      const filtered = this._data.filter(q => this._matches(q, this._filter));
       if (!filtered.length) {
         html.push(`<div class="v2-card"><div class="empty-state"><div class="empty-icon">📄</div>
-          <div class="empty-text">No estimates${this._filter ? ' here' : ' yet'}</div>
-          ${!this._filter && canWrite() ? '<div class="list-sub" style="margin-top:2px;">Create one to quote a ceramic, PPF, or correction job.</div>' : ''}</div></div>`);
+          <div class="empty-text">No ${this._filter === 'open' && this._data.length ? 'open ' : ''}estimates${this._data.length ? ' here' : ' yet'}</div>
+          ${!this._data.length && canWrite() ? '<div class="list-sub" style="margin-top:2px;">Create one to quote a ceramic, PPF, or correction job.</div>' : ''}</div></div>`);
       } else {
         html.push(`<div class="v2-card v2-tablewrap"><table class="v2-table">
           <thead><tr><th>Estimate</th><th>Customer</th><th>Vehicle</th><th class="r">Items</th><th class="r">Total</th><th>Status</th></tr></thead><tbody>`);
@@ -356,6 +391,23 @@
         html.push('</div></div>');
       }
 
+      // Booked by: sales attribution — who ENTERED each job (from the login that
+      // created it), vs. "Revenue by barber" below which is who PERFORMS the work.
+      // Booked = money they put on the calendar this month; Closed = their jobs
+      // marked done this month.
+      if (data.byCreator?.length) {
+        html.push(`<div class="v2-card"><div class="v2-chd"><div class="t">Booked by</div><span class="sub">who brought it in · this month</span></div><div style="padding:10px 16px 12px;">
+          <div style="display:flex;gap:10px;padding:0 0 6px;font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:600;">
+            <span style="flex:1;">Person</span><span style="width:104px;text-align:right;">Booked</span><span style="width:104px;text-align:right;">Closed</span></div>`);
+        data.byCreator.forEach(p => {
+          html.push(`<div style="display:flex;align-items:center;gap:10px;padding:5px 0;">
+            <span style="font-size:12.5px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(p.name)}</span>
+            <span class="num" style="width:104px;text-align:right;font-size:12.5px;font-weight:650;font-variant-numeric:tabular-nums;">${fmtMoney(p.bookedMonth)} <span style="color:var(--faint);font-weight:500;font-size:10.5px;">×${p.bookedMonthJobs}</span></span>
+            <span class="num" style="width:104px;text-align:right;font-size:12.5px;font-weight:650;color:var(--green-deep);font-variant-numeric:tabular-nums;">${fmtMoney(p.closedMonth)} <span style="color:var(--faint);font-weight:500;font-size:10.5px;">×${p.closedMonthJobs}</span></span></div>`);
+        });
+        html.push(`<div style="font-size:11px;color:var(--faint);margin-top:8px;">Booked = jobs this person entered this month (any status). Closed = their jobs completed this month. Older appointments (before attribution existed) aren’t counted.</div></div></div>`);
+      }
+
       if (data.byBarber?.length > 1) {
         const maxRev = Math.max(...data.byBarber.map(b => b.revenue), 1);
         html.push(`<div class="v2-card"><div class="v2-chd"><div class="t">Revenue by ${esc(V('staffPlural', 'Barber').toLowerCase())}</div></div><div style="padding:10px 16px 12px;">`);
@@ -424,10 +476,15 @@
       const reviews = data.reviews || [];
       const st = data.stats || { count: 0, avg: 0, dist: [0, 0, 0, 0, 0] };
       const link = location.origin + '/review/' + (Auth.getShopSlug() || '');
+      // Text requests send the Google link when Settings has one — show that as
+      // the link to copy, with the in-app rating page (which feeds the stars
+      // below) as the secondary.
+      const google = ((Shop.settings && Shop.settings.googleReviewLink) || '').trim();
+      const primary = google || link;
       const html = [];
 
       html.push(`<div class="v2-pagehd"><div><h1>Reviews</h1><div class="sub">Collect ratings through your review link and feature the best on your booking page</div></div>
-        <div class="sp"></div><button class="btn" onclick="navigator.clipboard.writeText('${esc(link)}');toast('Review link copied ✓')">Copy review link</button></div>`);
+        <div class="sp"></div><button class="btn" onclick="navigator.clipboard.writeText('${esc(primary)}');toast('Review link copied ✓')">Copy review link</button></div>`);
 
       html.push(`<div class="v2-card"><div style="display:flex;gap:26px;align-items:center;padding:18px 20px;flex-wrap:wrap;">`);
       if (st.count) {
@@ -447,10 +504,10 @@
         html.push(`<div style="flex:1;text-align:center;padding:8px 0;"><div style="font-size:28px;margin-bottom:6px;">⭐</div>
           <div style="font-weight:650;">No reviews yet</div><div style="font-size:12.5px;color:var(--muted);margin-top:2px;">Share your review link to start collecting feedback.</div></div>`);
       }
-      html.push(`<div style="min-width:230px;flex:1;"><div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">Your review link</div>
-        <div style="display:flex;gap:6px;"><input class="form-input" readonly value="${esc(link)}" style="flex:1;font-size:11.5px;height:32px;" onclick="this.select()" />
-        <button class="btn btn-sm btn-green" style="height:32px;" onclick="navigator.clipboard.writeText('${esc(link)}');toast('Link copied ✓')">Copy</button></div>
-        <div style="font-size:11px;color:var(--faint);margin-top:5px;">Send after a visit — they rate you in seconds.</div></div></div></div>`);
+      html.push(`<div style="min-width:230px;flex:1;"><div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">${google ? 'Your Google review link' : 'Your review link'}</div>
+        <div style="display:flex;gap:6px;"><input class="form-input" readonly value="${esc(primary)}" style="flex:1;font-size:11.5px;height:32px;" onclick="this.select()" />
+        <button class="btn btn-sm btn-green" style="height:32px;" onclick="navigator.clipboard.writeText('${esc(primary)}');toast('Link copied ✓')">Copy</button></div>
+        <div style="font-size:11px;color:var(--faint);margin-top:5px;">${google ? 'This is what the text requests below send. In-app rating page: ' + esc(link) : 'Send after a visit — they rate you in seconds. Add a Google review link in Settings to send clients straight to Google.'}</div></div></div></div>`);
 
       const done = (appts || []).filter(a => a.status === 'done' && a.customerPhone && !a.reviewId)
         .sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 6);

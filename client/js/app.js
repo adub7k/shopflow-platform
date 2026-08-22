@@ -5,8 +5,8 @@ function closeSidebar(){document.body.classList.remove('sidebar-open');}
 // ── Role-based page permissions ───────────────────────────────────────────────
 // full = owner/full access · technician = appts + clients · viewonly = calendar only
 const ROLE_PAGES = {
-  full:       ['dashboard','messages','appointments','response','leads','clients','quotes','revenue','tasks','reviews','automations','newsletter','settings'],
-  technician: ['dashboard','messages','appointments','response','leads','clients','quotes','tasks'],
+  full:       ['dashboard','messages','appointments','response','pipeline','leads','clients','quotes','revenue','tasks','reviews','automations','newsletter','settings'],
+  technician: ['dashboard','messages','appointments','response','pipeline','leads','clients','quotes','tasks'],
   viewonly:   ['appointments'],
 };
 // Pages that only appear for a given industry. Injected after the role base set,
@@ -47,7 +47,7 @@ const App = {
     document.querySelectorAll('.nav-item,.bottom-nav-item').forEach(b=>b.classList.remove('active'));
     const el=document.getElementById('page-'+page); if(el)el.classList.add('active');
     document.querySelectorAll('[data-page="'+page+'"]').forEach(b=>b.classList.add('active'));
-    const titles={dashboard:'Dashboard',messages:'Messages',appointments:'Appointments',jobs:'Jobs',properties:'Properties',crews:'Crews',recurring:'Recurring',response:'Response Center',leads:'Leads',clients:'Clients',quotes:'Estimates',revenue:'Revenue',tasks:'Tasks',reviews:'Reviews',automations:'Automations',settings:'Settings'};
+    const titles={dashboard:'Dashboard',messages:'Messages',appointments:'Appointments',jobs:'Jobs',properties:'Properties',crews:'Crews',recurring:'Recurring',response:'Response Center',pipeline:'Pipeline',leads:'Leads',clients:'Clients',quotes:'Estimates',revenue:'Revenue',tasks:'Tasks',reviews:'Reviews',automations:'Automations',settings:'Settings'};
     const tt=document.getElementById('topbar-title'); if(tt&&titles[page])tt.textContent=titles[page];
     this._render(page);
   },
@@ -60,6 +60,7 @@ const App = {
     if(page==='crews')       Crews.render();
     if(page==='recurring')   Recurring.render();
     if(page==='response')    Response.render();
+    if(page==='pipeline')    Pipeline.render();
     if(page==='leads')       Leads.render();
     if(page==='clients')     Clients.render();
     if(page==='quotes')      Quotes.render();
@@ -83,6 +84,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     Shop.settings = s; Shop.industry = s.industry||'barbershop'; Shop.vocab = s.vocab||{}; Shop.fields = s.customFields||[]; Shop.statuses = s.statuses||[]; Shop.sizes = s.vehicleSizes||[]; Shop.addons = s.addons||[]; Shop.membershipPlans = s.membershipPlans||[]; Shop.serviceCategories = s.serviceCategories||[]; Shop.supportsQuotes = !!s.supportsQuotes; Shop.tax = s.tax||{enabled:false,rate:0,label:'Sales Tax'};
     const tt=document.getElementById('topbar-title'); if(tt)tt.textContent=s.shopName||'ShopFlow';
     const sn=document.getElementById('sidebar-shop-name'); if(sn&&s.shopName)sn.textContent=s.shopName;
+    // Who's signed in + Sign out, in the sidebar footer. Sign-out also lives in
+    // Settings, but technicians and view-only staff can't open Settings — this is
+    // their only way off the device.
+    const un=document.getElementById('sidebar-user-name');
+    const ur=document.getElementById('sidebar-user-role');
+    if(un)un.textContent=Auth.getName()||'Signed in';
+    if(ur)ur.textContent={full:'Owner',technician:'Technician',viewonly:'View only'}[Auth.getRole()]||'';
     const ts=document.getElementById('topbar-sub');   if(ts&&s.tagline)ts.textContent=s.tagline;
 
     // Build the grouped, industry-aware sidebar from the nav registry, then apply
@@ -90,12 +98,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (typeof NavRegistry !== 'undefined') NavRegistry.render();
     applyRoleNav();
     // Push-notification deep links: sw-push.js opens /response-center (website
-    // leads) or /leads (public/Meta leads + missed-call reminders). The server
-    // serves the app shell at both, so land on the matching page.
+    // leads), /pipeline (new-lead + missed-call pushes), or /leads (older cached
+    // payloads). The server serves the app shell at all three, so land on the
+    // matching page.
     const wantsResponse = location.pathname.startsWith('/response-center') && canSee('response');
+    const wantsPipeline = location.pathname.startsWith('/pipeline') && canSee('pipeline');
     const wantsLeads = location.pathname.startsWith('/leads') && canSee('leads');
     await App.nav(
       wantsResponse ? 'response'
+      : wantsPipeline ? 'pipeline'
       : wantsLeads ? 'leads'
       : (canSee('dashboard') ? 'dashboard' : allowedPages()[0])
     );

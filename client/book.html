@@ -293,6 +293,7 @@ img{max-width:100%;display:block;}
     </div>
     <button class="cta-btn" id="cta-btn" disabled onclick="B.confirm()">Book now</button>
   </div>
+  <div id="cta-dep-note" style="display:none;text-align:center;font-size:11px;color:var(--faint);padding:0 16px 8px;">Deposits are non-refundable and are applied toward your service total.</div>
 </div>
 
 <!-- Lightbox -->
@@ -585,6 +586,10 @@ const B = {
   updateCTA(){
     const s=this.sel, dep=this.shop.deposit, meta=document.getElementById('cta-meta'),
           price=document.getElementById('cta-price'), btn=document.getElementById('cta-btn');
+    // Non-refundable disclosure: shown whenever this shop takes a booking deposit
+    // (set before the no-service early return so it's visible from the start).
+    const depNote=document.getElementById('cta-dep-note');
+    if(depNote) depNote.style.display = (dep&&dep.enabled) ? 'block' : 'none';
     if(!s.svcId){ meta.textContent='Choose a service to start'; price.textContent=''; btn.disabled=true; btn.textContent='Book now'; return; }
     price.textContent='$'+(s.svcPrice+this._addonsTotal());
     // Require the full booking AND contact + vehicle info before the button works,

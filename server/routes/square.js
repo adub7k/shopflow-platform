@@ -11,6 +11,7 @@ const jwt = require('jsonwebtoken');
 const { master, getShopDb, shopHelpers, genId, JWT_SECRET } = require('../db');
 const { requireAuth, requireRole } = require('../middleware');
 const sq = require('../payments/square');
+const { ensureQuoteCustomer } = require('../quotes-core');
 
 const APP_URL      = process.env.APP_URL || 'https://shopflowio.up.railway.app';
 const REDIRECT_URI = APP_URL + '/api/square/oauth/callback';
@@ -163,7 +164,7 @@ router.post('/api/public/:shopSlug/square-deposit-session', async (req, res) => 
     const amountCents = Math.round(Number(amount || s.deposit?.amount || 10) * 100);
     const link = await sq.createPaymentLink({
       name: 'Deposit — ' + (appt.service || 'Appointment'),
-      description: (s.shopName || '') + ' · ' + appt.date + ' at ' + appt.time,
+      description: (s.shopName || '') + ' · ' + appt.date + ' at ' + appt.time + ' · non-refundable deposit',
       amountCents,
       redirectUrl: APP_URL + '/sq/booking-deposit-success?appt=' + appointmentId + '&shop=' + shop.id,
       // Key by appointment + amount so re-sending the same amount is idempotent,
@@ -216,7 +217,7 @@ router.post('/api/shop/square/customer-deposit', requireAuth, requireRole('full'
     const depId = genId('dep');
     const link = await sq.createPaymentLink({
       name: 'Deposit — ' + (s.shopName || 'Detail'),
-      description: (s.shopName || '') + ' deposit',
+      description: (s.shopName || '') + ' · non-refundable deposit',
       amountCents,
       redirectUrl: APP_URL + '/sq/customer-deposit-success?cust=' + req.body.customerId + '&shop=' + shop.id + '&dep=' + depId,
       idempotencyKey: 'cdep-' + depId,
@@ -255,6 +256,73 @@ router.get('/sq/customer-deposit-success', async (req, res) => {
   res.send('<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="font-family:-apple-system,sans-serif;text-align:center;padding:60px 20px;background:#f5f5f7;"><div style="font-size:64px;margin-bottom:20px;">✅</div><div style="font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:8px;">Deposit received!</div><div style="font-size:15px;color:#6e6e73;line-height:1.6;margin-bottom:24px;">Thanks — your deposit was received. We\'ll see you soon.</div><div style="font-size:13px;color:#aeaeb2;">You can close this tab.</div></body></html>');
 });
 
+// ── PUBLIC: quote/estimate deposit via Square (Approve & pay on /quote page) ──
+// Same hosted-checkout pattern as booking deposits: create a Quick Pay link,
+// remember the order id on the quote, verify paid on the redirect return.
+function fulfillSquareQuoteDeposit(h, q) {
+  if (q.depositPaid) return false; // idempotent — redirect + reconcile may both fire
+  q.depositPaid = true; q.depositPaidAt = new Date().toISOString();
+  if (q.status !== 'approved' && q.status !== 'scheduled') { q.status = 'approved'; q.approvedAt = q.depositPaidAt; }
+  h.upsert('quotes', q);
+  try { ensureQuoteCustomer(h, q); } catch (e) {} // approved = real client in the CRM
+  return true;
+}
+// Called from the public quote GET too, so a missed redirect (closed tab)
+// self-heals the next time anyone opens the estimate. Best-effort by design.
+async function reconcileSquareQuoteDeposit(db, s, h, q) {
+  if (!q || q.depositPaid || !q.squareOrderId) return false;
+  const creds = (await resolveSquare(db, s)) || {};
+  if (await sq.isOrderPaid(q.squareOrderId, { accessToken: creds.accessToken })) return fulfillSquareQuoteDeposit(h, q);
+  return false;
+}
+
+router.post('/api/public/:shopSlug/square-quote-deposit-session', async (req, res) => {
+  try {
+    const shop = master.get('shops').find({ slug: req.params.shopSlug, active: true }).value();
+    if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
+    const db = getShopDb(shop.id); const s = db.get('settings').value() || {}; const h = shopHelpers(db);
+    const creds = await resolveSquare(db, s);
+    if (!creds) return res.status(400).json({ ok: false, error: 'Square not connected' });
+    const q = h.getById('quotes', req.body.quoteId);
+    if (!q) return res.status(404).json({ ok: false, error: 'Quote not found' });
+    if (q.status === 'declined') return res.status(400).json({ ok: false, error: 'This estimate was declined.' });
+    const amountCents = Math.round(Number(q.depositAmount || 0) * 100);
+    if (amountCents < 100) return res.status(400).json({ ok: false, error: 'No deposit configured for this estimate' });
+    const link = await sq.createPaymentLink({
+      name: 'Deposit — ' + (q.number || 'Estimate'),
+      description: (s.shopName || '') + ' · non-refundable deposit, applied toward your total',
+      amountCents,
+      redirectUrl: APP_URL + '/sq/quote-deposit-success?quote=' + q.id + '&shop=' + shop.id,
+      idempotencyKey: 'qdep-' + q.id + '-' + amountCents,
+      accessToken: creds.accessToken, locationId: creds.locationId,
+    });
+    q.squareOrderId = link.orderId; q.squarePaymentLinkId = link.id;
+    h.upsert('quotes', q);
+    res.json({ ok: true, url: link.url });
+  } catch (e) {
+    console.error('Square quote-deposit-session error:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Verify paid, flip the quote, then land the customer back on the estimate
+// itself — it renders the APPROVED stamp + "deposit received" note in the
+// stationery design (nicer than a generic success page).
+router.get('/sq/quote-deposit-success', async (req, res) => {
+  let slug = '', quoteId = String(req.query.quote || '');
+  try {
+    const shopId = req.query.shop;
+    const shop = master.get('shops').find({ id: shopId }).value();
+    slug = shop ? shop.slug : '';
+    if (shop && quoteId) {
+      const db = getShopDb(shopId); const h = shopHelpers(db); const s = db.get('settings').value() || {};
+      await reconcileSquareQuoteDeposit(db, s, h, h.getById('quotes', quoteId));
+    }
+  } catch (e) { /* best-effort; the public quote GET reconciles as a backstop */ }
+  if (slug && quoteId) return res.redirect('/quote/' + slug + '/' + quoteId);
+  res.send('<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="font-family:-apple-system,sans-serif;text-align:center;padding:60px 20px;background:#f5f5f7;"><div style="font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:8px;">Deposit received</div><div style="font-size:15px;color:#6e6e73;line-height:1.6;">Thanks — your estimate is approved. You can close this tab.</div></body></html>');
+});
+
 // ── AUTHED: reconcile a client's pending deposits against Square ───────────────
 // The success redirect can be missed (closed tab / PUBLIC_URL mismatch), so the
 // owner app calls this when opening a profile: ask Square whether each "sent"
@@ -287,3 +355,4 @@ router.post('/api/shop/square/reconcile-deposits', requireAuth, async (req, res)
 
 module.exports = router;
 module.exports.squareConnected = squareConnected;
+module.exports.reconcileSquareQuoteDeposit = reconcileSquareQuoteDeposit;

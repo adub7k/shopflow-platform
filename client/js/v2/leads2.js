@@ -1,32 +1,26 @@
 // ── v2 Leads (redesign) ───────────────────────────────────────────────────────
 // Loaded ONLY by app2.html, after js/pages/leads.js. The default view is a
 // simple list: each lead with who they are, what they asked for, and how to
-// reach them. The pipeline board still exists behind a "Pipeline" toggle for
-// anyone who wants to drag leads between stages. Rows open the existing lead
-// modal; all data APIs are the existing ones.
+// reach them. The "Pipeline" toggle jumps to the dedicated Pipeline board page
+// (js/pages/pipeline.js) — full stage set, one-tap advance, follow-up timing.
+// Rows open the existing lead modal; all data APIs are the existing ones.
 (function () {
-  const ORDER = ['new', 'contacted', 'booked', 'closed'];
-  const COL_HINT = {
-    new: 'Uncontacted — answer these first',
-    contacted: 'Waiting on a reply or estimate',
-    booked: 'Converted to an appointment',
-    closed: 'Won or lost — kept for records',
+  // Stage vocabulary comes from the shared owner-editable config
+  // (Leads.stageConfig, settings.pipeline.stages) — resolved per render, not at
+  // load time, because Shop.settings isn't populated until boot finishes.
+  const stages = () => Leads.stageConfig();
+  const orderKeys = () => stages().map(s => s.key);
+  const statusPill = (key) => {
+    const s = stages().find(x => x.key === key);
+    return s ? `<span class="badge" style="background:${s.color}1a;color:${s.color};">${esc(s.label)}</span>` : '';
   };
-  const STATUS_PILL = {
-    new:       '<span class="badge badge-blue">New</span>',
-    contacted: '<span class="badge badge-yellow">Contacted</span>',
-    booked:    '<span class="badge badge-green">Booked</span>',
-    closed:    '<span class="badge badge-gray">Closed</span>',
-  };
-  let dragId = null;
 
-  Leads._view2 = Leads._view2 || 'list';        // 'list' | 'pipeline'
   Leads._statusFilter2 = Leads._statusFilter2 || 'all';
 
-  // A lead whose status isn't one of the four known stages (legacy or website
-  // state-machine values) is treated as "new" for placement/filtering so it
+  // A lead whose status isn't a configured stage (legacy or website
+  // state-machine values) is treated as intake for placement/filtering so it
   // never silently disappears.
-  const colOf = (l) => ORDER.includes(l.status) ? l.status : 'new';
+  const colOf = (l) => { const ks = orderKeys(); return ks.includes(l.status) ? l.status : ks[0]; };
 
   // Safe read of "what they asked for" — coerces stray shapes so one odd record
   // can't throw. Returns { services, vehicle, note } strings.
@@ -63,7 +57,8 @@
   // Leads / Booked / Conversion for a subset. 30-day window is the ad-spend read;
   // all-time rides along in the subtitle.
   function channelStats(subset) {
-    const isBooked = (l) => colOf(l) === 'booked';
+    // Won = reached booked or beyond (Leads._isWon guards legacy closed=dead).
+    const isBooked = (l) => Leads._isWon(l);
     const last30 = subset.filter(l => (Date.now() - new Date(l.createdAt || l.firstContactAt || 0)) < 30 * 86400000);
     const b30 = last30.filter(isBooked).length, bAll = subset.filter(isBooked).length;
     const conv = last30.length ? Math.round(b30 / last30.length * 100) : 0;
@@ -101,6 +96,10 @@
   }
 
   Leads.render = async function () {
+    // Modal actions (save / status / note / convert) all funnel back through
+    // here — when the owner is working from the Pipeline board, repaint that
+    // instead of the hidden list.
+    if (typeof Pipeline !== 'undefined' && Pipeline.isActive()) return Pipeline.render();
     const el = document.getElementById('page-leads'); if (!el) return;
     el.classList.add('v2-wide');
     // Keep the last good leads on a failed refresh, and surface the error instead
@@ -110,13 +109,13 @@
     catch (e) { loadError = (e && e.message) || 'Could not load leads'; this._leads = this._leads || []; }
     const leads = this._leads || [];
 
-    const counts = { all: leads.length }; ORDER.forEach(s => counts[s] = 0);
+    const counts = { all: leads.length }; orderKeys().forEach(k => counts[k] = 0);
     leads.forEach(l => { counts[colOf(l)]++; });
 
     const html = [];
 
-    // Header + view toggle (list is default; pipeline lives behind the toggle).
-    const seg = (v, label) => `<button class="v2-seg${this._view2 === v ? ' on' : ''}" onclick="Leads.setView('${v}')">${label}</button>`;
+    // Header + view toggle (list here; "Pipeline" jumps to the board page).
+    const seg = (v, label) => `<button class="v2-seg${v === 'list' ? ' on' : ''}" onclick="Leads.setView('${v}')">${label}</button>`;
     html.push(`<div class="v2-pagehd"><div><h1>Leads</h1>
       <div class="sub">${counts.all} lead${counts.all !== 1 ? 's' : ''}${counts.new ? ` · <span style="color:var(--blue,#2f6feb);font-weight:600;">${counts.new} new</span>` : ''}</div></div>
       <div class="sp"></div>
@@ -128,12 +127,39 @@
     // Phone-vs-Meta channel split, above both views.
     html.push(channelMetrics(leads));
 
-    if (this._view2 === 'pipeline') { renderPipeline.call(this, html, leads, counts); el.innerHTML = html.join(''); wireDnD(); return; }
+    // Duplicate detector: same person under two phone formats (E.164 vs
+    // national) — the server merge folds histories together, oldest wins.
+    const pk = (p) => String(p || '').replace(/\D/g, '').slice(-10);
+    const seen = {};
+    let dupes = 0;
+    leads.forEach(l => {
+      if (l.channel === 'website') return;
+      const k = pk(l.phone);
+      if (!k) return;
+      if (seen[k]) dupes++; else seen[k] = true;
+    });
+    if (dupes) {
+      html.push(`<div style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--orange);border-radius:10px;padding:10px 12px;margin-bottom:12px;">
+        <div style="flex:1;font-size:13px;color:var(--muted);"><strong style="color:var(--text);">${dupes} duplicate lead${dupes === 1 ? '' : 's'}</strong> — same phone number saved twice (different formats). Merging keeps every note, call, and follow-up on one record.</div>
+        <button class="btn btn-sm" onclick="Leads.mergeDupes(this)">Merge duplicates</button>
+      </div>`);
+    }
+
     renderList.call(this, html, leads, counts);
     el.innerHTML = html.join('');
   };
 
-  Leads.setView = function (v) { this._view2 = v; this.render(); };
+  Leads.mergeDupes = async function (btn) {
+    disableBtn(btn);
+    try {
+      const r = await db.leads.dedupe();
+      toast((r.merged || 0) + ' duplicate' + (r.merged === 1 ? '' : 's') + ' merged ✓');
+    } catch (e) { toast(e.message || 'Merge failed', 'error'); }
+    this.render();
+  };
+
+  // The board is its own page now (full stage set + follow-up timing).
+  Leads.setView = function (v) { if (v === 'pipeline') App.nav('pipeline'); };
   Leads.setStatusFilter = function (s) { this._statusFilter2 = s; this.render(); };
 
   // ── List view (default) ───────────────────────────────────────────────────
@@ -141,7 +167,7 @@
     // Compact status filter chips.
     const chip = (key, label, n) => `<button class="v2-chip${this._statusFilter2 === key ? ' on' : ''}" onclick="Leads.setStatusFilter('${key}')">${label}${n ? `<span class="n">${n}</span>` : ''}</button>`;
     html.push(`<div class="v2-chips" style="margin-bottom:12px;">
-      ${chip('all', 'All', counts.all)}${chip('new', 'New', counts.new)}${chip('contacted', 'Contacted', counts.contacted)}${chip('booked', 'Booked', counts.booked)}${chip('closed', 'Closed', counts.closed)}</div>`);
+      ${chip('all', 'All', counts.all)}${stages().map(s => chip(s.key, esc(s.label), counts[s.key])).join('')}</div>`);
 
     let rows = leads.slice();
     if (this._statusFilter2 !== 'all') rows = rows.filter(l => colOf(l) === this._statusFilter2);
@@ -176,7 +202,7 @@
             <div style="font-weight:600;margin-top:4px;">${esc(name)}</div></td>
           <td>${reqLines.join('')}</td>
           <td style="color:var(--muted);">${esc(l.phone || '—')}${email}</td>
-          <td>${STATUS_PILL[colOf(l)] || ''}</td>
+          <td>${statusPill(colOf(l))}</td>
           <td class="r" style="color:var(--muted);white-space:nowrap;">${when ? _msgTime(when) : '—'}</td>
         </tr>`);
       } catch (err) {
@@ -185,74 +211,36 @@
       }
     });
     html.push('</tbody></table></div>');
-  }
 
-  // ── Pipeline view (kanban board, kept from the redesign) ──────────────────
-  function renderPipeline(html, leads, counts) {
-    const booked = counts.booked || 0;
-    const conv = counts.all ? Math.round(booked / counts.all * 100) : 0;
-    const missed = leads.reduce((s, l) => s + (l.missedCount || 0), 0);
-    html.push(`<div class="v2-mgrid" style="grid-template-columns:repeat(4,1fr);">
-      <div class="metric-card"><div class="metric-label">New leads</div><div class="metric-value">${counts.new || 0}</div><div class="metric-sub">${counts.new ? 'waiting on a response' : 'all answered'}</div></div>
-      <div class="metric-card"><div class="metric-label">In conversation</div><div class="metric-value">${counts.contacted || 0}</div><div class="metric-sub">contacted, not booked yet</div></div>
-      <div class="metric-card"><div class="metric-label">Booked</div><div class="metric-value green">${booked}</div><div class="metric-sub">${conv}% of all leads</div></div>
-      <div class="metric-card"><div class="metric-label">Missed calls</div><div class="metric-value">${missed}</div><div class="metric-sub">across all leads</div></div></div>`);
-
-    html.push('<div class="v2-board">');
-    for (const st of ORDER) {
-      const m = Leads._statusMeta[st];
-      const cards = leads.filter(l => colOf(l) === st)
-        .sort((a, b) => new Date(b.lastContactAt || b.createdAt || 0) - new Date(a.lastContactAt || a.createdAt || 0));
-      html.push(`<div class="v2-bcol" data-status="${st}"><div class="v2-bh">
-        <div class="bt">${m ? m.label : st} <span class="n">${cards.length}</span></div>
-        <div class="bv">${COL_HINT[st] || ''}</div></div><div class="v2-bcards">`);
-      cards.forEach(l => {
-        try {
-          const sm = Leads._sourceMeta(l.source);
-          const name = l.name || l.phone || 'Unknown caller';
-          const { services, vehicle } = requested(l);
-          const sub = [vehicle || l.location, services || l.phone].filter(Boolean).join(' · ');
-          const when = l.lastContactAt || l.createdAt;
-          html.push(`<div class="v2-lead" draggable="true" data-id="${l.id}" onclick="Leads.open('${l.id}')">
-            <div class="ln">${esc(name)}</div>
-            <div class="ls">${esc(sub || '—')}</div>
-            <div class="lf"><span class="v2-src">${sm.icon} ${esc(sm.label)}</span>
-              ${(l.missedCount || 0) > 0 ? `<span class="lead-missed">⚠ ${l.missedCount} missed</span>` : ''}
-              <span style="margin-left:auto;font-size:10.5px;color:var(--faint);">${when ? _msgTime(when) : ''}</span></div></div>`);
-        } catch (err) {
-          console.error('Lead card render failed for', l && l.id, err);
-          html.push(`<div class="v2-lead" draggable="true" data-id="${l && l.id || ''}" onclick="Leads.open('${l && l.id || ''}')">
-            <div class="ln">${esc((l && (l.name || l.phone)) || 'Lead')}</div>
-            <div class="ls" style="color:var(--faint);">Tap to view</div></div>`);
-        }
-      });
-      if (!cards.length) html.push(`<div style="text-align:center;font-size:11.5px;color:var(--faint);padding:14px 6px;">Empty</div>`);
-      html.push('</div></div>');
-    }
+    // Phones get a tappable card list instead of a side-scrolling table —
+    // app2.css swaps the two at 640px. Same rows, same modal on tap.
+    html.push('<div class="v2-leadlist v2-card">');
+    rows.forEach(l => {
+      try {
+        const sm = Leads._sourceMeta(l.source);
+        const name = l.name || l.phone || 'Unknown caller';
+        const { services, vehicle } = requested(l);
+        const sub = [services, vehicle].filter(Boolean).join(' · ') || l.phone || '';
+        const when = l.lastContactAt || l.createdAt;
+        html.push(`<div class="msg-inbox-row" onclick="Leads.open('${l.id}')">
+          ${avatarEl(name, 42)}
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</div>
+              <div style="font-size:11px;color:var(--faint);white-space:nowrap;flex-shrink:0;">${when ? _msgTime(when) : ''}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;margin-top:3px;min-width:0;">
+              ${statusPill(colOf(l))}
+              <span class="v2-src" style="flex-shrink:0;">${sm.icon} ${esc(sm.label)}</span>
+              <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">${esc(sub)}</div>
+            </div>
+          </div>
+        </div>`);
+      } catch (err) {
+        console.error('Lead card render failed for', l && l.id, err);
+      }
+    });
     html.push('</div>');
   }
 
-  function wireDnD() {
-    document.querySelectorAll('#page-leads .v2-lead').forEach(card => {
-      card.addEventListener('dragstart', e => { dragId = card.dataset.id; card.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
-      card.addEventListener('dragend', () => card.classList.remove('dragging'));
-    });
-    document.querySelectorAll('#page-leads .v2-bcol').forEach(col => {
-      col.addEventListener('dragover', e => { e.preventDefault(); col.classList.add('dragover'); });
-      col.addEventListener('dragleave', () => col.classList.remove('dragover'));
-      col.addEventListener('drop', async e => {
-        e.preventDefault(); col.classList.remove('dragover');
-        const l = (Leads._leads || []).find(x => x.id === dragId); if (!l) return;
-        const to = col.dataset.status; if (l.status === to) return;
-        const from = l.status; l.status = to; Leads.render();
-        try {
-          await db.leads.update(l.id, { status: to });
-          toast(`${l.name || l.phone || 'Lead'} → ${Leads._statusMeta[to]?.label || to}`);
-        } catch (err) {
-          l.status = from; Leads.render();
-          toast(err.message || 'Could not move lead', 'error');
-        }
-      });
-    });
-  }
 })();

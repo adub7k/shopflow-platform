@@ -7,11 +7,127 @@ const Leads = {
   _leads: [],
   _filter: 'all',
 
-  _statusMeta: {
-    new:       { label: 'New',       bg: 'var(--green-lt)',  fg: 'var(--green)', dot: '#2563eb' },
-    contacted: { label: 'Contacted', bg: '#fef3c7',          fg: '#92400e',      dot: '#d97706' },
-    booked:    { label: 'Booked',    bg: 'var(--green-lt)',  fg: 'var(--green)', dot: '#16a34a' },
-    closed:    { label: 'Closed',    bg: '#f3f4f6',          fg: '#6b7280',      dot: '#9ca3af' },
+  // ── Pipeline stage configuration (shared with the Pipeline board) ───────────
+  // The owner can define their own stages (Pipeline → Edit stages), stored as
+  // settings.pipeline.stages [{key,label,color,interval,won,terminal,fixed}].
+  // Three anchors always exist: the intake stage (key 'new' — every lead lands
+  // there) and the two end states 'closed' (won) / 'lost' (dead). Keys are
+  // stable ids: renames only change labels, so lead records never migrate.
+  // `interval` = minutes a lead may sit in the stage before it's flagged.
+  DEFAULT_STAGES: [
+    { key: 'new',       label: 'New',       color: '#2563eb', interval: 15,   fixed: 'intake' },
+    { key: 'contacted', label: 'Contacted', color: '#d97706', interval: 1440 },
+    { key: 'quoted',    label: 'Quoted',    color: '#7c3aed', interval: 2880 },
+    { key: 'booked',    label: 'Booked',    color: '#16a34a', interval: 0,    won: true },
+    { key: 'worked',    label: 'Worked',    color: '#0891b2', interval: 2880, won: true },
+    { key: 'closed',    label: 'Closed',    color: '#374151', terminal: true, won: true, fixed: 'won' },
+    { key: 'lost',      label: 'Lost',      color: '#9ca3af', terminal: true, fixed: 'lost' },
+  ],
+  stageConfig() {
+    const p = (Shop.settings && Shop.settings.pipeline) || {};
+    let stages = (Array.isArray(p.stages) && p.stages.length)
+      ? p.stages.map(s => ({
+          key: String((s && s.key) || ''),
+          label: String((s && s.label) || 'Stage').slice(0, 24),
+          color: /^#[0-9a-fA-F]{6}$/.test((s && s.color) || '') ? s.color : '#64748b',
+          interval: Math.max(0, Number(s && s.interval) || 0),
+          won: !!(s && s.won), terminal: !!(s && s.terminal), fixed: s && s.fixed,
+        })).filter(s => s.key)
+      : null;
+    // The anchors must survive whatever was saved — a config missing one is
+    // treated as corrupt and rebuilt from the defaults.
+    if (!stages || !['new', 'closed', 'lost'].every(k => stages.some(s => s.key === k))) {
+      stages = this.DEFAULT_STAGES.map(s => ({ ...s }));
+      // An earlier build stored timing alone as settings.pipeline.intervals.
+      if (p.intervals) stages.forEach(s => { if (p.intervals[s.key] != null) s.interval = Math.max(0, Number(p.intervals[s.key]) || 0); });
+    }
+    return stages;
+  },
+  // ── 30-day follow-up sequence (Meta leads; worked from the Tasks page) ──────
+  // Per-lead state lives at lead.followUp = { idx, status, nextAt, startedAt,
+  // log[] }. status: active (in the queue when due) · paused (customer replied /
+  // manual hold) · completed (booked — auto-set server-side) · stopped (lost or
+  // manually ended) · done (finished day 30 → long-term reactivation pool).
+  // Every send is MANUAL: the Tasks queue button opens Messages prefilled; the
+  // owner hits send themselves. Nothing here auto-texts.
+  DEFAULT_FOLLOWUP_SEQ: [
+    { id: 'd0a', label: 'Day 0 Initial',   day: 0,  sms: "Hey [NAME], this is Angelo from [SHOP] 👋 Saw you were looking to get your [VEHICLE] tinted. What are you mainly wanting it for — heat, privacy, or the look?" },
+    { id: 'd0b', label: 'Day 0 Follow-Up', day: 0,  sms: "I can get you a price too 👍 Just want to make sure I point you toward the right film for what you're wanting." },
+    { id: 'd0c', label: 'Day 0 Evening',   day: 0,  sms: "Quick question [NAME] — are you still shopping around for tint, or did you already find a shop?" },
+    { id: 'd1',  label: 'Day 1',  day: 1,  sms: "Hey [NAME], wanted to make sure I didn't miss you. If you're still looking, send me the year/make/model and I'll get you a couple options." },
+    { id: 'd2',  label: 'Day 2',  day: 2,  sms: "If heat is the big reason you're looking, I'd definitely recommend going ceramic. The difference in the NM sun is pretty noticeable.\nWant me to show you the option I'd recommend?" },
+    { id: 'd3',  label: 'Day 3',  day: 3,  sms: "Are you mainly comparing prices right now? If so, that's totally fine. If you send me what you've been quoted, I can make sure you're actually comparing the same type of film." },
+    { id: 'd5',  label: 'Day 5',  day: 5,  sms: "We've been doing quite a few vehicles lately for people who originally came in because they were tired of the heat. Once they get the better film, they usually tell us they wish they'd done it sooner 😂\nStill thinking about doing yours?" },
+    { id: 'd7',  label: 'Day 7',  day: 7,  sms: "[NAME], just wanted to give you a heads up — the [OFFER] is still available.\nIf you want to take advantage of it, I can check what openings we have this week." },
+    { id: 'd10', label: 'Day 10', day: 10, sms: "Be honest with me 😂 — did you decide to get the tint done somewhere else, or are you still thinking about it?" },
+    { id: 'd14', label: 'Day 14', day: 14, sms: "If you're still debating what to get, tell me what's most important:\n1. Lowest price\n2. Heat rejection\n3. Privacy\n4. Best overall\nI'll tell you exactly what I'd go with." },
+    { id: 'd17', label: 'Day 17', day: 17, sms: "One thing I don't want you to do is spend money twice on tint. If you're comparing shops, I'd be happy to explain the difference between the films we're offering so you know exactly what you're paying for." },
+    { id: 'd21', label: 'Day 21', day: 21, sms: "Hey [NAME], I've got a couple openings coming up and figured I'd check with you before I fill them. Still want me to get your [VEHICLE] tinted?" },
+    { id: 'd24', label: 'Day 24', day: 24, sms: "Imagine getting into the car after it's been sitting in the sun all afternoon and it actually feels comfortable 😂\nThat's honestly why most of our customers end up loving the ceramic.\nWant me to get you a quote?" },
+    { id: 'd27', label: 'Day 27', day: 27, sms: "I don't want to keep blowing you up if tint isn't a priority right now 😂\nShould I close this out for now?" },
+    { id: 'd30', label: 'Day 30', day: 30, sms: "Last message from me, [NAME] 👍\nIf you still want to get the [VEHICLE] done, just reply TINT and I'll take care of everything from there." },
+  ],
+  followUpSeq() {
+    const s = (Shop.settings && Shop.settings.followUpSeq);
+    if (Array.isArray(s) && s.length) {
+      const seq = s.map(e => ({ id: String((e && e.id) || ''), label: String((e && e.label) || 'Step'), day: Math.max(0, Number(e && e.day) || 0), sms: String((e && e.sms) || '') }))
+        .filter(e => e.id && e.sms);
+      if (seq.length) return seq;
+    }
+    return this.DEFAULT_FOLLOWUP_SEQ;
+  },
+  // [VAR] replacement with graceful fallbacks — a missing value never leaks
+  // "[VEHICLE]" to a customer.
+  fuFill(body, l) {
+    const first = String((l && l.name) || '').trim().split(/\s+/)[0];
+    const veh = l && l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model].filter(Boolean).join(' ') : '';
+    const shop = (Shop.settings && Shop.settings.shopName) || 'our shop';
+    const now = new Date();
+    const map = {
+      NAME: first || 'there',
+      PHONE: (l && l.phone) || '',
+      VEHICLE: veh || 'vehicle',
+      SHOP: shop,
+      OFFER: (Shop.settings && Shop.settings.followUpOffer) || 'deal we talked about',
+      PRICE: (l && l.quotedAmount != null) ? fmtMoney(l.quotedAmount) : 'a price',
+      SALESPERSON: (typeof Auth !== 'undefined' && Auth.getName && Auth.getName()) || shop,
+      DATE: now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      TIME: now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+    };
+    return String(body || '')
+      .replace(/\[([A-Z]+)\]/g, (m, k) => (map[k] !== undefined ? map[k] : m))
+      .replace(/\{first\}/gi, map.NAME).replace(/\{name\}/gi, (l && l.name) || 'there').replace(/\{shop\}/gi, shop);
+  },
+  // When step `idx` is sent at `fromISO`, when is the NEXT step due? Same-day
+  // steps chain 3h apart; later days ride the day gap. Relative to the actual
+  // send, so a late send never collapses the remaining cadence.
+  fuNextAt(seq, sentIdx, fromISO) {
+    const cur = seq[sentIdx], next = seq[sentIdx + 1];
+    if (!next) return null;
+    const from = new Date(fromISO || Date.now()).getTime();
+    const deltaDays = next.day - (cur ? cur.day : 0);
+    return new Date(from + (deltaDays <= 0 ? 3 * 3600000 : deltaDays * 86400000)).toISOString();
+  },
+  fuFreshState() {
+    const now = new Date().toISOString();
+    return { idx: 0, status: 'active', nextAt: now, startedAt: now, log: [] };
+  },
+
+  // Badge colors derived from the stage config so custom stages render
+  // everywhere: list badges, filter pills, and the modal's status picker.
+  get _statusMeta() {
+    const m = {};
+    this.stageConfig().forEach(s => { m[s.key] = { label: s.label, bg: s.color + '1a', fg: s.color, dot: s.color }; });
+    return m;
+  },
+  // A lead counts as won once it reaches any win-flagged stage. 'closed' is
+  // trusted only with server proof (closedAt / stage history): under the old
+  // semantics closed meant dead, and those legacy leads carry neither.
+  _isWon(l) {
+    const won = new Set(this.stageConfig().filter(s => s.won && !s.terminal).map(s => s.key));
+    return won.has(l.status)
+      || (l.stageLog || []).some(s => won.has(s.to))
+      || (l.status === 'closed' && (!!l.closedAt || (l.stageLog || []).length > 0));
   },
 
   // Display meta for a lead source. Known channels get an icon; anything else
@@ -35,7 +151,7 @@ const Leads = {
   // window is the ad-spend read; all-time rides along as the subtitle.
   _convStats() {
     const all = this._leads; if (!all.length) return '';
-    const isBooked = l => l.status === 'booked';
+    const isBooked = l => this._isWon(l);
     const last30 = all.filter(l => (Date.now() - new Date(l.createdAt || l.firstContactAt || 0)) < 30 * 86400000);
     const b30 = last30.filter(isBooked).length, bAll = all.filter(isBooked).length;
     const pct = (n, d) => d ? Math.round(n / d * 100) : 0;
@@ -61,7 +177,7 @@ const Leads = {
       const k = String(l.source || 'call').toLowerCase();
       bySrc[k] = bySrc[k] || { total: 0, booked: 0 };
       bySrc[k].total++;
-      if (l.status === 'booked') bySrc[k].booked++;
+      if (this._isWon(l)) bySrc[k].booked++;
     });
     const keys = Object.keys(bySrc);
     if (keys.length < 2 && keys[0] === 'call') return ''; // calls-only shops: nothing to compare yet
@@ -82,15 +198,20 @@ const Leads = {
   },
 
   async render() {
+    // Modal actions (save / status / note / convert) all funnel back through
+    // here — when the owner is working from the Pipeline board, repaint that
+    // instead of the hidden list.
+    if (typeof Pipeline !== 'undefined' && Pipeline.isActive()) return Pipeline.render();
     const el = document.getElementById('page-leads'); if (!el) return;
     try { this._leads = await db.leads.all(); } catch(e) { this._leads = []; }
 
-    const counts = { all: this._leads.length, new: 0, contacted: 0, booked: 0, closed: 0 };
+    const counts = { all: this._leads.length };
+    Object.keys(this._statusMeta).forEach(k => { counts[k] = 0; });
     this._leads.forEach(l => { counts[l.status] = (counts[l.status]||0) + 1; });
 
     const pill = (key, label) => `<button class="lead-pill ${this._filter===key?'active':''}" onclick="Leads.setFilter('${key}')">${label}${counts[key]?` <span class="lead-pill-count">${counts[key]}</span>`:''}</button>`;
     const filters = `<div class="lead-filters">
-      ${pill('all','All')}${pill('new','New')}${pill('contacted','Contacted')}${pill('booked','Booked')}${pill('closed','Closed')}
+      ${pill('all','All')}${Object.keys(this._statusMeta).map(k => pill(k, this._statusMeta[k].label)).join('')}
     </div>`;
 
     const tn = (Shop.settings && Shop.settings.trackingNumber) || '';
@@ -225,6 +346,8 @@ const Leads = {
 
       ${this._aiCard(l)}
 
+      ${this._fuCard(l)}
+
       ${detailCard.trim()?`<div class="form-group" style="background:var(--off);border-radius:10px;padding:8px 12px;">${detailCard}</div>`:''}
 
       <div class="form-group">
@@ -233,8 +356,18 @@ const Leads = {
       </div>
 
       <div class="form-group">
+        <label class="form-label">Source</label>
+        ${this._sourcePicker(l)}
+      </div>
+
+      <div class="form-group">
         <label class="form-label">Status</label>
         <div class="lead-status-row">${statusPills}</div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Quoted amount ($)</label>
+        <input class="form-input" id="lead-quoted" type="number" min="0" step="1" inputmode="decimal" placeholder="e.g. 450" value="${l.quotedAmount != null ? l.quotedAmount : ''}"/>
       </div>
 
       <div class="form-group">
@@ -270,6 +403,93 @@ const Leads = {
         <button class="btn btn-full" style="color:var(--red);" onclick="Leads.remove('${l.id}')">Delete lead</button>
       </div>
     `);
+  },
+
+  // ── 30-day follow-up card (sequence state + history + manual controls) ──────
+  _fuCard(l) {
+    const fu = l.followUp;
+    const seq = this.followUpSeq();
+    if (!fu) {
+      const stage = this.stageConfig().find(s => s.key === l.status);
+      if (stage && (stage.terminal || stage.won)) return '';
+      return `<div class="card" style="margin-bottom:14px;"><div style="display:flex;align-items:center;gap:10px;">
+        <div style="flex:1;font-size:13px;color:var(--muted);">Not in the 30-day follow-up sequence.</div>
+        <button class="btn btn-sm" onclick="Leads.fuStart('${l.id}')">Start sequence</button></div></div>`;
+    }
+    const step = seq[fu.idx];
+    const statusLine = ({
+      active: step ? `Next: <strong>${esc(step.label)}</strong> · due ${fu.nextAt ? _msgTimeFull(fu.nextAt) : 'now'}` : 'Sequence finished',
+      paused: `<span style="color:var(--orange);font-weight:700;">Paused${fu.pausedReason === 'replied' ? ' — customer replied' : ''}</span>`,
+      completed: `<span style="color:var(--green);font-weight:700;">Completed — booked</span>`,
+      stopped: `<span style="color:var(--faint);font-weight:700;">Stopped</span>`,
+      done: `<span style="color:var(--faint);font-weight:700;">Finished day 30 — in the reactivation pool</span>`,
+    })[fu.status] || '';
+    const hist = (fu.log || []).map(e => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0;">
+        <span>${esc(e.step)}${e.skipped ? ' <span style="color:var(--faint);">(skipped)</span>' : ''}</span>
+        <span style="color:${e.skipped ? 'var(--faint)' : 'var(--green)'};white-space:nowrap;">${e.skipped ? '' : '✓ '}${_msgTimeFull(e.at)}</span>
+      </div>`).join('');
+    const pend = (step && fu.status === 'active')
+      ? `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0;color:var(--muted);"><span>${esc(step.label)}</span><span>Pending</span></div>` : '';
+    const ctl = [];
+    if (fu.status === 'active') {
+      ctl.push(`<button class="btn btn-sm" onclick="Leads.fuAction('${l.id}','replied')">Customer replied</button>`);
+      ctl.push(`<button class="btn btn-sm" onclick="Leads.fuAction('${l.id}','pause')">Pause</button>`);
+      if (step) ctl.push(`<button class="btn btn-sm" onclick="Leads.fuAction('${l.id}','skip')">Skip step</button>`);
+    }
+    if (['paused', 'completed', 'stopped'].includes(fu.status)) ctl.push(`<button class="btn btn-sm" onclick="Leads.fuAction('${l.id}','resume')">Resume</button>`);
+    if (['active', 'paused'].includes(fu.status)) ctl.push(`<button class="btn btn-sm" style="color:var(--red);" onclick="Leads.fuAction('${l.id}','stop')">Stop</button>`);
+    const dateCtl = (fu.status === 'active' && step)
+      ? `<div style="display:flex;gap:6px;align-items:center;margin-top:8px;">
+          <input class="form-input" id="fu-next-${l.id}" type="date" value="${String(fu.nextAt || '').split('T')[0]}" style="flex:1;">
+          <button class="btn btn-sm" style="flex-shrink:0;" onclick="Leads.fuAction('${l.id}','reschedule')">Set date</button></div>` : '';
+    return `<div class="card" style="margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.05em;margin-bottom:6px;">30-DAY FOLLOW-UP</div>
+      <div style="font-size:13px;line-height:1.5;">${statusLine}</div>
+      ${(hist || pend) ? `<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px;max-height:180px;overflow-y:auto;">${hist}${pend}</div>` : ''}
+      ${dateCtl}
+      ${ctl.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">${ctl.join('')}</div>` : ''}
+    </div>`;
+  },
+  async fuStart(id) {
+    const l = this._leads.find(x => x.id === id); if (!l) return;
+    l.followUp = this.fuFreshState();
+    await this._fuPersist(l, 'Sequence started — Day 0 due now');
+  },
+  async fuAction(id, act) {
+    const l = this._leads.find(x => x.id === id); if (!l || !l.followUp) return;
+    const fu = l.followUp;
+    const seq = this.followUpSeq();
+    const now = new Date().toISOString();
+    if (act === 'pause') { fu.status = 'paused'; fu.pausedReason = 'manual'; }
+    else if (act === 'replied') { fu.status = 'paused'; fu.pausedReason = 'replied'; }
+    else if (act === 'resume') {
+      if (fu.idx >= seq.length) { fu.status = 'done'; fu.nextAt = null; }
+      else { fu.status = 'active'; fu.pausedReason = null; if (!fu.nextAt || fu.nextAt < now) fu.nextAt = now; }
+    }
+    else if (act === 'stop') { fu.status = 'stopped'; }
+    else if (act === 'skip') {
+      const step = seq[fu.idx]; if (!step) return;
+      fu.log = (fu.log || []).concat({ step: step.label, day: step.day, at: now, by: (Auth.getName && Auth.getName()) || '', skipped: true });
+      fu.idx += 1;
+      fu.nextAt = this.fuNextAt(seq, fu.idx - 1, now);
+      if (fu.idx >= seq.length) { fu.status = 'done'; fu.nextAt = null; }
+    }
+    else if (act === 'reschedule') {
+      const inp = document.getElementById('fu-next-' + id);
+      if (!inp || !inp.value) return;
+      fu.nextAt = new Date(inp.value + 'T09:00:00').toISOString();
+    }
+    await this._fuPersist(l, 'Follow-up updated ✓');
+  },
+  async _fuPersist(l, msg) {
+    // Preserve any half-typed modal edits, then reopen so the card reflects the
+    // change (same pattern as setStatus).
+    this._captureModalEdits(l);
+    try {
+      await db.leads.update(l.id, { followUp: l.followUp });
+      toast(msg);
+      this.open(l.id);
+    } catch (e) { toast(e.message || 'Could not update', 'error'); }
   },
 
   // ── AI receptionist intake card ──
@@ -370,20 +590,54 @@ const Leads = {
     this.open(id); // re-render modal to reflect selection
   },
 
+  // Editable source picker: the known channels plus the lead's current value
+  // (if custom) and a Custom… escape hatch. Fixing a mis-attributed lead here
+  // corrects the channel split and the pipeline's Meta/Website/Calls filters.
+  _KNOWN_SOURCES: ['call','website','facebook','instagram','google','tiktok','nextdoor','yelp','referral','walk-in'],
+  _sourcePicker(l) {
+    const cur = String(l.source || 'call').toLowerCase();
+    const opts = this._KNOWN_SOURCES.includes(cur) ? this._KNOWN_SOURCES : [cur].concat(this._KNOWN_SOURCES);
+    return `<select class="form-input" id="lead-source" onchange="Leads._sourceCustomToggle()">
+        ${opts.map(s => { const m = this._sourceMeta(s); return `<option value="${esc(s)}" ${s === cur ? 'selected' : ''}>${m.icon} ${esc(m.label)}</option>`; }).join('')}
+        <option value="__custom">Custom…</option>
+      </select>
+      <input class="form-input" id="lead-source-custom" placeholder="e.g. car show" style="display:none;margin-top:8px;"/>`;
+  },
+  _sourceCustomToggle() {
+    const sel = document.getElementById('lead-source');
+    const box = document.getElementById('lead-source-custom');
+    if (sel && box) {
+      box.style.display = sel.value === '__custom' ? '' : 'none';
+      if (sel.value === '__custom') box.focus();
+    }
+  },
+  _sourceValue(fallback) {
+    const sel = document.getElementById('lead-source');
+    if (!sel) return fallback;
+    if (sel.value !== '__custom') return sel.value;
+    const custom = document.getElementById('lead-source-custom')?.value.trim().toLowerCase();
+    return custom || fallback;
+  },
+
   // Pull the current modal field values into the in-memory lead so a re-render
   // (or a convert) doesn't lose what the user just typed.
   _captureModalEdits(l) {
     const nameEl = document.getElementById('lead-name');
     if (nameEl) l.name = nameEl.value;
+    const qEl = document.getElementById('lead-quoted');
+    if (qEl) { const v = parseFloat(qEl.value); l.quotedAmount = (Number.isFinite(v) && v > 0) ? v : null; }
+    l.source = this._sourceValue(l.source);
   },
 
   async save(id) {
     const l = this._leads.find(x => x.id === id); if (!l) return;
     const name = document.getElementById('lead-name')?.value || '';
+    const qv = parseFloat(document.getElementById('lead-quoted')?.value);
+    const source = this._sourceValue(l.source);
     try {
       // Notes are saved per-entry via addNote — never send `notes` here, or a
       // blank value would wipe a pre-history lead's legacy free-text notes.
-      await db.leads.update(id, { name, status: l.status });
+      await db.leads.update(id, { name, status: l.status, source, quotedAmount: (Number.isFinite(qv) && qv > 0) ? qv : null });
       Modal.close(); toast('Lead saved ✓'); this.render();
     } catch(e) { toast(e.message || 'Could not save', 'error'); }
   },
@@ -395,12 +649,9 @@ const Leads = {
     const l = this._leads.find(x => x.id === id);
     if (!l || !l.phone) { toast('No phone number on file', 'warning'); return; }
     // Manual send via the iPhone Messages deep link (no Twilio/A2P).
+    // Texting does NOT move the stage — the owner advances leads explicitly
+    // (a stray auto-move here was silently reshuffling the pipeline).
     _cpSms(l.phone, body);
-    // Texting a new lead counts as the first touch → move it to "contacted".
-    if (l.status === 'new') {
-      l.status = 'contacted';
-      db.leads.update(id, { status: 'contacted' }).catch(() => {});
-    }
   },
 
   async convert(id) {

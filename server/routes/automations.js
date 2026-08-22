@@ -171,7 +171,7 @@ module.exports = function createAutomations({ getShopDb, getAllTenantIds, sendSm
       await sendPush(tenantId, {
         title: '⏱️ Missed call — call them back',
         body: `${who}${lead.name && lead.phone ? ` (${lead.phone})` : ''} called ${mins} min ago and still hasn't been reached. Fast callbacks win the job.`,
-        url: '/leads',
+        url: '/pipeline',
         tag: `missed-${lead.id}`,
       });
       return;

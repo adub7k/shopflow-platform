@@ -270,6 +270,10 @@ module.exports = function websiteLeadsRouter({ getShopDb, sendSms, sendEmailAler
       time: lead.appointment.time,
       source: 'website-lead',
       created_at: lead.appointment.booked_at,
+      createdAt: lead.appointment.booked_at,
+      // Booked-by attribution: the authenticated staff member scheduling this
+      // lead (requireStaffTenant guards this path, so accountId is trustworthy).
+      createdBy: req.accountId || null,
     });
     await db.write();
 

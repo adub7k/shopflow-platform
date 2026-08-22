@@ -7,6 +7,8 @@ const Settings = {
     try{
       const [s,barbers,services,staff]=await Promise.all([db.settings.get(),db.barbers.all(),db.services.all(),db.staff.all().catch(()=>[])]);
       this._barbers=barbers; this._services=services; this._staff=staff; this._addons=s.addons||[]; this._plans=s.membershipPlans||[];
+      // Client-portal activity summary (only fetched when a client login exists).
+      this._clientAct = staff.some(u=>u.role==='client') ? await db.clientActivity.get().catch(()=>null) : null;
       this._siteTeam=s.siteTeam||[];   // public "Meet the Team" roster (website)
       this._tpls=_smsTemplates(s.smsTemplates);   // owner-managed message templates (normalized list)
       const html=[];
@@ -189,6 +191,7 @@ const Settings = {
         { key:'service_ceramic', label:'Ceramic Coating photo' },
         { key:'service_ppf',     label:'Paint Protection Film photo' },
         { key:'service_detail',  label:'Auto Detailing photo' },
+        { key:'service_commercial', label:'Commercial & Home Tint photo' },
       ];
       html.push('<div class="section-header">Website Photos</div>');
       html.push('<div class="card">');
@@ -242,20 +245,23 @@ const Settings = {
       // Team — one place for everyone. A member can have a login (role) and/or be
       // assignable to appointments (a linked, color-coded booking record). Logins =
       // accounts; bookable providers = barber records linked by barber.accountId.
-      const roleLabels={full:'Full Access',technician:'Technician',viewonly:'View Only'};
-      const roleColors={full:'#16a34a',technician:'#2563eb',viewonly:'#6e6e73'};
+      const roleLabels={full:'Full Access',technician:'Technician',viewonly:'View Only',client:'Client Portal'};
+      const roleColors={full:'#16a34a',technician:'#2563eb',viewonly:'#6e6e73',client:'#7c3aed'};
       // Build a unified roster: every login, plus any bookable provider with no login.
       const team=[];
       staff.forEach(u=>team.push({ account:u, barber:barbers.find(b=>b.accountId===u.id)||null }));
       barbers.filter(b=>!staff.some(u=>u.id===b.accountId)).forEach(b=>team.push({ account:null, barber:b }));
       html.push('<div style="margin:26px 0 10px;border-top:1px solid var(--line);padding-top:16px;font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--muted);">TEAM</div>');
       html.push('<div class="section-header" style="display:flex;justify-content:space-between;align-items:center;"><span>Team</span><button class="btn btn-sm btn-green" onclick="Settings.openTeam(\'\',\'\')">+ Add</button></div>');
-      html.push('<div style="font-size:12px;color:var(--muted);margin:-6px 0 10px;">Add the people who work with you. Give them a login (Full Access sees everything · Technician sees jobs &amp; clients, no money or settings · View Only sees the calendar) and/or make them assignable to appointments.</div>');
+      html.push('<div style="font-size:12px;color:var(--muted);margin:-6px 0 10px;">Add the people who work with you. Give them a login (Full Access sees everything · Technician sees jobs &amp; clients, no money or settings · View Only sees the calendar · Client Portal is for outside partners — a lead list only) and/or make them assignable to appointments.</div>');
       team.forEach(m=>{
         const u=m.account, b=m.barber;
         const name=(u&&u.name)||(b&&b.name)||'—';
         const accent=(b&&b.color)||roleColors[u&&u.role]||'#6e6e73';
-        const sub=u?u.email:'No login';
+        // Client-portal members show when the login was last used (from the
+        // server-side activity journal) + an Activity button with the full feed.
+        const act=(u&&u.role==='client'&&this._clientAct)?(this._clientAct.clients||[]).find(c=>c.email===u.email):null;
+        const sub=u?u.email+(act&&typeof _msgTime==='function'?' · active '+_msgTime(act.lastSeen):''):'No login';
         const chips=[];
         if(u) chips.push(`<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:${roleColors[u.role]||'#6e6e73'}1a;color:${roleColors[u.role]||'#6e6e73'};white-space:nowrap;">${esc(roleLabels[u.role]||u.role)}</span>`);
         if(b) chips.push(`<span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:${b.color||'#16a34a'}1a;color:${b.color||'#16a34a'};white-space:nowrap;">● Bookable</span>`);
@@ -263,6 +269,7 @@ const Settings = {
           <div style="width:40px;height:40px;border-radius:50%;background:${accent}22;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:${accent};">${initials(name)}</div>
           <div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;">${esc(name)}${u&&u.isOwner?' <span style="font-size:10px;color:var(--faint);font-weight:600;">(owner)</span>':''}</div><div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(sub)}</div></div>
           <div style="display:flex;gap:5px;flex:none;align-items:center;">${chips.join('')}</div>
+          ${u&&u.role==='client'?`<button class="btn btn-sm" onclick="Settings.openClientActivity('${esc(u.email)}')">Activity</button>`:''}
           <button class="btn btn-sm" onclick="Settings.openTeam('${u?u.id:''}','${b?b.id:''}')">Edit</button>
         </div>`);
       });
@@ -448,6 +455,7 @@ const Settings = {
       ['full','Full Access — sees everything'],
       ['technician','Technician — jobs & clients only'],
       ['viewonly','View Only — calendar only'],
+      ['client','Client Portal — lead list only (outside partners)'],
     ];
     const sched=b?.schedule||{workDays:[1,2,3,4,5,6],startTime:'9:00 AM',endTime:'6:00 PM',slotMinutes:30};
     const colors=['#16a34a','#2563eb','#d97706','#7c3aed','#dc2626','#0891b2','#be185d'];
@@ -468,9 +476,12 @@ const Settings = {
       <div class="form-group"><label class="form-label">Password ${u?'<span style="font-weight:400;color:var(--faint);">(leave blank to keep current)</span>':'<span style="font-weight:400;color:var(--faint);">(needed for a login)</span>'}</label><input class="form-input" id="fu-pass" type="password" placeholder="At least 6 characters" autocomplete="new-password" /></div>
       ${isOwner
         ? '<input type="hidden" id="fu-role" value="full" /><div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Owner account — always Full Access.</div>'
-        : `<div class="form-group"><label class="form-label">Role</label><select class="form-input" id="fu-role">${roles.map(([v,l])=>`<option value="${v}"${(u?.role||'technician')===v?' selected':''}>${esc(l)}</option>`).join('')}</select></div>`}
+        : `<div class="form-group"><label class="form-label">Role</label><select class="form-input" id="fu-role" onchange="Settings._roleChanged()">${roles.map(([v,l])=>`<option value="${v}"${(u?.role||'technician')===v?' selected':''}>${esc(l)}</option>`).join('')}</select></div>`}
+      <div id="team-client-hint" style="display:${u?.role==='client'?'block':'none'};background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:10px 12px;margin:-6px 0 14px;font-size:12px;color:#5b21b6;line-height:1.5;">
+        🔗 A Client Portal login only sees the shared lead list at <strong>${location.origin}/portal</strong> — names, contact info, coarse source, and new/contacted status. No jobs, money, campaigns, notes, or settings. Made for outside partners like a marketing vendor.
+      </div>
 
-      <div class="form-group" style="margin-top:6px;"><label class="toggle-row" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span><span class="form-label" style="display:block;">Assignable to appointments</span><span style="font-size:12px;color:var(--muted);">Show them as a bookable provider with their own color.</span></span><input type="checkbox" id="fu-bookable" ${bookable?'checked':''} onchange="Settings._toggleBookable()" style="width:20px;height:20px;flex-shrink:0;" /></label></div>
+      <div class="form-group" id="team-bookable-row" style="margin-top:6px;${u?.role==='client'?'display:none;':''}"><label class="toggle-row" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"><span><span class="form-label" style="display:block;">Assignable to appointments</span><span style="font-size:12px;color:var(--muted);">Show them as a bookable provider with their own color.</span></span><input type="checkbox" id="fu-bookable" ${bookable?'checked':''} onchange="Settings._toggleBookable()" style="width:20px;height:20px;flex-shrink:0;" /></label></div>
 
       <div id="team-booking" style="${bookable?'':'display:none;'}">
         <div class="form-group"><label class="form-label">Color</label>
@@ -530,6 +541,56 @@ const Settings = {
     const w=document.getElementById('team-booking'); if(w)w.style.display=on?'':'none';
   },
 
+  // ── Client-portal activity feed (what an outside login did) ──
+  async openClientActivity(email) {
+    let data=this._clientAct;
+    try{ data=await db.clientActivity.get(); this._clientAct=data; }catch(e){}
+    const acct=(this._staff||[]).find(u=>u.email===email)||{};
+    const sum=((data&&data.clients)||[]).find(c=>c.email===email);
+    const feed=((data&&data.activity)||[]).filter(a=>a.email===email);
+    const t=(iso)=>typeof _msgTimeFull==='function'?_msgTimeFull(iso):new Date(iso).toLocaleString();
+    const LABEL={
+      'login':        ['🔑','Signed in'],
+      'view':         ['👀','Viewed the lead list'],
+      'lead.created': ['➕','Logged lead'],
+      'lead.contacted':['✓','Marked contacted'],
+    };
+    const statChip=(n,l)=>`<div style="flex:1;min-width:70px;background:var(--surface2);border-radius:10px;padding:8px 4px;text-align:center;"><div style="font-size:18px;font-weight:800;">${n||0}</div><div style="font-size:10.5px;color:var(--muted);font-weight:600;">${l}</div></div>`;
+    const rows=feed.length?feed.map(a=>{
+      const m=LABEL[a.action]||['·',a.action];
+      const what=a.leadName?`${m[1]} <strong>${esc(a.leadName)}</strong>`:m[1];
+      return `<div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);align-items:baseline;">
+        <span style="flex-shrink:0;">${m[0]}</span>
+        <div style="flex:1;min-width:0;font-size:13px;color:var(--text);">${what}</div>
+        <div style="font-size:11px;color:var(--faint);white-space:nowrap;">${t(a.at)}</div>
+      </div>`;
+    }).join(''):'<div style="font-size:13px;color:var(--faint);text-align:center;padding:18px 0;">No activity yet — entries appear the first time this login is used.</div>';
+    Modal.show(`
+      <div class="modal-title">Portal activity — ${esc(acct.name||email)}</div>
+      <div style="font-size:12px;color:var(--muted);margin:-8px 0 12px;">${esc(email)}${sum?` · last active ${t(sum.lastSeen)}`:''}</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        ${statChip(sum&&((sum.logins||0)+(sum.views||0)),'Visits')}${statChip(sum&&sum.created,'Leads logged')}${statChip(sum&&sum.contacted,'Contacted')}
+      </div>
+      <div style="max-height:45vh;overflow-y:auto;">${rows}</div>
+      <div class="modal-actions"><button class="btn btn-full" onclick="Modal.close()">Close</button></div>
+    `);
+  },
+
+  // Client Portal logins are for outside partners — never bookable, and the
+  // email/password becomes their /portal credential. Swap the UI accordingly.
+  _roleChanged() {
+    const isClient = document.getElementById('fu-role')?.value === 'client';
+    const hint = document.getElementById('team-client-hint');
+    if (hint) hint.style.display = isClient ? 'block' : 'none';
+    const row = document.getElementById('team-bookable-row');
+    if (row) row.style.display = isClient ? 'none' : '';
+    if (isClient) {
+      const cb = document.getElementById('fu-bookable');
+      if (cb) cb.checked = false;
+      this._toggleBookable();
+    }
+  },
+
   _toggleCustomTimes() {
     const on = document.getElementById('fb-customtimes')?.checked;
     const range = document.getElementById('fb-range-fields');
@@ -569,7 +630,8 @@ const Settings = {
     const email = document.getElementById('fu-email')?.value.trim();
     const pass  = document.getElementById('fu-pass')?.value||'';
     const role  = document.getElementById('fu-role')?.value||'technician';
-    const bookable = !!document.getElementById('fu-bookable')?.checked;
+    // Client Portal members are never bookable — their login IS the deliverable.
+    const bookable = role!=='client' && !!document.getElementById('fu-bookable')?.checked;
     if(!name){ toast('Enter a name','warning'); return; }
     const wantLogin = !!email || !!accountId;
     if(!wantLogin && !bookable){ toast('Add a login (email) or make them assignable to appointments','warning'); return; }
@@ -957,6 +1019,11 @@ const Settings = {
 
   // ── Message-template manager ──────────────────────────────────────────────────
   MERGE_FIELDS: ['{first}','{name}','{shop}','{date}','{time}','{service}','{link}'],
+  // Built-in prompts that auto-pick a template (see SMS_TEMPLATE_INTENTS).
+  TEMPLATE_USES: [
+    { id: 'review',   label: 'Used for review requests' },
+    { id: 'reminder', label: 'Used for appointment reminders' },
+  ],
 
   // Render the editable list of templates into #s-tpl-list.
   _renderTemplateList() {
@@ -964,11 +1031,22 @@ const Settings = {
     if (!tpls.length) {
       return '<div style="font-size:12px;color:var(--faint);padding:6px 0 12px;">No templates yet — add one to get started.</div>';
     }
+    // Show which template each built-in prompt will pull, so renaming a row makes
+    // its role obvious instead of silently re-pointing the review/reminder texts.
+    const uses = {};
+    this.TEMPLATE_USES.forEach(u => {
+      const hit = _smsTemplateFor(u.id, tpls);
+      if (hit && hit.id) (uses[hit.id] = uses[hit.id] || []).push(u.label);
+    });
     return tpls.map((t,i) => {
       const chips = this.MERGE_FIELDS.map(f =>
         `<button type="button" class="btn btn-xs" style="padding:2px 7px;font-size:11px;" onclick="Settings._insertVar(${i},'${f}')">${f}</button>`
       ).join(' ');
+      const used = (uses[t.id] || []).map(l =>
+        `<span style="font-size:10px;font-weight:700;color:var(--green);background:var(--green-lt);padding:2px 8px;border-radius:20px;">${esc(l)}</span>`
+      ).join(' ');
       return '<div class="card" style="padding:12px;margin-bottom:10px;background:var(--off,#f9fafb);">'
+        + (used ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px;">${used}</div>` : '')
         + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
         +   '<label class="form-label" style="margin:0;">Template name</label>'
         +   `<button class="btn btn-sm btn-danger" style="padding:2px 10px;" onclick="Settings.delTemplate(${i})" title="Delete template">✕</button>`

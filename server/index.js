@@ -46,7 +46,17 @@ app.use(cors({ origin: '*' }));
 // Stripe webhook needs the raw, unparsed body for signature verification, so it
 // must be mounted BEFORE express.json().
 app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), require('./routes/stripe').stripeWebhook);
-app.use(express.json({ limit: '5mb' }));
+// Meta's X-Hub-Signature-256 is an HMAC over the RAW bytes, so /webhooks/meta
+// needs the unparsed buffer. Capturing it in express.json's verify hook keeps
+// one JSON parser for the whole app (no ordering trap like the Stripe route
+// above), and the buffer is stashed for that path ONLY so ordinary requests
+// don't each retain a copy of their body.
+app.use(express.json({
+  limit: '5mb',
+  verify: (req, res, buf) => {
+    if (req.originalUrl && req.originalUrl.split('?')[0] === '/webhooks/meta') req.rawBody = buf;
+  },
+}));
 app.use(express.urlencoded({ extended: false })); // Twilio webhooks POST form-encoded
 app.use(express.static(CLIENT_DIR));
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '30d' }));
@@ -79,6 +89,7 @@ app.use(require('./routes/auth'));
 app.use(require('./routes/public'));
 app.use(require('./routes/twilio'));
 app.use(require('./routes/shop'));
+app.use(require('./routes/client'));
 app.use(require('./routes/newsletter'));
 app.use(require('./routes/cleaning'));
 app.use(require('./routes/receptionist'));
@@ -86,6 +97,9 @@ app.use(require('./routes/admin'));
 app.use(require('./routes/sales'));
 app.use(require('./routes/stripe'));
 app.use(require('./routes/square'));
+// Native Meta Lead Ads ingestion (GET verify handshake + POST leadgen). Mounted
+// after express.json so req.rawBody (above) and req.body are both available.
+app.use(require('./routes/meta-webhook'));
 
 // ── Website lead intake + Response Center + platform + push + automations ─────
 // Drop-in modules (docs/website-leads/) wired through server/integrations.js
@@ -152,9 +166,10 @@ app.get('/classic/*', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app.html
 // Push-notification deep link (sw-push.js opens /response-center?lead=…):
 // serve the app shell; the client boot lands on the Response Center page.
 app.get('/response-center', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app2.html')));
-// New-lead + missed-call push notifications deep-link here (sw-push opens /leads):
-// serve the app shell; the client boot lands on the Leads page.
-app.get(['/leads', '/leads/*'], (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app2.html')));
+// New-lead + missed-call push notifications deep-link to /pipeline (the lead
+// board); /leads is kept for older subscriptions' cached payloads and bookmarks.
+// Both serve the app shell; the client boot lands on the matching page.
+app.get(['/pipeline', '/leads', '/leads/*'], (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app2.html')));
 // Quote-first verticals (detail shops) get the opt-in lead-capture page at the
 // same /book/<slug> URL; scheduling verticals keep the calendar booking flow.
 // Per-shop override: settings.bookingMode ('booking' | 'leads').
@@ -179,6 +194,7 @@ app.get('/review/*',(req, res) => res.sendFile(path.join(CLIENT_DIR, 'review.htm
 app.get('/quote/*', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'quote.html')));
 app.get('/demo',    (req, res) => res.sendFile(path.join(CLIENT_DIR, 'demo.html')));
 app.get('/sales',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'sales.html')));
+app.get(['/portal', '/portal/*'], (req, res) => res.sendFile(path.join(CLIENT_DIR, 'portal.html')));
 app.get('/signup',  (req, res) => res.sendFile(path.join(CLIENT_DIR, 'signup.html')));
 app.get('/login',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'login.html')));
 app.get('/admin',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'admin.html')));

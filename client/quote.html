@@ -2,153 +2,351 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="theme-color" content="#edebe6"/>
 <title>Your Estimate</title>
 <style>
+/* ── A printed estimate, not a web app. Serif letterhead + ledger table on a
+     warm paper sheet — same stationery identity as the estimate email. ── */
 :root{
-  --accent:#16a34a; --accent-2:#22c55e; --accent-ink:#fff;
-  --ink:#0f1115; --muted:#6b7280; --faint:#9aa0ab;
-  --bg:#f5f6f8; --surface:#fff; --line:#e8eaee;
-  --r-xl:22px; --r-lg:18px; --r-md:13px;
-  --sh-md:0 6px 22px rgba(15,17,21,.08); --sh-lg:0 18px 50px rgba(15,17,21,.16);
-  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  --accent:#16a34a;
+  --paper:#fffdf9; --desk:#edebe6;
+  --ink:#1c1a16; --muted:#6f6a60; --faint:#a39d90;
+  --hair:#e5e1d8; --rule:#282420;
+  --serif:'Iowan Old Style','Palatino Linotype',Palatino,Georgia,'Times New Roman',serif;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-body{background:var(--bg);font-family:var(--font);color:var(--ink);-webkit-font-smoothing:antialiased;min-height:100vh;}
-.shell{max-width:480px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column;}
-#loading{position:fixed;inset:0;background:var(--surface);display:flex;align-items:center;justify-content:center;z-index:50;}
-.spinner{width:32px;height:32px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;}
+html{background:var(--desk);}
+body{
+  background:var(--desk);color:var(--ink);font-family:var(--serif);
+  -webkit-font-smoothing:antialiased;min-height:100vh;
+  padding:clamp(10px,3vw,40px) 10px calc(30px + env(safe-area-inset-bottom));
+}
+#loading{position:fixed;inset:0;background:var(--desk);display:flex;align-items:center;justify-content:center;z-index:50;}
+.spinner{width:26px;height:26px;border:2px solid var(--hair);border-top-color:var(--ink);border-radius:50%;animation:spin .8s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
-.hero{background:linear-gradient(150deg,var(--accent),var(--accent-2));color:var(--accent-ink);padding:42px 24px 34px;text-align:center;border-radius:0 0 var(--r-xl) var(--r-xl);}
-.hero-av{width:60px;height:60px;border-radius:17px;background:var(--surface);color:var(--accent);font-size:23px;font-weight:900;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;box-shadow:var(--sh-lg);}
-.hero h1{font-size:23px;font-weight:900;letter-spacing:-.04em;}
-.hero p{font-size:14px;opacity:.92;margin-top:5px;}
-.body{padding:24px 20px 36px;flex:1;}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);box-shadow:var(--sh-md);overflow:hidden;margin-bottom:16px;}
-.card-head{padding:15px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;}
-.qnum{font-size:13px;font-weight:800;color:var(--muted);font-family:ui-monospace,Menlo,monospace;}
-.badge{font-size:11px;font-weight:800;padding:4px 10px;border-radius:100px;text-transform:uppercase;letter-spacing:.04em;}
-.b-sent{background:#eef2ff;color:#4338ca;} .b-approved{background:#ecfdf5;color:#047857;} .b-declined{background:#fef2f2;color:#dc2626;} .b-scheduled{background:#eff6ff;color:#1d4ed8;}
-.veh{padding:12px 18px;font-size:13px;color:var(--muted);border-bottom:1px solid var(--line);}
-.li{display:flex;justify-content:space-between;align-items:center;padding:13px 18px;border-bottom:1px solid var(--line);font-size:15px;}
-.li-name{font-weight:600;} .li-price{font-weight:700;}
-.total{display:flex;justify-content:space-between;align-items:center;padding:16px 18px;font-size:18px;font-weight:900;}
-.total .amt{color:var(--accent);}
-.note{padding:13px 18px;font-size:13px;color:var(--muted);background:#fafbfc;line-height:1.5;}
-.dep{margin:0 0 16px;padding:13px 16px;background:#fffbeb;border:1px solid #fde68a;border-radius:var(--r-md);font-size:13px;color:#92400e;font-weight:600;text-align:center;}
-.btn{width:100%;border:none;border-radius:100px;background:linear-gradient(135deg,var(--accent),var(--accent-2));color:var(--accent-ink);font-family:var(--font);font-size:17px;font-weight:800;padding:17px;cursor:pointer;box-shadow:var(--sh-md);transition:opacity .15s,transform .08s;margin-bottom:10px;}
-.btn:active{transform:scale(.98);} .btn:disabled{background:var(--line);color:var(--faint);box-shadow:none;cursor:not-allowed;}
-.btn-ghost{background:none;color:var(--muted);box-shadow:none;font-weight:700;font-size:15px;padding:12px;}
-.err{background:#fef2f2;border:1.5px solid #fecaca;border-radius:var(--r-md);padding:12px 16px;font-size:13px;color:#dc2626;margin-bottom:14px;display:none;font-weight:600;}
-.center{padding:64px 28px;text-align:center;display:none;flex:1;flex-direction:column;justify-content:center;}
-.center .ic{font-size:70px;margin-bottom:16px;animation:pop .45s cubic-bezier(.18,.89,.32,1.28);}
-@keyframes pop{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
-.center h2{font-size:25px;font-weight:900;letter-spacing:-.04em;margin-bottom:8px;}
-.center p{font-size:15px;color:var(--muted);line-height:1.6;}
+
+.sheet{
+  max-width:560px;margin:0 auto;background:var(--paper);
+  border:1px solid rgba(0,0,0,.045);
+  box-shadow:0 1px 2px rgba(28,26,22,.05),0 12px 34px rgba(28,26,22,.10);
+  padding:clamp(28px,6vw,48px) clamp(22px,5.5vw,48px) clamp(30px,6vw,44px);
+  animation:settle .45s ease both;
+}
+@keyframes settle{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* Letterhead */
+.lh{text-align:center;}
+.lh h1{font-size:clamp(23px,5.6vw,27px);font-weight:600;letter-spacing:.01em;line-height:1.15;}
+.lh .tag{font-style:italic;color:var(--muted);font-size:14px;margin-top:5px;}
+.lh .contact{font-family:var(--sans);font-size:10.5px;color:var(--faint);letter-spacing:.14em;text-transform:uppercase;margin-top:9px;}
+.lh .contact span+span::before{content:"·";margin:0 7px;color:var(--hair);}
+.rule{margin:20px 0 0;border-top:1px solid var(--hair);position:relative;}
+.rule::after{content:"";position:absolute;left:50%;top:-1.5px;transform:translateX(-50%);width:44px;height:3px;background:var(--accent);}
+
+/* Document meta */
+.meta{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-top:22px;}
+.cap{font-family:var(--sans);font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--faint);}
+.meta .num{font-size:19px;margin-top:3px;}
+.meta .right{text-align:right;}
+.meta .date{font-size:14px;color:var(--muted);font-style:italic;margin-top:3px;}
+.prepared{margin-top:18px;}
+.prepared .who{font-size:17px;margin-top:3px;}
+.prepared .veh{font-size:14px;color:var(--muted);font-style:italic;margin-top:2px;}
+
+/* Stamp for decided estimates */
+.stamp{display:inline-block;margin-top:16px;padding:5px 12px 4px;border:1.5px solid var(--accent);color:var(--accent);
+  font-family:var(--sans);font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;border-radius:2px;}
+.stamp.gray{border-color:var(--faint);color:var(--muted);}
+
+/* Ledger */
+.ledger{margin-top:26px;}
+.li{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding:11px 1px;border-bottom:1px solid var(--hair);}
+.li:first-child{border-top:1px solid var(--hair);}
+.li .n{font-size:15.5px;line-height:1.35;}
+.li .p{font-family:var(--sans);font-size:14.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;}
+.li.sub .n{font-size:13.5px;color:var(--muted);font-style:italic;}
+.li.sub .p{font-weight:400;color:var(--muted);}
+.total{display:flex;justify-content:space-between;align-items:baseline;padding:14px 1px 0;margin-top:2px;border-top:2px solid var(--rule);}
+.total .cap{color:var(--muted);}
+.total .amt{font-size:26px;font-weight:600;letter-spacing:-.01em;font-variant-numeric:lining-nums;}
+
+/* Notes + deposit */
+.notes{margin-top:20px;}
+.notes p{font-size:14px;font-style:italic;color:var(--muted);line-height:1.65;margin-top:5px;white-space:pre-line;}
+.dep{margin-top:22px;border:1px solid var(--hair);border-left:3px solid var(--accent);padding:12px 15px;}
+.dep .cap{color:var(--muted);}
+.dep p{font-size:13.5px;color:var(--ink);line-height:1.55;margin-top:4px;font-family:var(--sans);}
+.dep.paid{border-left-color:var(--accent);}
+.dep.paid p{color:var(--muted);}
+
+/* Actions */
+.actions{margin-top:28px;}
+.btn{display:block;width:100%;border:none;border-radius:6px;background:var(--accent);color:#fff;
+  font-family:var(--sans);font-size:15.5px;font-weight:600;letter-spacing:.01em;padding:15px;cursor:pointer;
+  transition:filter .15s,transform .08s;}
+.btn:active{filter:brightness(.92);transform:translateY(1px);}
+.btn:disabled{background:var(--hair);color:var(--faint);cursor:not-allowed;}
+.btn-quiet{display:block;width:100%;background:none;border:none;margin-top:6px;padding:12px;cursor:pointer;
+  font-family:var(--sans);font-size:13.5px;font-weight:500;color:var(--faint);text-decoration:underline;text-underline-offset:3px;}
+.btn-quiet:active{color:var(--muted);}
+.confirm-row{display:flex;gap:10px;margin-top:10px;}
+.confirm-row .btn{background:none;border:1px solid var(--hair);color:var(--muted);font-weight:500;}
+.confirm-row .btn.danger{border-color:#d8c9c5;color:#a33f35;}
+.decided{text-align:center;font-family:var(--sans);font-size:13.5px;color:var(--muted);padding:8px 0 2px;line-height:1.6;}
+.err{display:none;margin-top:16px;border:1px solid #e5c8c3;border-left:3px solid #b0453a;background:#fdf7f6;
+  padding:11px 14px;font-family:var(--sans);font-size:13.5px;color:#8c3a31;line-height:1.5;}
+
+/* Sheet footer */
+.foot{margin-top:34px;padding-top:16px;border-top:1px solid var(--hair);text-align:center;}
+.foot .thanks{font-style:italic;font-size:14px;color:var(--muted);}
+.foot .contact{font-family:var(--sans);font-size:10.5px;color:var(--faint);letter-spacing:.12em;text-transform:uppercase;margin-top:7px;}
+.foot a{color:inherit;text-decoration:none;}
+
+/* Terminal states (approved / declined / not found) */
+.center{display:none;text-align:center;padding:34px 6px 20px;}
+.center .mark{width:52px;height:52px;margin:0 auto 18px;display:block;}
+.center h2{font-size:24px;font-weight:600;letter-spacing:.005em;}
+.center p{font-family:var(--sans);font-size:14.5px;color:var(--muted);line-height:1.65;margin-top:9px;}
+.center .fineline{margin:22px auto 0;width:44px;border-top:1px solid var(--hair);}
+.center .foot-note{font-style:italic;font-family:var(--serif);font-size:13.5px;color:var(--faint);margin-top:14px;}
+
+@media print{
+  body{background:#fff;padding:0;}
+  .sheet{box-shadow:none;border:none;max-width:none;}
+  .actions,.btn,.btn-quiet{display:none!important;}
+}
 </style>
 </head>
 <body>
 <div id="loading"><div class="spinner"></div></div>
-<div class="shell">
-  <div id="view" style="display:none;flex-direction:column;flex:1;">
-    <div class="hero">
-      <div class="hero-av" id="av"></div>
-      <h1 id="title">Your estimate</h1>
-      <p id="subtitle"></p>
-    </div>
-    <div class="body">
-      <div class="err" id="err"></div>
-      <div class="card">
-        <div class="card-head"><span class="qnum" id="qnum"></span><span class="badge" id="qbadge"></span></div>
-        <div class="veh" id="veh" style="display:none;"></div>
-        <div id="lines"></div>
-        <div id="taxrows"></div>
-        <div class="total"><span>Total</span><span class="amt" id="total"></span></div>
-        <div class="note" id="note" style="display:none;"></div>
+
+<div class="sheet" id="sheet" style="display:none;">
+
+  <div id="view" style="display:none;">
+    <header class="lh">
+      <h1 id="shop-name"></h1>
+      <div class="tag" id="shop-tag" style="display:none;"></div>
+      <div class="contact" id="shop-contact" style="display:none;"></div>
+    </header>
+    <div class="rule"></div>
+
+    <div class="meta">
+      <div>
+        <div class="cap">Estimate</div>
+        <div class="num" id="qnum"></div>
       </div>
-      <div class="dep" id="dep" style="display:none;"></div>
-      <div id="actions"></div>
+      <div class="right">
+        <div class="cap">Issued</div>
+        <div class="date" id="qdate"></div>
+      </div>
     </div>
+
+    <div class="prepared" id="prepared" style="display:none;">
+      <div class="cap">Prepared for</div>
+      <div class="who" id="who"></div>
+      <div class="veh" id="veh" style="display:none;"></div>
+    </div>
+
+    <div id="stamp-wrap"></div>
+
+    <div class="ledger">
+      <div id="lines"></div>
+      <div id="taxrows"></div>
+      <div class="total"><span class="cap">Total</span><span class="amt" id="total"></span></div>
+    </div>
+
+    <div class="notes" id="note-wrap" style="display:none;">
+      <div class="cap">Notes</div>
+      <p id="note"></p>
+    </div>
+
+    <div class="dep" id="dep" style="display:none;">
+      <div class="cap" id="dep-cap">Deposit</div>
+      <p id="dep-text"></p>
+    </div>
+
+    <div class="err" id="err"></div>
+    <div class="actions" id="actions"></div>
+
+    <footer class="foot">
+      <div class="thanks">Thank you for the opportunity to earn your business.</div>
+      <div class="contact" id="foot-contact" style="display:none;"></div>
+    </footer>
   </div>
+
   <div id="approved" class="center">
-    <div class="ic">🎉</div><h2>Estimate approved!</h2>
-    <p id="approved-sub">Thanks! We'll be in touch to schedule your appointment.</p>
+    <svg class="mark" viewBox="0 0 52 52" fill="none" aria-hidden="true">
+      <circle cx="26" cy="26" r="24.5" stroke="var(--accent)" stroke-width="1.5"/>
+      <path d="M16 26.8 L23 34 L36.5 19.5" stroke="var(--accent)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <h2>Estimate approved</h2>
+    <p id="approved-sub">Thank you — we’ll be in touch shortly to get you scheduled.</p>
+    <div class="fineline"></div>
+    <div class="foot-note" id="approved-shop"></div>
   </div>
+
   <div id="declined" class="center">
-    <div class="ic">👍</div><h2>No problem</h2>
-    <p>You've declined this estimate. If you change your mind, just reach out to the shop.</p>
+    <svg class="mark" viewBox="0 0 52 52" fill="none" aria-hidden="true">
+      <circle cx="26" cy="26" r="24.5" stroke="var(--faint)" stroke-width="1.5"/>
+      <path d="M18 26 H34" stroke="var(--faint)" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+    <h2>No problem at all</h2>
+    <p>You’ve declined this estimate. If anything changes, we’d still be glad to take care of you — just reach out.</p>
+    <div class="fineline"></div>
+    <div class="foot-note" id="declined-shop"></div>
   </div>
+
   <div id="gone" class="center">
-    <div class="ic">🔍</div><h2>Estimate not found</h2>
-    <p>This link may be expired or incorrect. Please contact the shop.</p>
+    <svg class="mark" viewBox="0 0 52 52" fill="none" aria-hidden="true">
+      <circle cx="26" cy="26" r="24.5" stroke="var(--faint)" stroke-width="1.5"/>
+      <path d="M26 16 V29" stroke="var(--faint)" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="26" cy="35.5" r="1.6" fill="var(--faint)"/>
+    </svg>
+    <h2>Estimate not found</h2>
+    <p>This link may be expired or incorrect. Please contact the shop and they’ll send you a fresh one.</p>
   </div>
+
 </div>
+
 <script>
 const es=(s)=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-function lighten(hex,amt){ const n=parseInt(hex.slice(1),16); const r=Math.min(255,(n>>16&255)+Math.round(255*amt)),g=Math.min(255,(n>>8&255)+Math.round(255*amt)),b=Math.min(255,(n&255)+Math.round(255*amt)); return '#'+(1<<24|r<<16|g<<8|b).toString(16).slice(1); }
+// $1,400 or $187.50 — whole dollars stay whole, cents show as cents.
+const fm=(n)=>{ n=Number(n)||0; const c=Math.round(n*100)%100!==0; return '$'+n.toLocaleString('en-US',{minimumFractionDigits:c?2:0,maximumFractionDigits:c?2:0}); };
+const fdate=(iso)=>{ try{ return new Date(iso).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}); }catch(e){ return ''; } };
 const Q = {
   slug:'', id:'', info:null,
   async init(){
     const parts=location.pathname.replace(/^\/quote\/?/,'').split('/');
     this.slug=(parts[0]||'').split('?')[0]; this.id=(parts[1]||'').split('?')[0];
-    if(!this.slug||!this.id) return this.show('gone');
+    if(!this.slug||!this.id) return this.finish('gone');
     try{
       const info=await fetch('/api/public/'+this.slug+'/quote/'+this.id).then(r=>r.json());
-      if(info.error||!info.quote) return this.show('gone');
-      this.info=info; this._accent(info.accentColor||'#16a34a');
-      document.getElementById('av').textContent=(info.shopName||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
-      document.getElementById('subtitle').textContent=info.shopName||'';
+      if(info.error||!info.quote) return this.finish('gone');
+      this.info=info;
+      document.documentElement.style.setProperty('--accent', info.accentColor||'#16a34a');
       document.title='Estimate — '+(info.shopName||'');
+      this._letterhead(info);
       this._render(info.quote);
-      this.show('view'); document.getElementById('view').style.display='flex';
-    }catch(e){ this.show('gone'); }
-    finally{ document.getElementById('loading').style.display='none'; }
+      this.finish('view');
+    }catch(e){ this.finish('gone'); }
   },
-  _accent(hex){ const r=document.documentElement.style; r.setProperty('--accent',hex); r.setProperty('--accent-2',lighten(hex,.14)); },
-  show(id){ ['view','approved','declined','gone'].forEach(x=>{const e=document.getElementById(x);if(e)e.style.display='none';}); const el=document.getElementById(id); if(el)el.style.display='flex'; },
+  // Reveal the sheet with `id` as the visible section.
+  finish(id){
+    document.getElementById('loading').style.display='none';
+    document.getElementById('sheet').style.display='block';
+    this.show(id);
+  },
+  show(id){
+    ['view','approved','declined','gone'].forEach(x=>{const e=document.getElementById(x);if(e)e.style.display='none';});
+    const el=document.getElementById(id); if(el)el.style.display='block';
+    const shop=(this.info&&this.info.shopName)||'';
+    const a=document.getElementById(id+'-shop'); if(a&&shop)a.textContent=shop;
+  },
   err(m){ const e=document.getElementById('err'); if(!e)return; e.textContent=m||''; e.style.display=m?'block':'none'; },
+  _letterhead(info){
+    document.getElementById('shop-name').textContent=info.shopName||'';
+    if(info.tagline){ const t=document.getElementById('shop-tag'); t.style.display=''; t.textContent=info.tagline; }
+    const bits=[info.phone,info.address].filter(Boolean);
+    if(bits.length){
+      const c=document.getElementById('shop-contact'); c.style.display='';
+      c.innerHTML=bits.map(b=>'<span>'+es(b)+'</span>').join('');
+    }
+    const fbits=[info.phone,info.email].filter(Boolean);
+    if(fbits.length){
+      const f=document.getElementById('foot-contact'); f.style.display='';
+      f.innerHTML=fbits.map(b=>{
+        const digits=String(b).replace(/[^\d+]/g,'');
+        if(b.indexOf('@')>0) return '<span><a href="mailto:'+es(b)+'">'+es(b)+'</a></span>';
+        if(digits.length>=10) return '<span><a href="tel:'+es(digits)+'">'+es(b)+'</a></span>';
+        return '<span>'+es(b)+'</span>';
+      }).join(' &nbsp;·&nbsp; ');
+    }
+  },
   _render(q){
     document.getElementById('qnum').textContent=q.number||'Estimate';
-    const badge=document.getElementById('qbadge');
-    const map={sent:'b-sent',approved:'b-approved',declined:'b-declined',scheduled:'b-scheduled'};
-    badge.className='badge '+(map[q.status]||'b-sent');
-    badge.textContent=q.status==='sent'?'Pending':q.status;
-    const v=q.vehicle; if(v&&(v.year||v.make||v.model)){ const el=document.getElementById('veh'); el.style.display=''; el.textContent='🚗 '+[v.year,v.make,v.model,v.color].filter(Boolean).join(' '); }
-    document.getElementById('lines').innerHTML=(q.lineItems||[]).map(l=>`<div class="li"><span class="li-name">${es(l.name)}</span><span class="li-price">$${l.price}</span></div>`).join('');
-    const tr=document.getElementById('taxrows');
-    if(tr){ tr.innerHTML = q.taxAmount
-      ? `<div class="li"><span class="li-name" style="color:var(--muted);font-weight:600;">Subtotal</span><span class="li-price" style="color:var(--muted);">$${q.subtotal}</span></div><div class="li"><span class="li-name" style="color:var(--muted);font-weight:600;">${es(q.taxLabel||'Sales Tax')} (${q.taxRate}%)</span><span class="li-price" style="color:var(--muted);">$${q.taxAmount}</span></div>`
-      : ''; }
-    document.getElementById('total').textContent='$'+q.total;
-    if(q.notes){ const n=document.getElementById('note'); n.style.display=''; n.textContent=q.notes; }
-    if(q.depositRequired && !q.depositPaid){ const d=document.getElementById('dep'); d.style.display=''; d.textContent='💳 A $'+q.depositAmount+' deposit is required to approve this estimate.'; }
-    if(q.depositPaid){ const d=document.getElementById('dep'); d.style.display=''; d.style.background='#ecfdf5'; d.style.borderColor='#a7f3d0'; d.style.color='#047857'; d.textContent='✓ Deposit paid'; }
+    document.getElementById('qdate').textContent=q.createdAt?fdate(q.createdAt):fdate(new Date().toISOString());
+    if(q.customerName){
+      document.getElementById('prepared').style.display='';
+      document.getElementById('who').textContent=q.customerName;
+    }
+    const v=q.vehicle;
+    if(v&&(v.year||v.make||v.model)){
+      document.getElementById('prepared').style.display='';
+      const el=document.getElementById('veh'); el.style.display='';
+      const vm=[v.year,v.make,v.model].filter(Boolean).join(' ');
+      el.textContent=v.color?(vm?vm+' · '+v.color:v.color):vm;
+    }
+    const stamps={approved:['Approved',''],scheduled:['Scheduled',''],declined:['Declined','gray']};
+    if(stamps[q.status]){
+      document.getElementById('stamp-wrap').innerHTML='<span class="stamp '+stamps[q.status][1]+'">'+stamps[q.status][0]+'</span>';
+    }
+    document.getElementById('lines').innerHTML=(q.lineItems||[]).map(l=>
+      `<div class="li"><span class="n">${es(l.name)}</span><span class="p">${fm(l.price)}</span></div>`).join('');
+    document.getElementById('taxrows').innerHTML = q.taxAmount
+      ? `<div class="li sub"><span class="n">Subtotal</span><span class="p">${fm(q.subtotal)}</span></div>
+         <div class="li sub"><span class="n">${es(q.taxLabel||'Sales Tax')} (${q.taxRate}%)</span><span class="p">${fm(q.taxAmount)}</span></div>`
+      : '';
+    document.getElementById('total').textContent=fm(q.total);
+    if(q.notes){ document.getElementById('note-wrap').style.display=''; document.getElementById('note').textContent=q.notes; }
+    const payOnline=!!(this.info&&(this.info.paymentProvider||this.info.stripeConnected));
+    if(q.depositRequired && !q.depositPaid){
+      const d=document.getElementById('dep'); d.style.display='';
+      document.getElementById('dep-cap').textContent='Deposit required';
+      document.getElementById('dep-text').textContent=payOnline
+        ? 'A '+fm(q.depositAmount)+' non-refundable deposit reserves your spot and is applied toward the total.'
+        : 'A '+fm(q.depositAmount)+' non-refundable deposit reserves your spot — the shop will collect it with you directly.';
+    }
+    if(q.depositPaid){
+      const d=document.getElementById('dep'); d.style.display=''; d.className='dep paid';
+      document.getElementById('dep-cap').textContent='Deposit';
+      document.getElementById('dep-text').textContent='Your '+fm(q.depositAmount)+' deposit has been received — thank you.';
+    }
     const act=document.getElementById('actions');
     if(q.status==='sent'){
-      act.innerHTML=`<button class="btn" id="approve-btn" onclick="Q.approve()">${q.depositRequired&&!q.depositPaid?('Approve & pay $'+q.depositAmount+' deposit'):'Approve estimate'}</button>
-        <button class="btn-ghost" onclick="Q.decline()">Decline</button>`;
+      act.innerHTML=`<button class="btn" id="approve-btn" onclick="Q.approve()">${q.depositRequired&&!q.depositPaid&&payOnline?('Approve & pay '+fm(q.depositAmount)+' deposit'):'Approve this estimate'}</button>
+        <button class="btn-quiet" id="decline-btn" onclick="Q.askDecline()">I’d like to decline</button>`;
     } else if(q.status==='approved'||q.status==='scheduled'){
-      act.innerHTML=`<div style="text-align:center;color:var(--muted);font-size:14px;padding:6px 0;">✓ You approved this estimate.${q.status==='scheduled'?' It is scheduled.':' The shop will reach out to schedule.'}</div>`;
+      act.innerHTML=`<div class="decided">You approved this estimate.${q.status==='scheduled'?' Your appointment is scheduled.':' The shop will reach out to schedule.'}</div>`;
     } else if(q.status==='declined'){
-      act.innerHTML=`<div style="text-align:center;color:var(--muted);font-size:14px;padding:6px 0;">This estimate was declined.</div>`;
+      act.innerHTML=`<div class="decided">This estimate was declined.</div>`;
     }
+  },
+  // Two-step decline, kept on the page — no browser confirm() popup.
+  askDecline(){
+    const act=document.getElementById('actions');
+    act.insertAdjacentHTML('beforeend',
+      `<div class="confirm-row" id="confirm-row">
+         <button class="btn" onclick="Q.unDecline()">Keep it</button>
+         <button class="btn danger" onclick="Q.decline()">Yes, decline</button>
+       </div>`);
+    const d=document.getElementById('decline-btn'); if(d)d.style.display='none';
+  },
+  unDecline(){
+    const r=document.getElementById('confirm-row'); if(r)r.remove();
+    const d=document.getElementById('decline-btn'); if(d)d.style.display='';
   },
   async approve(){
     const btn=document.getElementById('approve-btn'); if(btn){btn.disabled=true;btn.textContent='Approving…';}
     this.err('');
     try{
       const r=await fetch('/api/public/'+this.slug+'/quote/'+this.id+'/approve',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(r=>r.json());
-      if(!r.ok){ this.err(r.error||'Could not approve. Please try again.'); if(btn){btn.disabled=false;btn.textContent='Approve estimate';} return; }
+      if(!r.ok){ this.err(r.error||'Could not approve. Please try again.'); if(btn){btn.disabled=false;btn.textContent='Approve this estimate';} return; }
       if(r.depositRequired){
-        const d=await fetch('/api/public/'+this.slug+'/quote-deposit-session',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({quoteId:this.id})}).then(r=>r.json());
+        // Square is the payment rail; Stripe stays only for legacy-connected shops.
+        const ep=(this.info&&this.info.paymentProvider)==='square'?'/square-quote-deposit-session':'/quote-deposit-session';
+        const d=await fetch('/api/public/'+this.slug+ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({quoteId:this.id})}).then(r=>r.json());
         if(d.ok&&d.url){ window.location.href=d.url; return; }
-        this.err(d.error||'Could not start the deposit payment.'); if(btn){btn.disabled=false;btn.textContent='Approve estimate';} return;
+        this.err(d.error||'Could not start the deposit payment.'); if(btn){btn.disabled=false;btn.textContent='Approve this estimate';} return;
+      }
+      if(r.collectDeposit){
+        document.getElementById('approved-sub').textContent='Thank you — we’ll be in touch shortly to get you scheduled and take care of your deposit.';
       }
       this.show('approved');
-    }catch(e){ this.err('Something went wrong. Please try again.'); if(btn){btn.disabled=false;btn.textContent='Approve estimate';} }
+    }catch(e){ this.err('Something went wrong. Please try again.'); if(btn){btn.disabled=false;btn.textContent='Approve this estimate';} }
   },
   async decline(){
-    if(!confirm('Decline this estimate?')) return;
     try{ await fetch('/api/public/'+this.slug+'/quote/'+this.id+'/decline',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); this.show('declined'); }
     catch(e){ this.err('Something went wrong. Please try again.'); }
   },

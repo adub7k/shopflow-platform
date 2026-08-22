@@ -10,6 +10,11 @@ const { upsertLead, resolveContact, recordLeadPayload } = require('../leads-core
 // implementation. inspoMode is re-exported from there. (The inline slot helpers
 // that used to live here now live in ../booking — do not re-add them.)
 const { computeAvailability, createAppointment, inspoMode } = require('../booking');
+const { deliver } = require('../email');
+// Square is the payments direction (Stripe kept as legacy fallback for any
+// shop already onboarded there). squareConnected = per-shop OAuth or platform env.
+const { squareConnected, reconcileSquareQuoteDeposit } = require('./square');
+const { ensureQuoteCustomer } = require('../quotes-core');
 
 // ── Per-date availability overrides ───────────────────────────────────────────
 // When settings.availabilityMode === 'perDate', the shop hand-picks the open
@@ -72,6 +77,33 @@ router.post('/api/public/demo/book', async (req, res) => {
     if (taken) return res.status(409).json({ ok: false, error: 'That time slot was just taken. Please choose another.' });
     const demo = { id: uuidv4(), name, shopName: shopName||'', phone, currentTool: currentTool||'', date, time, status: 'scheduled', notes: '', bookedAt: new Date().toISOString() };
     master.get('demos').push(demo).write();
+    // Ping the platform owner — demo bookings are rare enough that every one
+    // matters, and there's no ops dashboard being watched. Fire-and-forget.
+    const notifyTo = process.env.DEMO_NOTIFY_EMAIL || 'adub7k@gmail.com';
+    const digits = phone.replace(/\D/g, '');
+    const esc = (s) => String(s || '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+    deliver({
+      to: notifyTo,
+      subject: `📅 Demo call booked: ${name}${shopName ? ` (${shopName})` : ''} — ${date} at ${time}`,
+      html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;">
+        <h2 style="color:#16a34a;margin:0 0 6px;">New demo call booked</h2>
+        <table style="width:100%;border-collapse:collapse;background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;">
+          ${[['Name', esc(name)],
+             shopName && ['Shop', esc(shopName)],
+             ['Phone', `<a href="tel:+1${digits}" style="color:#16a34a;font-weight:600;">${esc(phone)}</a>`],
+             currentTool && ['Using now', esc(currentTool)],
+             ['When', `${esc(date)} at ${esc(time)}`]]
+            .filter(Boolean)
+            .map(([k, v]) => `<tr>
+              <td style="padding:8px 12px;color:#6b7280;font-size:13px;white-space:nowrap;vertical-align:top;">${k}</td>
+              <td style="padding:8px 12px;color:#111827;font-size:13px;">${v}</td>
+            </tr>`).join('')}
+        </table>
+      </div>`,
+      text: `New demo call booked\nName: ${name}\nShop: ${shopName || '—'}\nPhone: ${phone}\nUsing now: ${currentTool || '—'}\nWhen: ${date} at ${time}`,
+    }).then((r) => r.ok
+      ? console.log('Demo-booking email sent →', notifyTo)
+      : console.error('Demo-booking email failed:', r.reason));
     if (twilioClient && TWILIO_DEFAULT_FROM) {
       const msg = `Hey ${name}! Your ShopFlow demo is confirmed for ${date} at ${time}. We'll walk you through everything — see you then! 🚀`;
       try { await twilioClient.messages.create({ from: TWILIO_DEFAULT_FROM, to: '+1' + phone.replace(/\D/g,''), body: msg }); } catch(e) { console.error('Demo SMS error:', e.message); }
@@ -188,7 +220,7 @@ function publicShopFromSlug(reqSlug) {
   if (!shop) return null;
   return { shop, db: getShopDb(shop.id) };
 }
-router.get('/api/public/:shopSlug/quote/:quoteId', (req, res) => {
+router.get('/api/public/:shopSlug/quote/:quoteId', async (req, res) => {
   try {
     const ctx = publicShopFromSlug(req.params.shopSlug);
     if (!ctx) return res.status(404).json({ error: 'Shop not found' });
@@ -196,12 +228,27 @@ router.get('/api/public/:shopSlug/quote/:quoteId', (req, res) => {
     const q = h.getById('quotes', req.params.quoteId);
     if (!q) return res.status(404).json({ error: 'Quote not found' });
     const s = ctx.db.get('settings').value() || {};
+    // Self-heal a paid-but-unflipped deposit (customer paid on Square but the
+    // success redirect was missed): every open of the estimate reconciles.
+    if (q.squareOrderId && q.depositRequired && !q.depositPaid) {
+      try { await reconcileSquareQuoteDeposit(ctx.db, s, h, q); } catch (e) {}
+    }
+    const stripeReady = !!(s.stripe && s.stripe.connectAccountId && s.stripe.onboardingComplete);
     res.json({
       shopName: s.shopName || ctx.shop.shopName,
       accentColor: s.accentColor || '#16a34a',
+      // Which processor collects the deposit online (null = none — customer can
+      // still approve; the shop collects directly). Square is preferred.
+      paymentProvider: squareConnected(s) ? 'square' : (stripeReady ? 'stripe' : null),
+      // Letterhead fields — same shop-chosen contact info the estimate email
+      // already shows this customer (never staff/internal numbers).
+      tagline: s.tagline || '',
+      phone: s.phone || '',
+      address: s.address || '',
+      email: s.email || '',
       stripeConnected: !!(s.stripe && s.stripe.connectAccountId && s.stripe.onboardingComplete),
       quote: {
-        id: q.id, number: q.number, status: q.status,
+        id: q.id, number: q.number, status: q.status, createdAt: q.createdAt || null,
         customerName: q.customerName || '',
         vehicle: q.vehicle || null, vehicleSize: q.vehicleSize || null,
         lineItems: q.lineItems || [], total: q.total || 0, notes: q.notes || '',
@@ -220,14 +267,28 @@ router.post('/api/public/:shopSlug/quote/:quoteId/approve', (req, res) => {
     const q = h.getById('quotes', req.params.quoteId);
     if (!q) return res.status(404).json({ ok: false, error: 'Quote not found' });
     if (q.status === 'declined') return res.status(400).json({ ok: false, error: 'This estimate was already declined.' });
-    const depositOutstanding = !!q.depositRequired && !q.depositPaid;
-    // Only finalize approval once any required deposit is actually paid. When a
-    // deposit is still owed, leave the status as-is and signal the client to
+    // The shop already closed this one out as done — an old link shouldn't
+    // reopen it. ('lost' stays approvable: a late yes is still a win.)
+    if (q.status === 'completed') return res.status(400).json({ ok: false, error: 'This estimate has already been completed. Please contact the shop.' });
+    const s = ctx.db.get('settings').value() || {};
+    const stripeReady = !!(s.stripe && s.stripe.connectAccountId && s.stripe.onboardingComplete);
+    const paymentsReady = squareConnected(s) || stripeReady;
+    // Only block approval on the deposit when we can actually collect it online.
+    // Without a payment processor the estimate must still be approvable — the
+    // shop collects the deposit directly; otherwise a deposit-required estimate
+    // is a dead end the customer can never approve.
+    const depositOutstanding = !!q.depositRequired && !q.depositPaid && paymentsReady;
+    // Only finalize approval once any collectable deposit is actually paid. When
+    // a deposit is still owed, leave the status as-is and signal the client to
     // collect it — the Stripe success callback flips the quote to 'approved'.
     if (!depositOutstanding && q.status !== 'approved' && q.status !== 'scheduled') {
-      q.status = 'approved'; q.approvedAt = new Date().toISOString(); h.upsert('quotes', q);
+      // A late yes on one the shop wrote off clears the close-out stamp too.
+      q.status = 'approved'; q.approvedAt = new Date().toISOString(); q.lostAt = null; h.upsert('quotes', q);
+      // An approved estimate is a real client — create/link their CRM profile.
+      try { ensureQuoteCustomer(h, q); } catch (e) {}
     }
-    res.json({ ok: true, depositRequired: depositOutstanding, depositAmount: q.depositAmount || 0 });
+    res.json({ ok: true, depositRequired: depositOutstanding, depositAmount: q.depositAmount || 0,
+               collectDeposit: !!q.depositRequired && !q.depositPaid && !paymentsReady });
   } catch(e) { res.status(500).json({ ok: false, error: 'Server error' }); }
 });
 router.post('/api/public/:shopSlug/quote/:quoteId/decline', (req, res) => {
@@ -237,7 +298,8 @@ router.post('/api/public/:shopSlug/quote/:quoteId/decline', (req, res) => {
     const h = shopHelpers(ctx.db);
     const q = h.getById('quotes', req.params.quoteId);
     if (!q) return res.status(404).json({ ok: false, error: 'Quote not found' });
-    if (q.status !== 'scheduled') { q.status = 'declined'; q.declinedAt = new Date().toISOString(); h.upsert('quotes', q); }
+    // Scheduled or already closed out by the shop — leave the record alone.
+    if (q.status !== 'scheduled' && q.status !== 'completed') { q.status = 'declined'; q.declinedAt = new Date().toISOString(); h.upsert('quotes', q); }
     res.json({ ok: true });
   } catch(e) { res.status(500).json({ ok: false, error: 'Server error' }); }
 });
@@ -421,7 +483,9 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     const db = getShopDb(shop.id);
     // All validation + the double-book guard + server-authoritative pricing live
     // in booking.createAppointment (shared with the AI voice receptionist).
-    const result = createAppointment(db, shop, req.body);
+    // This endpoint is anonymous, so booked-by attribution fields must never be
+    // accepted from the request body.
+    const result = createAppointment(db, shop, { ...req.body, createdBy: null, createdByName: null });
     if (!result.ok) return res.status(result.code || 400).json({ ok: false, error: result.error });
     master.get('shops').find({ id: shop.id }).assign({ lastActivity: new Date().toISOString() }).write();
     // No confirmation SMS. The platform has no Twilio A2P and the booker isn't the

@@ -4,6 +4,7 @@ const { requireAuth, requireRole } = require('../middleware');
 const { sendTest, sendQuoteEmail, shopReplyTo } = require('../email');
 const { resolveProfile } = require('../industries');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, shopOwnNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, deleteUpload, computeTax, computeApptCost } = require('../db');
+const { ensureQuoteCustomer } = require('../quotes-core');
 
 // ── PROTECTED: Settings ───────────────────────────────────────────────────────
 // Readable by any signed-in staff (needed for vocabulary/statuses), but sensitive
@@ -90,7 +91,7 @@ router.delete('/api/shop/gallery/:id', requireAuth, requireRole('full'), shopRou
 // time. Distinct from settings.gallery (a list) and settings.heroImage (this
 // platform's own booking-page background). Unknown slots are rejected so the map
 // can't be polluted with arbitrary keys.
-const SITE_IMAGE_SLOTS = ['logo', 'hero', 'service_tint', 'service_ceramic', 'service_ppf', 'service_detail'];
+const SITE_IMAGE_SLOTS = ['logo', 'hero', 'service_tint', 'service_ceramic', 'service_ppf', 'service_detail', 'service_commercial'];
 router.post('/api/shop/site-image', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
   try {
     const key = String(req.body.key || '');
@@ -185,7 +186,9 @@ router.get('/api/shop/staff', requireAuth, requireRole('full'), (req, res) => {
 router.post('/api/shop/staff', requireAuth, requireRole('full'), async (req, res) => {
   const { id, name, email, password, role } = req.body;
   const shop = master.get('shops').find({ id: req.shopId }).value();
-  const validRoles = ['full', 'technician', 'viewonly'];
+  // 'client' = outside-collaborator portal login (leads only, /portal) — its
+  // token is rejected on every /api/shop route by requireAuth (middleware.js).
+  const validRoles = ['full', 'technician', 'viewonly', 'client'];
   const r = validRoles.includes(role) ? role : 'technician';
   if (id) {
     const acct = master.get('accounts').find({ id }).value();
@@ -221,6 +224,24 @@ router.delete('/api/shop/staff/:id', requireAuth, requireRole('full'), (req, res
   master.get('accounts').remove({ id: req.params.id }).write();
   res.json({ ok: true });
 });
+
+// ── PROTECTED: Client-portal activity (owner only) ────────────────────────────
+// Everything a role:client login did — sign-ins, list views (session-throttled),
+// leads logged, leads marked contacted. Written by routes/client.js + auth.js;
+// read here for Settings → Team → Activity. Per-client summary rides along.
+router.get('/api/shop/client-activity', requireAuth, requireRole('full'), shopRoute(async (req, res, db) => {
+  const activity = (db.get('clientActivity').value() || []).slice(0, 200);
+  const clients = {};
+  (db.get('clientActivity').value() || []).forEach(a => {
+    const c = clients[a.email] || (clients[a.email] = { email: a.email, name: a.name, lastSeen: a.at, logins: 0, views: 0, created: 0, contacted: 0 });
+    if (a.at > c.lastSeen) c.lastSeen = a.at;
+    if (a.action === 'login') c.logins++;
+    else if (a.action === 'view') c.views++;
+    else if (a.action === 'lead.created') c.created++;
+    else if (a.action === 'lead.contacted') c.contacted++;
+  });
+  res.json({ ok: true, activity, clients: Object.values(clients) });
+}));
 
 // ── PROTECTED: Barbers ────────────────────────────────────────────────────────
 router.get('/api/shop/barbers', requireAuth, shopRoute(async (req, res, db, h) => {
@@ -363,6 +384,18 @@ router.get('/api/shop/appointments', requireAuth, shopRoute(async (req, res, db,
 }));
 router.post('/api/shop/appointments', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const a = req.body; if (!a.id) a.id = genId('a');
+  // Booked-by attribution: stamp WHO entered this appointment from the auth
+  // token, never from the client body (a crafted request could credit someone
+  // else). Stamped on create only — edits keep the original booker (upsert
+  // merges, so deleting the keys here leaves the stored values untouched).
+  // Name is snapshotted so attribution survives a deleted staff login.
+  delete a.createdBy; delete a.createdByName;
+  if (!h.getById('appointments', a.id)) {
+    a.createdBy = req.accountId || null;
+    const acct = master.get('accounts').find({ id: req.accountId }).value();
+    a.createdByName = acct ? (acct.name || acct.email) : null;
+    if (!a.createdAt) a.createdAt = new Date().toISOString();
+  }
   // Prevent double-booking the same staff member at the same date+time. The
   // public booking path validates this; the in-app create previously did not,
   // so staff (or a crafted request) could silently overbook a chair. Terminal
@@ -501,17 +534,39 @@ router.post('/api/shop/quotes', requireAuth, requireRole('full','technician'), s
     q.createdAt = new Date().toISOString();
   }
   h.upsert('quotes', q);
+  // Owner marked it approved (or edited an approved one): make sure the client
+  // profile exists + is linked. Idempotent — no-op once customerId resolves.
+  const merged = h.getById('quotes', q.id);
+  if (merged && merged.status === 'approved') { try { ensureQuoteCustomer(h, merged); } catch (e) {} }
+  // Owner closed the estimate out ('completed' = work won, 'lost' = it died) or
+  // reopened it. Stamp the transition server-side so reporting can tell won work
+  // from dead work, and clear the stamps on a reopen.
+  if (merged && typeof q.status === 'string') {
+    const now = new Date().toISOString();
+    const stamp = {};
+    if (q.status === 'completed') { if (!merged.completedAt) stamp.completedAt = now; }
+    else if (q.status === 'lost') { if (!merged.lostAt)      stamp.lostAt      = now; }
+    else if (q.status === 'scheduled' && !merged.scheduledAt) { stamp.scheduledAt = now; }
+    if (!['completed','lost','declined'].includes(q.status)) {
+      if (merged.completedAt) stamp.completedAt = null;
+      if (merged.lostAt)      stamp.lostAt      = null;
+      if (merged.declinedAt)  stamp.declinedAt  = null;
+    }
+    if (Object.keys(stamp).length) h.upsert('quotes', { id: merged.id, ...stamp });
+  }
   res.json({ id: q.id, number: q.number });
 }));
 router.delete('/api/shop/quotes/:id', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   ensureQuotes(db); h.remove('quotes', req.params.id); res.json({ ok:true });
 }));
 // Text the customer a link to view + approve the quote.
+// Recipient: the quote's own phone, falling back to the linked customer record.
 router.post('/api/shop/quotes/:id/send', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   ensureQuotes(db);
   const q = h.getById('quotes', req.params.id); if (!q) return res.status(404).json({ ok:false, error:'Quote not found' });
-  const phone = (q.customerPhone||'').replace(/\D/g,'');
-  if (phone.length < 10) return res.status(400).json({ ok:false, error:'No phone number on file for this customer' });
+  const rawPhone = q.customerPhone || (q.customerId ? (h.getById('customers', q.customerId)||{}).phone : '') || '';
+  const toNum = toE164(rawPhone);
+  if (!toNum) return res.status(400).json({ ok:false, error:'No phone number on file for this customer' });
   const from = shopFromNumber(req.shopId);
   if (!twilioClient || !from) return res.status(400).json({ ok:false, error:'SMS is not active for this shop yet' });
   const s = db.get('settings').value() || {};
@@ -520,8 +575,14 @@ router.post('/api/shop/quotes/:id/send', requireAuth, requireRole('full','techni
   const link = `${base}/quote/${shopRow.slug}/${q.id}`;
   const body = `Hi ${(q.customerName||'there').split(' ')[0]}! Here's your estimate from ${s.shopName||'us'} (${q.number}) — $${q.total}. View & approve: ${link}`;
   try {
-    await twilioClient.messages.create({ from, to:'+1'+phone, body });
-    q.sentAt = new Date().toISOString(); h.upsert('quotes', q);
+    await twilioClient.messages.create({ from, to: toNum, body });
+    // Log to the customer's text thread so the estimate shows in their history.
+    h.upsert('conversations', { id: genId('msg'), customerId: q.customerId || null,
+      customerName: q.customerName || rawPhone, type:'sms', direction:'outbound', body,
+      sentAt: new Date().toISOString(), read:true });
+    q.sentAt = new Date().toISOString(); q.smsSentAt = q.sentAt;
+    if (!q.customerPhone) q.customerPhone = rawPhone; // persist for future sends
+    h.upsert('quotes', q);
     res.json({ ok:true });
   } catch(e) { res.status(500).json({ ok:false, error:'Could not send the text' }); }
 }));
@@ -665,6 +726,38 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
   const totalDeposits = round2(paidDeposits.reduce((s, d) => s + Number(d.amount || 0), 0));
   const monthDeposits = round2(paidDeposits.filter(d => monthOf(d.paidAt) === curMonth).reduce((s, d) => s + Number(d.amount || 0), 0));
 
+  // ── Booked by (who ENTERED the appointment) ────────────────────────────────
+  // Per-account sales attribution: every staff-created appointment carries a
+  // server-stamped createdBy (accountId). "Booked" = jobs that person entered
+  // this month (by entry timestamp, excluding dead statuses) at booked price —
+  // the money they put on the calendar. "Closed" = their jobs marked done,
+  // bucketed by appointment date like the rest of the revenue math. Names join
+  // live from master accounts (renames stick) and fall back to the snapshot
+  // taken at booking time, so deleted logins keep their history.
+  const shopAccounts = master.get('accounts').filter({ shopId: req.shopId }).value() || [];
+  const DEAD_STATUSES = ['cancelled', 'canceled', 'declined', 'no-show'];
+  const byCreatorMap = {};
+  h.getAll('appointments').forEach(a => {
+    if (!a.createdBy) return;
+    const live = shopAccounts.find(x => x.id === a.createdBy);
+    const row = byCreatorMap[a.createdBy] || (byCreatorMap[a.createdBy] = {
+      accountId: a.createdBy,
+      name: (live && (live.name || live.email)) || a.createdByName || 'Former staff',
+      bookedMonth: 0, bookedMonthJobs: 0,
+      closedMonth: 0, closedMonthJobs: 0,
+      closedTotal: 0, closedTotalJobs: 0,
+    });
+    const price = Number(a.price || 0);
+    if (monthOf(a.createdAt) === curMonth && !DEAD_STATUSES.includes(a.status)) { row.bookedMonth += price; row.bookedMonthJobs++; }
+    if (a.status === 'done') {
+      row.closedTotal += price; row.closedTotalJobs++;
+      if ((a.date || '') >= ms) { row.closedMonth += price; row.closedMonthJobs++; }
+    }
+  });
+  const byCreator = Object.values(byCreatorMap)
+    .map(r => ({ ...r, bookedMonth: round2(r.bookedMonth), closedMonth: round2(r.closedMonth), closedTotal: round2(r.closedTotal) }))
+    .sort((a, b) => b.bookedMonth - a.bookedMonth || b.closedTotal - a.closedTotal);
+
   // ── Revenue Recovered (AI receptionist) ────────────────────────────────────
   // Money the AI voice receptionist brought in on calls the shop would otherwise
   // have missed. Two sources, deduped by appointment id:
@@ -751,6 +844,7 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
     monthDeposits, totalDeposits,
     monthJobs: thisMonth.length,
     avgTicket: thisMonth.length?Math.round(thisMonth.reduce((s,a)=>s+Number(a.price||0),0)/thisMonth.length):0,
+    byCreator,
     byBarber: Object.values(byBarber).sort((a,b)=>b.revenue-a.revenue),
     byMonth: Object.entries(byMonth).sort((a,b)=>a[0].localeCompare(b[0])).map(([month,revenue])=>({month,revenue})),
     recentDone: [...done].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,5),
@@ -880,6 +974,188 @@ router.get('/api/shop/leads', requireAuth, requireRole('full','technician'), sho
   res.json(leads);
 }));
 
+// Pipeline stages: new → … → closed (won), with lost as the dead-end. The
+// middle stages are owner-configurable (settings.pipeline.stages), so accept
+// any configured key plus the built-in set — default shops carry no config.
+// closed used to double as "dead"; lost now holds that meaning, and a won
+// close is stamped with closedAt.
+function shopStageKeys(db) {
+  const builtinStages = ['new','contacted','quoted','booked','worked','closed','lost'];
+  const cfgStages = (((db.get('settings').value() || {}).pipeline) || {}).stages;
+  return new Set(builtinStages.concat(
+    Array.isArray(cfgStages) ? cfgStages.map(s => s && s.key).filter(Boolean) : []));
+}
+
+// Apply a (validated) pipeline status to a lead with all its bookkeeping —
+// shared by the single-lead update and the bulk clean-out endpoint so a bulk
+// move behaves exactly like tapping each lead by hand.
+function applyLeadStatus(lead, status) {
+  const now = new Date().toISOString();
+  const prevStage = lead.pipelineStatus || lead.status;
+  if (lead.channel === 'website') {
+    // Website-intake leads run the Response Center's richer status machine
+    // (routes/website-leads.router.js). Map the pipeline stages onto it and
+    // stamp the same first-response fields its endpoints stamp, so both
+    // views stay coherent whichever one the owner works from. The granular
+    // stage (quoted/worked…) survives in pipelineStatus, which the client's
+    // _normalizeLead prefers when rendering.
+    // Custom (owner-created) stages are always mid-funnel → CONTACTED.
+    const mapped = { new:'NEW_LEAD', contacted:'CONTACTED', quoted:'CONTACTED', booked:'APPOINTMENT_SET', worked:'APPOINTMENT_SET', closed:'COMPLETED', lost:'LOST' }[status] || 'CONTACTED';
+    if (lead.status === 'NEW_LEAD' && mapped !== 'NEW_LEAD' && !lead.first_response_at) {
+      lead.first_response_at = now;
+      lead.response_time_seconds = Math.max(0, Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 1000));
+      if (lead.contact_status === 'UNCONTACTED') lead.contact_status = 'ATTEMPTED';
+    }
+    lead.status = mapped;
+    lead.pipelineStatus = status;
+    lead.updated_at = now;
+  } else {
+    // Speed-to-lead metric: the first move off 'new' is the shop's first
+    // response (owner texted via the sms: deep link or called back, then set
+    // the status). Stamped once, server-side, so response times are durable.
+    if (lead.status === 'new' && status !== 'new' && !lead.firstResponseAt) lead.firstResponseAt = now;
+    lead.status = status;
+  }
+  // Stage timing, stamped server-side so the Pipeline board's follow-up
+  // intervals measure real time-in-stage across devices.
+  if (prevStage !== status) {
+    lead.stageChangedAt = now;
+    lead.stageLog = lead.stageLog || [];
+    lead.stageLog.push({ from: prevStage, to: status, at: now });
+    if (status === 'closed' && !lead.closedAt) lead.closedAt = now;
+    // Booking/losing a lead ends its 30-day follow-up sequence automatically
+    // (built-in stage keys; custom won stages are hidden from the queue by the
+    // client's chaseable check either way). Manually resumable from the modal.
+    const fu = lead.followUp;
+    if (fu && (fu.status === 'active' || fu.status === 'paused')) {
+      if (['booked', 'worked', 'closed'].includes(status)) fu.status = 'completed';
+      else if (status === 'lost') fu.status = 'stopped';
+    }
+  }
+}
+
+// Sanitize a client-sent followUp state (the 30-day sequence bookkeeping).
+// Bounded shapes only — never trust free-form structures into the db.
+function cleanFollowUp(v) {
+  if (!v || typeof v !== 'object') return undefined;
+  const statuses = ['active', 'paused', 'completed', 'stopped', 'done'];
+  const iso = (x) => (x && !isNaN(Date.parse(x))) ? new Date(x).toISOString() : null;
+  return {
+    idx: Math.max(0, Math.min(200, parseInt(v.idx, 10) || 0)),
+    status: statuses.includes(v.status) ? v.status : 'active',
+    nextAt: iso(v.nextAt),
+    startedAt: iso(v.startedAt) || new Date().toISOString(),
+    pausedReason: v.pausedReason ? String(v.pausedReason).slice(0, 30) : null,
+    log: (Array.isArray(v.log) ? v.log.slice(0, 100) : []).map(e => ({
+      step: String((e && e.step) || '').slice(0, 40),
+      day: Math.max(0, Number(e && e.day) || 0),
+      body: e && e.body ? String(e.body).slice(0, 500) : undefined,
+      at: iso(e && e.at) || new Date().toISOString(),
+      by: String((e && e.by) || '').slice(0, 60),
+      skipped: e && e.skipped ? true : undefined,
+    })),
+  };
+}
+
+// Bulk clean-out (Pipeline → Select): move up to 500 leads to one stage in a
+// single call. Registered BEFORE /api/shop/leads/:id so "bulk-status" is never
+// captured as an :id.
+router.post('/api/shop/leads/bulk-status', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids.slice(0, 500) : [];
+  const status = req.body.status;
+  if (!ids.length || !shopStageKeys(db).has(status)) return res.status(400).json({ ok:false, error:'Bad request' });
+  let updated = 0;
+  ids.forEach(id => {
+    const lead = h.getById('leads', id);
+    if (lead) { applyLeadStatus(lead, status); h.upsert('leads', lead); updated++; }
+  });
+  res.json({ ok:true, updated });
+}));
+
+// Merge duplicate leads (owner only). Groups by last-10-digit phone
+// (leads-core.phoneKey) — the E.164-vs-national format mismatch let the Meta
+// webhook, Twilio calls, and the website form each create their own copy of
+// the same person. The oldest record survives; every other copy's history
+// (notes, stage log, calls, conversations, follow-up sequence, quote) is
+// folded into it and the copy is removed. Website-channel leads are skipped
+// (different schema — the Response Center owns those).
+function mergeLeadInto(p, d, stageOrder) {
+  const rank = (s) => stageOrder.indexOf(s);
+  p.name = p.name || d.name;
+  p.phone = p.phone || d.phone;
+  p.email = p.email || d.email;
+  p.vehicle = p.vehicle || d.vehicle;
+  p.location = p.location || d.location;
+  p.utm = p.utm || d.utm;
+  p.referrer = p.referrer || d.referrer;
+  if (d.notes) p.notes = [p.notes, d.notes].filter(Boolean).join('\n');
+  p.noteLog = (p.noteLog || []).concat(d.noteLog || []).sort((a, b) => new Date(b.at) - new Date(a.at));
+  p.servicesInterested = Array.from(new Set([...(p.servicesInterested || []), ...(d.servicesInterested || [])]));
+  p.stageLog = (p.stageLog || []).concat(d.stageLog || []).sort((a, b) => new Date(a.at) - new Date(b.at));
+  p.callCount = (p.callCount || 0) + (d.callCount || 0);
+  p.missedCount = (p.missedCount || 0) + (d.missedCount || 0);
+  p.formSubmits = (p.formSubmits || 0) + (d.formSubmits || 0);
+  if (d.quotedAmount != null && p.quotedAmount == null) p.quotedAmount = d.quotedAmount;
+  p.ai = p.ai || d.ai;
+  p.customerId = p.customerId || d.customerId;
+  // Keep whichever copy is furthest down the pipeline, and prefer a real ad
+  // channel over the bare 'call' attribution.
+  if (rank(d.status) > rank(p.status)) { p.status = d.status; p.stageChangedAt = d.stageChangedAt || p.stageChangedAt; }
+  if ((p.source || 'call') === 'call' && d.source && d.source !== 'call') p.source = d.source;
+  if (d.followUp && (!p.followUp || (d.followUp.idx || 0) > (p.followUp.idx || 0))) p.followUp = d.followUp;
+  p.dripLog = Object.assign({}, d.dripLog || {}, p.dripLog || {});
+  if (d.createdAt && (!p.createdAt || d.createdAt < p.createdAt)) p.createdAt = d.createdAt;
+  if (d.firstContactAt && (!p.firstContactAt || d.firstContactAt < p.firstContactAt)) p.firstContactAt = d.firstContactAt;
+  if (d.lastContactAt && (!p.lastContactAt || d.lastContactAt > p.lastContactAt)) p.lastContactAt = d.lastContactAt;
+  if (d.firstResponseAt && (!p.firstResponseAt || d.firstResponseAt < p.firstResponseAt)) p.firstResponseAt = d.firstResponseAt;
+  if (d.closedAt && !p.closedAt) p.closedAt = d.closedAt;
+}
+
+router.post('/api/shop/leads/dedupe', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
+  const { phoneKey } = require('../leads-core');
+  const stageOrder = Array.from(shopStageKeys(db));
+  const groups = {};
+  h.getAll('leads').forEach(l => {
+    if (!l || l.channel === 'website') return;
+    const k = phoneKey(l.phone);
+    if (k) (groups[k] = groups[k] || []).push(l);
+  });
+  let merged = 0;
+  Object.values(groups).forEach(g => {
+    if (g.length < 2) return;
+    g.sort((a, b) => new Date(a.createdAt || a.firstContactAt || 0) - new Date(b.createdAt || b.firstContactAt || 0));
+    const primary = g[0];
+    for (let i = 1; i < g.length; i++) {
+      const dup = g[i];
+      mergeLeadInto(primary, dup, stageOrder);
+      // Re-home the duplicate's call and message history before it goes.
+      (db.get('calls').value() || []).forEach(c => { if (c.leadId === dup.id) c.leadId = primary.id; });
+      (db.get('conversations').value() || []).forEach(c => { if (c.leadId === dup.id) c.leadId = primary.id; });
+      h.remove('leads', dup.id);
+      merged++;
+    }
+    h.upsert('leads', primary);
+  });
+  db.get('calls').write();
+  res.json({ ok: true, merged });
+}));
+
+// Bulk delete (owner only, like single delete): removes the leads and their
+// call logs. The client confirms before calling — this is irreversible.
+router.post('/api/shop/leads/bulk-delete', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
+  const ids = Array.isArray(req.body.ids) ? req.body.ids.slice(0, 500) : [];
+  if (!ids.length) return res.status(400).json({ ok:false, error:'Bad request' });
+  let deleted = 0;
+  ids.forEach(id => {
+    if (h.getById('leads', id)) {
+      db.get('calls').remove({ leadId: id }).write();
+      h.remove('leads', id);
+      deleted++;
+    }
+  });
+  res.json({ ok:true, deleted });
+}));
+
 // Update editable lead fields (name, status, notes).
 router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const lead = h.getById('leads', req.params.id);
@@ -887,28 +1163,48 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   const { name, status, notes } = req.body;
   if (name   !== undefined) lead.name = String(name).slice(0,80);
   if (notes  !== undefined) lead.notes = String(notes).slice(0,2000);
-  if (status !== undefined && ['new','contacted','booked','closed'].includes(status)) {
-    if (lead.channel === 'website') {
-      // Website-intake leads run the Response Center's richer status machine
-      // (routes/website-leads.router.js). Map the kanban's four statuses onto
-      // it and stamp the same first-response fields its endpoints stamp, so
-      // both views stay coherent whichever one the owner works from.
-      const mapped = { new:'NEW_LEAD', contacted:'CONTACTED', booked:'APPOINTMENT_SET', closed:'LOST' }[status];
-      if (lead.status === 'NEW_LEAD' && mapped !== 'NEW_LEAD' && !lead.first_response_at) {
-        lead.first_response_at = new Date().toISOString();
-        lead.response_time_seconds = Math.max(0, Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 1000));
-        if (lead.contact_status === 'UNCONTACTED') lead.contact_status = 'ATTEMPTED';
-      }
-      lead.status = mapped;
-      lead.updated_at = new Date().toISOString();
-    } else {
-      // Speed-to-lead metric: the first move off 'new' is the shop's first
-      // response (owner texted via the sms: deep link or called back, then set
-      // the status). Stamped once, server-side, so response times are durable.
-      if (lead.status === 'new' && status !== 'new' && !lead.firstResponseAt) lead.firstResponseAt = new Date().toISOString();
-      lead.status = status;
+  // Source is editable so mis-attributed leads (e.g. a Meta lead that came in
+  // as a bare call) can be fixed — it drives the channel split + Meta filter.
+  // utm.source is kept in sync so both attribution reads stay coherent.
+  if (req.body.source !== undefined) {
+    const src = String(req.body.source).trim().toLowerCase().slice(0, 40);
+    if (src) {
+      lead.source = src;
+      if (lead.utm && typeof lead.utm === 'object') lead.utm.source = src;
     }
   }
+  // Owner-entered quote value — drives the pipeline's per-column revenue
+  // totals. Overrides the AI receptionist's detected quotedPrice; null clears.
+  if (req.body.quotedAmount !== undefined) {
+    const q = Number(req.body.quotedAmount);
+    lead.quotedAmount = (Number.isFinite(q) && q > 0) ? Math.round(q * 100) / 100 : null;
+  }
+  // 30-day sequence state (Tasks page queue). Sends are manual (sms: deep link
+  // client-side); this just persists the bookkeeping. A grown log = a text was
+  // sent → refresh lastContactAt.
+  if (req.body.followUp !== undefined) {
+    const fu = cleanFollowUp(req.body.followUp);
+    if (fu) {
+      const prevLen = ((lead.followUp || {}).log || []).length;
+      if (fu.log.length > prevLen) lead.lastContactAt = new Date().toISOString();
+      lead.followUp = fu;
+    }
+  }
+  // By-day follow-up bookkeeping: the owner tapped the day-N text button (the
+  // sms: deep link opened Messages prefilled on their phone). Stamps the marker
+  // so the card shows "texted" and logs it in the lead's note history.
+  if (req.body.dripDay !== undefined) {
+    const d = parseInt(req.body.dripDay, 10);
+    if (d > 0) {
+      const now = new Date().toISOString();
+      lead.dripLog = lead.dripLog || {};
+      lead.dripLog['d' + d] = now;
+      lead.lastContactAt = now;
+      lead.noteLog = lead.noteLog || [];
+      lead.noteLog.unshift({ id: genId('note'), text: `Day-${d} follow-up text sent`, at: now, by: String(req.body.by || '').slice(0, 60) });
+    }
+  }
+  if (status !== undefined && shopStageKeys(db).has(status)) applyLeadStatus(lead, status);
   h.upsert('leads', lead);
   res.json({ ok:true, lead });
 }));
@@ -938,8 +1234,8 @@ router.post('/api/shop/leads/:id/convert', requireAuth, requireRole('full','tech
   if (!lead) return res.status(404).json({ ok:false, error:'Lead not found' });
   let cust = lead.customerId ? h.getById('customers', lead.customerId) : null;
   if (!cust) {
-    const digits = String(lead.phone||'').replace(/\D/g,'');
-    cust = h.getAll('customers').find(c => String(c.phone||'').replace(/\D/g,'') === digits && digits);
+    const digits = String(lead.phone||'').replace(/\D/g,'').slice(-10);
+    cust = h.getAll('customers').find(c => String(c.phone||'').replace(/\D/g,'').slice(-10) === digits && digits);
   }
   if (!cust) {
     cust = { id: genId('c'), name: lead.name || lead.phone, phone: lead.phone, email: lead.email || '', source: lead.source || 'call',
@@ -948,7 +1244,21 @@ router.post('/api/shop/leads/:id/convert', requireAuth, requireRole('full','tech
     h.upsert('customers', cust);
   }
   lead.customerId = cust.id;
-  lead.status = lead.status === 'new' || lead.status === 'contacted' ? 'booked' : lead.status;
+  // Converting implies the work is booked: move the lead up to the pipeline's
+  // win line (first stage flagged won — 'booked' on a default pipeline) unless
+  // it's already at or past it, or explicitly lost.
+  {
+    const cfg = (((db.get('settings').value() || {}).pipeline) || {}).stages;
+    const stages = (Array.isArray(cfg) && cfg.length) ? cfg : null;
+    const keys = stages ? stages.map(s => s && s.key) : ['new','contacted','quoted','booked','worked','closed','lost'];
+    const wonKey = stages ? (((stages.find(s => s && s.won && !s.terminal)) || {}).key || 'closed') : 'booked';
+    const curIdx = keys.indexOf(lead.status);
+    if (lead.status !== 'lost' && (curIdx === -1 || curIdx < keys.indexOf(wonKey))) {
+      lead.stageLog = (lead.stageLog || []).concat({ from: lead.status, to: wonKey, at: new Date().toISOString() });
+      lead.status = wonKey;
+      lead.stageChangedAt = new Date().toISOString();
+    }
+  }
   h.upsert('leads', lead);
   res.json({ ok:true, customerId: cust.id });
 }));
@@ -967,14 +1277,12 @@ router.post('/api/shop/leads/:id/sms', requireAuth, requireRole('full','technici
     await twilioClient.messages.create({ from: fromNum, to: toNum, body });
     h.upsert('conversations', { id: genId('msg'), customerId: lead.customerId || null, leadId: lead.id,
       customerName: lead.name || lead.phone, type:'sms', direction:'outbound', body, sentAt:new Date().toISOString(), read:true });
-    if (lead.status === 'new') { lead.status = 'contacted'; }
-    if (lead.channel === 'website' && lead.status === 'NEW_LEAD') {
-      // Website-intake lead: advance its own status machine + response stamps.
-      lead.status = 'CONTACTED';
-      if (!lead.first_response_at) {
-        lead.first_response_at = new Date().toISOString();
-        lead.response_time_seconds = Math.max(0, Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 1000));
-      }
+    // Texting does NOT move the pipeline stage — stage moves are always the
+    // owner's explicit call (advance/back buttons, status pills, bulk move).
+    // Response-time metrics still get stamped: the text IS the first response.
+    if (lead.channel === 'website' && !lead.first_response_at) {
+      lead.first_response_at = new Date().toISOString();
+      lead.response_time_seconds = Math.max(0, Math.floor((Date.now() - new Date(lead.created_at).getTime()) / 1000));
       if (lead.contact_status === 'UNCONTACTED') lead.contact_status = 'ATTEMPTED';
       lead.updated_at = new Date().toISOString();
     }

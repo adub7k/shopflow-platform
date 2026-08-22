@@ -2,13 +2,36 @@
 // Send a customer a line-item estimate for high-ticket work; they approve (and
 // optionally pay a deposit) on a public page, then the shop schedules it.
 const Quotes = {
-  _data: [], _services: [], _filter: '', _lines: [],
+  _data: [], _services: [], _filter: 'open', _lines: [],
+
+  // Lifecycle: sent → approved → scheduled, then the owner closes it out as
+  // 'completed' (work done) or 'lost' (didn't get it). 'declined' is the same
+  // dead end but reached by the customer on the public page, so both file under
+  // "Lost" in the UI. Closed estimates drop off the default Open list and can be
+  // reopened if closed by mistake.
+  STATUS_META: {
+    sent:      { label:'Sent',      cls:'badge-yellow' },
+    approved:  { label:'Approved',  cls:'badge-green'  },
+    scheduled: { label:'Scheduled', cls:'badge-blue'   },
+    completed: { label:'Completed', cls:'badge-green'  },
+    declined:  { label:'Declined',  cls:'badge-red'    },
+    lost:      { label:'Lost',      cls:'badge-gray'   },
+  },
+  CLOSED_STATUSES: ['completed','declined','lost'],
+  isClosed(st){ return this.CLOSED_STATUSES.includes(st); },
+  // Tab value → predicate. 'open' is everything still in play; 'lost' groups the
+  // owner's close-out with the customer's decline.
+  _matches(q, filter){
+    if(!filter) return true;                               // All
+    if(filter==='open') return !this.isClosed(q.status);
+    if(filter==='lost') return q.status==='lost' || q.status==='declined';
+    return q.status===filter;
+  },
 
   _vkey(fieldKey){ return fieldKey.replace(/^vehicle/,'').toLowerCase(); },
   _badge(st){
-    const m={sent:'badge-yellow',approved:'badge-green',scheduled:'badge-blue',declined:'badge-red'};
-    const lb={sent:'Sent',approved:'Approved',scheduled:'Scheduled',declined:'Declined'};
-    return `<span class="badge ${m[st]||'badge-gray'}" style="margin-top:3px;">${lb[st]||st}</span>`;
+    const m=this.STATUS_META[st]||{};
+    return `<span class="badge ${m.cls||'badge-gray'}" style="margin-top:3px;">${m.label||st}</span>`;
   },
   // Delivery/open indicator for an emailed estimate. Empty until it's been
   // emailed; then shows whether the customer has opened it (tracking pixel).
@@ -29,13 +52,17 @@ const Quotes = {
       [this._data, this._services] = await Promise.all([db.quotes.all(), db.services.all()]);
       const html=[];
       html.push(`<div class="section-header"><span>Estimates</span>${canWrite()?'<button class="btn btn-sm btn-green" onclick="Quotes.openForm(null)">+ New</button>':''}</div>`);
-      const tabs=[['','All'],['sent','Sent'],['approved','Approved'],['scheduled','Scheduled'],['declined','Declined']];
+      const tabs=[['open','Open'],['sent','Sent'],['approved','Approved'],['scheduled','Scheduled'],['completed','Completed'],['lost','Lost'],['','All']];
       html.push('<div style="display:flex;gap:6px;overflow-x:auto;margin-bottom:14px;padding-bottom:2px;">');
-      tabs.forEach(([v,lb])=>html.push(`<button class="btn btn-sm${this._filter===v?' btn-primary':''}" style="white-space:nowrap;" onclick="Quotes._filter='${v}';Quotes.render()">${lb}</button>`));
+      tabs.forEach(([v,lb])=>{
+        const n=this._data.filter(q=>this._matches(q,v)).length;
+        html.push(`<button class="btn btn-sm${this._filter===v?' btn-primary':''}" style="white-space:nowrap;" onclick="Quotes._filter='${v}';Quotes.render()">${lb}${n?` <span style="opacity:.6;">${n}</span>`:''}</button>`);
+      });
       html.push('</div>');
-      const filtered=this._data.filter(q=>!this._filter||q.status===this._filter);
+      const filtered=this._data.filter(q=>this._matches(q,this._filter));
       if(!filtered.length){
-        html.push(`<div class="card"><div class="empty-state"><div class="empty-icon">📄</div><div class="empty-text">No estimates${this._filter?' here':' yet'}</div>${!this._filter&&canWrite()?'<div class="empty-sub">Create one to quote a ceramic, PPF, or correction job.</div>':''}</div></div>`);
+        const none=!this._data.length;   // nothing at all vs. nothing in this tab
+        html.push(`<div class="card"><div class="empty-state"><div class="empty-icon">📄</div><div class="empty-text">No ${this._filter==='open'&&!none?'open ':''}estimates${none?' yet':' here'}</div>${none&&canWrite()?'<div class="empty-sub">Create one to quote a ceramic, PPF, or correction job.</div>':''}</div></div>`);
       } else {
         html.push('<div class="list-card">');
         filtered.forEach(q=>{
@@ -63,10 +90,14 @@ const Quotes = {
       <div class="modal-title">${q?'Edit Estimate':'New Estimate'}</div>
       <div class="form-group"><label class="form-label">Customer *</label>
         <div class="autocomplete-wrap"><input class="form-input" id="fq-name" value="${esc(q?.customerName||'')}" placeholder="Search or type name..." /><div class="autocomplete-list" id="fq-list"></div></div>
-        <input type="hidden" id="fq-cid" value="${q?.customerId||''}" /><input type="hidden" id="fq-phone" value="${esc(q?.customerPhone||'')}" />
+        <input type="hidden" id="fq-cid" value="${q?.customerId||''}" />
       </div>
-      <div class="form-group"><label class="form-label">Email <span style="color:var(--faint);font-weight:400;">(to send the estimate)</span></label>
-        <input class="form-input" id="fq-email" type="email" value="${esc(q?.customerEmail||'')}" placeholder="customer@email.com" /></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;">
+        <div class="form-group"><label class="form-label">Email <span style="color:var(--faint);font-weight:400;">(to email it)</span></label>
+          <input class="form-input" id="fq-email" type="email" value="${esc(q?.customerEmail||'')}" placeholder="customer@email.com" /></div>
+        <div class="form-group"><label class="form-label">Mobile <span style="color:var(--faint);font-weight:400;">(to text it)</span></label>
+          <input class="form-input" id="fq-phone" type="tel" value="${esc(q?.customerPhone||'')}" placeholder="(555) 555-1234" /></div>
+      </div>
       ${fields.length?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;">${fields.map(f=>`<div class="form-group"><label class="form-label">${esc(f.label)}</label><input class="form-input" id="fq-v-${esc(f.key)}" value="${esc(v[this._vkey(f.key)]||'')}" placeholder="${esc(f.label)}" /></div>`).join('')}</div>`:''}
       <div class="form-group"><label class="form-label">Line items</label><div id="fq-lines"></div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
@@ -81,11 +112,13 @@ const Quotes = {
       </div>
       <div class="form-group"><label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;margin:0;"><input type="checkbox" id="fq-dep-on" ${q?.depositRequired?'checked':''} onchange="Quotes._toggleDep()" /> Require a deposit to approve</label>
         <div id="fq-dep-row" style="display:${q?.depositRequired?'block':'none'};margin-top:8px;"><input class="form-input" id="fq-dep-amt" type="number" value="${q?.depositAmount||50}" placeholder="Deposit amount" /></div>
+        ${!(Shop.settings&&((Shop.settings.square&&Shop.settings.square.accessToken)||(Shop.settings.stripe&&Shop.settings.stripe.onboardingComplete)))?'<div style="font-size:12px;color:var(--faint);margin-top:6px;">Customers can always approve online. If Square isn’t connected (Settings → Payments), you collect the deposit directly.</div>':''}
       </div>
       <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="fq-notes" rows="2" placeholder="Scope, expectations, timeline...">${esc(q?.notes||'')}</textarea></div>
       <div class="modal-actions">
-        <button id="fq-btn-send" class="btn btn-green btn-full" onclick="Quotes.save('${q?.id||''}',true)">${q?'Save & email':'Create & email'} estimate</button>
-        <button id="fq-btn" class="btn btn-full" onclick="Quotes.save('${q?.id||''}',false)">${q?'Save without sending':'Create without sending'}</button>
+        <button id="fq-btn-send" class="btn btn-green btn-full" onclick="Quotes.save('${q?.id||''}','email')">${q?'Save & email':'Create & email'} estimate</button>
+        <button id="fq-btn-text" class="btn btn-green btn-full" onclick="Quotes.save('${q?.id||''}','sms')">${q?'Save & text':'Create & text'} estimate</button>
+        <button id="fq-btn" class="btn btn-full" onclick="Quotes.save('${q?.id||''}','')">${q?'Save without sending':'Create without sending'}</button>
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
       </div>`);
     setTimeout(()=>{
@@ -115,22 +148,25 @@ const Quotes = {
   _removeLine(i){ this._lines.splice(i,1); this._renderLines(); },
   _toggleDep(){ const on=document.getElementById('fq-dep-on')?.checked; const r=document.getElementById('fq-dep-row'); if(r)r.style.display=on?'block':'none'; },
 
-  async save(id, alsoEmail){
+  // sendVia: 'email' | 'sms' | '' (save only)
+  async save(id, sendVia){
     const name=document.getElementById('fq-name')?.value.trim();
     if(!name){toast('Enter a customer name','warning');return;}
     if(!this._lines.length){toast('Add at least one line item','warning');return;}
     const email=document.getElementById('fq-email')?.value.trim()||'';
-    // Create & email needs somewhere to send it — stop before saving a half-action.
-    if(alsoEmail && !email){toast('Add an email address to send the estimate','warning');document.getElementById('fq-email')?.focus();return;}
+    const phone=document.getElementById('fq-phone')?.value.trim()||'';
+    // Sending needs somewhere to send it — stop before saving a half-action.
+    if(sendVia==='email' && !email){toast('Add an email address to send the estimate','warning');document.getElementById('fq-email')?.focus();return;}
+    if(sendVia==='sms' && phone.replace(/\D/g,'').length<10){toast('Add a mobile number to text the estimate','warning');document.getElementById('fq-phone')?.focus();return;}
     const vehicle={}; (Shop.fields||[]).forEach(f=>{ const val=document.getElementById('fq-v-'+f.key)?.value.trim()||''; if(val) vehicle[this._vkey(f.key)]=val; });
     const depOn=document.getElementById('fq-dep-on')?.checked;
-    const btn=document.getElementById(alsoEmail?'fq-btn-send':'fq-btn'); disableBtn(btn);
+    const btn=document.getElementById(sendVia==='email'?'fq-btn-send':sendVia==='sms'?'fq-btn-text':'fq-btn'); disableBtn(btn);
     try{
       const saved=await db.quotes.save({
         id:id||undefined,
         customerId:document.getElementById('fq-cid')?.value||null,
         customerName:name,
-        customerPhone:document.getElementById('fq-phone')?.value||'',
+        customerPhone:phone,
         customerEmail:email,
         vehicle,
         lineItems:this._lines,
@@ -138,9 +174,23 @@ const Quotes = {
         depositAmount:depOn?(parseFloat(document.getElementById('fq-dep-amt')?.value)||50):0,
         notes:document.getElementById('fq-notes')?.value.trim()||'',
       });
-      if(alsoEmail){
+      if(sendVia==='sms'){
+        // Manual send: fetch the saved quote (server computed number/total),
+        // then pull up Messages prefilled — the owner just hits send.
         const qid=(saved&&saved.id)||id;
-        const r=await db.quotes.sendEmail(qid);
+        const q=await db.quotes.get(qid);
+        Modal.close(); await this.render();
+        _cpSms(q.customerPhone, this._smsBody(q), q.customerId);
+        q.smsSentAt=new Date().toISOString();
+        try{ await db.quotes.save({id:qid, smsSentAt:q.smsSentAt}); }catch(err){}
+        return;
+      }
+      if(sendVia==='email'){
+        const qid=(saved&&saved.id)||id;
+        // apiFetch throws on non-2xx — the quote is already saved by then, so
+        // report a send failure as exactly that, not "could not save".
+        let r; try{ r=await db.quotes.sendEmail(qid); }
+        catch(err){ r={ok:false,error:err.message}; }
         Modal.close(); await this.render();
         toast(r&&r.ok?'Estimate saved & emailed ✓':`Saved, but email failed: ${(r&&r.error)||'unknown error'}`, r&&r.ok?'success':'error');
         return;
@@ -159,6 +209,8 @@ const Quotes = {
         ${q.vehicle&&(q.vehicle.make||q.vehicle.model)?`<div style="font-size:13px;color:var(--muted);margin-top:3px;">🚗 ${esc([q.vehicle.year,q.vehicle.make,q.vehicle.model,q.vehicle.color].filter(Boolean).join(' '))}</div>`:''}
         <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${this._badge(q.status)} ${q.depositPaid?'<span class="badge badge-green">Deposit paid</span>':''}${this._openTag(q)}</div>
         ${q.emailSentAt?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">${q.emailOpenedAt?'Customer opened the email':'Emailed — not opened yet'}${(q.reminderCount||0)>0?` · ${q.reminderCount} reminder${q.reminderCount>1?'s':''} sent`:''}</div>`:''}
+        ${q.smsSentAt?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">📱 Texted ${(()=>{try{return new Date(q.smsSentAt).toLocaleDateString(undefined,{month:'short',day:'numeric'});}catch(e){return '';}})()}</div>`:''}
+        ${this.isClosed(q.status)?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">Closed out as ${esc((this.STATUS_META[q.status]||{}).label||q.status).toLowerCase()}${(()=>{const d=q.completedAt||q.lostAt||q.declinedAt;try{return d?' · '+new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'';}catch(e){return '';}})()}</div>`:''}
       </div>
       <div class="list-card" style="margin-bottom:14px;">
         ${(q.lineItems||[]).map(l=>`<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:14px;">${esc(l.name)}</div></div><div style="font-weight:700;">${fmtMoney(l.price)}</div></div>`).join('')}
@@ -170,25 +222,48 @@ const Quotes = {
       <div class="modal-actions">
         <button class="btn btn-full" onclick="navigator.clipboard.writeText('${link}');toast('Link copied ✓')">🔗 Copy estimate link</button>
         ${q.customerEmail?`<button class="btn btn-full" onclick="Quotes.sendEmail('${q.id}')">✉️ Email to customer</button>`:''}
-        ${q.customerPhone?`<button class="btn btn-full" onclick="Quotes.sendLink('${q.id}')">📱 Text to customer</button>`:''}
+        ${(q.customerPhone||q.customerId)?`<button class="btn btn-full" onclick="Quotes.sendLink('${q.id}')">📱 Text to customer</button>`:''}
         ${q.status==='approved'?`<button class="btn btn-green btn-full" onclick="Quotes.schedule('${q.id}')">📅 Schedule appointment</button>`:''}
         ${q.status==='sent'?`<button class="btn btn-full" onclick="Quotes.mark('${q.id}','approved')">Mark approved</button>`:''}
+        ${canWrite()&&!this.isClosed(q.status)?`<button class="btn btn-green btn-full" onclick="Quotes.mark('${q.id}','completed')">✓ Close out — completed</button>`:''}
+        ${canWrite()&&!this.isClosed(q.status)?`<button class="btn btn-full" onclick="Quotes.mark('${q.id}','lost')">✕ Close out — lost</button>`:''}
+        ${canWrite()&&this.isClosed(q.status)?`<button class="btn btn-full" onclick="Quotes.reopen('${q.id}')">↩ Reopen estimate</button>`:''}
         ${canWrite()?`<button class="btn btn-full" onclick="Quotes.openForm('${q.id}')">Edit</button>`:''}
         ${canWrite()?`<button class="btn btn-danger btn-full" onclick="Quotes.delete('${q.id}')">Delete</button>`:''}
         <button class="btn btn-full" onclick="Modal.close()">Close</button>
       </div>`);
   },
 
+  // Prefilled estimate text (same copy the server-side sender uses).
+  _smsBody(q){
+    const link=location.origin+'/quote/'+Auth.getShopSlug()+'/'+q.id;
+    return `Hi ${(q.customerName||'there').split(' ')[0]}! Here's your estimate from ${Auth.getShopName()||'us'} (${q.number||''}) — $${q.total}. View & approve: ${link}`;
+  },
+  // Manual send: pull up the owner's Messages app prefilled (iPhone sms: deep
+  // link via _cpSms — no Twilio/A2P; same stance as Tasks/Messages/Response).
   async sendLink(id){
-    try{ const r=await db.quotes.send(id); if(r&&r.ok){toast('Estimate texted ✓');} else {toast((r&&r.error)||'Could not send','error');} }
-    catch(e){ toast(e.message||'Could not send','error'); }
+    const q=this._data.find(x=>x.id===id); if(!q)return;
+    const phone=q.customerPhone||'';
+    if(phone.replace(/\D/g,'').length<10){toast('No phone number on this estimate','warning');return;}
+    _cpSms(phone, this._smsBody(q), q.customerId);
+    q.smsSentAt=new Date().toISOString();
+    try{ await db.quotes.save({id:q.id, smsSentAt:q.smsSentAt}); }catch(e){}
   },
   async sendEmail(id){
-    try{ const r=await db.quotes.sendEmail(id); if(r&&r.ok){toast('Estimate emailed ✓');} else {toast((r&&r.error)||'Could not send','error');} }
+    try{ const r=await db.quotes.sendEmail(id); if(r&&r.ok){toast('Estimate emailed ✓'); const q=this._data.find(x=>x.id===id); if(q&&!q.emailSentAt)q.emailSentAt=new Date().toISOString();} else {toast((r&&r.error)||'Could not send','error');} }
     catch(e){ toast(e.message||'Could not send','error'); }
   },
   async mark(id, status){
-    try{ await db.quotes.save({id,status}); Modal.close(); toast('Marked '+status+' ✓'); await this.render(); }
+    const lb=(this.STATUS_META[status]||{}).label||status;
+    try{ await db.quotes.save({id,status}); Modal.close(); toast('Marked '+lb.toLowerCase()+' ✓'); await this.render(); }
+    catch(e){ toast('Could not update','error'); }
+  },
+  // Undo a close-out: back to where the estimate actually got to, so a mis-click
+  // doesn't dump a scheduled job back into "Sent".
+  async reopen(id){
+    const q=this._data.find(x=>x.id===id); if(!q)return;
+    const status = (q.appointmentId || q.scheduledAt) ? 'scheduled' : (q.approvedAt ? 'approved' : 'sent');
+    try{ await db.quotes.save({id,status}); Modal.close(); toast('Estimate reopened ✓'); await this.render(); }
     catch(e){ toast('Could not update','error'); }
   },
   schedule(id){

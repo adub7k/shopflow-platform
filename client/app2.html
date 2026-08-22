@@ -59,6 +59,13 @@
     </div>
     <div id="sidebar-nav"></div>
     <div id="sidebar-footer">
+      <div id="sidebar-user" style="display:flex;align-items:center;gap:8px;margin-bottom:9px;">
+        <div style="flex:1;min-width:0;">
+          <div id="sidebar-user-name" style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Signed in</div>
+          <div id="sidebar-user-role" style="font-size:11px;color:var(--faint);"></div>
+        </div>
+        <button class="btn btn-sm" onclick="Auth.logout()" title="Sign out">Sign out</button>
+      </div>
       Powered by <strong style="color:var(--green-deep);">ShopFlow</strong>
     </div>
   </div>
@@ -73,6 +80,7 @@
     <div id="page-crews"        class="page"></div>
     <div id="page-recurring"    class="page"></div>
     <div id="page-response"     class="page"></div>
+    <div id="page-pipeline"     class="page"></div>
     <div id="page-leads"        class="page"></div>
     <div id="page-clients"      class="page"></div>
     <div id="page-quotes"       class="page"></div>
@@ -141,6 +149,7 @@
 <script src="/js/pages/recurring.js"></script>
 <script src="/js/pages/tasks.js"></script>
 <script src="/js/pages/response.js"></script>
+<script src="/js/pages/pipeline.js"></script>
 <script src="/js/v2/dashboard2.js"></script>
 <script src="/js/v2/clients2.js"></script>
 <script src="/js/v2/leads2.js"></script>

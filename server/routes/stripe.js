@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { requireAuth, requireRole } = require('../middleware');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, computeTax } = require('../db');
+const { ensureQuoteCustomer } = require('../quotes-core');
 
 // ── Stripe helpers ────────────────────────────────────────────────────────────
 function getStripe() {
@@ -34,6 +35,7 @@ function fulfillQuoteDeposit(shopId, quoteId, session) {
     if (q.status !== 'scheduled') q.status = 'approved';
     q.approvedAt = q.approvedAt || new Date().toISOString();
     h.upsert('quotes', q);
+    try { ensureQuoteCustomer(h, q); } catch (e) {} // approved = real client in the CRM
   }
 }
 function fulfillMembership(shopId, custId, planId, session) {
@@ -264,7 +266,7 @@ router.post('/api/public/:shopSlug/quote-deposit-session', async (req, res) => {
     const stripe = getStripe();
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
-      line_items: [{ price_data: { currency: 'usd', product_data: { name: 'Deposit — ' + (q.number || 'Estimate'), description: s.shopName + ' · approved estimate' }, unit_amount: total }, quantity: 1 }],
+      line_items: [{ price_data: { currency: 'usd', product_data: { name: 'Deposit — ' + (q.number || 'Estimate'), description: s.shopName + ' · non-refundable deposit, applied toward your total' }, unit_amount: total }, quantity: 1 }],
       mode: 'payment',
       success_url: APP_URL + '/quote-deposit-success?session={CHECKOUT_SESSION_ID}&quote=' + q.id + '&shop=' + shop.id,
       cancel_url:  APP_URL + '/quote/' + req.params.shopSlug + '/' + q.id + '?deposit=cancelled',
