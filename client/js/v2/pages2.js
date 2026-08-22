@@ -291,7 +291,7 @@
       const ai = data.aiReceptionist || {};
       const rec = data.aiRecoveredTotal || 0, pipe = data.aiPipelineOpen || 0;
       if ((ai.answered || 0) > 0 || rec > 0 || pipe > 0) {
-        const answered = ai.answered || 0, engaged = ai.engaged || 0, won = (ai.captured || 0) + (ai.booked || 0);
+        const answered = ai.answered || 0, engaged = ai.engaged || 0, quoted = ai.quoted || 0, booked = ai.booked || 0;
         const pctOf = (n, d) => d > 0 ? Math.round(n / d * 100) : 0;
         // Label + count on top, full-width bar below — stays readable at any width
         // (a single inline row squished the bar to nothing on phones).
@@ -311,7 +311,8 @@
             </div>
             ${frow('Calls answered', answered, '')}
             ${frow('Talked to the assistant', engaged, answered ? `· ${pctOf(engaged, answered)}%` : '')}
-            ${frow('Lead captured or booked', won, engaged ? `· ${pctOf(won, engaged)}% of talkers` : '')}
+            ${frow('Quotes given', quoted, engaged ? `· ${pctOf(quoted, engaged)}% of talkers` : '')}
+            ${frow('Booked', booked, engaged ? `· ${pctOf(booked, engaged)}% of talkers` : '')}
             <div style="font-size:11px;color:var(--faint);margin-top:9px;">Recovered = money from AI-driven jobs that closed. Pipeline = quoted leads not yet won.${ai.quotedTotal ? ` ${fmtMoney(ai.quotedTotal)} quoted in total.` : ''}</div>
           </div></div>`);
       }

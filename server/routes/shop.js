@@ -706,9 +706,19 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
   // outcome.type records how the AI ended it.
   const aiCalls = h.getAll('calls').filter(c => c && c.voiceAI);
   const outcomeType = c => (c.voiceAI.outcome && c.voiceAI.outcome.type) || null;
+  // A quote was "given" on a call when the AI attached a price to its outcome —
+  // either it ended in the 'quoted' state, or it captured/booked with a price
+  // (quotedPrice from capture_lead, price from book_appointment). So quoted ⊇
+  // booked-with-a-price, keeping the funnel monotonic (answered → engaged →
+  // quoted → booked).
+  const gaveQuote = c => {
+    const o = c.voiceAI.outcome || {};
+    return o.type === 'quoted' || o.quotedPrice != null || o.price != null;
+  };
   const aiReceptionist = {
     answered: aiCalls.length,
     engaged:  aiCalls.filter(c => (c.voiceAI.turns || []).some(t => t.role === 'user')).length,
+    quoted:   aiCalls.filter(gaveQuote).length,
     captured: aiCalls.filter(c => outcomeType(c) === 'captured').length,
     booked:   aiCalls.filter(c => outcomeType(c) === 'booked').length,
     quotedTotal: round2(aiLeads.reduce((s, l) => s + (quoteOf(l) > 0 ? quoteOf(l) : 0), 0)),

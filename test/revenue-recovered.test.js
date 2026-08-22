@@ -44,8 +44,8 @@ db.set('leads', [
 db.set('calls', [
   // answered + engaged (caller spoke) + captured
   { id: 'k1', voiceAI: { turns: [{ role: 'assistant', text: 'hi' }, { role: 'user', text: 'I need a detail' }], outcome: { type: 'captured' } } },
-  // answered + engaged + booked
-  { id: 'k2', voiceAI: { turns: [{ role: 'assistant', text: 'hi' }, { role: 'user', text: 'book me' }], outcome: { type: 'booked' } } },
+  // answered + engaged + quoted-then-booked (a price was given, then they booked)
+  { id: 'k2', voiceAI: { turns: [{ role: 'assistant', text: 'hi' }, { role: 'user', text: 'book me' }], outcome: { type: 'booked', quotedPrice: 250 } } },
   // answered but hung up on the greeting (no user turn) → not engaged, no outcome
   { id: 'k3', voiceAI: { turns: [{ role: 'assistant', text: 'hi' }], outcome: null } },
   // a plain non-AI call (no voiceAI) → excluded from the funnel entirely
@@ -72,6 +72,7 @@ const server = app.listen(0, async () => {
     eq('funnel: engaged = 2 (k3 hung up on greeting)', j.aiReceptionist.engaged, 2);
     eq('funnel: captured = 1', j.aiReceptionist.captured, 1);
     eq('funnel: booked = 1', j.aiReceptionist.booked, 1);
+    eq('funnel: quoted = 1 (k2 gave a price)', j.aiReceptionist.quoted, 1);
     eq('funnel: quotedTotal = 200+400 (nulls ignored)', j.aiReceptionist.quotedTotal, 600);
   } catch (e) { failures++; console.log('FAIL  threw', e.message); }
   server.close();
