@@ -234,7 +234,10 @@ const Tasks = {
     const out = [];
     out.push('<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:14px;">'
       + '<div class="section-header" style="margin:0;">Follow-ups</div>'
-      + '<button class="btn btn-sm" onclick="Tasks.cadenceModal()">⚙ Cadence</button></div>');
+      + '<div style="display:flex;gap:6px;">'
+      +   '<button class="btn btn-sm' + (this._selMode ? ' btn-primary' : '') + '" onclick="Tasks.toggleSelMode()">' + (this._selMode ? 'Done' : 'Select') + '</button>'
+      +   '<button class="btn btn-sm" onclick="Tasks.cadenceModal()">⚙ Cadence</button>'
+      + '</div></div>');
 
     // 30-day sequence metrics + enrollment prompt (only once any lead is in it,
     // or there are Meta leads waiting to be enrolled).
@@ -277,6 +280,7 @@ const Tasks = {
         + ' <span class="badge ' + badge + '">' + arr.length + '</span></div>');
       arr.forEach(t => out.push(this._card(t)));
     });
+    out.push(this._selBarHtml());
     return out.join('');
   },
 
@@ -289,8 +293,9 @@ const Tasks = {
         '<button class="btn btn-sm" onclick="Tasks.fuMark(\'' + t.id + '\',\'replied\')">Replied</button>',
         '<button class="btn btn-sm" onclick="Tasks.fuMark(\'' + t.id + '\',\'skip\')">Skip</button>',
       ].filter(Boolean).join('');
-      return '<div class="card" style="margin-bottom:10px;">'
-        + '<div style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;" onclick="Tasks.fuOpen(\'' + t.id + '\')">'
+      return '<div class="card ' + (this._sel.has(t.id) ? 'on' : '') + '" data-selrow="' + t.id + '" style="margin-bottom:10px;">'
+        + '<div style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;" onclick="' + (this._selMode ? 'Tasks.selToggle(\'' + t.id + '\')' : 'Tasks.fuOpen(\'' + t.id + '\')') + '">'
+        +   this._selCb(t)
         +   avatarEl(t.name, 40)
         +   '<div style="flex:1;min-width:0;">'
         +     '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">'
@@ -301,7 +306,7 @@ const Tasks = {
         +     '<div style="font-size:12px;font-weight:600;color:' + (t.detail === 'Due today' ? 'var(--green)' : 'var(--red)') + ';margin-top:2px;">' + esc(t.detail) + '</div>'
         +   '</div>'
         + '</div>'
-        + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">' + acts + '</div>'
+        + (this._selMode ? '' : '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">' + acts + '</div>')
         + '</div>';
     }
     const SRC = {
@@ -319,8 +324,9 @@ const Tasks = {
     if (t.source !== 'lead' && t.source !== 'reminder') acts.push('<button class="btn btn-sm" onclick="Tasks.snooze(\'' + id + '\')">⏰ Snooze</button>');
     acts.push('<button class="btn btn-sm btn-danger" onclick="Tasks.dismiss(\'' + id + '\')">✕</button>');
 
-    return '<div class="card" style="margin-bottom:10px;">'
+    return '<div class="card ' + (this._sel.has(t.id) ? 'on' : '') + '" data-selrow="' + t.id + '" style="margin-bottom:10px;"' + (this._selMode ? ' onclick="Tasks.selToggle(\'' + t.id + '\')"' : '') + '>'
       + '<div style="display:flex;gap:10px;align-items:flex-start;">'
+      +   this._selCb(t)
       +   avatarEl(t.name, 40)
       +   '<div style="flex:1;min-width:0;">'
       +     '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">'
@@ -336,13 +342,94 @@ const Tasks = {
       + (t.notes
           ? '<div style="margin-top:8px;padding:8px 10px;background:var(--bg,#f9fafb);border-radius:8px;font-size:13px;color:#374151;line-height:1.4;white-space:pre-wrap;"><span style="font-weight:700;color:var(--muted);">📝 Notes:</span> ' + esc(t.notes) + '</div>'
           : '<div style="margin-top:8px;font-size:12px;color:var(--faint);font-style:italic;">No notes yet.</div>')
-      + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">' + acts.join('') + '</div>'
+      + (this._selMode ? '' : '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;">' + acts.join('') + '</div>')
       + '</div>';
   },
 
   // ── Lookups + persistence helpers ───────────────────────────────────────────
   _cust(id) { return this._customers.find(c => c.id === id); },
   _ensureFollowup(c) { if (!c.followup) c.followup = { completedStep: -1, snoozeUntil: null, status: 'active' }; return c.followup; },
+
+  // ── Select mode (bulk clean-out of the task queue) ──────────────────────────
+  // Same pattern as the Leads list: checkboxes on every card + a sticky bar.
+  // Dismiss uses each task type's own semantics (win-back → dismissed, service
+  // → dismissed rec, lead → lost, reminder → cleared, sequence → stopped).
+  _selMode: false,
+  _sel: new Set(),
+  toggleSelMode() { this._selMode = !this._selMode; this._sel = new Set(); this.render(); },
+  selToggle(id) {
+    if (this._sel.has(id)) this._sel.delete(id); else this._sel.add(id);
+    const on = this._sel.has(id);
+    document.querySelectorAll('[data-selrow="' + id + '"]').forEach(r => {
+      r.classList.toggle('on', on);
+      const cb = r.querySelector('input.tk-cb'); if (cb) cb.checked = on;
+    });
+    const c = document.getElementById('tk-sel-count'); if (c) c.textContent = this._sel.size + ' selected';
+  },
+  selAll() {
+    const all = Object.keys(this._tasks || {});
+    const everything = all.length && all.every(id => this._sel.has(id));
+    this._sel = everything ? new Set() : new Set(all);
+    this.render();
+  },
+  _selCb(t) {
+    if (!this._selMode) return '';
+    return '<input type="checkbox" class="tk-cb" ' + (this._sel.has(t.id) ? 'checked' : '') + ' onclick="event.stopPropagation();Tasks.selToggle(\'' + t.id + '\')">';
+  },
+  _selBarHtml() {
+    if (!this._selMode) return '';
+    return '<div class="ld-selbar">'
+      + '<button class="btn btn-sm" onclick="Tasks.selAll()">All</button>'
+      + '<span id="tk-sel-count" style="font-size:12.5px;font-weight:700;white-space:nowrap;flex:1;">' + this._sel.size + ' selected</span>'
+      + '<button class="btn btn-sm" onclick="Tasks.selApply(\'skip\')">Skip step</button>'
+      + '<button class="btn btn-sm" onclick="Tasks.selApply(\'lost\')">Mark lost</button>'
+      + '<button class="btn btn-sm btn-danger" onclick="Tasks.selApply(\'dismiss\')">Dismiss</button>'
+      + '</div>';
+  },
+  async selApply(kind) {
+    const tasks = [...this._sel].map(id => this._tasks[id]).filter(Boolean);
+    if (!tasks.length) { toast('Nothing selected', 'warning'); return; }
+    if (typeof canWrite === 'function' && !canWrite()) { toast('Read-only access', 'warning'); return; }
+    try {
+      if (kind === 'lost') {
+        const ids = [...new Set(tasks.filter(t => t.leadId).map(t => t.leadId))];
+        if (!ids.length) { toast('No lead tasks selected', 'warning'); return; }
+        await db.leads.bulkStatus(ids, 'lost');   // also auto-stops their sequences
+        toast(ids.length + ' marked lost');
+      } else if (kind === 'skip') {
+        const seqTasks = tasks.filter(t => t.source === 'sequence');
+        if (!seqTasks.length) { toast('No sequence tasks selected', 'warning'); return; }
+        const seq = Leads.followUpSeq();
+        const now = new Date().toISOString();
+        await Promise.all(seqTasks.map(t => {
+          const l = this._leads.find(x => x.id === t.leadId);
+          if (!l || !l.followUp) return null;
+          const fu = l.followUp, st = seq[fu.idx];
+          if (!st) return null;
+          fu.log = (fu.log || []).concat({ step: st.label, day: st.day, at: now, by: (Auth.getName && Auth.getName()) || '', skipped: true });
+          fu.idx += 1;
+          fu.nextAt = Leads.fuNextAt(seq, fu.idx - 1, now);
+          if (fu.idx >= seq.length) { fu.status = 'done'; fu.nextAt = null; }
+          return db.leads.update(l.id, { followUp: fu });
+        }));
+        toast(seqTasks.length + ' step' + (seqTasks.length === 1 ? '' : 's') + ' skipped');
+      } else if (kind === 'dismiss') {
+        const custSaves = new Map();
+        const leadOps = [];
+        tasks.forEach(t => {
+          if (t.source === 'winback') { const c = this._cust(t.custId); if (c) { this._ensureFollowup(c).status = 'dismissed'; custSaves.set(c.id, c); } }
+          else if (t.source === 'service') { const c = this._cust(t.custId); if (c) { c.dismissedRecs = (c.dismissedRecs || []).concat(t.recTitle); custSaves.set(c.id, c); } }
+          else if (t.source === 'lead') leadOps.push(db.leads.update(t.leadId, { status: 'lost' }));
+          else if (t.source === 'reminder') this._remDone[t.apptId] = true;
+          else if (t.source === 'sequence') { const l = this._leads.find(x => x.id === t.leadId); if (l && l.followUp) { l.followUp.status = 'stopped'; leadOps.push(db.leads.update(l.id, { followUp: l.followUp })); } }
+        });
+        await Promise.all([...custSaves.values()].map(c => db.customers.save(c)).concat(leadOps));
+        toast(tasks.length + ' dismissed');
+      }
+    } catch (e) { toast(e.message || 'Bulk action failed', 'error'); return; }
+    this._sel = new Set();
+    this.render();   // stay in select mode — keep sweeping
+  },
 
   // ── 30-day sequence actions ─────────────────────────────────────────────────
   _fuLead(taskId) {
@@ -552,15 +639,21 @@ const Tasks = {
     } catch (e) { toast(e.message || 'Could not save', 'error'); }
   },
 
-  // ── Cadence settings modal (owner-configurable day-offsets + templates) ──────
+  // ── Cadence settings modal — ALL the Tasks-page cadences in one place:
+  // the win-back schedule AND the 30-day Meta-lead sequence (+ its [OFFER]).
   cadenceModal() {
     if (typeof canWrite === 'function' && !canWrite()) { toast('Read-only access', 'warning'); return; }
     this._wbEdit = JSON.parse(JSON.stringify(this._wb || this._winbackFrom(Shop.settings)));
+    this._fsEdit = Leads.followUpSeq().map(s => ({ ...s }));
+    this._fsOffer = (Shop.settings && Shop.settings.followUpOffer) || '';
     this._renderCadence();
   },
 
   _renderCadence() {
     const wb = this._wbEdit;
+    const secHd = (title, sub) => '<div style="font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.05em;margin:16px 0 4px;">' + title + '</div>'
+      + (sub ? '<p style="font-size:12.5px;color:var(--muted);margin:0 0 10px;line-height:1.5;">' + sub + '</p>' : '');
+
     const steps = wb.steps.map((s, i) =>
       '<div class="card" style="padding:10px;margin-bottom:8px;">'
       + '<div class="form-row" style="align-items:flex-end;">'
@@ -572,18 +665,33 @@ const Tasks = {
       +   '<textarea class="form-input" id="wb-msg-' + i + '" rows="3">' + esc(s.message) + '</textarea></div>'
       + '</div>').join('');
 
-    Modal.show('<div class="modal-title">Win-back cadence</div>'
-      + '<p style="font-size:13px;color:var(--muted);margin:-4px 0 12px;">Reach out to at-risk clients on a schedule. Each step\'s day is counted from when a client crosses the at-risk threshold.</p>'
+    const fsSteps = this._fsEdit.map((s, i) =>
+      '<div class="card" style="padding:10px;margin-bottom:8px;">'
+      + '<div class="form-row" style="align-items:flex-end;">'
+      +   '<div class="form-group" style="flex:0 0 80px;margin-bottom:8px;"><label class="form-label">Day</label><input class="form-input" id="fs-day-' + i + '" type="number" min="0" value="' + esc(s.day) + '"></div>'
+      +   '<div class="form-group" style="flex:1;margin-bottom:8px;"><label class="form-label">Label</label><input class="form-input" id="fs-label-' + i + '" value="' + esc(s.label) + '"></div>'
+      +   '<button class="btn btn-sm btn-danger" style="margin-bottom:8px;" onclick="Tasks._fsDel(' + i + ')">✕</button>'
+      + '</div>'
+      + '<div class="form-group" style="margin-bottom:0;"><label class="form-label">Message <span style="color:var(--faint);font-weight:400;">— [NAME] [VEHICLE] [SHOP] [OFFER] [PRICE]</span></label>'
+      +   '<textarea class="form-input" id="fs-msg-' + i + '" rows="3">' + esc(s.sms) + '</textarea></div>'
+      + '</div>').join('');
+
+    Modal.show('<div class="modal-title">Cadences</div>'
+      + secHd('WIN-BACK (PAST CLIENTS)', 'Reach out to at-risk clients on a schedule. Each step\'s day counts from when a client crosses the at-risk threshold.')
       + '<div class="form-group"><label class="form-label">At-risk after (days since last visit)</label>'
       +   '<input class="form-input" id="wb-atrisk" type="number" min="1" value="' + esc(wb.atRiskDays) + '"></div>'
-      + '<div class="form-label" style="margin-bottom:6px;">Steps</div>'
       + steps
-      + '<button class="btn btn-sm" style="margin-bottom:12px;" onclick="Tasks._addStep()">+ Add step</button>'
+      + '<button class="btn btn-sm" style="margin-bottom:4px;" onclick="Tasks._addStep()">+ Add win-back step</button>'
+      + secHd('30-DAY LEAD SEQUENCE (META LEADS)', 'The follow-up queue\'s steps and texts. Days count from when the lead came in; same-day steps chain a few hours apart. Sends stay manual — a step without a message is removed on save.')
+      + '<div class="form-group"><label class="form-label">Current offer <span style="color:var(--faint);font-weight:400;">— fills [OFFER]</span></label>'
+      +   '<input class="form-input" id="fs-offer" placeholder="e.g. $50 off ceramic tint this month" value="' + esc(this._fsOffer) + '"></div>'
+      + fsSteps
+      + '<button class="btn btn-sm" style="margin-bottom:12px;" onclick="Tasks._fsAdd()">+ Add sequence step</button>'
       + '<div class="modal-actions"><button class="btn" onclick="Modal.close()">Cancel</button>'
-      +   '<button class="btn btn-green" onclick="Tasks.saveCadence(this)">Save</button></div>');
+      +   '<button class="btn btn-green" onclick="Tasks.saveCadence(this)">Save all</button></div>');
   },
 
-  // Read the live inputs back into the working copy (so add/remove keep edits).
+  // Read the live inputs back into the working copies (so add/remove keep edits).
   _syncCadence() {
     const wb = this._wbEdit;
     const at = document.getElementById('wb-atrisk'); if (at) wb.atRiskDays = Math.max(1, Number(at.value) || 60);
@@ -592,6 +700,12 @@ const Tasks = {
       const l = document.getElementById('wb-label-' + i); if (l) s.label = l.value;
       const m = document.getElementById('wb-msg-' + i);   if (m) s.message = m.value;
     });
+    (this._fsEdit || []).forEach((s, i) => {
+      const d = document.getElementById('fs-day-' + i);   if (d) s.day = Math.max(0, Number(d.value) || 0);
+      const l = document.getElementById('fs-label-' + i); if (l) s.label = l.value;
+      const m = document.getElementById('fs-msg-' + i);   if (m) s.sms = m.value;
+    });
+    const off = document.getElementById('fs-offer'); if (off) this._fsOffer = off.value.trim().slice(0, 120);
   },
 
   _addStep() {
@@ -607,17 +721,37 @@ const Tasks = {
     this._renderCadence();
   },
 
+  _fsAdd() {
+    this._syncCadence();
+    const last = this._fsEdit[this._fsEdit.length - 1];
+    this._fsEdit.push({ id: genId('fs'), label: 'Day ' + (last ? Number(last.day) + 3 : 0), day: last ? Number(last.day) + 3 : 0, sms: '' });
+    this._renderCadence();
+  },
+
+  _fsDel(i) {
+    this._syncCadence();
+    this._fsEdit.splice(i, 1);
+    this._renderCadence();
+  },
+
   async saveCadence(btn) {
     this._syncCadence();
     const wb = this._wbEdit;
     if (!wb.steps.length) { toast('Add at least one step', 'error'); return; }
     wb.steps.sort((a, b) => a.day - b.day);
+    // Sequence steps: drop empties, stable-sort by day (same-day steps keep
+    // their order — that's the Day 0 Initial → Follow-Up → Evening chain).
+    const followUpSeq = (this._fsEdit || [])
+      .map(s => ({ id: s.id || genId('fs'), label: String(s.label || 'Step').slice(0, 40), day: Math.max(0, Number(s.day) || 0), sms: String(s.sms || '').trim().slice(0, 500) }))
+      .filter(s => s.sms)
+      .sort((a, b) => a.day - b.day);
     disableBtn(btn);
     try {
-      await db.settings.save({ winback: wb });   // POST /settings merges (assign) — other settings preserved
-      if (Shop.settings) Shop.settings.winback = wb;
+      // POST /settings merges (assign) — other settings preserved.
+      await db.settings.save({ winback: wb, followUpSeq, followUpOffer: this._fsOffer || '' });
+      if (Shop.settings) { Shop.settings.winback = wb; Shop.settings.followUpSeq = followUpSeq; Shop.settings.followUpOffer = this._fsOffer || ''; }
       this._wb = wb;
-      Modal.close(); toast('Cadence saved ✓'); this.render();
+      Modal.close(); toast('Cadences saved ✓'); this.render();
     } catch (e) { enableBtn(btn); toast(e.message || 'Could not save', 'error'); }
   },
 };

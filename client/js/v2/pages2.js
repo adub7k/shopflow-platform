@@ -170,7 +170,9 @@
     const out = [];
     out.push(`<div class="v2-pagehd"><div><h1>Tasks</h1>
       <div class="sub">${total ? total + ' follow-up' + (total !== 1 ? 's' : '') + ' queued — win-backs, service due, uncontacted leads, tomorrow’s reminders' : 'Win-backs, service reminders, and uncontacted leads land here'}</div></div>
-      <div class="sp"></div><button class="btn" onclick="Tasks.cadenceModal()">Edit cadence</button></div>`);
+      <div class="sp"></div>
+      <button class="btn${this._selMode ? ' btn-primary' : ''}" onclick="Tasks.toggleSelMode()">${this._selMode ? 'Done' : 'Select'}</button>
+      <button class="btn" onclick="Tasks.cadenceModal()">Edit cadence</button></div>`);
     // 30-day Meta-lead sequence: metrics strip + enrollment prompt.
     const fs = this._fuStats || {};
     if (fs.entered || (this._fuUnenrolled || []).length) {
@@ -198,6 +200,7 @@
       out.push(`<div class="grouphd" style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin:18px 0 8px;">${label} · ${arr.length}</div>`);
       out.push('<div class="v2-card">' + arr.map(t => this._card(t)).join('') + '</div>');
     });
+    out.push(this._selBarHtml());
     return out.join('');
   };
 
@@ -210,16 +213,18 @@
         `<button class="btn btn-sm" onclick="Tasks.fuMark('${t.id}','replied')">Replied</button>`,
         `<button class="btn btn-sm" onclick="Tasks.fuMark('${t.id}','skip')">Skip</button>`,
       ].filter(Boolean).join('');
-      return `<div class="list-row" style="align-items:flex-start;">
-        <span onclick="Tasks.fuOpen('${t.id}')" style="cursor:pointer;">${avatarEl(t.name, 36)}</span>
+      const open = this._selMode ? `Tasks.selToggle('${t.id}')` : `Tasks.fuOpen('${t.id}')`;
+      return `<div class="list-row ${this._sel.has(t.id) ? 'on' : ''}" data-selrow="${t.id}" style="align-items:flex-start;">
+        ${this._selCb(t)}
+        <span onclick="${open}" style="cursor:pointer;">${avatarEl(t.name, 36)}</span>
         <div class="list-main">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;" onclick="Tasks.fuOpen('${t.id}')">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;" onclick="${open}">
             <span class="list-name">${esc(t.name)}</span>
             <span class="badge badge-yellow">${esc(t.step.label)}</span>
             <span style="font-size:11.5px;font-weight:700;color:${t.detail === 'Due today' ? 'var(--green-deep,var(--green))' : 'var(--red)'};">${esc(t.detail)}</span>
           </div>
           ${t.reason ? `<div class="list-sub">${esc(t.reason)}</div>` : ''}
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${acts}</div>
+          ${this._selMode ? '' : `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${acts}</div>`}
         </div></div>`;
     }
     const SRC = {
@@ -231,13 +236,14 @@
     acts.push(`<button class="btn btn-sm" onclick="Tasks.done('${t.id}')">✓ Done</button>`);
     if (t.source !== 'lead' && t.source !== 'reminder') acts.push(`<button class="btn btn-sm" onclick="Tasks.snooze('${t.id}')">Snooze</button>`);
     acts.push(`<button class="btn btn-sm" style="color:var(--red);" onclick="Tasks.dismiss('${t.id}')">✕</button>`);
-    return `<div class="list-row" style="align-items:flex-start;cursor:default;">
+    return `<div class="list-row ${this._sel.has(t.id) ? 'on' : ''}" data-selrow="${t.id}" style="align-items:flex-start;cursor:${this._selMode ? 'pointer' : 'default'};"${this._selMode ? ` onclick="Tasks.selToggle('${t.id}')"` : ''}>
+      ${this._selCb(t)}
       ${avatarEl(t.name, 36)}
       <div class="list-main">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span class="list-name">${esc(t.name)}</span><span class="badge ${SRC[0]}">${SRC[1]}</span></div>
         <div class="list-sub">${esc(t.reason)}${t.detail ? ' · ' + esc(t.detail) : ''}</div>
         ${t.notes ? `<div style="margin-top:5px;font-size:12px;color:var(--muted);background:var(--surface2);border-radius:7px;padding:6px 9px;white-space:pre-wrap;">📝 ${esc(t.notes)}</div>` : ''}
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${acts.join('')}</div>
+        ${this._selMode ? '' : `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">${acts.join('')}</div>`}
       </div></div>`;
   };
 })();
