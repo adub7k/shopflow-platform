@@ -17,6 +17,46 @@
 
   Leads._statusFilter2 = Leads._statusFilter2 || 'all';
 
+  // ── Select mode (bulk clean-out on the list) ──────────────────────────────
+  // Same idea as the Pipeline column "Select": checkboxes on every row plus a
+  // sticky bar with Move / Mark lost / Delete, driven by the bulk endpoints.
+  Leads._selMode = false;
+  Leads._sel = new Set();
+  Leads.toggleSelMode = function () { this._selMode = !this._selMode; this._sel = new Set(); this.render(); };
+  Leads.selToggle = function (id) {
+    if (this._sel.has(id)) this._sel.delete(id); else this._sel.add(id);
+    const on = this._sel.has(id);
+    document.querySelectorAll(`[data-selrow="${id}"]`).forEach(r => {
+      r.classList.toggle('on', on);
+      const cb = r.querySelector('input.ld-cb'); if (cb) cb.checked = on;
+    });
+    const c = document.getElementById('sel-count'); if (c) c.textContent = this._sel.size + ' selected';
+  };
+  Leads.selAll = function () {
+    const shown = this._shownIds || [];
+    const all = shown.length && shown.every(id => this._sel.has(id));
+    this._sel = all ? new Set() : new Set(shown);
+    this.render();
+  };
+  Leads.selApply = async function (kind) {
+    const ids = [...this._sel];
+    if (!ids.length) { toast('Nothing selected', 'warning'); return; }
+    try {
+      if (kind === 'delete') {
+        if (!confirm(`Delete ${ids.length} lead${ids.length === 1 ? '' : 's'} and their history? This can't be undone.`)) return;
+        await db.leads.bulkDelete(ids); toast(ids.length + ' deleted');
+      } else if (kind === 'lost') {
+        await db.leads.bulkStatus(ids, 'lost'); toast(ids.length + ' marked lost');
+      } else {
+        const to = (document.getElementById('sel-move') || {}).value; if (!to) return;
+        const s = stages().find(x => x.key === to);
+        await db.leads.bulkStatus(ids, to); toast(ids.length + ' moved to ' + ((s && s.label) || to));
+      }
+    } catch (e) { toast(e.message || 'Bulk action failed', 'error'); return; }
+    this._sel = new Set();
+    this.render();   // stay in select mode — keep sweeping
+  };
+
   // A lead whose status isn't a configured stage (legacy or website
   // state-machine values) is treated as intake for placement/filtering so it
   // never silently disappears.
@@ -120,6 +160,7 @@
       <div class="sub">${counts.all} lead${counts.all !== 1 ? 's' : ''}${counts.new ? ` · <span style="color:var(--blue,#2f6feb);font-weight:600;">${counts.new} new</span>` : ''}</div></div>
       <div class="sp"></div>
       <div class="v2-segwrap" style="display:inline-flex;border:1px solid var(--border-md);border-radius:8px;overflow:hidden;margin-right:10px;">${seg('list', 'List')}${seg('pipeline', 'Pipeline')}</div>
+      <button class="btn${this._selMode ? ' btn-primary' : ''}" onclick="Leads.toggleSelMode()">${this._selMode ? 'Done' : 'Select'}</button>
       <button class="btn" onclick="App.nav('response')">Response Center${counts.new ? ' (' + counts.new + ')' : ''}</button></div>`);
 
     if (loadError) html.push(`<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--red,#e5534b);border-radius:10px;padding:10px 12px;margin-bottom:12px;color:var(--muted);font-size:13px;">⚠ Couldn't refresh leads (${esc(loadError)}). Showing the last loaded set — reload to try again.</div>`);
@@ -172,6 +213,10 @@
     let rows = leads.slice();
     if (this._statusFilter2 !== 'all') rows = rows.filter(l => colOf(l) === this._statusFilter2);
     rows.sort((a, b) => new Date(b.lastContactAt || b.createdAt || 0) - new Date(a.lastContactAt || a.createdAt || 0));
+    this._shownIds = rows.map(l => l.id);   // Select-all operates on the filtered view
+    const selMode = this._selMode;
+    const rowClick = (id) => selMode ? `Leads.selToggle('${id}')` : `Leads.open('${id}')`;
+    const rowCb = (id) => selMode ? `<input type="checkbox" class="ld-cb" ${this._sel.has(id) ? 'checked' : ''} onclick="event.stopPropagation();Leads.selToggle('${id}')">` : '';
 
     if (!rows.length) {
       html.push(`<div class="v2-card"><div class="empty-state"><div class="empty-icon">📥</div>
@@ -197,8 +242,8 @@
         if (!reqLines.length) { const act = activitySummary(l); reqLines.push(`<div style="color:var(--faint);">${act ? esc(act) : '—'}</div>`); }
         const when = l.lastContactAt || l.createdAt;
         const email = l.email ? `<div style="color:var(--muted);font-size:12px;">${esc(l.email)}</div>` : '';
-        html.push(`<tr onclick="Leads.open('${l.id}')">
-          <td><div style="display:flex;align-items:center;gap:8px;"><span class="v2-src">${sm.icon} ${esc(sm.label)}</span></div>
+        html.push(`<tr data-selrow="${l.id}" class="${this._sel.has(l.id) ? 'on' : ''}" onclick="${rowClick(l.id)}">
+          <td><div style="display:flex;align-items:center;gap:8px;">${rowCb(l.id)}<span class="v2-src">${sm.icon} ${esc(sm.label)}</span></div>
             <div style="font-weight:600;margin-top:4px;">${esc(name)}</div></td>
           <td>${reqLines.join('')}</td>
           <td style="color:var(--muted);">${esc(l.phone || '—')}${email}</td>
@@ -222,8 +267,8 @@
         const { services, vehicle } = requested(l);
         const sub = [services, vehicle].filter(Boolean).join(' · ') || l.phone || '';
         const when = l.lastContactAt || l.createdAt;
-        html.push(`<div class="msg-inbox-row" onclick="Leads.open('${l.id}')">
-          ${avatarEl(name, 42)}
+        html.push(`<div class="msg-inbox-row ${this._sel.has(l.id) ? 'on' : ''}" data-selrow="${l.id}" onclick="${rowClick(l.id)}">
+          ${rowCb(l.id)}${avatarEl(name, 42)}
           <div style="flex:1;min-width:0;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
               <div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</div>
@@ -241,6 +286,20 @@
       }
     });
     html.push('</div>');
+
+    // Sticky bulk-action bar while selecting.
+    if (selMode) {
+      const opts = stages().map(s => `<option value="${s.key}">${esc(s.label)}</option>`).join('');
+      const canDel = Auth.getRole() === 'full';
+      html.push(`<div class="ld-selbar">
+        <button class="btn btn-sm" onclick="Leads.selAll()">All</button>
+        <span id="sel-count" style="font-size:12.5px;font-weight:700;white-space:nowrap;">${this._sel.size} selected</span>
+        <select class="form-input" id="sel-move" style="flex:1;min-width:90px;max-width:150px;padding:6px 8px;">${opts}</select>
+        <button class="btn btn-sm" onclick="Leads.selApply('move')">Move</button>
+        <button class="btn btn-sm" onclick="Leads.selApply('lost')">Lost</button>
+        ${canDel ? `<button class="btn btn-sm btn-danger" onclick="Leads.selApply('delete')">Delete</button>` : ''}
+      </div>`);
+    }
   }
 
 })();

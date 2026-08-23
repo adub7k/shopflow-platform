@@ -461,3 +461,10 @@ table.v2-table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:68
 .pipe-view button+button{border-left:1px solid var(--border);}
 .pipe-ed-row textarea{margin-top:8px;}
 .pipe-ed-daylbl{font-size:13px;font-weight:600;color:var(--muted);flex-shrink:0;}
+
+/* ── Leads list select mode ── */
+.ld-cb{width:18px;height:18px;flex-shrink:0;accent-color:var(--green-deep);cursor:pointer;}
+.v2-table tr.on td{background:var(--green-lt);}
+.msg-inbox-row.on{background:var(--green-lt);}
+.ld-selbar{position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:60;display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--border-md);border-radius:12px;box-shadow:var(--shadow-lg);padding:10px 12px;width:min(560px,calc(100vw - 24px));}
+@media(max-width:640px){.ld-selbar{bottom:calc(84px + env(safe-area-inset-bottom));flex-wrap:wrap;}.ld-selbar .btn{min-height:38px;}}
