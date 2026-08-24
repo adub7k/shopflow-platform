@@ -1180,15 +1180,14 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
     lead.quotedAmount = (Number.isFinite(q) && q > 0) ? Math.round(q * 100) / 100 : null;
   }
   // 30-day sequence state (Tasks page queue). Sends are manual (sms: deep link
-  // client-side); this just persists the bookkeeping. A grown log = a text was
-  // sent → refresh lastContactAt.
+  // client-side); this just persists the bookkeeping. Deliberately does NOT
+  // touch lastContactAt: that clock means CUSTOMER activity (calls, form
+  // submits). Owner touches bumping it made every worked lead leap to the top
+  // of the Leads list stamped with the touch time — reading as a brand-new
+  // lead. Owner-side send times live in followUp.log / dripLog / noteLog.
   if (req.body.followUp !== undefined) {
     const fu = cleanFollowUp(req.body.followUp);
-    if (fu) {
-      const prevLen = ((lead.followUp || {}).log || []).length;
-      if (fu.log.length > prevLen) lead.lastContactAt = new Date().toISOString();
-      lead.followUp = fu;
-    }
+    if (fu) lead.followUp = fu;
   }
   // By-day follow-up bookkeeping: the owner tapped the day-N text button (the
   // sms: deep link opened Messages prefilled on their phone). Stamps the marker
@@ -1199,7 +1198,8 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
       const now = new Date().toISOString();
       lead.dripLog = lead.dripLog || {};
       lead.dripLog['d' + d] = now;
-      lead.lastContactAt = now;
+      // No lastContactAt bump — owner touches must not reorder the Leads list
+      // (see the followUp comment above).
       lead.noteLog = lead.noteLog || [];
       lead.noteLog.unshift({ id: genId('note'), text: `Day-${d} follow-up text sent`, at: now, by: String(req.body.by || '').slice(0, 60) });
     }
@@ -1287,7 +1287,8 @@ router.post('/api/shop/leads/:id/sms', requireAuth, requireRole('full','technici
       lead.updated_at = new Date().toISOString();
     }
     if (!lead.firstResponseAt) lead.firstResponseAt = new Date().toISOString();
-    lead.lastContactAt = new Date().toISOString();
+    // No lastContactAt bump — that clock is customer activity only; an owner
+    // outbound text reordering the Leads list read as a phantom new lead.
     h.upsert('leads', lead);
     res.json({ ok:true });
   } catch(e) { res.json({ ok:false, error:e.message }); }
