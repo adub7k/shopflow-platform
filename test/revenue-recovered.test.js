@@ -40,10 +40,12 @@ db.set('leads', [
   { id: 'lB',       phone: '+15550000002', customerId: 'cB', status: 'closed',    ai: { source: 'voice', quotedPrice: 200, quality: 'hot',  generatedAt: past } }, // realized via a2
   { id: 'lOpen',    phone: '+15550000009',                   status: 'contacted', ai: { source: 'voice', quotedPrice: 400, quality: 'warm', generatedAt: past } }, // open pipeline $400
   { id: 'lNoQuote', phone: '+15550000010',                   status: 'contacted', ai: { source: 'voice', quotedPrice: null, budget: null,   generatedAt: past } }, // no quote → ignored
+  { id: 'lManual',  phone: '+15550000011',                   status: 'contacted', quotedAmount: 175 }, // owner typed a quote on the lead (AI gave it but didn't log it)
 ]).write();
 db.set('calls', [
-  // answered + engaged (caller spoke) + captured
-  { id: 'k1', voiceAI: { turns: [{ role: 'assistant', text: 'hi' }, { role: 'user', text: 'I need a detail' }], outcome: { type: 'captured' } } },
+  // answered + engaged + captured; outcome logged NO price, but its lead has a
+  // manual quotedAmount → still counts as a quote given.
+  { id: 'k1', leadId: 'lManual', voiceAI: { turns: [{ role: 'assistant', text: 'hi' }, { role: 'user', text: 'I need a detail' }], outcome: { type: 'captured' } } },
   // answered + engaged + quoted-then-booked (a price was given, then they booked)
   { id: 'k2', voiceAI: { turns: [{ role: 'assistant', text: 'hi' }, { role: 'user', text: 'book me' }], outcome: { type: 'booked', quotedPrice: 250 } } },
   // answered but hung up on the greeting (no user turn) → not engaged, no outcome
@@ -72,7 +74,7 @@ const server = app.listen(0, async () => {
     eq('funnel: engaged = 2 (k3 hung up on greeting)', j.aiReceptionist.engaged, 2);
     eq('funnel: captured = 1', j.aiReceptionist.captured, 1);
     eq('funnel: booked = 1', j.aiReceptionist.booked, 1);
-    eq('funnel: quoted = 1 (k2 gave a price)', j.aiReceptionist.quoted, 1);
+    eq('funnel: quoted = 2 (k2 outcome price + k1 lead manual quotedAmount)', j.aiReceptionist.quoted, 2);
     eq('funnel: quotedTotal = 200+400 (nulls ignored)', j.aiReceptionist.quotedTotal, 600);
   } catch (e) { failures++; console.log('FAIL  threw', e.message); }
   server.close();

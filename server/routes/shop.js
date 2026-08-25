@@ -770,7 +770,14 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
   // AI-captured leads still open (not yet realized) — potential, shown separately.
   const onlyDigits = s => String(s || '').replace(/\D/g, '');
   const last10 = s => onlyDigits(s).slice(-10);
-  const quoteOf = l => Number(l.ai && l.ai.quotedPrice != null ? l.ai.quotedPrice : (l.ai && l.ai.budget));
+  // Effective quote for a lead: the owner's manual "Quoted amount" (entered on the
+  // lead in the Leads UI) is authoritative — it's a correction/backfill for quotes
+  // the AI gave but didn't record — so it wins; else the AI-captured price; else the
+  // caller's stated budget.
+  const quoteOf = l => Number(
+    l.quotedAmount != null ? l.quotedAmount
+    : (l.ai && l.ai.quotedPrice != null) ? l.ai.quotedPrice
+    : (l.ai && l.ai.budget));
   const aiLeads = h.getAll('leads').filter(l => l.ai && l.ai.source === 'voice');
   const aiCustCap = new Map();   // customerId → capture date (YYYY-MM-DD)
   const aiPhoneCap = new Map();  // last-10 phone → capture date
@@ -808,10 +815,15 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
     const o = c.voiceAI.outcome || {};
     return o.type === 'quoted' || o.quotedPrice != null || o.price != null;
   };
+  // A call also counts as "quoted" when its linked lead carries a quote — the AI's
+  // captured price OR the owner's manually-entered "Quoted amount" — so quotes the
+  // receptionist gave but didn't log (owner backfills them on the lead) show here.
+  const leadById = new Map(h.getAll('leads').map(l => [l.id, l]));
+  const callQuoted = c => gaveQuote(c) || (c.leadId && leadById.has(c.leadId) && quoteOf(leadById.get(c.leadId)) > 0);
   const aiReceptionist = {
     answered: aiCalls.length,
     engaged:  aiCalls.filter(c => (c.voiceAI.turns || []).some(t => t.role === 'user')).length,
-    quoted:   aiCalls.filter(gaveQuote).length,
+    quoted:   aiCalls.filter(callQuoted).length,
     captured: aiCalls.filter(c => outcomeType(c) === 'captured').length,
     booked:   aiCalls.filter(c => outcomeType(c) === 'booked').length,
     quotedTotal: round2(aiLeads.reduce((s, l) => s + (quoteOf(l) > 0 ? quoteOf(l) : 0), 0)),
