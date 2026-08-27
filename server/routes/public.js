@@ -252,6 +252,9 @@ router.get('/api/public/:shopSlug/quote/:quoteId', async (req, res) => {
         customerName: q.customerName || '',
         vehicle: q.vehicle || null, vehicleSize: q.vehicleSize || null,
         lineItems: q.lineItems || [], total: q.total || 0, notes: q.notes || '',
+        // Fleet contracts: total is per-visit; these carry the recurring view.
+        contract: q.contract || null, monthlyTotal: q.monthlyTotal || 0, contractValue: q.contractValue || 0,
+        fleetName: q.fleetName || '', vehicleCount: q.vehicleCount || 0,
         subtotal: q.subtotal != null ? q.subtotal : (q.total || 0),
         taxRate: q.taxRate || 0, taxLabel: q.taxLabel || 'Sales Tax', taxAmount: q.taxAmount || 0,
         depositRequired: !!q.depositRequired, depositAmount: q.depositAmount || 0, depositPaid: !!q.depositPaid,

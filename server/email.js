@@ -211,10 +211,29 @@ function renderQuoteEmail({ shop, quote, link, openPixel, reminder }) {
   const v = q.vehicle || {};
   const vehicle = [v.year, v.make, v.model, v.color && `(${v.color})`].filter(Boolean).join(' ');
 
-  const itemRows = (q.lineItems || []).map((l) => `<tr>
-        <td style="padding:12px 0;border-bottom:1px solid #ececec;font-size:15px;color:#222;">${esc(l.name)}</td>
-        <td style="padding:12px 0;border-bottom:1px solid #ececec;font-size:15px;color:#222;text-align:right;white-space:nowrap;">${money(l.price)}</td>
-      </tr>`).join('');
+  // Fleet estimates carry a per-line quantity (vehicles); everything else is 1.
+  const itemRows = (q.lineItems || []).map((l) => {
+    const n = Number(l.qty) || 1;
+    return `<tr>
+        <td style="padding:12px 0;border-bottom:1px solid #ececec;font-size:15px;color:#222;">${esc(l.name)}${n > 1 ? `<span style="color:#888;font-size:13.5px;"> &nbsp;${n} × ${money(l.price)}</span>` : ''}</td>
+        <td style="padding:12px 0;border-bottom:1px solid #ececec;font-size:15px;color:#222;text-align:right;white-space:nowrap;">${money(l.price * n)}</td>
+      </tr>`;
+  }).join('');
+
+  // Recurring terms: the items price one visit, so the email says so and adds
+  // the monthly + full contract value the customer is actually agreeing to.
+  const FREQ_LABEL = { weekly: 'Weekly', biweekly: 'Every 2 weeks', monthly: 'Monthly', quarterly: 'Quarterly' };
+  const ct = q.contract && FREQ_LABEL[q.contract.frequency] ? q.contract : null;
+  const contractRows = ct ? `<tr>
+        <td style="padding:16px 0 0;font-size:13.5px;color:#777;border-top:1px solid #ececec;">${FREQ_LABEL[ct.frequency]} · ${ct.termMonths}-month term</td>
+        <td style="padding:16px 0 0;border-top:1px solid #ececec;"></td>
+      </tr><tr>
+        <td style="padding:8px 0 0;font-size:17px;font-weight:bold;color:#1a1a1a;">Monthly</td>
+        <td style="padding:8px 0 0;font-size:17px;font-weight:bold;color:${accent};text-align:right;">${money(q.monthlyTotal)}</td>
+      </tr><tr>
+        <td style="padding:4px 0 0;font-size:13.5px;color:#777;">Total contract value</td>
+        <td style="padding:4px 0 0;font-size:13.5px;color:#777;text-align:right;">${money(q.contractValue)}</td>
+      </tr>` : '';
 
   const taxRows = q.taxAmount ? `<tr>
         <td style="padding:6px 0 0;font-size:14px;color:#777;">Subtotal</td>
@@ -238,12 +257,16 @@ function renderQuoteEmail({ shop, quote, link, openPixel, reminder }) {
   const greeting = firstName ? `Hi ${esc(firstName)},` : 'Hello,';
 
   // Intro copy differs for a first send vs. a follow-up nudge.
+  const isFleet = !!(ct || q.fleetName || q.vehicleCount);
+  const forWhat = isFleet ? ` for your fleet${q.fleetName ? ` at <strong>${esc(q.fleetName)}</strong>` : ''}`
+    : vehicle ? ` for your <strong>${esc(vehicle)}</strong>` : '';
   const introHtml = reminder
-    ? `Just checking in on the estimate we sent${vehicle ? ` for your <strong>${esc(vehicle)}</strong>` : ''}. It's still available to review whenever you're ready — no rush, and reach out with any questions.`
-    : `Thank you for the opportunity to earn your business. Here's the estimate${vehicle ? ` for your <strong>${esc(vehicle)}</strong>` : ''}, prepared just for you.`;
+    ? `Just checking in on the estimate we sent${forWhat}. It's still available to review whenever you're ready — no rush, and reach out with any questions.`
+    : `Thank you for the opportunity to earn your business. Here's the estimate${forWhat}, prepared just for you.`;
+  const forWhatText = forWhat.replace(/<[^>]+>/g, '');
   const introText = reminder
-    ? `Just checking in on the estimate we sent${q.number ? ` (${q.number})` : ''}${vehicle ? ` for your ${vehicle}` : ''}. It's still available whenever you're ready:`
-    : `Thanks for the opportunity to earn your business. Here's the estimate${q.number ? ` (${q.number})` : ''}${vehicle ? ` for your ${vehicle}` : ''}:`;
+    ? `Just checking in on the estimate we sent${q.number ? ` (${q.number})` : ''}${forWhatText}. It's still available whenever you're ready:`
+    : `Thanks for the opportunity to earn your business. Here's the estimate${q.number ? ` (${q.number})` : ''}${forWhatText}:`;
 
   const subject = reminder
     ? `Following up on your estimate${q.number ? ` ${q.number}` : ''} from ${name}`
@@ -253,9 +276,15 @@ function renderQuoteEmail({ shop, quote, link, openPixel, reminder }) {
     ``,
     introText,
     ``,
-    ...(q.lineItems || []).map((l) => `  ${l.name} — ${money(l.price)}`),
+    ...(q.lineItems || []).map((l) => {
+      const n = Number(l.qty) || 1;
+      return `  ${l.name}${n > 1 ? ` (${n} × ${money(l.price)})` : ''} — ${money(l.price * n)}`;
+    }),
     q.taxAmount ? `  ${q.taxLabel || 'Sales Tax'} (${q.taxRate}%) — ${money(q.taxAmount)}` : '',
-    `  Total — ${money(q.total)}`,
+    `  ${ct ? 'Per visit' : 'Total'} — ${money(q.total)}`,
+    ct ? `  ${FREQ_LABEL[ct.frequency]} · ${ct.termMonths}-month term` : '',
+    ct ? `  Monthly — ${money(q.monthlyTotal)}` : '',
+    ct ? `  Total contract value — ${money(q.contractValue)}` : '',
     ``,
     q.depositRequired && !q.depositPaid ? `A ${money(q.depositAmount)} deposit is required to approve.` : '',
     `Review and approve your estimate here: ${link}`,
@@ -287,9 +316,10 @@ function renderQuoteEmail({ shop, quote, link, openPixel, reminder }) {
         ${itemRows}
         ${taxRows}
         <tr>
-          <td style="padding:14px 0 0;font-size:17px;font-weight:bold;color:#1a1a1a;">Total</td>
+          <td style="padding:14px 0 0;font-size:17px;font-weight:bold;color:#1a1a1a;">${ct ? 'Per visit' : 'Total'}</td>
           <td style="padding:14px 0 0;font-size:17px;font-weight:bold;color:${accent};text-align:right;">${money(q.total)}</td>
         </tr>
+        ${contractRows}
       </table>
     </td></tr>
     <tr><td style="padding:24px 40px 0;">${depositNote}${notesNote}</td></tr>

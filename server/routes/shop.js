@@ -500,6 +500,27 @@ router.delete('/api/shop/appointments/:id/photos/:photoId', requireAuth, require
 // A quote is sent to the customer, who approves it (optionally paying a deposit)
 // on a public page; the shop then schedules it into an appointment.
 function ensureQuotes(db) { if (!Array.isArray(db.get('quotes').value())) db.set('quotes', []).write(); }
+const _qty = (v) => Math.max(1, Math.min(999, Math.round(Number(v) || 1)));
+
+// ── Fleet contract math ───────────────────────────────────────────────────────
+// A fleet estimate prices ONE visit (line items × vehicle counts), so quote.total
+// stays the per-visit number every downstream feature already reads — deposits,
+// "Schedule appointment", revenue reporting. The recurring figures are derived
+// beside it: an every-2-weeks contract is 26 visits a year, not 24, so monthly is
+// annualised rather than multiplied by a nominal 2 visits/month.
+const VISITS_PER_YEAR = { weekly: 52, biweekly: 26, monthly: 12, quarterly: 4 };
+function contractTotals(q) {
+  const c = q.contract;
+  const freq = c && VISITS_PER_YEAR[c.frequency];
+  if (!freq) return { contract: null, monthlyTotal: 0, contractValue: 0 };
+  const termMonths = Math.max(1, Math.min(120, Math.round(Number(c.termMonths) || 12)));
+  const monthlyTotal = Math.round((Number(q.total) || 0) * (freq / 12) * 100) / 100;
+  return {
+    contract: { frequency: c.frequency, termMonths },
+    monthlyTotal,
+    contractValue: Math.round(monthlyTotal * termMonths * 100) / 100,
+  };
+}
 
 router.get('/api/shop/quotes', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   ensureQuotes(db);
@@ -516,8 +537,10 @@ router.post('/api/shop/quotes', requireAuth, requireRole('full','technician'), s
   // Only (re)compute line items + total when the caller actually sends them —
   // otherwise a partial update (e.g. status change) would wipe the items via merge.
   if (Array.isArray(q.lineItems)) {
-    q.lineItems = q.lineItems.map(l=>({ name:String(l.name||'').slice(0,80), price:Number(l.price)||0 }));
-    const subtotal = q.lineItems.reduce((t,l)=>t+l.price, 0);
+    // qty carries fleet quantities ("Full Detail × 12 trucks"); 1 for ordinary
+    // one-vehicle estimates, which keeps every pre-fleet quote's math identical.
+    q.lineItems = q.lineItems.map(l=>({ name:String(l.name||'').slice(0,80), price:Number(l.price)||0, qty:_qty(l.qty) }));
+    const subtotal = Math.round(q.lineItems.reduce((t,l)=>t+l.price*l.qty, 0) * 100) / 100;
     const tax = computeTax(db.get('settings').value() || {}, subtotal);
     q.subtotal  = subtotal;
     q.taxRate   = tax.amount ? tax.rate : 0;
@@ -534,9 +557,16 @@ router.post('/api/shop/quotes', requireAuth, requireRole('full','technician'), s
     q.createdAt = new Date().toISOString();
   }
   h.upsert('quotes', q);
+  let merged = h.getById('quotes', q.id);
+  // Recurring totals ride on the merged record so they're right whether this
+  // save changed the items, the terms, or both. Only recomputed when the caller
+  // actually touched one of them — a bare status change leaves them alone.
+  if (merged && (Array.isArray(q.lineItems) || q.contract !== undefined)) {
+    h.upsert('quotes', { id: merged.id, ...contractTotals(merged) });
+    merged = h.getById('quotes', q.id);
+  }
   // Owner marked it approved (or edited an approved one): make sure the client
   // profile exists + is linked. Idempotent — no-op once customerId resolves.
-  const merged = h.getById('quotes', q.id);
   if (merged && merged.status === 'approved') { try { ensureQuoteCustomer(h, merged); } catch (e) {} }
   // Owner closed the estimate out ('completed' = work won, 'lost' = it died) or
   // reopened it. Stamp the transition server-side so reporting can tell won work

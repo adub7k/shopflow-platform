@@ -28,6 +28,20 @@ const Quotes = {
     return q.status===filter;
   },
 
+  // Fleet contracts. Line items price ONE visit; the recurring numbers are
+  // derived from the frequency (server recomputes them authoritatively on save —
+  // see contractTotals in routes/shop.js, which must agree with FREQ below).
+  FREQ: [['weekly','Weekly',52],['biweekly','Every 2 weeks',26],['monthly','Monthly',12],['quarterly','Quarterly',4]],
+  _freqLabel(f){ const m=this.FREQ.find(x=>x[0]===f); return m?m[1]:''; },
+  // Fleet WITHOUT contract terms is a legitimate shape: a one-time deal to do
+  // somebody's whole fleet. Everything fleet-flavoured keys off this, not off
+  // the contract, so those estimates still read as fleet work.
+  _isFleet(q){ return !!(q && (q.contract || q.fleetName || q.vehicleCount)); },
+  // Headline figure: recurring value on a contract, the job total otherwise.
+  _headline(q){ return q && q.contract ? q.monthlyTotal : (q||{}).total; },
+  _visitsPerYear(f){ const m=this.FREQ.find(x=>x[0]===f); return m?m[2]:0; },
+  _isFleetMode(){ return !!document.getElementById('fq-fleet')?.checked; },
+
   _vkey(fieldKey){ return fieldKey.replace(/^vehicle/,'').toLowerCase(); },
   _badge(st){
     const m=this.STATUS_META[st]||{};
@@ -68,10 +82,15 @@ const Quotes = {
         filtered.forEach(q=>{
           const n=(q.lineItems||[]).length;
           const veh=q.vehicle&&q.vehicle.make?' · '+esc([q.vehicle.year,q.vehicle.make,q.vehicle.model].filter(Boolean).join(' ')):'';
+          // Fleet rows lead with the recurring value — that's the number the
+          // owner is actually chasing — and keep per-visit underneath it.
+          const sub=this._isFleet(q)
+            ? [esc(q.fleetName||'Fleet'), q.contract?this._freqLabel(q.contract.frequency):'One-time', q.vehicleCount?`${q.vehicleCount} vehicles`:''].filter(Boolean).join(' · ')
+            : `${n} item${n!==1?'s':''}${veh}`;
           html.push(`<div class="list-row" onclick="Quotes.openDetail('${q.id}')">
-            <div class="list-main"><div class="list-name">${esc(q.customerName||'—')} <span style="font-size:11px;color:var(--faint);font-family:monospace;">${esc(q.number||'')}</span></div>
-            <div class="list-sub">${n} item${n!==1?'s':''}${veh}</div></div>
-            <div class="list-right" style="text-align:right;"><div style="font-weight:700;color:var(--green);">${fmtMoney(q.total)}</div>${this._badge(q.status)}<div>${this._openTag(q)}</div></div>
+            <div class="list-main"><div class="list-name">${esc(q.customerName||'—')} ${this._isFleet(q)?'<span class="badge badge-blue">🚚 Fleet</span> ':''}<span style="font-size:11px;color:var(--faint);font-family:monospace;">${esc(q.number||'')}</span></div>
+            <div class="list-sub">${sub}</div></div>
+            <div class="list-right" style="text-align:right;"><div style="font-weight:700;color:var(--green);">${fmtMoney(q.contract?q.monthlyTotal:q.total)}${q.contract?'<span style="font-size:11px;font-weight:600;color:var(--faint);">/mo</span>':''}</div>${this._badge(q.status)}<div>${this._openTag(q)}</div></div>
           </div>`);
         });
         html.push('</div>');
@@ -82,6 +101,7 @@ const Quotes = {
 
   openForm(id){
     const q=id?this._data.find(x=>x.id===id):null;
+    const ct=q&&q.contract||null;
     this._lines = q ? JSON.parse(JSON.stringify(q.lineItems||[])) : [];
     const fields=Shop.fields||[]; const v=(q&&q.vehicle)||{};
     const svcOpts=this._services.map(s=>`<option value="${s.id}">${esc(s.name)} — ${fmtMoney(s.price)}</option>`).join('');
@@ -99,6 +119,26 @@ const Quotes = {
           <input class="form-input" id="fq-phone" type="tel" value="${esc(q?.customerPhone||'')}" placeholder="(555) 555-1234" /></div>
       </div>
       ${fields.length?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;">${fields.map(f=>`<div class="form-group"><label class="form-label">${esc(f.label)}</label><input class="form-input" id="fq-v-${esc(f.key)}" value="${esc(v[this._vkey(f.key)]||'')}" placeholder="${esc(f.label)}" /></div>`).join('')}</div>`:''}
+      <div class="form-group" style="margin-bottom:10px;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;margin:0;">
+          <input type="checkbox" id="fq-fleet" ${ct?'checked':''} onchange="Quotes._toggleFleet()" /> 🚚 Fleet contract (multiple vehicles / recurring)
+        </label>
+        <div id="fq-fleet-box" style="display:${ct?'block':'none'};background:var(--surface2);border-radius:10px;padding:12px;margin-top:9px;">
+          <div style="display:grid;grid-template-columns:1fr 110px;gap:0 10px;">
+            <div class="form-group"><label class="form-label">Company</label><input class="form-input" id="fq-fleetname" value="${esc(q?.fleetName||'')}" placeholder="e.g. Sandia Auto Group" /></div>
+            <div class="form-group"><label class="form-label">Vehicles</label><input class="form-input" id="fq-vcount" type="number" min="1" value="${q?.vehicleCount||''}" placeholder="12" /></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 110px;gap:0 10px;">
+            <div class="form-group" style="margin-bottom:0;"><label class="form-label">Billing</label>
+              <select class="form-input" id="fq-freq" onchange="Quotes._freqChange()">
+                <option value="">One-time job (no contract)</option>
+                ${this.FREQ.map(([v,lb])=>`<option value="${v}" ${ct&&ct.frequency===v?'selected':''}>${lb}</option>`).join('')}
+              </select></div>
+            <div class="form-group" id="fq-term-wrap" style="margin-bottom:0;display:${ct?'block':'none'};"><label class="form-label">Term (mo)</label><input class="form-input" id="fq-term" type="number" min="1" max="120" value="${ct?.termMonths||12}" oninput="Quotes._renderLines()" /></div>
+          </div>
+          <div style="font-size:11.5px;color:var(--muted);margin-top:10px;line-height:1.45;">Set each line's quantity to the number of vehicles. Leave billing on <b>one-time</b> for a single fleet job; pick a frequency to quote it as a recurring contract.</div>
+        </div>
+      </div>
       <div class="form-group"><label class="form-label">Line items</label><div id="fq-lines"></div></div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
         <select class="form-input" id="fq-svc" style="flex:1;min-width:130px;"><option value="">Add service…</option>${svcOpts}</select>
@@ -122,29 +162,78 @@ const Quotes = {
         <button class="btn btn-full" onclick="Modal.close()">Cancel</button>
       </div>`);
     setTimeout(()=>{
-      makeAutocomplete('fq-name','fq-list',(cid,name,phone,email)=>{document.getElementById('fq-name').value=name;document.getElementById('fq-cid').value=cid;document.getElementById('fq-phone').value=phone||'';const em=document.getElementById('fq-email');if(em&&email&&!em.value)em.value=email;});
+      makeAutocomplete('fq-name','fq-list',(cid,name,phone,email)=>{document.getElementById('fq-name').value=name;document.getElementById('fq-cid').value=cid;document.getElementById('fq-phone').value=phone||'';const em=document.getElementById('fq-email');if(em&&email&&!em.value)em.value=email;this._prefillFleet(cid);});
       this._renderLines();
     },150);
   },
 
   _renderLines(){
     const el=document.getElementById('fq-lines'); if(!el)return;
+    const fleet=this._isFleetMode();
+    // Quantity is only editable in fleet mode — a one-vehicle estimate keeps the
+    // plain "name … price" row it has always had.
     let html = this._lines.length
-      ? this._lines.map((l,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;"><span>${esc(l.name)}</span><span style="display:flex;align-items:center;gap:10px;"><strong>${fmtMoney(l.price)}</strong><button class="btn btn-sm btn-danger" onclick="Quotes._removeLine(${i})">×</button></span></div>`).join('')
+      ? this._lines.map((l,i)=>{
+          const qty=Number(l.qty)||1;
+          const qtyCell=fleet
+            ? `<input class="form-input" type="number" min="1" value="${qty}" style="width:56px;padding:4px 6px;font-size:13px;text-align:center;" onchange="Quotes._setQty(${i},this.value)" title="Vehicles" />`
+            : '';
+          const ext=fleet&&qty>1?`<span style="font-size:11px;color:var(--faint);">${qty} × ${fmtMoney(l.price)}</span>`:'';
+          return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;gap:8px;"><span style="flex:1;min-width:0;">${esc(l.name)}<br>${ext}</span><span style="display:flex;align-items:center;gap:8px;">${qtyCell}<strong>${fmtMoney(l.price*qty)}</strong><button class="btn btn-sm btn-danger" onclick="Quotes._removeLine(${i})">×</button></span></div>`;
+        }).join('')
       : '<div style="font-size:12px;color:var(--faint);padding:6px 0;">No items yet — add a service, add-on, or custom line below.</div>';
-    const subtotal=this._lines.reduce((t,l)=>t+Number(l.price||0),0);
+    const subtotal=Math.round(this._lines.reduce((t,l)=>t+Number(l.price||0)*(Number(l.qty)||1),0)*100)/100;
     const t=Shop.tax||{}; const rate=Number(t.rate)||0; const taxOn=t.enabled&&rate>0;
     const tax=taxOn?Math.round(subtotal*rate)/100:0;
+    const perVisit=subtotal+tax;
     if(taxOn){
       html+=`<div style="display:flex;justify-content:space-between;padding:7px 0 0;font-size:13px;color:var(--muted);"><span>Subtotal</span><span>${fmtMoney(subtotal)}</span></div>`;
       html+=`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px;color:var(--muted);"><span>${esc(t.label||'Sales Tax')} (${rate}%)</span><span>${fmtMoney(tax)}</span></div>`;
     }
-    html+=`<div style="display:flex;justify-content:space-between;padding:9px 0 2px;font-weight:800;"><span>Total</span><span style="color:var(--green);">${fmtMoney(subtotal+tax)}</span></div>`;
+    const freq=fleet?(document.getElementById('fq-freq')?.value||''):'';
+    const per=this._visitsPerYear(freq);
+    html+=`<div style="display:flex;justify-content:space-between;padding:9px 0 2px;font-weight:800;"><span>${per?'Per visit':'Total'}</span><span style="color:var(--green);">${fmtMoney(perVisit)}</span></div>`;
+    if(per){
+      const term=Math.max(1,Math.min(120,parseInt(document.getElementById('fq-term')?.value)||12));
+      const monthly=Math.round(perVisit*(per/12)*100)/100;
+      html+=`<div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;">`;
+      html+=`<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);"><span>${esc(this._freqLabel(freq))} · ${term}-month term</span><span></span></div>`;
+      html+=`<div style="display:flex;justify-content:space-between;padding:4px 0;font-weight:800;"><span>Monthly</span><span style="color:var(--green);">${fmtMoney(monthly)}</span></div>`;
+      html+=`<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--muted);"><span>Contract value</span><span>${fmtMoney(Math.round(monthly*term*100)/100)}</span></div></div>`;
+    }
     el.innerHTML=html;
   },
-  _addSvc(){ const sel=document.getElementById('fq-svc'); const s=this._services.find(x=>x.id===sel.value); if(!s)return; this._lines.push({name:s.name,price:Number(s.price)||0}); sel.value=''; this._renderLines(); },
-  _addAddon(){ const sel=document.getElementById('fq-addon'); const a=(Shop.addons||[]).find(x=>x.id===sel.value); if(!a)return; this._lines.push({name:a.name,price:Number(a.price)||0}); sel.value=''; this._renderLines(); },
-  _addCustom(){ const n=document.getElementById('fq-cl-name'),p=document.getElementById('fq-cl-price'); const name=(n.value||'').trim(); if(!name){toast('Enter a line name','warning');return;} this._lines.push({name,price:parseFloat(p.value)||0}); n.value='';p.value=''; this._renderLines(); n.focus(); },
+  // A term only means something once there's a frequency to repeat.
+  _freqChange(){
+    const w=document.getElementById('fq-term-wrap');
+    if(w)w.style.display=document.getElementById('fq-freq')?.value?'block':'none';
+    this._renderLines();
+  },
+  _setQty(i,v){ if(this._lines[i]) this._lines[i].qty=Math.max(1,Math.min(999,parseInt(v)||1)); this._renderLines(); },
+  // Turning fleet mode off drops back to one of everything, so a half-filled
+  // fleet estimate can't leave stale quantities inflating a normal quote.
+  _toggleFleet(){
+    const on=this._isFleetMode();
+    const box=document.getElementById('fq-fleet-box'); if(box)box.style.display=on?'block':'none';
+    if(!on) this._lines.forEach(l=>{ l.qty=1; });
+    this._renderLines();
+  },
+  // Picking a client already flagged as a fleet account in the CRM sets this up
+  // for the owner instead of making them re-enter what's on the profile.
+  async _prefillFleet(cid){
+    if(!cid) return;
+    try{
+      const c=await db.customers.get(cid);
+      if(!c||!c.isFleet) return;
+      const cb=document.getElementById('fq-fleet');
+      if(cb&&!cb.checked){ cb.checked=true; this._toggleFleet(); }
+      const fn=document.getElementById('fq-fleetname'); if(fn&&!fn.value) fn.value=c.companyName||c.name||'';
+      const vc=document.getElementById('fq-vcount'); if(vc&&!vc.value&&(c.vehicles||[]).length) vc.value=(c.vehicles||[]).length;
+    }catch(e){}
+  },
+  _addSvc(){ const sel=document.getElementById('fq-svc'); const s=this._services.find(x=>x.id===sel.value); if(!s)return; this._lines.push({name:s.name,price:Number(s.price)||0,qty:this._isFleetMode()?(parseInt(document.getElementById('fq-vcount')?.value)||1):1}); sel.value=''; this._renderLines(); },
+  _addAddon(){ const sel=document.getElementById('fq-addon'); const a=(Shop.addons||[]).find(x=>x.id===sel.value); if(!a)return; this._lines.push({name:a.name,price:Number(a.price)||0,qty:this._isFleetMode()?(parseInt(document.getElementById('fq-vcount')?.value)||1):1}); sel.value=''; this._renderLines(); },
+  _addCustom(){ const n=document.getElementById('fq-cl-name'),p=document.getElementById('fq-cl-price'); const name=(n.value||'').trim(); if(!name){toast('Enter a line name','warning');return;} this._lines.push({name,price:parseFloat(p.value)||0,qty:this._isFleetMode()?(parseInt(document.getElementById('fq-vcount')?.value)||1):1}); n.value='';p.value=''; this._renderLines(); n.focus(); },
   _removeLine(i){ this._lines.splice(i,1); this._renderLines(); },
   _toggleDep(){ const on=document.getElementById('fq-dep-on')?.checked; const r=document.getElementById('fq-dep-row'); if(r)r.style.display=on?'block':'none'; },
 
@@ -160,6 +249,11 @@ const Quotes = {
     if(sendVia==='sms' && phone.replace(/\D/g,'').length<10){toast('Add a mobile number to text the estimate','warning');document.getElementById('fq-phone')?.focus();return;}
     const vehicle={}; (Shop.fields||[]).forEach(f=>{ const val=document.getElementById('fq-v-'+f.key)?.value.trim()||''; if(val) vehicle[this._vkey(f.key)]=val; });
     const depOn=document.getElementById('fq-dep-on')?.checked;
+    const fleetOn=this._isFleetMode();
+    const freq=fleetOn?(document.getElementById('fq-freq')?.value||''):'';
+    const contract=freq
+      ? { frequency:freq, termMonths:Math.max(1,Math.min(120,parseInt(document.getElementById('fq-term')?.value)||12)) }
+      : null;
     const btn=document.getElementById(sendVia==='email'?'fq-btn-send':sendVia==='sms'?'fq-btn-text':'fq-btn'); disableBtn(btn);
     try{
       const saved=await db.quotes.save({
@@ -170,6 +264,11 @@ const Quotes = {
         customerEmail:email,
         vehicle,
         lineItems:this._lines,
+        // Fleet contract terms. Sent as null when the toggle is off so turning a
+        // contract back into a one-off clears the recurring totals server-side.
+        contract:contract,
+        fleetName:fleetOn?(document.getElementById('fq-fleetname')?.value.trim()||''):'',
+        vehicleCount:fleetOn?(parseInt(document.getElementById('fq-vcount')?.value)||0):0,
         depositRequired:!!depOn,
         depositAmount:depOn?(parseFloat(document.getElementById('fq-dep-amt')?.value)||50):0,
         notes:document.getElementById('fq-notes')?.value.trim()||'',
@@ -206,6 +305,7 @@ const Quotes = {
       <div class="modal-title">${esc(q.number||'Estimate')}</div>
       <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:14px;">
         <div style="font-size:16px;font-weight:700;">${esc(q.customerName||'—')}</div>
+        ${this._isFleet(q)?`<div style="font-size:13px;color:var(--muted);margin-top:3px;">🚚 ${esc(q.fleetName||'Fleet')}${q.vehicleCount?` · ${q.vehicleCount} vehicles`:''} · ${q.contract?`${this._freqLabel(q.contract.frequency)} · ${q.contract.termMonths}-month term`:'One-time job'}</div>`:''}
         ${q.vehicle&&(q.vehicle.make||q.vehicle.model)?`<div style="font-size:13px;color:var(--muted);margin-top:3px;">🚗 ${esc([q.vehicle.year,q.vehicle.make,q.vehicle.model,q.vehicle.color].filter(Boolean).join(' '))}</div>`:''}
         <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${this._badge(q.status)} ${q.depositPaid?'<span class="badge badge-green">Deposit paid</span>':''}${this._openTag(q)}</div>
         ${q.emailSentAt?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">${q.emailOpenedAt?'Customer opened the email':'Emailed — not opened yet'}${(q.reminderCount||0)>0?` · ${q.reminderCount} reminder${q.reminderCount>1?'s':''} sent`:''}</div>`:''}
@@ -213,10 +313,12 @@ const Quotes = {
         ${this.isClosed(q.status)?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">Closed out as ${esc((this.STATUS_META[q.status]||{}).label||q.status).toLowerCase()}${(()=>{const d=q.completedAt||q.lostAt||q.declinedAt;try{return d?' · '+new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'';}catch(e){return '';}})()}</div>`:''}
       </div>
       <div class="list-card" style="margin-bottom:14px;">
-        ${(q.lineItems||[]).map(l=>`<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:14px;">${esc(l.name)}</div></div><div style="font-weight:700;">${fmtMoney(l.price)}</div></div>`).join('')}
+        ${(q.lineItems||[]).map(l=>{const n=Number(l.qty)||1;return `<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:14px;">${esc(l.name)}</div>${n>1?`<div class="list-sub">${n} × ${fmtMoney(l.price)}</div>`:''}</div><div style="font-weight:700;">${fmtMoney(l.price*n)}</div></div>`;}).join('')}
         ${q.taxAmount?`<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:13px;color:var(--muted);">Subtotal</div></div><div style="color:var(--muted);">${fmtMoney(q.subtotal)}</div></div>
         <div class="list-row"><div class="list-main"><div class="list-name" style="font-size:13px;color:var(--muted);">${esc(q.taxLabel||'Sales Tax')} (${q.taxRate}%)</div></div><div style="color:var(--muted);">${fmtMoney(q.taxAmount)}</div></div>`:''}
-        <div class="list-row"><div class="list-main"><div class="list-name" style="font-weight:800;">Total</div></div><div style="font-weight:800;color:var(--green);">${fmtMoney(q.total)}</div></div>
+        <div class="list-row"><div class="list-main"><div class="list-name" style="font-weight:800;">${q.contract?'Per visit':'Total'}</div></div><div style="font-weight:800;color:var(--green);">${fmtMoney(q.total)}</div></div>
+        ${q.contract?`<div class="list-row"><div class="list-main"><div class="list-name" style="font-weight:800;">Monthly</div><div class="list-sub">${this._freqLabel(q.contract.frequency)}</div></div><div style="font-weight:800;color:var(--green);">${fmtMoney(q.monthlyTotal)}</div></div>
+        <div class="list-row"><div class="list-main"><div class="list-name" style="font-size:13px;color:var(--muted);">Contract value (${q.contract.termMonths} mo)</div></div><div style="color:var(--muted);">${fmtMoney(q.contractValue)}</div></div>`:''}
       </div>
       ${q.notes?`<div style="font-size:13px;color:var(--muted);margin-bottom:14px;">${esc(q.notes)}</div>`:''}
       <div class="modal-actions">
@@ -237,7 +339,9 @@ const Quotes = {
   // Prefilled estimate text (same copy the server-side sender uses).
   _smsBody(q){
     const link=location.origin+'/quote/'+Auth.getShopSlug()+'/'+q.id;
-    return `Hi ${(q.customerName||'there').split(' ')[0]}! Here's your estimate from ${Auth.getShopName()||'us'} (${q.number||''}) — $${q.total}. View & approve: ${link}`;
+    // A contract's headline number is the monthly, not the single visit.
+    const amount=q.contract?`$${q.monthlyTotal}/mo`:`$${q.total}`;
+    return `Hi ${(q.customerName||'there').split(' ')[0]}! Here's your estimate from ${Auth.getShopName()||'us'} (${q.number||''}) — ${amount}. View & approve: ${link}`;
   },
   // Manual send: pull up the owner's Messages app prefilled (iPhone sms: deep
   // link via _cpSms — no Twilio/A2P; same stance as Tasks/Messages/Response).

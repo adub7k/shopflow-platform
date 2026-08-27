@@ -154,7 +154,8 @@ body{
     <div class="ledger">
       <div id="lines"></div>
       <div id="taxrows"></div>
-      <div class="total"><span class="cap">Total</span><span class="amt" id="total"></span></div>
+      <div class="total"><span class="cap" id="total-cap">Total</span><span class="amt" id="total"></span></div>
+      <div id="contract-wrap" style="display:none;"></div>
     </div>
 
     <div class="notes" id="note-wrap" style="display:none;">
@@ -267,12 +268,18 @@ const Q = {
   _render(q){
     document.getElementById('qnum').textContent=q.number||'Estimate';
     document.getElementById('qdate').textContent=q.createdAt?fdate(q.createdAt):fdate(new Date().toISOString());
-    if(q.customerName){
+    if(q.customerName||q.fleetName){
       document.getElementById('prepared').style.display='';
-      document.getElementById('who').textContent=q.customerName;
+      document.getElementById('who').textContent=q.fleetName||q.customerName;
+      if(q.fleetName&&q.customerName&&q.fleetName!==q.customerName){
+        const el=document.getElementById('veh'); el.style.display='';
+        el.textContent=q.customerName+(q.vehicleCount?' · '+q.vehicleCount+' vehicles':'');
+      }
     }
     const v=q.vehicle;
-    if(v&&(v.year||v.make||v.model)){
+    // A fleet quote already used this line for the contact + vehicle count, and
+    // there's no single vehicle to name on it.
+    if(!q.fleetName&&v&&(v.year||v.make||v.model)){
       document.getElementById('prepared').style.display='';
       const el=document.getElementById('veh'); el.style.display='';
       const vm=[v.year,v.make,v.model].filter(Boolean).join(' ');
@@ -282,13 +289,29 @@ const Q = {
     if(stamps[q.status]){
       document.getElementById('stamp-wrap').innerHTML='<span class="stamp '+stamps[q.status][1]+'">'+stamps[q.status][0]+'</span>';
     }
-    document.getElementById('lines').innerHTML=(q.lineItems||[]).map(l=>
-      `<div class="li"><span class="n">${es(l.name)}</span><span class="p">${fm(l.price)}</span></div>`).join('');
+    // Fleet lines carry a quantity (a per-vehicle count); ordinary estimates are
+    // qty 1 and read exactly as they always have.
+    document.getElementById('lines').innerHTML=(q.lineItems||[]).map(l=>{
+      const n=Number(l.qty)||1;
+      const label=n>1?`${es(l.name)} <span style="color:var(--muted);font-size:13.5px;">${n} × ${fm(l.price)}</span>`:es(l.name);
+      return `<div class="li"><span class="n">${label}</span><span class="p">${fm(l.price*n)}</span></div>`;
+    }).join('');
     document.getElementById('taxrows').innerHTML = q.taxAmount
       ? `<div class="li sub"><span class="n">Subtotal</span><span class="p">${fm(q.subtotal)}</span></div>
          <div class="li sub"><span class="n">${es(q.taxLabel||'Sales Tax')} (${q.taxRate}%)</span><span class="p">${fm(q.taxAmount)}</span></div>`
       : '';
     document.getElementById('total').textContent=fm(q.total);
+    // Contract terms: the line items price one visit, so relabel the total and
+    // spell out the recurring commitment underneath it.
+    if(q.contract&&q.contract.frequency){
+      const FREQ={weekly:'Weekly',biweekly:'Every 2 weeks',monthly:'Monthly',quarterly:'Quarterly'};
+      const term=q.contract.termMonths||12;
+      document.getElementById('total-cap').textContent='Per visit';
+      const w=document.getElementById('contract-wrap'); w.style.display='';
+      w.innerHTML=`<div class="li sub" style="border-top:1px solid var(--hair);margin-top:14px;"><span class="n">${FREQ[q.contract.frequency]||''} · ${term}-month term</span><span class="p"></span></div>
+        <div class="total" style="border-top:none;padding-top:6px;"><span class="cap">Monthly</span><span class="amt">${fm(q.monthlyTotal)}</span></div>
+        <div class="li sub"><span class="n">Total contract value</span><span class="p">${fm(q.contractValue)}</span></div>`;
+    }
     if(q.notes){ document.getElementById('note-wrap').style.display=''; document.getElementById('note').textContent=q.notes; }
     const payOnline=!!(this.info&&(this.info.paymentProvider||this.info.stripeConnected));
     if(q.depositRequired && !q.depositPaid){

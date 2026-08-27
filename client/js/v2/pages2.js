@@ -259,6 +259,10 @@
       const won = this._data.filter(q => ['approved', 'scheduled', 'completed'].includes(q.status));
       const decided = won.length + this._data.filter(q => ['declined', 'lost'].includes(q.status)).length;
       const rate = decided ? Math.round(won.length / decided * 100) : null;
+      // A fleet contract is worth its whole term, not one visit — counting these
+      // pots at q.total would undersell a $90k contract as a $3,480 job.
+      const val = (q) => Number(q.contractValue) || Number(q.total) || 0;
+      const contracted = (list) => list.some(q => q.contract);
 
       const html = [];
       html.push(`<div class="v2-pagehd"><div><h1>Estimates</h1>
@@ -266,8 +270,8 @@
         <div class="sp"></div>${canWrite() ? `<button class="btn btn-green" onclick="Quotes.openForm(null)">＋ New estimate</button>` : ''}</div>`);
 
       html.push(`<div class="v2-mgrid" style="grid-template-columns:repeat(3,1fr);">
-        <div class="metric-card"><div class="metric-label">Awaiting response</div><div class="metric-value">${fmtMoney(open.reduce((s, q) => s + (Number(q.total) || 0), 0))}</div><div class="metric-sub">${open.length} estimate${open.length !== 1 ? 's' : ''} out</div></div>
-        <div class="metric-card"><div class="metric-label">Won value</div><div class="metric-value green">${fmtMoney(won.reduce((s, q) => s + (Number(q.total) || 0), 0))}</div><div class="metric-sub">${won.length} approved, scheduled or completed</div></div>
+        <div class="metric-card"><div class="metric-label">Awaiting response</div><div class="metric-value">${fmtMoney(open.reduce((s, q) => s + val(q), 0))}</div><div class="metric-sub">${open.length} estimate${open.length !== 1 ? 's' : ''} out${contracted(open) ? ' · contracts at full term' : ''}</div></div>
+        <div class="metric-card"><div class="metric-label">Won value</div><div class="metric-value green">${fmtMoney(won.reduce((s, q) => s + val(q), 0))}</div><div class="metric-sub">${won.length} approved, scheduled or completed</div></div>
         <div class="metric-card"><div class="metric-label">Acceptance rate</div><div class="metric-value">${rate != null ? rate + '%' : '—'}</div><div class="metric-sub">of decided estimates</div></div></div>`);
 
       const tabs = [['open', 'Open'], ['sent', 'Sent'], ['approved', 'Approved'], ['scheduled', 'Scheduled'], ['completed', 'Completed'], ['lost', 'Lost'], ['', 'All']];
@@ -283,13 +287,21 @@
         html.push(`<div class="v2-card v2-tablewrap"><table class="v2-table">
           <thead><tr><th>Estimate</th><th>Customer</th><th>Vehicle</th><th class="r">Items</th><th class="r">Total</th><th>Status</th></tr></thead><tbody>`);
         filtered.forEach(q => {
-          const veh = q.vehicle && q.vehicle.make ? [q.vehicle.year, q.vehicle.make, q.vehicle.model].filter(Boolean).map(esc).join(' ') : '—';
+          // Fleet rows swap the single vehicle for the fleet + its terms, and
+          // show the recurring value with the per-visit price under it.
+          const fleet = this._isFleet(q);
+          const veh = fleet
+            ? esc([q.fleetName || 'Fleet', q.vehicleCount ? q.vehicleCount + ' vehicles' : '', q.contract ? `${this._freqLabel(q.contract.frequency)} · ${q.contract.termMonths} mo` : 'One-time'].filter(Boolean).join(' · '))
+            : (q.vehicle && q.vehicle.make ? [q.vehicle.year, q.vehicle.make, q.vehicle.model].filter(Boolean).map(esc).join(' ') : '—');
+          const money = q.contract
+            ? `<b>${fmtMoney(q.contractValue)}</b><div class="list-sub">${fmtMoney(q.monthlyTotal)}/mo · ${fmtMoney(q.total)}/visit</div>`
+            : `<b>${fmtMoney(q.total)}</b>`;
           html.push(`<tr onclick="Quotes.openDetail('${q.id}')">
             <td style="font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--muted);">${esc(q.number || '—')}</td>
-            <td><b>${esc(q.customerName || '—')}</b></td>
+            <td><b>${esc(q.customerName || '—')}</b>${fleet ? ' <span class="badge badge-blue">🚚 Fleet</span>' : ''}</td>
             <td style="color:var(--muted);">${veh}</td>
             <td class="r">${(q.lineItems || []).length}</td>
-            <td class="r"><b>${fmtMoney(q.total)}</b></td>
+            <td class="r">${money}</td>
             <td>${this._badge(q.status)}</td></tr>`);
         });
         html.push('</tbody></table></div>');
