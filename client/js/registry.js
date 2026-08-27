@@ -27,6 +27,7 @@ const NavRegistry = {
     reviews:      { label: 'Reviews',      icon: '⭐' },
     automations:  { label: 'Automations',  icon: '⚡' },
     newsletter:   { label: 'Newsletter',   icon: '✉️' },
+    notifications:{ label: 'Notifications', icon: '🔔' },
     settings:     { label: 'Settings',     icon: '⚙️' },
   },
 
@@ -51,6 +52,7 @@ const NavRegistry = {
     reviews:      '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
     automations:  '<path d="M12 3l1.9 5.6L19.5 10l-5.6 1.9L12 17.5l-1.9-5.6L4.5 10l5.6-1.4z"/>',
     newsletter:   '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/>',
+    notifications:'<path d="M18 8a6 6 0 1 0-12 0c0 6-3 7-3 7h18s-3-1-3-7"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/>',
     settings:     '<line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2.2"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2.2"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="7" cy="18" r="2.2"/>',
   },
   icon(p) {
@@ -68,6 +70,9 @@ const NavRegistry = {
     { title: 'Operations', pages: ['appointments'], industry: true },
     { title: 'Money',      pages: ['quotes', 'revenue'] },
     { title: 'Growth',     pages: ['reviews', 'automations', 'newsletter'] },
+    // Owners manage push inside Settings, so `notifications` is technician-only
+    // (ROLE_PAGES in app.js) — this group simply disappears for everyone else.
+    { title: 'Account',    pages: ['notifications'] },
     { title: '',           pages: ['settings'] },
   ],
 
