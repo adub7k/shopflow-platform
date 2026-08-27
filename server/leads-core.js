@@ -23,6 +23,36 @@ const phoneKey = (p) => String(p || '').replace(/\D/g, '').slice(-10);
 // prod without a deploy.
 const NOTIFY_COOLDOWN_MS = (Number(process.env.LEAD_NOTIFY_COOLDOWN_MIN) || 15) * 60 * 1000;
 
+// ── Source normalisation ─────────────────────────────────────────────────────
+// `source` used to be whatever reached the intake — the website form passed
+// utm_source straight through, so one Meta campaign could produce `facebook`,
+// another `fb`, and a partner's template `facebook_mobile_feed`. Three labels,
+// one channel: reporting fragmented, and worse, the 30-day follow-up sequence
+// below only enrols on an exact match, so an oddly-tagged ad lead silently
+// skipped follow-up entirely.
+//
+// Everything now funnels through here, so a lead's channel is decided by what
+// it IS, not by how carefully whoever built the campaign typed the UTM.
+// Unrecognised values are kept as-is (lowercased) rather than bucketed into
+// `other` — a source we don't know about is information, not noise.
+const SOURCE_RULES = [
+  [/instagram|(^|[^a-z])ig([^a-z]|$)/, 'instagram'],
+  [/facebook|(^|[^a-z])fb([^a-z]|$)|^meta$|meta[_-]?ads?/, 'facebook'],
+  [/google|adwords|gads|youtube/, 'google'],
+  [/^(call|phone|missed[_-]?call|inbound)$/, 'call'],
+  [/^(web|website|site|organic|direct)$/, 'website'],
+];
+
+function normalizeSource(raw) {
+  const v = String(raw || '').trim().toLowerCase();
+  if (!v) return 'website';
+  for (const [re, canonical] of SOURCE_RULES) if (re.test(v)) return canonical;
+  return v.slice(0, 40);
+}
+
+/** Channels that auto-enter the 30-day follow-up sequence. */
+const PAID_SOCIAL_SOURCES = ['facebook', 'instagram'];
+
 // A re-submit of the same inquiry repeats most of its note lines (service,
 // vehicle, timeline) and adds a few (requested appointment, photos). Merge
 // line-wise so the lead reads as one note instead of the same block twice.
@@ -49,7 +79,11 @@ function upsertLead(db, shop, f = {}) {
   const servicesInterested = Array.isArray(f.servicesInterested) ? f.servicesInterested : [];
   const utm = (f.utm && Object.keys(f.utm).length) ? f.utm : null;
   const referrer = f.referrer || '';
-  const source = (f.source || 'website');
+  // Normalised here, not at each caller, so the website form, the Meta
+  // webhook, Make and the admin manual-add all label the same channel the same
+  // way. The raw value is kept on the lead for tracing a weird campaign tag.
+  const rawSource = String(f.source || 'website').trim().toLowerCase();
+  const source = normalizeSource(rawSource);
   // Native Meta lead-ads (routes/meta-webhook.js) pass the Graph leadgen_id so a
   // re-delivery of the same lead can be recognised and skipped, plus whatever
   // extra Instant Form answers the shop asked for. Both are optional — every
@@ -112,9 +146,12 @@ function upsertLead(db, shop, f = {}) {
     // Meta ad leads auto-enter the 30-day follow-up sequence: Day 0 lands in
     // the Tasks queue immediately. Enrollment only — every send stays manual
     // (owner taps through their Messages app); nothing is texted from here.
-    if (['facebook', 'instagram', 'meta', 'fb', 'ig'].includes(String(source).toLowerCase())) {
+    if (PAID_SOCIAL_SOURCES.includes(source)) {
       lead.followUp = { idx: 0, status: 'active', nextAt: now, startedAt: now, log: [] };
     }
+    // Keep the campaign's own tag when it differs, so an odd utm_source is
+    // still traceable after normalisation.
+    if (rawSource && rawSource !== source) lead.sourceRaw = rawSource;
     if (metaLeadgenId) lead.metaLeadgenId = metaLeadgenId;
     if (metaCustomFields) lead.metaCustomFields = metaCustomFields;
   }
@@ -215,4 +252,4 @@ function recordLeadPayload(shopSlug, body) {
 }
 function getLeadPayloads() { return _payloads; }
 
-module.exports = { upsertLead, resolveContact, recordLeadPayload, getLeadPayloads, phoneKey };
+module.exports = { upsertLead, resolveContact, recordLeadPayload, getLeadPayloads, phoneKey, normalizeSource, PAID_SOCIAL_SOURCES };

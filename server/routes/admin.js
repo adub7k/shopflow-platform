@@ -5,12 +5,68 @@ const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { requireAdmin } = require('../middleware');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb } = require('../db');
-const { upsertLead, getLeadPayloads } = require('../leads-core');
+const { upsertLead, getLeadPayloads, normalizeSource } = require('../leads-core');
 
 // A shop's rate is ONLY its editable monthlyRate — the old barbershop tier
 // table (starter/pro/shop) is gone; a shop with no rate set contributes $0
 // until one is entered in the admin UI.
 const shopRate = (s) => Number(s.monthlyRate) || 0;
+
+// ── ADMIN: backfill lead sources ──────────────────────────────────────────────
+// One-off repair for leads written before source normalisation existed, when
+// utm_source reached the CRM raw: the same Meta channel could be stored as
+// `facebook`, `fb` or `facebook_mobile_feed`, splitting reporting three ways.
+//
+// Two deliberate limits:
+//   • DRY RUN BY DEFAULT. Pass { apply: true } to write. The dry run returns
+//     exactly what would change so it can be read before anything is touched.
+//   • It does NOT enrol anything in the 30-day follow-up sequence. Enrolment
+//     is for leads arriving now; retroactively enrolling months of old leads
+//     would dump a queue of stale people into Tasks and start Angelo texting
+//     customers who enquired in March.
+// The pre-normalisation value is kept on `sourceRaw`, so this is reversible.
+router.post('/api/admin/backfill-lead-sources', requireAdmin, (req, res) => {
+  try {
+    const apply = req.body.apply === true;
+    const onlyShop = String(req.body.shopId || '').trim();
+    const shops = (master.get('shops').value() || [])
+      .filter(s => !onlyShop || s.id === onlyShop);
+
+    const changes = {};   // "fb → facebook" : count
+    const perShop = [];
+    let scanned = 0, changed = 0;
+
+    shops.forEach(shop => {
+      const db = getShopDb(shop.id);
+      const leads = shopHelpers(db).getAll('leads');
+      let shopChanged = 0;
+
+      leads.forEach(lead => {
+        scanned++;
+        const before = String(lead.source || '').trim().toLowerCase();
+        const after = normalizeSource(before);
+        if (!before || before === after) return;
+
+        const key = `${before} → ${after}`;
+        changes[key] = (changes[key] || 0) + 1;
+        changed++; shopChanged++;
+
+        if (apply) {
+          if (!lead.sourceRaw) lead.sourceRaw = before;   // never overwrite an earlier original
+          lead.source = after;
+        }
+      });
+
+      if (shopChanged) perShop.push({ shop: shop.name || shop.id, changed: shopChanged });
+      if (apply && shopChanged) db.write();
+    });
+
+    res.json({ ok: true, dryRun: !apply, scanned, changed, changes, perShop });
+  } catch (e) {
+    console.error('Lead source backfill error:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
 
 // ── ADMIN: overview stats ─────────────────────────────────────────────────────
 router.get('/api/admin/stats', requireAdmin, (req, res) => {
