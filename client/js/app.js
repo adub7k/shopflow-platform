@@ -99,16 +99,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (typeof NavRegistry !== 'undefined') NavRegistry.render();
     applyRoleNav();
     // Push-notification deep links: sw-push.js opens /response-center (website
-    // leads), /pipeline (new-lead + missed-call pushes), or /leads (older cached
-    // payloads). The server serves the app shell at all three, so land on the
-    // matching page.
+    // leads), /pipeline (new-lead + missed-call pushes), /appointments (24-hour
+    // appointment reminders), or /leads (older cached payloads). The server
+    // serves the app shell at all four, so land on the matching page.
     const wantsResponse = location.pathname.startsWith('/response-center') && canSee('response');
     const wantsPipeline = location.pathname.startsWith('/pipeline') && canSee('pipeline');
     const wantsLeads = location.pathname.startsWith('/leads') && canSee('leads');
+    const wantsAppts = location.pathname.startsWith('/appointments') && canSee('appointments');
     await App.nav(
       wantsResponse ? 'response'
       : wantsPipeline ? 'pipeline'
       : wantsLeads ? 'leads'
+      : wantsAppts ? 'appointments'
       : (canSee('dashboard') ? 'dashboard' : allowedPages()[0])
     );
 

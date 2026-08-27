@@ -3,6 +3,7 @@ const { generateDueRecurring } = require('./recurring');
 const { runAutomations } = require('./automation/engine');
 const { sendQuoteEmail, shopReplyTo } = require('./email');
 const { resumeStalledCampaigns } = require('./newsletter');
+const { sendPush } = require('./push-instance');
 
 const _DAY = 24 * 60 * 60 * 1000;
 function publicBase() {
@@ -53,6 +54,95 @@ async function remindStaleQuotes(db, shop, s) {
   }
 }
 
+// ── 24-hour appointment reminders (push to the shop's phones) ────────────────
+// Fires one push per appointment as it crosses the reminder window (24h before
+// by default). This is a STAFF reminder, not a customer text: customers have no
+// PWA to push to, and server-side SMS stays off (no A2P) — the owner still texts
+// tomorrow's clients from the Tasks tab. Deduped by stamping reminderPushAt on
+// the appointment, so a restart or a slow tick never double-sends.
+//
+// Wall-clock times are stored per shop as date 'YYYY-MM-DD' + time '4:00 PM' in
+// the shop's own timezone, so both are resolved through TZ rather than the
+// server's clock (Railway runs UTC).
+const TERMINAL_STATUSES = ['done', 'no-show', 'cancelled', 'canceled', 'declined', 'pending-deposit'];
+
+// Minutes past midnight for a stored 12-hour time string ('4:00 PM' → 960).
+function minutesFrom12h(t) {
+  const m = /^\s*(\d{1,2}):(\d{2})\s*([AaPp][Mm])?/.exec(t || '');
+  if (!m) return null;
+  let h = parseInt(m[1], 10);
+  const min = parseInt(m[2], 10);
+  const ap = (m[3] || '').toUpperCase();
+  if (ap === 'PM' && h !== 12) h += 12;
+  if (ap === 'AM' && h === 12) h = 0;
+  return h * 60 + min;
+}
+
+// How far the zone is from UTC at a given instant, in ms.
+function tzOffsetMs(ts, tz) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour12: false, year: 'numeric', month: '2-digit',
+    day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(new Date(ts)).reduce((o, p) => (o[p.type] = p.value, o), {});
+  const asUTC = Date.UTC(parts.year, parts.month - 1, parts.day,
+    parts.hour === '24' ? 0 : parts.hour, parts.minute, parts.second);
+  return asUTC - ts;
+}
+
+// 'YYYY-MM-DD' + '4:00 PM' in `tz` → epoch ms. Offset is resolved twice so a
+// reminder that straddles a DST change lands on the right instant.
+function apptStartMs(date, time, tz) {
+  const [y, mo, d] = String(date || '').split('-').map(Number);
+  const mins = minutesFrom12h(time);
+  if (!y || !mo || !d || mins === null) return null;
+  const guess = Date.UTC(y, mo - 1, d, Math.floor(mins / 60), mins % 60);
+  const ts = guess - tzOffsetMs(guess, tz);
+  return guess - tzOffsetMs(ts, tz);
+}
+
+async function remindUpcomingAppointments(db, shop, s, TZ, todayStr) {
+  const cfg = s.appointmentReminders || {};
+  if (cfg.push === false) return;                            // owner turned it off
+  const hours = Math.min(72, Math.max(1, Number(cfg.hoursBefore ?? 24)));
+  const windowMs = hours * 60 * 60 * 1000;
+  const now = Date.now();
+  const h = shopHelpers(db);
+  const appts = db.get('appointments').value() || [];
+  for (const a of appts) {
+    if (a.reminderPushAt) continue;                          // already reminded
+    if (TERMINAL_STATUSES.includes(a.status)) continue;
+    if ((a.date || '') < todayStr) continue;                 // cheap skip of history
+    const start = apptStartMs(a.date, a.time, TZ);
+    if (!start) continue;
+    const until = start - now;
+    if (until <= 0 || until > windowMs) continue;            // not in the window yet
+    // Booked INSIDE the window (e.g. a next-morning slot taken tonight)? The
+    // reminder moment already passed — the booking itself was the notice.
+    const created = Date.parse(a.createdAt || '');
+    if (!isNaN(created) && created > start - windowMs) { a.reminderPushAt = 'skipped'; h.upsert('appointments', a); continue; }
+    // A tick can land late (restart, downtime) and hoursBefore can be set past
+    // 24, so say which day it actually is instead of assuming "tomorrow".
+    const dayStr = (off) => new Date(now + off).toLocaleDateString('en-CA', { timeZone: TZ });
+    const when = a.date === dayStr(0) ? 'Today'
+      : a.date === dayStr(_DAY) ? 'Tomorrow'
+      : new Date(start).toLocaleDateString('en-US', { timeZone: TZ, weekday: 'long' });
+    try {
+      const r = await sendPush(shop.id, {
+        title: `📅 ${when} ${a.time || ''} — ${a.customerName || 'Appointment'}`.trim(),
+        body: [a.service, a.barberName, a.customerPhone].filter(Boolean).join(' · ') || 'Tap to see the details.',
+        url: '/appointments',
+        tag: `appt-${a.id}`,
+      });
+      // Only burn the one-shot stamp on a real send (0 devices counts — there
+      // was nothing to deliver). A server with no VAPID keys retries instead.
+      if (!r || r.ok !== false) {
+        a.reminderPushAt = new Date().toISOString();
+        h.upsert('appointments', a);
+      }
+    } catch (e) { /* best effort — retry next tick */ }
+  }
+}
+
 // ── Scheduler: 24hr reminders + 21-day rebook nudges ─────────────────────────
 async function runScheduler() {
   try {
@@ -79,6 +169,9 @@ async function runScheduler() {
         // estimate nudges regardless of SMS setup.
         try { await remindStaleQuotes(db, shop, s); } catch(e){}
 
+        // ── 24-hour appointment reminders (push; no SMS/Twilio involved) ──
+        try { await remindUpcomingAppointments(db, shop, s, TZ, todayStr); } catch(e){}
+
         // ── Newsletter crash recovery ──
         // A campaign left mid-send by a restart resumes here (the launch route
         // normally drives the whole send in-process).
@@ -98,4 +191,4 @@ async function runScheduler() {
 }
 setInterval(runScheduler, 5*60*1000);
 
-module.exports = { runScheduler, remindStaleQuotes };
+module.exports = { runScheduler, remindStaleQuotes, remindUpcomingAppointments, apptStartMs };

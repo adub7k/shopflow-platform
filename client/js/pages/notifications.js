@@ -54,7 +54,8 @@ const Notifications = {
 
     html.push('<div class="section-header">What You\'ll Get</div><div class="card">');
     [['📞','New lead','Someone submits your website or ad form.'],
-     ['⏰','Missed call','A call comes in that nobody picks up — plus a reminder if it\'s still untouched 5 minutes later.']]
+     ['⏰','Missed call','A call comes in that nobody picks up — plus a reminder if it\'s still untouched 5 minutes later.'],
+     ['📅','Appointment reminder','A heads-up before each booking — 24 hours ahead unless the owner changed it in Settings.']]
       .forEach(([icon, title, sub2]) => {
         html.push('<div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);"><span style="font-size:16px;">' + icon + '</span>'
           + '<div><div style="font-size:13px;font-weight:700;">' + title + '</div><div style="font-size:12px;color:var(--muted);margin-top:2px;line-height:1.4;">' + sub2 + '</div></div></div>');

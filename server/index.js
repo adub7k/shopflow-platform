@@ -170,6 +170,8 @@ app.get('/response-center', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'ap
 // board); /leads is kept for older subscriptions' cached payloads and bookmarks.
 // Both serve the app shell; the client boot lands on the matching page.
 app.get(['/pipeline', '/leads', '/leads/*'], (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app2.html')));
+// 24-hour appointment reminders deep-link to /appointments (scheduler.js).
+app.get('/appointments', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'app2.html')));
 // Quote-first verticals (detail shops) get the opt-in lead-capture page at the
 // same /book/<slug> URL; scheduling verticals keep the calendar booking flow.
 // Per-shop override: settings.bookingMode ('booking' | 'leads').

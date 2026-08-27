@@ -353,6 +353,17 @@ const Settings = {
       html.push('<div class="section-header">Phone Notifications</div><div class="card">');
       html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Get an instant notification on this phone when a new website lead comes in — free, no texting fees. Requires ShopFlow installed to your home screen (iPhone: iOS 16.4+).</div>');
       html.push('<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-primary" style="flex:1;min-width:150px;" onclick="Settings.enablePush(this)">🔔 Enable notifications</button><button class="btn" style="flex:1;min-width:150px;" onclick="Settings.testPush(this)">Test notifications</button></div>');
+      // Appointment reminders: a push to every enabled phone as each booking
+      // crosses the window below. Staff-side only — customers still get texted
+      // by hand from the Tasks tab.
+      const ar_ = s.appointmentReminders || {};
+      html.push('<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:14px;">');
+      html.push(`<div class="form-group" style="margin-bottom:8px;"><label class="form-label"><input type="checkbox" id="s-apptpush" ${ar_.push!==false?'checked':''} style="margin-right:6px;" /> Remind me before each appointment</label></div>`);
+      html.push(`<div class="form-group" style="margin-bottom:0;"><label class="form-label">How far ahead</label><select class="form-input" id="s-apptpush-hours">`
+        + [[2,'2 hours'],[12,'12 hours'],[24,'24 hours'],[48,'48 hours']].map(([v,l]) =>
+            `<option value="${v}" ${Number(ar_.hoursBefore??24)===v?'selected':''}>${l} before</option>`).join('')
+        + '</select><div style="font-size:11px;color:var(--muted);margin-top:5px;">Goes to every phone with notifications on — yours and your staff\'s. Bookings made after that point don\'t get one (the booking itself was the heads-up).</div></div>');
+      html.push('</div>');
       html.push('</div>');
 
       // Email alerts (new leads / missed calls). The address here is the recipient
@@ -979,6 +990,8 @@ const Settings = {
     if(rgEl){ const rg=parseFloat(rgEl.value); data.revenueGoal=(!isNaN(rg)&&rg>0)?Math.round(rg):0; }
     const gr=document.getElementById('s-grev')?.value.trim(); if(gr)data.googleReviewLink=gr;
     const ne=document.getElementById('s-notifemail'); if(ne)data.notificationEmail=ne.value.trim();
+    const ap_=document.getElementById('s-apptpush');
+    if(ap_)data.appointmentReminders={push:ap_.checked,hoursBefore:parseInt(document.getElementById('s-apptpush-hours')?.value)||24};
     const ehost=document.getElementById('s-ehost')?.value.trim();
     const euser=document.getElementById('s-euser')?.value.trim();
     const epass=document.getElementById('s-epass')?.value;
