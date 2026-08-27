@@ -296,10 +296,13 @@ const Q = {
       const label=n>1?`${es(l.name)} <span style="color:var(--muted);font-size:13.5px;">${n} × ${fm(l.price)}</span>`:es(l.name);
       return `<div class="li"><span class="n">${label}</span><span class="p">${fm(l.price*n)}</span></div>`;
     }).join('');
-    document.getElementById('taxrows').innerHTML = q.taxAmount
-      ? `<div class="li sub"><span class="n">Subtotal</span><span class="p">${fm(q.subtotal)}</span></div>
-         <div class="li sub"><span class="n">${es(q.taxLabel||'Sales Tax')} (${q.taxRate}%)</span><span class="p">${fm(q.taxAmount)}</span></div>`
-      : '';
+    // Subtotal appears whenever there's anything between it and the total —
+    // a discount, tax, or both. The discount line shows the dollars off.
+    const midRows=[];
+    if(q.taxAmount||q.discountAmount) midRows.push(`<div class="li sub"><span class="n">Subtotal</span><span class="p">${fm(q.subtotal)}</span></div>`);
+    if(q.discountAmount) midRows.push(`<div class="li sub"><span class="n" style="color:#15803d;font-style:normal;font-weight:600;">Discount (${q.discountPercent}%)</span><span class="p" style="color:#15803d;">−${fm(q.discountAmount)}</span></div>`);
+    if(q.taxAmount) midRows.push(`<div class="li sub"><span class="n">${es(q.taxLabel||'Sales Tax')} (${q.taxRate}%)</span><span class="p">${fm(q.taxAmount)}</span></div>`);
+    document.getElementById('taxrows').innerHTML=midRows.join('');
     document.getElementById('total').textContent=fm(q.total);
     // Contract terms: the line items price one visit, so relabel the total and
     // spell out the recurring commitment underneath it.

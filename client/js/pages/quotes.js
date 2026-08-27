@@ -145,10 +145,13 @@ const Quotes = {
         <button class="btn btn-sm" onclick="Quotes._addSvc()">+ Service</button>
       </div>
       ${addonOpts?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;"><select class="form-input" id="fq-addon" style="flex:1;min-width:130px;"><option value="">Add add-on…</option>${addonOpts}</select><button class="btn btn-sm" onclick="Quotes._addAddon()">+ Add-on</button></div>`:''}
-      <div style="display:flex;gap:6px;margin-bottom:14px;">
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
         <input class="form-input" id="fq-cl-name" placeholder="Custom line (e.g. Paint correction)" style="flex:1;" />
         <input class="form-input" id="fq-cl-price" type="number" placeholder="$" style="width:84px;" />
         <button class="btn btn-sm" onclick="Quotes._addCustom()">+</button>
+      </div>
+      <div class="form-group" style="margin-bottom:14px;"><label class="form-label">Discount % <span style="color:var(--faint);font-weight:400;">(optional)</span></label>
+        <input class="form-input" id="fq-discount" type="number" min="0" max="100" step="0.5" inputmode="decimal" value="${q?.discountPercent||''}" placeholder="e.g. 10" oninput="Quotes._renderLines()" style="width:110px;" />
       </div>
       <div class="form-group"><label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;margin:0;"><input type="checkbox" id="fq-dep-on" ${q?.depositRequired?'checked':''} onchange="Quotes._toggleDep()" /> Require a deposit to approve</label>
         <div id="fq-dep-row" style="display:${q?.depositRequired?'block':'none'};margin-top:8px;"><input class="form-input" id="fq-dep-amt" type="number" value="${q?.depositAmount||50}" placeholder="Deposit amount" /></div>
@@ -183,11 +186,20 @@ const Quotes = {
         }).join('')
       : '<div style="font-size:12px;color:var(--faint);padding:6px 0;">No items yet — add a service, add-on, or custom line below.</div>';
     const subtotal=Math.round(this._lines.reduce((t,l)=>t+Number(l.price||0)*(Number(l.qty)||1),0)*100)/100;
+    // Discount comes off the subtotal; tax is charged on what's left. Mirrors
+    // the authoritative math in routes/shop.js.
+    const pct=Math.max(0,Math.min(100,parseFloat(document.getElementById('fq-discount')?.value)||0));
+    const discount=pct?Math.round(subtotal*pct)/100:0;
     const t=Shop.tax||{}; const rate=Number(t.rate)||0; const taxOn=t.enabled&&rate>0;
-    const tax=taxOn?Math.round(subtotal*rate)/100:0;
-    const perVisit=subtotal+tax;
-    if(taxOn){
+    const tax=taxOn?Math.round((subtotal-discount)*rate)/100:0;
+    const perVisit=Math.round((subtotal-discount+tax)*100)/100;
+    if(taxOn||discount){
       html+=`<div style="display:flex;justify-content:space-between;padding:7px 0 0;font-size:13px;color:var(--muted);"><span>Subtotal</span><span>${fmtMoney(subtotal)}</span></div>`;
+    }
+    if(discount){
+      html+=`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px;color:var(--green);font-weight:600;"><span>Discount (${pct}%)</span><span>−${fmtMoney(discount)}</span></div>`;
+    }
+    if(taxOn){
       html+=`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px;color:var(--muted);"><span>${esc(t.label||'Sales Tax')} (${rate}%)</span><span>${fmtMoney(tax)}</span></div>`;
     }
     const freq=fleet?(document.getElementById('fq-freq')?.value||''):'';
@@ -269,6 +281,7 @@ const Quotes = {
         contract:contract,
         fleetName:fleetOn?(document.getElementById('fq-fleetname')?.value.trim()||''):'',
         vehicleCount:fleetOn?(parseInt(document.getElementById('fq-vcount')?.value)||0):0,
+        discountPercent:Math.max(0,Math.min(100,parseFloat(document.getElementById('fq-discount')?.value)||0)),
         depositRequired:!!depOn,
         depositAmount:depOn?(parseFloat(document.getElementById('fq-dep-amt')?.value)||50):0,
         notes:document.getElementById('fq-notes')?.value.trim()||'',
@@ -314,8 +327,9 @@ const Quotes = {
       </div>
       <div class="list-card" style="margin-bottom:14px;">
         ${(q.lineItems||[]).map(l=>{const n=Number(l.qty)||1;return `<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:14px;">${esc(l.name)}</div>${n>1?`<div class="list-sub">${n} × ${fmtMoney(l.price)}</div>`:''}</div><div style="font-weight:700;">${fmtMoney(l.price*n)}</div></div>`;}).join('')}
-        ${q.taxAmount?`<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:13px;color:var(--muted);">Subtotal</div></div><div style="color:var(--muted);">${fmtMoney(q.subtotal)}</div></div>
-        <div class="list-row"><div class="list-main"><div class="list-name" style="font-size:13px;color:var(--muted);">${esc(q.taxLabel||'Sales Tax')} (${q.taxRate}%)</div></div><div style="color:var(--muted);">${fmtMoney(q.taxAmount)}</div></div>`:''}
+        ${(q.taxAmount||q.discountAmount)?`<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:13px;color:var(--muted);">Subtotal</div></div><div style="color:var(--muted);">${fmtMoney(q.subtotal)}</div></div>`:''}
+        ${q.discountAmount?`<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:13px;color:var(--green);font-weight:600;">Discount (${q.discountPercent}%)</div></div><div style="color:var(--green);font-weight:600;">−${fmtMoney(q.discountAmount)}</div></div>`:''}
+        ${q.taxAmount?`<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:13px;color:var(--muted);">${esc(q.taxLabel||'Sales Tax')} (${q.taxRate}%)</div></div><div style="color:var(--muted);">${fmtMoney(q.taxAmount)}</div></div>`:''}
         <div class="list-row"><div class="list-main"><div class="list-name" style="font-weight:800;">${q.contract?'Per visit':'Total'}</div></div><div style="font-weight:800;color:var(--green);">${fmtMoney(q.total)}</div></div>
         ${q.contract?`<div class="list-row"><div class="list-main"><div class="list-name" style="font-weight:800;">Monthly</div><div class="list-sub">${this._freqLabel(q.contract.frequency)}</div></div><div style="font-weight:800;color:var(--green);">${fmtMoney(q.monthlyTotal)}</div></div>
         <div class="list-row"><div class="list-main"><div class="list-name" style="font-size:13px;color:var(--muted);">Contract value (${q.contract.termMonths} mo)</div></div><div style="color:var(--muted);">${fmtMoney(q.contractValue)}</div></div>`:''}

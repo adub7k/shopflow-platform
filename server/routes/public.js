@@ -256,6 +256,7 @@ router.get('/api/public/:shopSlug/quote/:quoteId', async (req, res) => {
         contract: q.contract || null, monthlyTotal: q.monthlyTotal || 0, contractValue: q.contractValue || 0,
         fleetName: q.fleetName || '', vehicleCount: q.vehicleCount || 0,
         subtotal: q.subtotal != null ? q.subtotal : (q.total || 0),
+        discountPercent: q.discountPercent || 0, discountAmount: q.discountAmount || 0,
         taxRate: q.taxRate || 0, taxLabel: q.taxLabel || 'Sales Tax', taxAmount: q.taxAmount || 0,
         depositRequired: !!q.depositRequired, depositAmount: q.depositAmount || 0, depositPaid: !!q.depositPaid,
       },

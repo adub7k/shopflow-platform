@@ -235,13 +235,22 @@ function renderQuoteEmail({ shop, quote, link, openPixel, reminder }) {
         <td style="padding:4px 0 0;font-size:13.5px;color:#777;text-align:right;">${money(q.contractValue)}</td>
       </tr>` : '';
 
-  const taxRows = q.taxAmount ? `<tr>
+  // Rows between the items and the total: subtotal whenever a discount or tax
+  // sits under it, the discount (with the dollars off), then tax.
+  const taxRows = [
+    (q.taxAmount || q.discountAmount) ? `<tr>
         <td style="padding:6px 0 0;font-size:14px;color:#777;">Subtotal</td>
         <td style="padding:6px 0 0;font-size:14px;color:#777;text-align:right;">${money(q.subtotal)}</td>
-      </tr><tr>
+      </tr>` : '',
+    q.discountAmount ? `<tr>
+        <td style="padding:2px 0;font-size:14px;color:#15803d;font-weight:bold;">Discount (${q.discountPercent}%)</td>
+        <td style="padding:2px 0;font-size:14px;color:#15803d;font-weight:bold;text-align:right;">−${money(q.discountAmount)}</td>
+      </tr>` : '',
+    q.taxAmount ? `<tr>
         <td style="padding:2px 0;font-size:14px;color:#777;">${esc(q.taxLabel || 'Sales Tax')} (${q.taxRate}%)</td>
         <td style="padding:2px 0;font-size:14px;color:#777;text-align:right;">${money(q.taxAmount)}</td>
-      </tr>` : '';
+      </tr>` : '',
+  ].join('');
 
   const depositNote = (q.depositRequired && !q.depositPaid)
     ? `<p style="font-size:14px;color:#555;line-height:1.55;margin:0 0 18px;">A deposit of <strong>${money(q.depositAmount)}</strong> is required to approve this estimate; the balance is due at completion.</p>`
@@ -280,6 +289,7 @@ function renderQuoteEmail({ shop, quote, link, openPixel, reminder }) {
       const n = Number(l.qty) || 1;
       return `  ${l.name}${n > 1 ? ` (${n} × ${money(l.price)})` : ''} — ${money(l.price * n)}`;
     }),
+    q.discountAmount ? `  Discount (${q.discountPercent}%) — −${money(q.discountAmount)}` : '',
     q.taxAmount ? `  ${q.taxLabel || 'Sales Tax'} (${q.taxRate}%) — ${money(q.taxAmount)}` : '',
     `  ${ct ? 'Per visit' : 'Total'} — ${money(q.total)}`,
     ct ? `  ${FREQ_LABEL[ct.frequency]} · ${ct.termMonths}-month term` : '',

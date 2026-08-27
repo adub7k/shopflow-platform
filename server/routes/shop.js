@@ -541,12 +541,21 @@ router.post('/api/shop/quotes', requireAuth, requireRole('full','technician'), s
     // one-vehicle estimates, which keeps every pre-fleet quote's math identical.
     q.lineItems = q.lineItems.map(l=>({ name:String(l.name||'').slice(0,80), price:Number(l.price)||0, qty:_qty(l.qty) }));
     const subtotal = Math.round(q.lineItems.reduce((t,l)=>t+l.price*l.qty, 0) * 100) / 100;
-    const tax = computeTax(db.get('settings').value() || {}, subtotal);
+    // Percentage discount off the subtotal; tax is charged on what the customer
+    // actually pays. An edit that omits the field keeps the stored discount
+    // (partial saves must not silently un-discount an estimate).
+    const prior = q.id ? h.getById('quotes', q.id) : null;
+    const rawPct = q.discountPercent !== undefined ? q.discountPercent : (prior && prior.discountPercent);
+    const pct = Math.max(0, Math.min(100, Number(rawPct) || 0));
+    q.discountPercent = pct;
+    q.discountAmount  = pct ? Math.round(subtotal * pct) / 100 : 0;
+    const discounted = Math.round((subtotal - q.discountAmount) * 100) / 100;
+    const tax = computeTax(db.get('settings').value() || {}, discounted);
     q.subtotal  = subtotal;
     q.taxRate   = tax.amount ? tax.rate : 0;
     q.taxLabel  = tax.label;
     q.taxAmount = tax.amount;
-    q.total     = Math.round((subtotal + tax.amount) * 100) / 100;
+    q.total     = Math.round((discounted + tax.amount) * 100) / 100;
   }
   if (!q.id) {
     q.id = genId('q');
