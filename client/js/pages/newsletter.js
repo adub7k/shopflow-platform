@@ -51,7 +51,8 @@ const Newsletter = {
       <button class="btn" onclick="Newsletter.sendTest()">Email me a test</button>
       <button class="btn" onclick="Newsletter.saveDraft(true)">Save draft</button>
     </div>`);
-    html.push(`<div style="font-size:11px;color:var(--faint);margin-top:10px;">Every email is branded with your shop name and colors, greets each lead by first name, and includes the required unsubscribe link + your business address in the footer.</div>`);
+    const replyTo = String(s.newsletterReplyTo || s.email || s.notificationEmail || '').trim();
+    html.push(`<div style="font-size:11px;color:var(--faint);margin-top:10px;">Every email is branded with your shop name and colors, greets each lead by first name, and includes the required unsubscribe link + your business address in the footer. Replies go to <strong>${replyTo ? esc(replyTo) : 'your shop email'}</strong> — <a href="#" onclick="App.nav('settings');return false;" style="color:var(--faint);text-decoration:underline;">change in Settings → Newsletter Replies</a>.</div>`);
     html.push('</div>');
 
     // History

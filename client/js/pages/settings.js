@@ -377,6 +377,13 @@ const Settings = {
       html.push('<div id="s-notif-result" style="font-size:12.5px;margin-top:10px;line-height:1.4;"></div>');
       html.push('</div>');
 
+      // Newsletter replies — where a customer lands when they hit "reply" on a
+      // newsletter (settings.newsletterReplyTo, comma-separated for several).
+      html.push('<div class="section-header">Newsletter Replies</div><div class="card">');
+      html.push('<div style="font-size:12px;color:var(--muted);margin-bottom:12px;">When someone replies to one of your newsletters, the reply lands in this inbox. Separate multiple addresses with commas — everyone listed gets the reply. Leave blank to use your shop email.</div>');
+      html.push(`<div class="form-group"><label class="form-label">Reply-to email(s)</label><input class="form-input" id="s-nlreply" value="${esc(s.newsletterReplyTo||'')}" placeholder="you@example.com, partner@example.com" /></div>`);
+      html.push('</div>');
+
       // Google Reviews
       html.push('<div class="section-header">Google Reviews</div><div class="card">');
       html.push(`<div class="form-group"><label class="form-label">Google Review Link</label><input class="form-input" id="s-grev" value="${esc(s.googleReviewLink||'')}" placeholder="https://g.page/r/..." /></div>`);
@@ -990,6 +997,7 @@ const Settings = {
     if(rgEl){ const rg=parseFloat(rgEl.value); data.revenueGoal=(!isNaN(rg)&&rg>0)?Math.round(rg):0; }
     const gr=document.getElementById('s-grev')?.value.trim(); if(gr)data.googleReviewLink=gr;
     const ne=document.getElementById('s-notifemail'); if(ne)data.notificationEmail=ne.value.trim();
+    const nlr=document.getElementById('s-nlreply'); if(nlr)data.newsletterReplyTo=nlr.value.trim();
     const ap_=document.getElementById('s-apptpush');
     if(ap_)data.appointmentReminders={push:ap_.checked,hoursBefore:parseInt(document.getElementById('s-apptpush-hours')?.value)||24};
     const ehost=document.getElementById('s-ehost')?.value.trim();

@@ -13,7 +13,7 @@
 //   • Sending is a paced in-process loop (~1.5/sec — under Resend's 2 req/s
 //     limit) resumed by the scheduler if the process restarts mid-campaign.
 const { master, getShopDb, shopHelpers, genId } = require('./db');
-const { deliver, shopReplyTo } = require('./email');
+const { deliver, newsletterReplyTo } = require('./email');
 
 const esc = (s) => String(s || '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -181,7 +181,7 @@ async function runCampaignSend(shopId, campaignId) {
         const headers = unsubscribeUrl
           ? { 'List-Unsubscribe': `<${unsubscribeUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
           : undefined;
-        const r = await deliver({ to: next.email, subject, html, text, headers, replyTo: shopReplyTo(s, shop) });
+        const r = await deliver({ to: next.email, subject, html, text, headers, replyTo: newsletterReplyTo(s, shop) });
         if (r.ok) {
           next.status = 'sent'; next.sentAt = new Date().toISOString();
           c.sentCount = (c.sentCount || 0) + 1;

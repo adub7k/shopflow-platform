@@ -60,6 +60,19 @@ function shopReplyTo(settings, shopRow) {
   return String((settings || {}).email || (settings || {}).notificationEmail || (shopRow || {}).email || '').trim() || undefined;
 }
 
+// Newsletter replies can be steered to a specific inbox (or several — the owner
+// enters a comma-separated list in Settings → Newsletter Replies, stored as
+// settings.newsletterReplyTo). Returns a single address as a string, several as
+// an array (both Resend's reply_to and nodemailer's replyTo accept either), and
+// falls back to the shop-wide reply chain above when nothing valid is set.
+function newsletterReplyTo(settings, shopRow) {
+  const list = String((settings || {}).newsletterReplyTo || '')
+    .split(/[,;\s]+/).map((x) => x.trim())
+    .filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
+  if (!list.length) return shopReplyTo(settings, shopRow);
+  return list.length === 1 ? list[0] : list;
+}
+
 // Deliver one email over whichever channel is configured — Resend's HTTPS API
 // first (survives SMTP-blocked hosts), else SMTP via nodemailer. Never throws;
 // returns { ok:true } or { ok:false, reason } so callers can log or surface it.
@@ -363,4 +376,4 @@ async function sendQuoteEmail({ to, shop, quote, link, openPixel, reminder, repl
 // deliver/mailer are exported so server/integrations.js (website-leads modules)
 // shares the same channel selection + config-gating as the owner notifications.
 // renderQuoteEmail is exported so the template can be previewed + unit-tested.
-module.exports = { notifyNewLead, mailer, sendTest, deliver, sendQuoteEmail, renderQuoteEmail, shopReplyTo };
+module.exports = { notifyNewLead, mailer, sendTest, deliver, sendQuoteEmail, renderQuoteEmail, shopReplyTo, newsletterReplyTo };

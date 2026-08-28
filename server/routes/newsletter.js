@@ -8,7 +8,7 @@ const router = require('express').Router();
 const { requireAuth, requireRole } = require('../middleware');
 const { master, getShopDb, shopHelpers, shopRoute, genId } = require('../db');
 const { audience, renderNewsletterEmail, shopIdentity, runCampaignSend, ensureCampaigns } = require('../newsletter');
-const { deliver, shopReplyTo } = require('../email');
+const { deliver, newsletterReplyTo } = require('../email');
 
 const esc = (s) => String(s || '').replace(/[&<>"']/g, (c) =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -79,7 +79,7 @@ router.post('/api/shop/newsletter/:id/test', requireAuth, requireRole('full'), s
     shop: shopIdentity(s), campaign: c, lead: { name: 'Test Preview' },
     unsubscribeUrl: `${base}/u/${shopRow.slug}/preview`,
   });
-  const r = await deliver({ to, subject: `[Test] ${subject}`, html, text, replyTo: shopReplyTo(s, shopRow) });
+  const r = await deliver({ to, subject: `[Test] ${subject}`, html, text, replyTo: newsletterReplyTo(s, shopRow) });
   if (!r.ok) return res.status(502).json({ ok: false, error: r.reason });
   res.json({ ok: true, to });
 }));

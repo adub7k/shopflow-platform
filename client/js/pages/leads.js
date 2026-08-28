@@ -397,6 +397,7 @@ const Leads = {
       </div>
 
       <div class="modal-actions" style="flex-wrap:wrap;gap:8px;">
+        <button class="btn btn-green btn-full" onclick="Leads.book('${l.id}')">📅 Book appointment</button>
         <button class="btn btn-primary btn-full" onclick="Leads.save('${l.id}')">Save</button>
         ${(l.calls&&l.calls.length)?`<button class="btn btn-full" onclick="Leads.analyze('${l.id}',this)">✨ ${l.ai?'Re-analyze':'Analyze'} with AI</button>`:''}
         ${l.customerId?`<button class="btn btn-full" onclick="ClientProfile.open('${l.customerId}')">View client</button>`:`<button class="btn btn-full" onclick="Leads.convert('${l.id}')">Convert to client</button>`}
@@ -667,6 +668,29 @@ const Leads = {
       if (!res.ok) throw new Error(res.error || 'Convert failed');
       Modal.close(); toast('Converted to client ✓'); this.render();
     } catch(e) { toast(e.message || 'Could not convert', 'error'); }
+  },
+
+  // One-tap booking: convert the lead to a client (idempotent server-side — an
+  // already-converted lead just re-links) and drop straight into a pre-filled
+  // New Appointment form, instead of convert → find in Clients → book by hand.
+  async book(id) {
+    const l = this._leads.find(x => x.id === id);
+    try {
+      // Persist modal edits first so the typed name carries onto the client record.
+      if (l) {
+        this._captureModalEdits(l);
+        await db.leads.update(id, { name: l.name || '', status: l.status, quotedAmount: l.quotedAmount != null ? l.quotedAmount : null });
+      }
+      const res = await db.leads.convert(id);
+      if (!res.ok) throw new Error(res.error || 'Could not create the client');
+      Modal.close();
+      App.nav('appointments');
+      const extras = {};
+      if (l && Number(l.quotedAmount) > 0) extras.price = Number(l.quotedAmount);
+      if (l && l.vehicle) extras.vehicle = l.vehicle;
+      setTimeout(() => Appointments.openFormPrefilled(res.customerId, (l && (l.name || l.phone)) || '', (l && l.phone) || '', Object.keys(extras).length ? extras : undefined), 150);
+      toast('Client created ✓ — pick a date & time');
+    } catch(e) { toast(e.message || 'Could not book', 'error'); }
   },
 
   // Stream + play a voicemail recording. The audio is served by an authed proxy
