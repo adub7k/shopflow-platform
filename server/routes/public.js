@@ -228,6 +228,18 @@ router.get('/api/public/:shopSlug/quote/:quoteId', async (req, res) => {
     const q = h.getById('quotes', req.params.quoteId);
     if (!q) return res.status(404).json({ error: 'Quote not found' });
     const s = ctx.db.get('settings').value() || {};
+    // Open tracking for texted (and any) links: loading the page itself stamps
+    // the view — the email pixel only covers emails, and this is the stronger
+    // signal anyway (proxies can pre-fetch pixels; a page load is a real open).
+    // The shop's own logged-in preview isn't distinguishable here, so the first
+    // stamp can be the owner checking their handiwork — same caveat as the pixel.
+    try {
+      const now = new Date().toISOString();
+      if (!q.viewedAt) q.viewedAt = now;
+      q.lastViewedAt = now;
+      q.viewCount = (q.viewCount || 0) + 1;
+      h.upsert('quotes', q);
+    } catch (e) {}
     // Self-heal a paid-but-unflipped deposit (customer paid on Square but the
     // success redirect was missed): every open of the estimate reconciles.
     if (q.squareOrderId && q.depositRequired && !q.depositPaid) {

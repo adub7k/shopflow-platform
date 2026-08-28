@@ -47,16 +47,22 @@ const Quotes = {
     const m=this.STATUS_META[st]||{};
     return `<span class="badge ${m.cls||'badge-gray'}" style="margin-top:3px;">${m.label||st}</span>`;
   },
-  // Delivery/open indicator for an emailed estimate. Empty until it's been
-  // emailed; then shows whether the customer has opened it (tracking pixel).
+  // Open indicator. The strongest signal is the estimate PAGE being loaded
+  // (covers texted links — stamped server-side on every public open); the email
+  // pixel remains the fallback signal for emailed ones. Empty until sent.
   _openTag(q){
-    if(!q.emailSentAt) return '';
-    const opened=!!q.emailOpenedAt;
     const when=(iso)=>{try{return new Date(iso).toLocaleDateString(undefined,{month:'short',day:'numeric'});}catch(e){return '';}};
-    const title=opened
-      ? 'Customer opened the email'+(q.emailOpenCount>1?` (${q.emailOpenCount}×)`:'')+(q.emailOpenedAt?` — first on ${when(q.emailOpenedAt)}`:'')
-      : 'Email delivered — not opened yet';
-    return `<span title="${esc(title)}" style="display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;margin-top:3px;color:${opened?'var(--green)':'var(--faint)'};">${opened?'👁':'✉️'} ${opened?'Opened':'Not opened'}</span>`;
+    if(q.viewedAt){
+      const title='Customer opened the estimate page'+(q.viewCount>1?` (${q.viewCount}×)`:'')+` — first on ${when(q.viewedAt)}`+(q.lastViewedAt&&q.lastViewedAt!==q.viewedAt?`, last ${when(q.lastViewedAt)}`:'');
+      return `<span title="${esc(title)}" style="display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;margin-top:3px;color:var(--green);">👁 Viewed${q.viewCount>1?' ×'+q.viewCount:''}</span>`;
+    }
+    if(!q.emailSentAt&&!q.smsSentAt) return '';
+    const opened=!!q.emailOpenedAt;
+    if(opened){
+      const title='Customer opened the email'+(q.emailOpenCount>1?` (${q.emailOpenCount}×)`:'')+(q.emailOpenedAt?` — first on ${when(q.emailOpenedAt)}`:'');
+      return `<span title="${esc(title)}" style="display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;margin-top:3px;color:var(--green);">👁 Opened</span>`;
+    }
+    return `<span title="Sent — the page hasn't been opened yet" style="display:inline-flex;align-items:center;gap:3px;font-size:11px;font-weight:600;margin-top:3px;color:var(--faint);">${q.emailSentAt?'✉️':'📱'} Not opened</span>`;
   },
 
   async render(){
@@ -394,6 +400,7 @@ const Quotes = {
         <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${this._badge(q.status)} ${q.depositPaid?'<span class="badge badge-green">Deposit paid</span>':''}${this._openTag(q)}</div>
         ${q.emailSentAt?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">${q.emailOpenedAt?'Customer opened the email':'Emailed — not opened yet'}${(q.reminderCount||0)>0?` · ${q.reminderCount} reminder${q.reminderCount>1?'s':''} sent`:''}</div>`:''}
         ${q.smsSentAt?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">📱 Texted ${(()=>{try{return new Date(q.smsSentAt).toLocaleDateString(undefined,{month:'short',day:'numeric'});}catch(e){return '';}})()}</div>`:''}
+        ${q.viewedAt?`<div style="font-size:12px;color:var(--green);margin-top:6px;">👁 Opened the estimate page${q.viewCount>1?` ${q.viewCount}×`:''}${(()=>{try{return ' — first '+new Date(q.viewedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'})+(q.lastViewedAt&&q.lastViewedAt!==q.viewedAt?', last '+new Date(q.lastViewedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'');}catch(e){return '';}})()}</div>`:''}
         ${this.isClosed(q.status)?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">Closed out as ${esc((this.STATUS_META[q.status]||{}).label||q.status).toLowerCase()}${(()=>{const d=q.completedAt||q.lostAt||q.declinedAt;try{return d?' · '+new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'';}catch(e){return '';}})()}</div>`:''}
       </div>
       ${q.options&&q.options.length&&!q.chosenOptionId?`<div class="list-card" style="margin-bottom:14px;">
