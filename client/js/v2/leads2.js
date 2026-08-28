@@ -123,8 +123,9 @@
     </div>`;
   }
 
-  // Top-of-page channel comparison. Rendered on both list and pipeline views so
-  // the phone-vs-Meta read is always the first thing the owner sees.
+  // Phone-vs-Meta channel comparison. Lives on the REVENUE tab now (pages2.js
+  // calls this via Leads.channelMetrics) — it's an ad-spend/ROI read, so it sits
+  // with the money numbers instead of pushing the lead worklist down.
   function channelMetrics(leads) {
     if (!leads.length) return '';
     const phone = channelStats(leads.filter(isPhoneLead));
@@ -134,6 +135,7 @@
       ${channelCard('📱', 'Meta ads', 'Facebook / Instagram agency', meta)}
     </div>`;
   }
+  Leads.channelMetrics = channelMetrics;
 
   Leads.render = async function () {
     // Modal actions (save / status / note / convert) all funnel back through
@@ -164,9 +166,6 @@
       <button class="btn" onclick="App.nav('response')">Response Center${counts.new ? ' (' + counts.new + ')' : ''}</button></div>`);
 
     if (loadError) html.push(`<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--red,#e5534b);border-radius:10px;padding:10px 12px;margin-bottom:12px;color:var(--muted);font-size:13px;">⚠ Couldn't refresh leads (${esc(loadError)}). Showing the last loaded set — reload to try again.</div>`);
-
-    // Phone-vs-Meta channel split, above both views.
-    html.push(channelMetrics(leads));
 
     // Duplicate detector: same person under two phone formats (E.164 vs
     // national) — the server merge folds histories together, oldest wins.

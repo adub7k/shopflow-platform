@@ -317,7 +317,7 @@
     const el = document.getElementById('page-revenue'); if (!el) return;
     el.classList.add('v2-wide');
     try {
-      const [data, expenses] = await Promise.all([db.revenue.get(), db.expenses.all().catch(() => [])]);
+      const [data, expenses, leads] = await Promise.all([db.revenue.get(), db.expenses.all().catch(() => []), db.leads.all().catch(() => [])]);
       if (data.expenseCategories?.length) this._categories = data.expenseCategories;
       const netColor = data.monthNetProfit >= 0 ? 'var(--green-deep)' : 'var(--red)';
       const html = [];
@@ -330,6 +330,13 @@
         <div class="metric-card"><div class="metric-label">Net profit</div><div class="metric-value" style="color:${netColor};">${fmtMoney(data.monthNetProfit)}</div><div class="metric-sub">${data.monthNetMarginPct}% margin · after ${fmtMoney(data.monthOpEx)} expenses</div></div>
         <div class="metric-card"><div class="metric-label">Avg ticket</div><div class="metric-value">${fmtMoney(data.avgTicket)}</div><div class="metric-sub">this month</div></div>
         <div class="metric-card"><div class="metric-label">All time</div><div class="metric-value">${fmtMoney(data.totalRevenue)}</div><div class="metric-sub">${fmtMoney(data.totalNetProfit)} net profit</div></div></div>`);
+
+      // Lead conversion by channel (phone vs Meta) — moved here from the Leads
+      // page: it's the ad-spend ROI read, so it belongs with the money numbers.
+      // The builder still lives in leads2.js next to the source definitions.
+      if (typeof Leads !== 'undefined' && typeof Leads.channelMetrics === 'function') {
+        html.push(Leads.channelMetrics(leads));
+      }
 
       const line = (label, val, opts = {}) => {
         const amt = opts.neg ? `−${fmtMoney(Math.abs(val))}` : (val < 0 ? `−${fmtMoney(Math.abs(val))}` : fmtMoney(val));
