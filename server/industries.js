@@ -67,7 +67,7 @@ const INDUSTRIES = {
       { key: 'vehicleYear',  label: 'Year',  type: 'text', required: true },
       { key: 'vehicleMake',  label: 'Make',  type: 'text', required: true },
       { key: 'vehicleModel', label: 'Model', type: 'text', required: true },
-      { key: 'vehicleColor', label: 'Color', type: 'text', required: true },
+      { key: 'vehicleColor', label: 'Color', type: 'text' },
     ],
     // Vehicle size classes for per-size service pricing. A service may carry a
     // `sizePricing` map ({sedan,suv,truck}); when present, the booked price is

@@ -160,7 +160,9 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
       barbers, services, blockedDates,
       // Industry profile bits the booking page needs to render correctly.
       vocab: s.vocab || null,
-      customFields: s.customFields || [],
+      // Color is never a hard requirement — normalize it off even for shops
+      // whose stored settings predate that decision.
+      customFields: (s.customFields || []).map(f => f.key === 'vehicleColor' ? { ...f, required: false } : f),
       vehicleSizes: (s.vehicleSizes && s.vehicleSizes.length) ? s.vehicleSizes : (resolveProfile(db.get('industry').value()).vehicleSizes || []),
       addons: publicAddons,
       staffPicker: s.staffPicker !== undefined ? s.staffPicker : (resolveProfile(db.get('industry').value()).staffPicker !== false),
@@ -466,7 +468,8 @@ router.post('/api/public/:shopSlug/lead', async (req, res) => {
     const cf = req.body.customFields || {};
     Object.keys(cf).forEach(k => { cf[k] = String(cf[k] || '').trim().slice(0, 80); });
     if (!req.body.skipRequiredCustomFields) {
-      const missing = (s.customFields || []).filter(f => f.required && !String(cf[f.key] || '').trim());
+      // Color is never a hard requirement, whatever the stored field config says.
+      const missing = (s.customFields || []).filter(f => f.required && f.key !== 'vehicleColor' && !String(cf[f.key] || '').trim());
       if (missing.length) return res.status(400).json({ ok: false, error: 'Missing required fields: ' + missing.map(f => f.label).join(', ') });
     }
     const vehicle = (cf.vehicleYear || cf.vehicleMake || cf.vehicleModel)
