@@ -121,6 +121,30 @@ const Quotes = {
       ${fields.length?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 10px;">${fields.map(f=>`<div class="form-group"><label class="form-label">${esc(f.label)}</label><input class="form-input" id="fq-v-${esc(f.key)}" value="${esc(v[this._vkey(f.key)]||'')}" placeholder="${esc(f.label)}" /></div>`).join('')}</div>`:''}
       <div class="form-group" style="margin-bottom:10px;">
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;margin:0;">
+          <input type="checkbox" id="fq-opts-on" ${q?.options?.length?'checked':''} onchange="Quotes._toggleOpts()" /> ⚖️ Offer two options (customer picks one on the page)
+        </label>
+        <div id="fq-opts-box" style="display:${q?.options?.length?'block':'none'};background:var(--surface2);border-radius:10px;padding:12px;margin-top:9px;">
+          ${[0,1].map(i=>{const o=(q?.options||[])[i]||{};return `
+          <div style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px;background:var(--surface);">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:7px;">
+              <select class="form-input" id="fq-opt${i}-preset" style="flex:1;min-width:0;" onchange="Quotes._optPreset(${i})">
+                <option value="">${i===0?'Option 1 — preset…':'Option 2 — preset…'}</option>
+                <option value="carbon">Carbon tint</option>
+                <option value="ceramic">Ceramic tint</option>
+              </select>
+              <label style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;margin:0;"><input type="radio" name="fq-opt-rec" id="fq-opt${i}-rec" ${o.recommended?'checked':''}/> ⭐ Recommend</label>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 92px;gap:0 8px;">
+              <div class="form-group" style="margin-bottom:7px;"><input class="form-input" id="fq-opt${i}-name" value="${esc(o.name||'')}" placeholder="Name (e.g. Carbon Tint)" /></div>
+              <div class="form-group" style="margin-bottom:7px;"><input class="form-input" id="fq-opt${i}-price" type="number" min="0" inputmode="decimal" value="${o.price!=null?o.price:''}" placeholder="$" /></div>
+            </div>
+            <textarea class="form-input" id="fq-opt${i}-bens" rows="3" placeholder="Benefits — one per line (they unfold when the customer taps this option)">${esc((o.benefits||[]).join('\n'))}</textarea>
+          </div>`;}).join('')}
+          <div style="font-size:11.5px;color:var(--muted);line-height:1.45;">The page shows both cards with prices — tapping one unfolds its benefits and arms the approve button. Line items below are ignored while options are on; the deposit applies to whichever option they pick.</div>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:10px;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;margin:0;">
           <input type="checkbox" id="fq-fleet" ${ct?'checked':''} onchange="Quotes._toggleFleet()" /> 🚚 Fleet contract (multiple vehicles / recurring)
         </label>
         <div id="fq-fleet-box" style="display:${ct?'block':'none'};background:var(--surface2);border-radius:10px;padding:12px;margin-top:9px;">
@@ -249,11 +273,56 @@ const Quotes = {
   _removeLine(i){ this._lines.splice(i,1); this._renderLines(); },
   _toggleDep(){ const on=document.getElementById('fq-dep-on')?.checked; const r=document.getElementById('fq-dep-row'); if(r)r.style.display=on?'block':'none'; },
 
+  // ── Option estimates (customer picks one of two on the public page) ─────────
+  // Presets fill the name + benefit bullets (the same pitch the AI receptionist
+  // gives); price stays the owner's to type. Everything stays editable after.
+  OPT_PRESETS:{
+    carbon:{ name:'Carbon Tint', benefits:[
+      'Blocks 99% of harmful UV rays',
+      'Rejects up to 45% of the heat',
+      'Deep, factory-look black that never fades or turns purple',
+      'No interference with GPS, phone or radio signal',
+      'Lifetime warranty',
+    ]},
+    ceramic:{ name:'Ceramic Tint', benefits:[
+      'Blocks 99% of harmful UV rays',
+      'Rejects up to 95% of the heat — the real summer difference',
+      'Crystal-clear visibility, day and night',
+      'No interference with GPS, phone or radio signal',
+      'Lifetime warranty',
+    ]},
+  },
+  _toggleOpts(){
+    const on=document.getElementById('fq-opts-on')?.checked;
+    const box=document.getElementById('fq-opts-box'); if(box)box.style.display=on?'block':'none';
+    // Options and fleet contracts are different animals — never both.
+    if(on){ const f=document.getElementById('fq-fleet'); if(f&&f.checked){ f.checked=false; this._toggleFleet(); } }
+  },
+  _optPreset(i){
+    const key=document.getElementById('fq-opt'+i+'-preset')?.value; const p=this.OPT_PRESETS[key]; if(!p)return;
+    const n=document.getElementById('fq-opt'+i+'-name'); if(n)n.value=p.name;
+    const b=document.getElementById('fq-opt'+i+'-bens'); if(b)b.value=p.benefits.join('\n');
+  },
+  // Collect the two option editors; null = toggle off (server clears options).
+  _collectOptions(){
+    if(!document.getElementById('fq-opts-on')?.checked) return [];
+    return [0,1].map(i=>({
+      id:'opt'+(i+1),
+      name:document.getElementById('fq-opt'+i+'-name')?.value.trim()||'',
+      price:parseFloat(document.getElementById('fq-opt'+i+'-price')?.value)||0,
+      benefits:(document.getElementById('fq-opt'+i+'-bens')?.value||'').split('\n').map(s=>s.trim()).filter(Boolean),
+      recommended:!!document.getElementById('fq-opt'+i+'-rec')?.checked,
+    })).filter(o=>o.name&&o.price>0);
+  },
+
   // sendVia: 'email' | 'sms' | '' (save only)
   async save(id, sendVia){
     const name=document.getElementById('fq-name')?.value.trim();
     if(!name){toast('Enter a customer name','warning');return;}
-    if(!this._lines.length){toast('Add at least one line item','warning');return;}
+    const optsOn=!!document.getElementById('fq-opts-on')?.checked;
+    const options=this._collectOptions();
+    if(optsOn&&options.length<2){toast('Fill in both options (name + price), or turn options off','warning');return;}
+    if(!optsOn&&!this._lines.length){toast('Add at least one line item','warning');return;}
     const email=document.getElementById('fq-email')?.value.trim()||'';
     const phone=document.getElementById('fq-phone')?.value.trim()||'';
     // Sending needs somewhere to send it — stop before saving a half-action.
@@ -276,6 +345,8 @@ const Quotes = {
         customerEmail:email,
         vehicle,
         lineItems:this._lines,
+        // Two-option estimates: [] when the toggle is off so an edit clears them.
+        options:options,
         // Fleet contract terms. Sent as null when the toggle is off so turning a
         // contract back into a one-off clears the recurring totals server-side.
         contract:contract,
@@ -325,7 +396,12 @@ const Quotes = {
         ${q.smsSentAt?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">📱 Texted ${(()=>{try{return new Date(q.smsSentAt).toLocaleDateString(undefined,{month:'short',day:'numeric'});}catch(e){return '';}})()}</div>`:''}
         ${this.isClosed(q.status)?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">Closed out as ${esc((this.STATUS_META[q.status]||{}).label||q.status).toLowerCase()}${(()=>{const d=q.completedAt||q.lostAt||q.declinedAt;try{return d?' · '+new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'';}catch(e){return '';}})()}</div>`:''}
       </div>
-      <div class="list-card" style="margin-bottom:14px;">
+      ${q.options&&q.options.length&&!q.chosenOptionId?`<div class="list-card" style="margin-bottom:14px;">
+        ${q.options.map(o=>`<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:14px;">⚖️ ${esc(o.name)}${o.recommended?' <span style="font-size:10px;color:var(--green);font-weight:700;">★ RECOMMENDED</span>':''}</div><div class="list-sub">${esc((o.benefits||[]).slice(0,2).join(' · '))}${(o.benefits||[]).length>2?' · …':''}</div></div><div style="font-weight:700;">${fmtMoney(o.price)}</div></div>`).join('')}
+        <div class="list-row"><div class="list-main"><div class="list-name" style="font-size:12px;color:var(--faint);">Customer picks one on the page — starting at</div></div><div style="font-weight:800;color:var(--green);">${fmtMoney(q.total)}</div></div>
+      </div>`:''}
+      <div class="list-card" style="margin-bottom:14px;${q.options&&q.options.length&&!q.chosenOptionId?'display:none;':''}">
+        ${q.chosenOptionId&&q.options?`<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:12px;color:var(--green);font-weight:700;">✓ Customer chose ${esc((q.options.find(o=>o.id===q.chosenOptionId)||{}).name||'an option')}</div></div></div>`:''}
         ${(q.lineItems||[]).map(l=>{const n=Number(l.qty)||1;return `<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:14px;">${esc(l.name)}</div>${n>1?`<div class="list-sub">${n} × ${fmtMoney(l.price)}</div>`:''}</div><div style="font-weight:700;">${fmtMoney(l.price*n)}</div></div>`;}).join('')}
         ${(q.taxAmount||q.discountAmount)?`<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:13px;color:var(--muted);">Subtotal</div></div><div style="color:var(--muted);">${fmtMoney(q.subtotal)}</div></div>`:''}
         ${q.discountAmount?`<div class="list-row"><div class="list-main"><div class="list-name" style="font-size:13px;color:var(--green);font-weight:600;">Discount (${q.discountPercent}%)</div></div><div style="color:var(--green);font-weight:600;">−${fmtMoney(q.discountAmount)}</div></div>`:''}
@@ -353,7 +429,11 @@ const Quotes = {
   // Prefilled estimate text (same copy the server-side sender uses).
   _smsBody(q){
     const link=location.origin+'/quote/'+Auth.getShopSlug()+'/'+q.id;
-    // A contract's headline number is the monthly, not the single visit.
+    // Two-option estimates lead with the starting-at price and invite the pick;
+    // a contract's headline number is the monthly, not the single visit.
+    if(q.options&&q.options.length&&!q.chosenOptionId){
+      return `Hi ${(q.customerName||'there').split(' ')[0]}! Here are your options from ${Auth.getShopName()||'us'} (${q.number||''}) — starting at $${q.total}. Compare & approve: ${link}`;
+    }
     const amount=q.contract?`$${q.monthlyTotal}/mo`:`$${q.total}`;
     return `Hi ${(q.customerName||'there').split(' ')[0]}! Here's your estimate from ${Auth.getShopName()||'us'} (${q.number||''}) — ${amount}. View & approve: ${link}`;
   },

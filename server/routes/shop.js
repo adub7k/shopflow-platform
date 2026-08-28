@@ -557,6 +557,29 @@ router.post('/api/shop/quotes', requireAuth, requireRole('full','technician'), s
     q.taxAmount = tax.amount;
     q.total     = Math.round((discounted + tax.amount) * 100) / 100;
   }
+  // Option estimates: a "choose one" estimate (e.g. carbon vs ceramic tint).
+  // Each option = name + price + benefit bullets; the customer picks on the
+  // public page and approval materializes the choice into lineItems/totals.
+  // Until then the quote's total is the STARTING-AT price (lowest option).
+  if (Array.isArray(q.options)) {
+    q.options = q.options
+      .filter(o => o && String(o.name || '').trim() && Number(o.price) > 0)
+      .slice(0, 4)
+      .map((o, i) => ({
+        id: String(o.id || 'opt' + (i + 1)).slice(0, 20),
+        name: String(o.name).trim().slice(0, 60),
+        price: Math.round((Number(o.price) || 0) * 100) / 100,
+        benefits: (Array.isArray(o.benefits) ? o.benefits : String(o.benefits || '').split('\n'))
+          .map(b => String(b || '').trim().slice(0, 90)).filter(Boolean).slice(0, 8),
+        recommended: !!o.recommended,
+      }));
+    if (q.options.length < 2) { q.options = null; }
+    else if (!q.chosenOptionId) {
+      const min = Math.min(...q.options.map(o => o.price));
+      q.lineItems = []; q.subtotal = min; q.discountPercent = 0; q.discountAmount = 0;
+      q.taxRate = 0; q.taxAmount = 0; q.total = min;
+    }
+  }
   if (!q.id) {
     q.id = genId('q');
     const next = ((db.get('settings').value()||{}).quoteCounter || 1000) + 1;

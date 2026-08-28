@@ -224,8 +224,17 @@ function renderQuoteEmail({ shop, quote, link, openPixel, reminder }) {
   const v = q.vehicle || {};
   const vehicle = [v.year, v.make, v.model, v.color && `(${v.color})`].filter(Boolean).join(' ');
 
+  // Two-option estimates: the email lists each option with its benefits and
+  // sends the reader to the page to pick; the "total" is the starting-at price.
+  const hasOptions = Array.isArray(q.options) && q.options.length && !q.chosenOptionId;
   // Fleet estimates carry a per-line quantity (vehicles); everything else is 1.
-  const itemRows = (q.lineItems || []).map((l) => {
+  const itemRows = hasOptions
+    ? q.options.map((o) => `<tr>
+        <td style="padding:12px 0;border-bottom:1px solid #ececec;font-size:15px;color:#222;">${esc(o.name)}${o.recommended ? ' <span style="font-size:11px;color:' + accent + ';font-weight:bold;letter-spacing:.06em;">★ RECOMMENDED</span>' : ''}
+          ${(o.benefits || []).length ? `<div style="font-size:13px;color:#777;line-height:1.6;padding-top:3px;">${o.benefits.map(b => '✓ ' + esc(b)).join('<br/>')}</div>` : ''}</td>
+        <td style="padding:12px 0;border-bottom:1px solid #ececec;font-size:15px;color:#222;text-align:right;white-space:nowrap;vertical-align:top;">${money(o.price)}</td>
+      </tr>`).join('')
+    : (q.lineItems || []).map((l) => {
     const n = Number(l.qty) || 1;
     return `<tr>
         <td style="padding:12px 0;border-bottom:1px solid #ececec;font-size:15px;color:#222;">${esc(l.name)}${n > 1 ? `<span style="color:#888;font-size:13.5px;"> &nbsp;${n} × ${money(l.price)}</span>` : ''}</td>
@@ -339,9 +348,9 @@ function renderQuoteEmail({ shop, quote, link, openPixel, reminder }) {
         ${itemRows}
         ${taxRows}
         <tr>
-          <td style="padding:14px 0 0;font-size:17px;font-weight:bold;color:#1a1a1a;">${ct ? 'Per visit' : 'Total'}</td>
+          <td style="padding:14px 0 0;font-size:17px;font-weight:bold;color:#1a1a1a;">${hasOptions ? 'Starting at' : (ct ? 'Per visit' : 'Total')}</td>
           <td style="padding:14px 0 0;font-size:17px;font-weight:bold;color:${accent};text-align:right;">${money(q.total)}</td>
-        </tr>
+        </tr>${hasOptions ? `<tr><td colspan="2" style="padding:6px 0 0;font-size:13px;color:#777;">Compare both options and pick the one you want on the estimate page — one tap.</td></tr>` : ''}
         ${contractRows}
       </table>
     </td></tr>

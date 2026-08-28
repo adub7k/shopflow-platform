@@ -1,7 +1,7 @@
 const router = require('express').Router();
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
-const { master, getShopDb, shopHelpers, shopRoute, genId, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl } = require('../db');
+const { master, getShopDb, shopHelpers, shopRoute, genId, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, computeTax } = require('../db');
 const { resolveProfile } = require('../industries');
 const { upsertLead, resolveContact, recordLeadPayload } = require('../leads-core');
 // Booking core (single source of truth): the menu, open-slot availability, and
@@ -252,6 +252,9 @@ router.get('/api/public/:shopSlug/quote/:quoteId', async (req, res) => {
         customerName: q.customerName || '',
         vehicle: q.vehicle || null, vehicleSize: q.vehicleSize || null,
         lineItems: q.lineItems || [], total: q.total || 0, notes: q.notes || '',
+        // Option estimates: the customer picks one of these on this page.
+        options: Array.isArray(q.options) && q.options.length ? q.options : null,
+        chosenOptionId: q.chosenOptionId || null,
         // Fleet contracts: total is per-visit; these carry the recurring view.
         contract: q.contract || null, monthlyTotal: q.monthlyTotal || 0, contractValue: q.contractValue || 0,
         fleetName: q.fleetName || '', vehicleCount: q.vehicleCount || 0,
@@ -275,6 +278,19 @@ router.post('/api/public/:shopSlug/quote/:quoteId/approve', (req, res) => {
     // reopen it. ('lost' stays approvable: a late yes is still a win.)
     if (q.status === 'completed') return res.status(400).json({ ok: false, error: 'This estimate has already been completed. Please contact the shop.' });
     const s = ctx.db.get('settings').value() || {};
+    // Option estimates: the customer must pick one; approval locks the choice
+    // in and materializes it into real line items + totals (with tax).
+    if (Array.isArray(q.options) && q.options.length && !q.chosenOptionId) {
+      const opt = q.options.find(o => o.id === String((req.body || {}).optionId || ''));
+      if (!opt) return res.status(400).json({ ok: false, error: 'Please choose an option first.' });
+      const tax = computeTax(s, opt.price);
+      q.chosenOptionId = opt.id;
+      q.lineItems = [{ name: opt.name, price: opt.price, qty: 1 }];
+      q.subtotal = opt.price;
+      q.taxRate = tax.amount ? tax.rate : 0; q.taxLabel = tax.label; q.taxAmount = tax.amount;
+      q.total = Math.round((opt.price + tax.amount) * 100) / 100;
+      h.upsert('quotes', q);
+    }
     const stripeReady = !!(s.stripe && s.stripe.connectAccountId && s.stripe.onboardingComplete);
     const paymentsReady = squareConnected(s) || stripeReady;
     // Only block approval on the deposit when we can actually collect it online.
