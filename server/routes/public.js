@@ -13,7 +13,7 @@ const { computeAvailability, createAppointment, inspoMode } = require('../bookin
 const { deliver } = require('../email');
 // Square is the payments direction (Stripe kept as legacy fallback for any
 // shop already onboarded there). squareConnected = per-shop OAuth or platform env.
-const { squareConnected, reconcileSquareQuoteDeposit } = require('./square');
+const { squareConnected, reconcileSquareQuoteDeposit, reconcileSquareQuoteBalance } = require('./square');
 const { ensureQuoteCustomer } = require('../quotes-core');
 
 // ── Per-date availability overrides ───────────────────────────────────────────
@@ -242,10 +242,14 @@ router.get('/api/public/:shopSlug/quote/:quoteId', async (req, res) => {
       q.viewCount = (q.viewCount || 0) + 1;
       h.upsert('quotes', q);
     } catch (e) {}
-    // Self-heal a paid-but-unflipped deposit (customer paid on Square but the
-    // success redirect was missed): every open of the estimate reconciles.
+    // Self-heal paid-but-unflipped payments (customer paid on Square but the
+    // success redirect was missed): every open of the estimate reconciles both
+    // the deposit and the full-balance payment link.
     if (q.squareOrderId && q.depositRequired && !q.depositPaid) {
       try { await reconcileSquareQuoteDeposit(ctx.db, s, h, q); } catch (e) {}
+    }
+    if (q.squareBalanceOrderId && !q.balancePaid) {
+      try { await reconcileSquareQuoteBalance(ctx.db, s, h, q); } catch (e) {}
     }
     const stripeReady = !!(s.stripe && s.stripe.connectAccountId && s.stripe.onboardingComplete);
     res.json({
@@ -276,6 +280,7 @@ router.get('/api/public/:shopSlug/quote/:quoteId', async (req, res) => {
         discountPercent: q.discountPercent || 0, discountAmount: q.discountAmount || 0,
         taxRate: q.taxRate || 0, taxLabel: q.taxLabel || 'Sales Tax', taxAmount: q.taxAmount || 0,
         depositRequired: !!q.depositRequired, depositAmount: q.depositAmount || 0, depositPaid: !!q.depositPaid,
+        balancePaid: !!q.balancePaid, balanceAmount: q.balanceAmount || 0,
       },
     });
   } catch(e) { res.status(500).json({ error: 'Server error' }); }

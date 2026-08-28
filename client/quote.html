@@ -368,6 +368,12 @@ const Q = {
       document.getElementById('dep-cap').textContent='Deposit';
       document.getElementById('dep-text').textContent='Your '+fm(q.depositAmount)+' deposit has been received — thank you.';
     }
+    // Balance collected via the texted payment link: the document reads as settled.
+    if(q.balancePaid){
+      const d=document.getElementById('dep'); d.style.display=''; d.className='dep paid';
+      document.getElementById('dep-cap').textContent='Payment';
+      document.getElementById('dep-text').textContent='Paid in full — thank you for your business.';
+    }
     const act=document.getElementById('actions');
     if(q.status==='sent'){
       act.innerHTML=`<button class="btn" id="approve-btn" onclick="Q.approve()" ${this._opts?'disabled':''}>${this._opts?'Choose an option above':(q.depositRequired&&!q.depositPaid&&payOnline?('Approve & pay '+fm(q.depositAmount)+' deposit'):'Approve this estimate')}</button>

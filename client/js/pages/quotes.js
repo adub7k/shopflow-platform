@@ -409,7 +409,7 @@ const Quotes = {
         <div style="font-size:16px;font-weight:700;">${esc(q.customerName||'—')}</div>
         ${this._isFleet(q)?`<div style="font-size:13px;color:var(--muted);margin-top:3px;">🚚 ${esc(q.fleetName||'Fleet')}${q.vehicleCount?` · ${q.vehicleCount} vehicles`:''} · ${q.contract?`${this._freqLabel(q.contract.frequency)} · ${q.contract.termMonths}-month term`:'One-time job'}</div>`:''}
         ${q.vehicle&&(q.vehicle.make||q.vehicle.model)?`<div style="font-size:13px;color:var(--muted);margin-top:3px;">🚗 ${esc([q.vehicle.year,q.vehicle.make,q.vehicle.model,q.vehicle.color].filter(Boolean).join(' '))}</div>`:''}
-        <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${this._badge(q.status)} ${q.depositPaid?'<span class="badge badge-green">Deposit paid</span>':''}${this._openTag(q)}</div>
+        <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${this._badge(q.status)} ${q.balancePaid?'<span class="badge badge-green">💳 Paid in full</span>':(q.depositPaid?'<span class="badge badge-green">Deposit paid</span>':'')}${this._openTag(q)}</div>
         ${q.emailSentAt?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">${q.emailOpenedAt?'Customer opened the email':'Emailed — not opened yet'}${(q.reminderCount||0)>0?` · ${q.reminderCount} reminder${q.reminderCount>1?'s':''} sent`:''}</div>`:''}
         ${q.smsSentAt?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">📱 Texted ${(()=>{try{return new Date(q.smsSentAt).toLocaleDateString(undefined,{month:'short',day:'numeric'});}catch(e){return '';}})()}</div>`:''}
         ${q.viewedAt?`<div style="font-size:12px;color:var(--green);margin-top:6px;">👁 Opened the estimate page${q.viewCount>1?` ${q.viewCount}×`:''}${(()=>{try{return ' — first '+new Date(q.viewedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'})+(q.lastViewedAt&&q.lastViewedAt!==q.viewedAt?', last '+new Date(q.lastViewedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'');}catch(e){return '';}})()}</div>`:''}
@@ -435,6 +435,7 @@ const Quotes = {
         ${q.customerEmail?`<button class="btn btn-full" onclick="Quotes.sendEmail('${q.id}')">✉️ Email to customer</button>`:''}
         ${(q.customerPhone||q.customerId)?`<button class="btn btn-full" onclick="Quotes.sendLink('${q.id}')">📱 Text to customer</button>`:''}
         ${q.status==='approved'?`<button class="btn btn-green btn-full" onclick="Quotes.schedule('${q.id}')">📅 Schedule appointment</button>`:''}
+        ${['approved','scheduled','completed'].includes(q.status)&&!q.balancePaid&&!q.contract&&Number(q.total)>0?`<button class="btn btn-full" onclick="Quotes.paymentLink('${q.id}')">💳 Text payment link${q.depositPaid?` — ${fmtMoney(Math.max(0,(Number(q.total)||0)-(Number(q.depositAmount)||0)))} balance`:` — ${fmtMoney(q.total)}`}</button>`:''}
         ${q.status==='sent'?`<button class="btn btn-full" onclick="Quotes.mark('${q.id}','approved')">Mark approved</button>`:''}
         ${canWrite()&&!this.isClosed(q.status)?`<button class="btn btn-green btn-full" onclick="Quotes.mark('${q.id}','completed')">✓ Close out — completed</button>`:''}
         ${canWrite()&&!this.isClosed(q.status)?`<button class="btn btn-full" onclick="Quotes.mark('${q.id}','lost')">✕ Close out — lost</button>`:''}
@@ -455,6 +456,20 @@ const Quotes = {
     }
     const amount=q.contract?`$${q.monthlyTotal}/mo`:`$${q.total}`;
     return `Hi ${(q.customerName||'there').split(' ')[0]}! Here's your estimate from ${Auth.getShopName()||'us'} (${q.number||''}) — ${amount}. View & approve: ${link}`;
+  },
+  // Collect the balance: build a Square payment link for what's still owed
+  // (total minus any paid deposit) and pull up Messages prefilled with it —
+  // same manual-SMS stance as everything else. No phone → copies the link.
+  async paymentLink(id){
+    const q=this._data.find(x=>x.id===id); if(!q)return;
+    try{
+      const r=await db.quotes.paymentLink(id);
+      if(!r||!r.ok){toast((r&&r.error)||'Could not create the payment link','error');return;}
+      const amt=fmtMoney(r.amount);
+      const body=`Hi ${(q.customerName||'there').split(' ')[0]}! Here's your secure link to pay the ${r.depositCredited?amt+' balance (deposit already applied)':amt} for ${q.number||'your service'} with ${Auth.getShopName()||'us'}: ${r.url}`;
+      if((q.customerPhone||'').replace(/\D/g,'').length>=10){ _cpSms(q.customerPhone, body, q.customerId); }
+      else { try{ await navigator.clipboard.writeText(r.url); toast('No phone on file — payment link copied ✓'); }catch(e){ prompt('Payment link:', r.url); } }
+    }catch(e){ toast(e.message||'Could not create the payment link','error'); }
   },
   // Manual send: pull up the owner's Messages app prefilled (iPhone sms: deep
   // link via _cpSms — no Twilio/A2P; same stance as Tasks/Messages/Response).

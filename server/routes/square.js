@@ -323,6 +323,71 @@ router.get('/sq/quote-deposit-success', async (req, res) => {
   res.send('<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="font-family:-apple-system,sans-serif;text-align:center;padding:60px 20px;background:#f5f5f7;"><div style="font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:8px;">Deposit received</div><div style="font-size:15px;color:#6e6e73;line-height:1.6;">Thanks — your estimate is approved. You can close this tab.</div></body></html>');
 });
 
+// ── AUTHED: full-payment link for an approved estimate ─────────────────────────
+// The owner texts this to collect the remaining balance (total minus any paid
+// deposit) after the work is approved/done. Same hosted-checkout + verify-on-
+// return pattern as deposits; payment stamps balancePaid on the quote.
+function fulfillSquareQuoteBalance(h, q) {
+  if (q.balancePaid) return false; // redirect + reconcile may both fire
+  q.balancePaid = true; q.balancePaidAt = new Date().toISOString();
+  h.upsert('quotes', q);
+  return true;
+}
+async function reconcileSquareQuoteBalance(db, s, h, q) {
+  if (!q || q.balancePaid || !q.squareBalanceOrderId) return false;
+  const creds = (await resolveSquare(db, s)) || {};
+  if (await sq.isOrderPaid(q.squareBalanceOrderId, { accessToken: creds.accessToken })) return fulfillSquareQuoteBalance(h, q);
+  return false;
+}
+
+router.post('/api/shop/square/quote-payment-link', requireAuth, requireRole('full', 'technician'), async (req, res) => {
+  try {
+    const shop = master.get('shops').find({ id: req.shopId, active: true }).value();
+    if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
+    const db = getShopDb(shop.id); const s = db.get('settings').value() || {}; const h = shopHelpers(db);
+    const creds = await resolveSquare(db, s);
+    if (!creds) return res.status(400).json({ ok: false, error: 'Square not connected (Settings → Payments)' });
+    const q = h.getById('quotes', req.body.quoteId);
+    if (!q) return res.status(404).json({ ok: false, error: 'Estimate not found' });
+    if (!['approved', 'scheduled', 'completed'].includes(q.status)) return res.status(400).json({ ok: false, error: 'The estimate must be approved before collecting payment.' });
+    if (q.balancePaid) return res.status(400).json({ ok: false, error: 'This estimate is already paid in full.' });
+    if (q.contract) return res.status(400).json({ ok: false, error: 'Recurring contracts are billed per visit, not with a one-time link.' });
+    const balance = Math.round(((Number(q.total) || 0) - (q.depositPaid ? (Number(q.depositAmount) || 0) : 0)) * 100) / 100;
+    const amountCents = Math.round(balance * 100);
+    if (amountCents < 100) return res.status(400).json({ ok: false, error: 'Nothing left to collect on this estimate.' });
+    const link = await sq.createPaymentLink({
+      name: 'Payment — ' + (q.number || 'Estimate'),
+      description: (s.shopName || '') + (q.depositPaid ? ' · remaining balance (deposit already received)' : ' · full service'),
+      amountCents,
+      redirectUrl: APP_URL + '/sq/quote-payment-success?quote=' + q.id + '&shop=' + shop.id,
+      idempotencyKey: 'qpay-' + q.id + '-' + amountCents,
+      accessToken: creds.accessToken, locationId: creds.locationId,
+    });
+    q.squareBalanceOrderId = link.orderId; q.squareBalanceLinkId = link.id;
+    q.balanceAmount = balance; q.paymentLinkUrl = link.url;
+    h.upsert('quotes', q);
+    res.json({ ok: true, url: link.url, amount: balance, depositCredited: !!q.depositPaid });
+  } catch (e) {
+    console.error('Square quote-payment-link error:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+// Verify paid, stamp the quote, land the customer back on the estimate.
+router.get('/sq/quote-payment-success', async (req, res) => {
+  let slug = '', quoteId = String(req.query.quote || '');
+  try {
+    const shop = master.get('shops').find({ id: req.query.shop }).value();
+    slug = shop ? shop.slug : '';
+    if (shop && quoteId) {
+      const db = getShopDb(shop.id); const h = shopHelpers(db); const s = db.get('settings').value() || {};
+      await reconcileSquareQuoteBalance(db, s, h, h.getById('quotes', quoteId));
+    }
+  } catch (e) { /* best-effort; the public quote GET reconciles as a backstop */ }
+  if (slug && quoteId) return res.redirect('/quote/' + slug + '/' + quoteId);
+  res.send('<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="font-family:-apple-system,sans-serif;text-align:center;padding:60px 20px;background:#f5f5f7;"><div style="font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:8px;">Payment received</div><div style="font-size:15px;color:#6e6e73;line-height:1.6;">Thank you — you can close this tab.</div></body></html>');
+});
+
 // ── AUTHED: reconcile a client's pending deposits against Square ───────────────
 // The success redirect can be missed (closed tab / PUBLIC_URL mismatch), so the
 // owner app calls this when opening a profile: ask Square whether each "sent"
@@ -356,3 +421,4 @@ router.post('/api/shop/square/reconcile-deposits', requireAuth, async (req, res)
 module.exports = router;
 module.exports.squareConnected = squareConnected;
 module.exports.reconcileSquareQuoteDeposit = reconcileSquareQuoteDeposit;
+module.exports.reconcileSquareQuoteBalance = reconcileSquareQuoteBalance;
