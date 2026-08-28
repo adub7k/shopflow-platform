@@ -200,6 +200,18 @@ const Quotes = {
     },150);
   },
 
+  // Open the estimate form pre-filled from elsewhere (the lead modal's "Send
+  // estimate"): customer link + contact + vehicle land already typed, so the
+  // owner just adds options/items and hits Create & text.
+  openFormPrefilled(cid, name, phone, email, vehicle){
+    this.openForm(null);
+    setTimeout(()=>{
+      const set=(id,v)=>{ const el=document.getElementById(id); if(el&&v!=null&&v!=='') el.value=v; };
+      set('fq-cid',cid||''); set('fq-name',name||''); set('fq-phone',phone||''); set('fq-email',email||'');
+      if(vehicle){ (Shop.fields||[]).forEach(f=>{ const k=this._vkey(f.key); if(vehicle[k]) set('fq-v-'+f.key,vehicle[k]); }); }
+    },220);
+  },
+
   _renderLines(){
     const el=document.getElementById('fq-lines'); if(!el)return;
     const fleet=this._isFleetMode();
