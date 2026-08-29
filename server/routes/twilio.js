@@ -516,9 +516,11 @@ router.post('/api/twilio/voice/ai/gather/:shopId', verifyTwilio, async (req, res
 function upsertLeadFromCall(ctx, fromRaw, city, state) {
   // Last-10-digit match (see leads-core.phoneKey): callers arrive as E.164
   // (+1505…) but the same person may already exist as a 10-digit web lead.
-  const phone = String(fromRaw || '').replace(/\D/g, '').slice(-10);
+  // Sub-10-digit callers (anonymous/short codes) never match anything.
+  const { phoneKey } = require('../leads-core');
+  const phone = phoneKey(fromRaw);
   const now = new Date().toISOString();
-  const existing = ctx.h.getAll('leads').find(l => String(l.phone || '').replace(/\D/g, '').slice(-10) === phone && phone);
+  const existing = ctx.h.getAll('leads').find(l => phoneKey(l.phone) === phone && phone);
   if (existing) {
     existing.lastContactAt = now;
     existing.callCount = (existing.callCount || 0) + 1;

@@ -169,7 +169,9 @@
 
     // Duplicate detector: same person under two phone formats (E.164 vs
     // national) — the server merge folds histories together, oldest wins.
-    const pk = (p) => String(p || '').replace(/\D/g, '').slice(-10);
+    // Requires a full 10-digit number, mirroring the server's phoneKey — junk
+    // placeholder phones must never count (or merge) as duplicates.
+    const pk = (p) => { const d = String(p || '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : ''; };
     const seen = {};
     let dupes = 0;
     leads.forEach(l => {
@@ -211,7 +213,13 @@
 
     let rows = leads.slice();
     if (this._statusFilter2 !== 'all') rows = rows.filter(l => colOf(l) === this._statusFilter2);
-    rows.sort((a, b) => new Date(b.lastContactAt || b.createdAt || 0) - new Date(a.lastContactAt || a.createdAt || 0));
+    // Leads already reached out to TODAY sink to the bottom — the top of the
+    // list is always "who still needs me". Within each half: newest activity first.
+    rows.sort((a, b) => {
+      const ta = Leads.touchedToday(a) ? 1 : 0, tb = Leads.touchedToday(b) ? 1 : 0;
+      if (ta !== tb) return ta - tb;
+      return new Date(b.lastContactAt || b.createdAt || 0) - new Date(a.lastContactAt || a.createdAt || 0);
+    });
     this._shownIds = rows.map(l => l.id);   // Select-all operates on the filtered view
     const selMode = this._selMode;
     const rowClick = (id) => selMode ? `Leads.selToggle('${id}')` : `Leads.open('${id}')`;
@@ -246,7 +254,7 @@
             <div style="font-weight:600;margin-top:4px;">${esc(name)}</div></td>
           <td>${reqLines.join('')}</td>
           <td style="color:var(--muted);">${esc(l.phone || '—')}${email}</td>
-          <td>${statusPill(colOf(l))}</td>
+          <td>${statusPill(colOf(l))}${Leads.touchedToday(l) ? ' <span class="badge badge-green" title="Already reached out today">✓ today</span>' : ''}</td>
           <td class="r" style="color:var(--muted);white-space:nowrap;">${when ? _msgTime(when) : '—'}</td>
         </tr>`);
       } catch (err) {
@@ -274,7 +282,7 @@
               <div style="font-size:11px;color:var(--faint);white-space:nowrap;flex-shrink:0;">${when ? _msgTime(when) : ''}</div>
             </div>
             <div style="display:flex;align-items:center;gap:6px;margin-top:3px;min-width:0;">
-              ${statusPill(colOf(l))}
+              ${statusPill(colOf(l))}${Leads.touchedToday(l) ? '<span class="badge badge-green" style="flex-shrink:0;" title="Already reached out today">✓</span>' : ''}
               <span class="v2-src" style="flex-shrink:0;">${sm.icon} ${esc(sm.label)}</span>
               <div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;">${esc(sub)}</div>
             </div>

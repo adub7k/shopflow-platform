@@ -566,6 +566,9 @@ const Tasks = {
       if (fu.completedStep < t.stepIdx) { fu.completedStep = t.stepIdx; fu.snoozeUntil = null; this._persistCust(c); }
     } else if (t.source === 'reminder') {
       this._remDone[t.apptId] = true; this.render();   // clears it from today's list (session-only)
+    } else if (t.source === 'lead' && t.leadId) {
+      // Touch stamp so the lead sinks below untouched ones in today's lists.
+      db.leads.note(t.leadId, 'Texted').catch(() => {});
     }
   },
 

@@ -113,6 +113,24 @@ const Leads = {
     return { idx: 0, status: 'active', nextAt: now, startedAt: now, log: [] };
   },
 
+  // "Knocked out today": the owner already reached out to this lead today —
+  // a sequence step sent, a day-text tapped, or any Texted note stamped. Lists
+  // sort these to the BOTTOM so whoever is still waiting sits on top. (This is
+  // owner-touch evidence, deliberately separate from lastContactAt, which only
+  // customer activity moves.)
+  touchedToday(l) {
+    const now = new Date();
+    const isToday = (iso) => {
+      if (!iso) return false;
+      const d = new Date(iso);
+      return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+    };
+    if (l.followUp && (l.followUp.log || []).some(e => !e.skipped && isToday(e.at))) return true;
+    if (l.dripLog && Object.values(l.dripLog).some(isToday)) return true;
+    if ((l.noteLog || []).some(n => isToday(n.at) && /texted|text sent/i.test(n.text || ''))) return true;
+    return false;
+  },
+
   // Badge colors derived from the stage config so custom stages render
   // everywhere: list badges, filter pills, and the modal's status picker.
   get _statusMeta() {
@@ -692,6 +710,8 @@ const Leads = {
     // Texting does NOT move the stage — the owner advances leads explicitly
     // (a stray auto-move here was silently reshuffling the pipeline).
     _cpSms(l.phone, body);
+    // Touch stamp: today's reached-out leads sink below the untouched ones.
+    db.leads.note(id, 'Texted').catch(() => {});
   },
 
   async convert(id) {

@@ -253,8 +253,9 @@ const Response = {
     if (!body.trim()) return;
     _cpSms(l.phone, body.trim());
     Modal.close();
-    // No auto status move — "Mark responded" is its own explicit button, so a
-    // sent text never silently reshuffles the pipeline.
+    // Touch stamp (sinks the lead in today's lists) — but no auto status move:
+    // "Mark responded" is its own explicit button.
+    db.leads.note(id, 'Texted').catch(() => {});
     this.render();
   },
 

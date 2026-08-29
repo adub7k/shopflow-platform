@@ -14,7 +14,13 @@ const { sendPush } = require('./push-instance');
 
 // Canonical phone identity: last 10 digits. "+1 (505) 555-0129",
 // "505-555-0129" and "15055550129" all produce the same key.
-const phoneKey = (p) => String(p || '').replace(/\D/g, '').slice(-10);
+// A number with FEWER than 10 digits has no key — short/junk placeholders
+// ("0", "1234567", blank test leads) must never match EACH OTHER, or different
+// people get folded into one record.
+const phoneKey = (p) => {
+  const d = String(p || '').replace(/\D/g, '');
+  return d.length >= 10 ? d.slice(-10) : '';
+};
 
 // How long after alerting on a lead a re-submit of the same lead stays quiet.
 // Covers the site's two-stage post (partial + final) and integration retries;

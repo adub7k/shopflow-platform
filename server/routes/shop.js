@@ -1315,7 +1315,8 @@ router.post('/api/shop/leads/:id/convert', requireAuth, requireRole('full','tech
   if (!lead) return res.status(404).json({ ok:false, error:'Lead not found' });
   let cust = lead.customerId ? h.getById('customers', lead.customerId) : null;
   if (!cust) {
-    const digits = String(lead.phone||'').replace(/\D/g,'').slice(-10);
+    const digitsAll = String(lead.phone||'').replace(/\D/g,'');
+    const digits = digitsAll.length >= 10 ? digitsAll.slice(-10) : '';   // junk/short phones never match
     cust = h.getAll('customers').find(c => String(c.phone||'').replace(/\D/g,'').slice(-10) === digits && digits);
   }
   if (!cust) {

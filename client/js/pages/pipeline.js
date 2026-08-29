@@ -133,12 +133,15 @@ const Pipeline = {
     const byStage = {};
     stages.forEach(s => { byStage[s.key] = []; });
     leads.forEach(l => byStage[this._stage(l).key].push(l));
-    // Active columns: needs-follow-up first, then longest-waiting (FIFO).
+    // Active columns: anyone already reached out to TODAY sinks to the bottom;
+    // above them, needs-follow-up first, then longest-waiting (FIFO).
     // Terminal columns: most recent first.
     stages.forEach(s => {
       byStage[s.key].sort(s.terminal
         ? (a, b) => this._ageMin(a) - this._ageMin(b)
         : (a, b) => {
+            const ta = Leads.touchedToday(a) ? 1 : 0, tb = Leads.touchedToday(b) ? 1 : 0;
+            if (ta !== tb) return ta - tb;
             const oa = this._dueState(a) === 'over', ob = this._dueState(b) === 'over';
             if (oa !== ob) return oa ? -1 : 1;
             return this._ageMin(b) - this._ageMin(a);
@@ -221,7 +224,12 @@ const Pipeline = {
       for (let i = 1; i < entries.length; i++) if (a >= entries[i].day) idx = i;
       buckets[idx].push(l);
     });
-    buckets.forEach(b => b.sort((x, y) => this._leadAgeDays(y) - this._leadAgeDays(x)));
+    // Reached-out-today leads sink; the untouched oldest sit on top.
+    buckets.forEach(b => b.sort((x, y) => {
+      const tx = Leads.touchedToday(x) ? 1 : 0, ty = Leads.touchedToday(y) ? 1 : 0;
+      if (tx !== ty) return tx - ty;
+      return this._leadAgeDays(y) - this._leadAgeDays(x);
+    }));
 
     const jump = entries.map((e, i) => `<button class="pipe-jump-pill" onclick="Pipeline.jumpTo('day-${i}')">
         Day ${e.day}${i === entries.length - 1 ? '+' : ''}
@@ -382,6 +390,8 @@ const Pipeline = {
     const first = String(l.name || '').trim().split(/\s+/)[0];
     const shop = (Shop.settings && Shop.settings.shopName) || '';
     _cpSms(l.phone, `Hey${first ? ' ' + first : ''}! This is ${shop || 'us'} — thanks for reaching out. When works for a quick call about your vehicle?`);
+    // Touch stamp: today's reached-out leads sink below the untouched ones.
+    db.leads.note(id, 'Texted').catch(() => {});
   },
 
   async advance(id, btn) {
