@@ -334,7 +334,10 @@ const Leads = {
       // New notes from someone else while THIS lead is still the open modal →
       // repaint it, preserving a half-typed note draft.
       if (this._openId === id && fresh && document.getElementById('lead-note-new') && JSON.stringify(fresh.noteLog || []) !== beforeNotes) {
-        const draft = document.getElementById('lead-note-new')?.value;
+        // Only carry a note draft over if the box belonged to THIS lead — a
+        // stale previous modal's half-typed note must not land on this one.
+        const box0 = document.getElementById('lead-note-new');
+        const draft = (box0 && box0.dataset.lead === id) ? box0.value : '';
         this.open(id);
         const box = document.getElementById('lead-note-new'); if (box && draft) box.value = draft;
       }
@@ -424,7 +427,7 @@ const Leads = {
 
       <div class="form-group">
         <label class="form-label">Name</label>
-        <input class="form-input" id="lead-name" value="${esc(l.name||'')}" placeholder="Add a name…"/>
+        <input class="form-input" id="lead-name" data-lead="${l.id}" value="${esc(l.name||'')}" placeholder="Add a name…"/>
       </div>
 
       <div class="form-group">
@@ -463,7 +466,7 @@ const Leads = {
       <div class="form-group">
         <label class="form-label">Notes</label>
         <div style="display:flex;gap:8px;align-items:flex-end;">
-          <textarea class="form-input" id="lead-note-new" rows="2" placeholder="Add a note…" style="flex:1;"></textarea>
+          <textarea class="form-input" id="lead-note-new" data-lead="${l.id}" rows="2" placeholder="Add a note…" style="flex:1;"></textarea>
           <button class="btn" onclick="Leads.addNote('${l.id}')">Save note</button>
         </div>
         ${this._noteHistory(l)}
@@ -699,8 +702,13 @@ const Leads = {
   // Pull the current modal field values into the in-memory lead so a re-render
   // (or a convert) doesn't lose what the user just typed.
   _captureModalEdits(l) {
+    // The modal-box DOM persists after Modal.close (close only hides the
+    // overlay), so a leftover lead-name field can belong to a PREVIOUSLY
+    // viewed lead. Capture ONLY fields stamped with this lead's id —
+    // otherwise merely browsing A→B copied A's name/quote/source onto B.
     const nameEl = document.getElementById('lead-name');
-    if (nameEl) l.name = nameEl.value;
+    if (!nameEl || nameEl.dataset.lead !== l.id) return;
+    l.name = nameEl.value;
     const qEl = document.getElementById('lead-quoted');
     if (qEl) { const v = parseFloat(qEl.value); l.quotedAmount = (Number.isFinite(v) && v > 0) ? v : null; }
     const lrEl = document.getElementById('lead-lost-reason');
@@ -710,7 +718,12 @@ const Leads = {
 
   async save(id) {
     const l = this._leads.find(x => x.id === id); if (!l) return;
-    const name = document.getElementById('lead-name')?.value || '';
+    // Never persist fields from a modal that wasn't rendered for THIS lead —
+    // the modal-box DOM outlives Modal.close, and a stale previous modal here
+    // would overwrite this lead's name/quote/source with another lead's.
+    const nameEl = document.getElementById('lead-name');
+    if (!nameEl || nameEl.dataset.lead !== id) { toast('Reopen this lead to save', 'warning'); return; }
+    const name = nameEl.value || '';
     const qv = parseFloat(document.getElementById('lead-quoted')?.value);
     const source = this._sourceValue(l.source);
     try {
