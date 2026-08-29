@@ -58,6 +58,27 @@ app.use(express.json({
   },
 }));
 app.use(express.urlencoded({ extended: false })); // Twilio webhooks POST form-encoded
+
+// ── Build marker ──────────────────────────────────────────────────────────────
+// /js/build.js carries the deployed git sha into the client. It deliberately
+// lives under /js/ so the service worker handles it exactly like every other
+// script — if a device shows a stale sha here, its SW is serving stale code.
+const BUILD = (() => {
+  let sha = (process.env.RAILWAY_GIT_COMMIT_SHA || '').slice(0, 7);
+  if (!sha) {
+    try { sha = require('child_process').execSync('git rev-parse --short HEAD', { cwd: __dirname }).toString().trim(); }
+    catch { sha = 'dev'; }
+  }
+  return { sha, at: new Date().toISOString() };
+})();
+app.get('/js/build.js', (req, res) => {
+  // no-cache (not no-store): the SW may keep a copy as its offline fallback,
+  // but the browser must revalidate on every load.
+  res.set('Content-Type', 'application/javascript');
+  res.set('Cache-Control', 'no-cache');
+  res.send(`window.__BUILD__=${JSON.stringify(BUILD)};`);
+});
+
 app.use(express.static(CLIENT_DIR));
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '30d' }));
 app.use('/api', rateLimit({ windowMs: 60000, max: 500 }));

@@ -67,6 +67,7 @@
         <button class="btn btn-sm" onclick="Auth.logout()" title="Sign out">Sign out</button>
       </div>
       Powered by <strong style="color:var(--green-deep);">ShopFlow</strong>
+      <div id="build-tag" style="font-size:10px;color:var(--faint);margin-top:5px;font-family:ui-monospace,monospace;"></div>
     </div>
   </div>
 
@@ -129,6 +130,7 @@
 <!-- Toast -->
 <div id="toast"></div>
 
+<script src="/js/build.js"></script>
 <script src="/js/api.js"></script>
 <script>if(!localStorage.getItem("sf_token")){try{sessionStorage.setItem("sf_next",location.pathname+location.search);}catch(e){}window.location.href="/login";}</script>
 <script src="/js/utils.js"></script>

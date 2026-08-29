@@ -79,6 +79,19 @@ const App = {
 document.addEventListener('DOMContentLoaded', async () => {
   // PWA service worker: offline shell + web-push notifications (sw-push.js).
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+  // Build marker — proves WHICH js the device is actually running (the stale-SW
+  // saga). window.__BUILD__ comes from /js/build.js (deploy sha, served through
+  // the same SW path as all other scripts). Shown in the sidebar footer + logged.
+  // A stale device shows an old sha, an old shopflow-v* cache name, or an empty
+  // footer tag (this very code missing).
+  (async () => {
+    const b = window.__BUILD__ || {};
+    let cacheNames = '';
+    try { cacheNames = (await caches.keys()).filter(k => k.startsWith('shopflow')).join(','); } catch {}
+    console.log('[ShopFlow build] sha=' + (b.sha || 'MISSING') + ' deployed=' + (b.at || '?') + ' caches=' + (cacheNames || 'none'));
+    const el = document.getElementById('build-tag');
+    if (el) el.textContent = (b.sha || 'build?') + (cacheNames ? ' · ' + cacheNames.replace(/shopflow-/g, 'sw ') : '');
+  })();
   try {
     // Load settings + industry profile (vocabulary, custom fields, statuses)
     const s = await db.settings.get();

@@ -66,6 +66,7 @@
         <button class="btn btn-sm" onclick="Auth.logout()" title="Sign out">Sign out</button>
       </div>
       <div style="font-size:11px;color:var(--faint);">Powered by <strong style="color:var(--green);">ShopFlow</strong></div>
+      <div id="build-tag" style="font-size:10px;color:var(--faint);margin-top:5px;font-family:ui-monospace,monospace;"></div>
     </div>
   </div>
 
@@ -128,6 +129,7 @@
 <!-- Toast -->
 <div id="toast"></div>
 
+<script src="/js/build.js"></script>
 <script src="/js/api.js"></script>
 <script>if(!localStorage.getItem("sf_token")){window.location.href="/login";}</script>
 <script src="/js/utils.js"></script>
