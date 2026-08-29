@@ -77,10 +77,13 @@ const Pipeline = {
     return true;
   },
 
-  // Minutes the lead has sat in its current stage. stageChangedAt is stamped
-  // server-side on every status change; older leads fall back to last contact.
+  // Minutes since the lead was last WORKED in its current stage: the later of
+  // entering the stage (stageChangedAt) and the owner's last touch
+  // (followTouchAt — stamped by note saves, day-texts, and sequence sends), so
+  // handling a lead resets its "late" flag without moving it. Older leads fall
+  // back to last contact.
   _ageMin(l) {
-    const t = l.stageChangedAt || l.lastContactAt || l.createdAt;
+    const t = [l.stageChangedAt, l.followTouchAt].filter(Boolean).sort().pop() || l.lastContactAt || l.createdAt;
     return t ? Math.max(0, (Date.now() - new Date(t)) / 60000) : 0;
   },
   _fmtAge(min) {

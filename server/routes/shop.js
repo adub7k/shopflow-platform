@@ -1269,7 +1269,11 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   // lead. Owner-side send times live in followUp.log / dripLog / noteLog.
   if (req.body.followUp !== undefined) {
     const fu = cleanFollowUp(req.body.followUp);
-    if (fu) lead.followUp = fu;
+    if (fu) {
+      // A grown log = a sequence text went out → reset the "late" timer too.
+      if (fu.log.length > ((lead.followUp || {}).log || []).length) lead.followTouchAt = new Date().toISOString();
+      lead.followUp = fu;
+    }
   }
   // By-day follow-up bookkeeping: the owner tapped the day-N text button (the
   // sms: deep link opened Messages prefilled on their phone). Stamps the marker
@@ -1281,7 +1285,8 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
       lead.dripLog = lead.dripLog || {};
       lead.dripLog['d' + d] = now;
       // No lastContactAt bump — owner touches must not reorder the Leads list
-      // (see the followUp comment above).
+      // (see the followUp comment above). followTouchAt resets the "late" timer.
+      lead.followTouchAt = now;
       lead.noteLog = lead.noteLog || [];
       lead.noteLog.unshift({ id: genId('note'), text: `Day-${d} follow-up text sent`, at: now, by: String(req.body.by || '').slice(0, 60) });
     }
@@ -1300,6 +1305,9 @@ router.post('/api/shop/leads/:id/note', requireAuth, requireRole('full','technic
   if (!text) return res.status(400).json({ ok:false, error:'Note is empty' });
   lead.noteLog = lead.noteLog || [];
   lead.noteLog.unshift({ id: genId('note'), text, at: new Date().toISOString(), by: String(req.body.by || '').slice(0, 60) });
+  // Saving a note = the owner worked this lead → reset the board's follow-up
+  // ("late") timer. Deliberately NOT lastContactAt (customer-only clock).
+  lead.followTouchAt = new Date().toISOString();
   h.upsert('leads', lead);
   res.json({ ok:true, noteLog: lead.noteLog });
 }));
