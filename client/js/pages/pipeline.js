@@ -328,6 +328,7 @@ const Pipeline = {
         ${ageChip}
       </div>
       <div class="pipe-card-sub">${tag}<span class="t" title="${esc(sub)}">${esc(sub)}</span>${money}</div>
+      ${stage.fixed === 'lost' && l.lostReason ? `<div style="font-size:11px;color:var(--muted);margin-top:3px;font-style:italic;">✗ ${esc(l.lostReason)}</div>` : ''}
       <div class="pipe-card-actions">${actions}</div>
     </div>`;
   },
@@ -409,16 +410,53 @@ const Pipeline = {
     await this._setStatus(l, prev.key, `${esc(l.name || l.phone || 'Lead')} back to ${esc(prev.label)}`, btn);
   },
 
-  async markLost(id) {
-    if (!confirm('Mark this lead as lost?')) return;
-    const l = this._leads.find(x => x.id === id);
-    if (l) await this._setStatus(l, 'lost', 'Marked lost');
+  // Marking lost asks WHY — the reasons roll up into a loss report, which is
+  // the difference between "we lose leads" and "we lose leads on price".
+  LOST_REASONS: ['Too expensive', 'Went with someone else', 'No response / ghosted', 'Bad timing', 'Changed their mind'],
+  _lostModal(count, onConfirm) {
+    this._lostCb = onConfirm; this._lostSel = null;
+    Modal.show(`
+      <div class="modal-title">Mark ${count > 1 ? count + ' leads' : 'lead'} lost</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">Why? One tap — this feeds your loss-reason report.</div>
+      <div id="lost-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;">
+        ${this.LOST_REASONS.map(r => `<button class="btn btn-sm" data-reason="${esc(r)}" onclick="Pipeline._pickLost(this)">${esc(r)}</button>`).join('')}
+      </div>
+      <input class="form-input" id="lost-other" placeholder="Or type your own reason…" style="margin-bottom:12px;" oninput="Pipeline._clearLostPick()"/>
+      <div class="modal-actions">
+        <button class="btn btn-danger btn-full" onclick="Pipeline._confirmLost()">Mark lost</button>
+        <button class="btn btn-full" onclick="Pipeline._lostCancel()">Cancel</button>
+      </div>`);
+  },
+  // Cancel returns to the clean-out list when one was open (its modal was
+  // replaced by this one); otherwise just closes.
+  _lostCancel() { this._lostCb = null; if (this._cl) this._clRender(); else Modal.close(); },
+  _pickLost(btn) {
+    this._lostSel = btn.dataset.reason;
+    document.querySelectorAll('#lost-chips .btn').forEach(b => { b.style.background = b === btn ? 'var(--green)' : ''; b.style.color = b === btn ? '#fff' : ''; });
+    const o = document.getElementById('lost-other'); if (o) o.value = '';
+  },
+  _clearLostPick() {
+    this._lostSel = null;
+    document.querySelectorAll('#lost-chips .btn').forEach(b => { b.style.background = ''; b.style.color = ''; });
+  },
+  _confirmLost() {
+    const other = (document.getElementById('lost-other')?.value || '').trim();
+    const reason = other || this._lostSel || '';
+    Modal.close();
+    const cb = this._lostCb; this._lostCb = null;
+    if (cb) cb(reason);
   },
 
-  async _setStatus(l, status, msg, btn) {
+  markLost(id) {
+    const l = this._leads.find(x => x.id === id);
+    if (!l) return;
+    this._lostModal(1, (reason) => this._setStatus(l, 'lost', 'Marked lost', null, reason ? { lostReason: reason } : {}));
+  },
+
+  async _setStatus(l, status, msg, btn, extra) {
     if (btn) btn.disabled = true;
     try {
-      await db.leads.update(l.id, { status });
+      await db.leads.update(l.id, Object.assign({ status }, extra || {}));
       toast(msg);
     } catch (e) {
       toast(e.message || 'Could not update lead', 'error');
@@ -557,7 +595,12 @@ const Pipeline = {
     const s = this.stages().find(x => x.key === to);
     return this._clApply(ids => db.leads.bulkStatus(ids, to), 'moved to ' + ((s && s.label) || to));
   },
-  clLost() { return this._clApply(ids => db.leads.bulkStatus(ids, 'lost'), 'marked lost'); },
+  clLost() {
+    const n = this._cl.sel.size; if (!n) return;
+    // One shared reason for the whole swept batch (these are usually ghosts).
+    this._lostModal(n, (reason) =>
+      this._clApply(ids => db.leads.bulkStatus(ids, 'lost', reason || null), 'marked lost'));
+  },
   clDelete() {
     const n = this._cl.sel.size;
     if (!n) return;

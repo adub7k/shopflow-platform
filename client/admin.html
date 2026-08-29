@@ -393,6 +393,8 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         </div>
         <div style="display:flex;align-items:center;gap:12px;">
           <span id="overview-sms-status" style="font-size:12px;color:var(--muted);white-space:nowrap;"></span>
+          <button class="btn btn-outline btn-sm" onclick="exportShopsCsv()">⬇ CSV</button>
+          <button class="btn btn-green btn-sm" id="report-btn" onclick="openBusinessReport()">📄 Business report</button>
           <button class="btn btn-outline btn-sm" onclick="refreshAll()">↻ Refresh</button>
         </div>
       </div>
@@ -1366,6 +1368,10 @@ function renderDrawer(d) {
                   <span style="font-size:11.5px;font-weight:700;width:24px;text-align:right;">${count}</span>
                 </div>`).join('')}
             </div>`:''}
+            ${Object.keys(L.lostReasons||{}).length?`<div style="margin-top:12px;">
+              <div style="font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Why leads were lost</div>
+              ${Object.entries(L.lostReasons).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([r,c])=>`<div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:2px 0;"><span style="color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r)}</span><b>${c}</b></div>`).join('')}
+            </div>`:''}
           </div>
         </div>
 
@@ -1856,6 +1862,107 @@ function renderBilling() {
       <div class="plan-rev">${pct}%</div>
     </div>`;
   }).join('') : '<div class="empty-state">No active shops yet.</div>';
+}
+
+// ── Business report + CSV export ──────────────────────────────────────────────
+// Pulls stats + every shop's insights and renders a clean printable report in a
+// new tab (browser print → PDF). CSV is the same book-of-business as a sheet.
+async function _reportData() {
+  const [stats, shops] = await Promise.all([
+    fetch('/api/admin/stats', { headers: { 'x-admin-key': adminKey } }).then(r => r.json()),
+    fetch('/api/admin/shops', { headers: { 'x-admin-key': adminKey } }).then(r => r.json()),
+  ]);
+  const profiles = await Promise.all(shops.map(s =>
+    fetch('/api/admin/shop/' + s.id, { headers: { 'x-admin-key': adminKey } }).then(r => r.json()).catch(() => null)));
+  return { stats, shops, profiles };
+}
+async function openBusinessReport() {
+  const btn = document.getElementById('report-btn'); if (btn) { btn.disabled = true; btn.textContent = 'Building…'; }
+  try {
+    const { stats: d, shops, profiles } = await _reportData();
+    const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+    const lossAll = {};
+    profiles.forEach(p => { const lr = p && p.insights && p.insights.leads && p.insights.leads.lostReasons || {}; Object.entries(lr).forEach(([r, c]) => { lossAll[r] = (lossAll[r] || 0) + c; }); });
+    const planRows = Object.entries(d.planStats || {}).sort((a, b) => b[1].revenue - a[1].revenue)
+      .map(([p, v]) => `<tr><td>${esc(p)}</td><td class="r">${v.count}</td><td class="r">$${fmt(v.revenue)}/mo</td></tr>`).join('');
+    const shopRows = shops.map(s => {
+      const p = profiles.find(x => x && x.shop && x.shop.id === s.id);
+      const ins = (p && p.insights) || {}; const L = ins.leads || {}, R = ins.revenue || {}, F = ins.forecast || {}, Qo = ins.quota || {};
+      return `<tr>
+        <td><b>${esc(s.shopName)}</b><div class="sub">${esc(s.plan || '')} · ${s.active ? 'active' : 'inactive'}</div></td>
+        <td class="r">${fmtRate(effRate(s))}</td>
+        <td class="r">$${fmt(R.thisMonth || 0)}</td>
+        <td class="r">${Qo.pct != null ? Qo.pct + '%' : '—'}</td>
+        <td class="r">${L.thisMonth != null ? L.thisMonth : '—'}</td>
+        <td class="r">${L.conversionRate != null ? L.conversionRate + '%' : '—'}</td>
+        <td class="r">$${fmt(F.total || 0)}</td>
+        <td class="r">${s.lastActivity ? relTime(s.lastActivity) : 'never'}</td>
+      </tr>`;
+    }).join('');
+    const lossRows = Object.entries(lossAll).sort((a, b) => b[1] - a[1]).slice(0, 10)
+      .map(([r, c]) => `<tr><td>${esc(r)}</td><td class="r">${c}</td></tr>`).join('');
+    const w = window.open('', '_blank');
+    w.document.write(`<!DOCTYPE html><html><head><title>ShopFlow — Business Report</title><style>
+      body{font-family:-apple-system,'SF Pro Text','Segoe UI',sans-serif;color:#141F1A;max-width:820px;margin:0 auto;padding:40px 28px;font-variant-numeric:tabular-nums;}
+      h1{font-size:24px;letter-spacing:-.02em;margin:0;}
+      .date{color:#93A29A;font-size:13px;margin:4px 0 28px;}
+      h2{font-size:14px;text-transform:uppercase;letter-spacing:.07em;color:#5C6B63;margin:30px 0 10px;border-bottom:2px solid #065F41;padding-bottom:6px;}
+      .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+      .kpi{border:1px solid #E5EAE7;border-radius:10px;padding:12px 14px;}
+      .kpi .l{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#93A29A;font-weight:600;}
+      .kpi .v{font-size:21px;font-weight:700;margin-top:3px;}
+      .kpi .v.g{color:#065F41;}
+      table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px;}
+      th{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:#93A29A;text-align:left;padding:7px 8px;border-bottom:1px solid #D7DEDA;}
+      th.r,td.r{text-align:right;}
+      td{padding:8px;border-bottom:1px solid #EEF2F0;vertical-align:top;}
+      td .sub{font-size:11px;color:#93A29A;}
+      .foot{margin-top:34px;font-size:11px;color:#93A29A;text-align:center;}
+      @media print{body{padding:0;} .kpis{grid-template-columns:repeat(4,1fr);}}
+    </style></head><body>
+      <h1>ShopFlow — Business Report</h1>
+      <div class="date">Generated ${esc(today)}</div>
+      <div class="kpis">
+        <div class="kpi"><div class="l">MRR</div><div class="v g">$${fmt(d.mrr)}</div></div>
+        <div class="kpi"><div class="l">ARR</div><div class="v">$${fmt(d.arr)}</div></div>
+        <div class="kpi"><div class="l">Goal progress</div><div class="v">${d.mrrPct || 0}%<span style="font-size:12px;color:#93A29A;"> of $${fmtK(d.mrrGoal)}</span></div></div>
+        <div class="kpi"><div class="l">Active shops</div><div class="v">${d.activeShops}</div></div>
+        <div class="kpi"><div class="l">New MRR (mo)</div><div class="v g">+$${fmt(d.newMrrThisMonth || 0)}</div></div>
+        <div class="kpi"><div class="l">Avg / shop</div><div class="v">$${fmt(d.avgMrr || 0)}</div></div>
+        <div class="kpi"><div class="l">Churn</div><div class="v">${d.churnRate || 0}%</div></div>
+        <div class="kpi"><div class="l">Est. LTV</div><div class="v">$${fmtK(d.ltv || 0)}</div></div>
+      </div>
+      <h2>Revenue by plan</h2>
+      <table><thead><tr><th>Plan</th><th class="r">Shops</th><th class="r">MRR</th></tr></thead><tbody>${planRows || '<tr><td colspan="3">No active shops.</td></tr>'}</tbody></table>
+      <h2>Book of business</h2>
+      <table><thead><tr><th>Shop</th><th class="r">Rate</th><th class="r">Their rev (mo)</th><th class="r">Quota</th><th class="r">Leads (mo)</th><th class="r">Conv.</th><th class="r">Forecast</th><th class="r">Last active</th></tr></thead>
+      <tbody>${shopRows}</tbody></table>
+      ${lossRows ? `<h2>Why leads are lost (all shops)</h2>
+      <table><thead><tr><th>Reason</th><th class="r">Leads</th></tr></thead><tbody>${lossRows}</tbody></table>` : ''}
+      <div class="foot">ShopFlow · confidential · use your browser's Print → Save as PDF</div>
+      <script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
+    </body></html>`);
+    w.document.close();
+  } catch (e) { toast('Could not build the report'); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '📄 Business report'; } }
+}
+async function exportShopsCsv() {
+  try {
+    const { shops, profiles } = await _reportData();
+    const esc_csv = (v) => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const rows = [['Shop', 'Plan', 'Status', 'Monthly rate', 'Revenue this month', 'Quota', 'Quota %', 'Leads this month', 'Leads total', 'Conversion %', 'Avg response (min)', 'Forecast', 'Clients', 'Appointments', 'Joined', 'Last active']];
+    shops.forEach(s => {
+      const p = profiles.find(x => x && x.shop && x.shop.id === s.id);
+      const ins = (p && p.insights) || {}; const L = ins.leads || {}, R = ins.revenue || {}, F = ins.forecast || {}, Qo = ins.quota || {};
+      rows.push([s.shopName, s.plan || '', s.active ? 'active' : 'inactive', effRate(s), R.thisMonth || 0, Qo.monthly || '', Qo.pct != null ? Qo.pct : '', L.thisMonth != null ? L.thisMonth : '', L.total || 0, L.conversionRate != null ? L.conversionRate : '', L.avgResponseMins != null ? L.avgResponseMins : '', F.total || 0, s.customers, s.appointments, (s.createdAt || '').slice(0, 10), (s.lastActivity || '').slice(0, 10)]);
+    });
+    const csv = rows.map(r => r.map(esc_csv).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = 'shopflow-business-' + new Date().toISOString().slice(0, 10) + '.csv';
+    a.click(); URL.revokeObjectURL(a.href);
+    toast('CSV exported ✓');
+  } catch (e) { toast('Could not export CSV'); }
 }
 
 // ── Feature toggles ───────────────────────────────────────────────────────────

@@ -235,6 +235,9 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   const quota = Number(shop.monthlyQuota) || 0;
   const sources = {};
   leads.forEach(l => { const src = l.channel || l.source || 'call'; sources[src] = (sources[src] || 0) + 1; });
+  // Why leads die — tallied from the reasons picked when marking lost.
+  const lostReasons = {};
+  leads.forEach(l => { if (l.lostReason) lostReasons[l.lostReason] = (lostReasons[l.lostReason] || 0) + 1; });
 
   const insights = {
     leads: {
@@ -242,7 +245,7 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
       converted: leads.filter(leadWon).length,
       conversionRate: leads.length ? Math.round(leads.filter(leadWon).length / leads.length * 100) : null,
       avgResponseMins: respTimes.length ? Math.round(respTimes.reduce((a, b) => a + b, 0) / respTimes.length) : null,
-      sources,
+      sources, lostReasons,
       callsThisMonth: calls.filter(c => (c.startedAt || '').startsWith(thisMonth)).length,
     },
     revenue: { thisMonth: revenueThisMonth, lastMonth: revenueLastMonth },

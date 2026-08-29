@@ -1097,6 +1097,9 @@ function applyLeadStatus(lead, status) {
     lead.stageLog = lead.stageLog || [];
     lead.stageLog.push({ from: prevStage, to: status, at: now });
     if (status === 'closed' && !lead.closedAt) lead.closedAt = now;
+    // Lost stamps; a reopened lead sheds them so old reasons don't haunt it.
+    if (status === 'lost' && !lead.lostAt) lead.lostAt = now;
+    if (prevStage === 'lost' && status !== 'lost') { lead.lostAt = null; lead.lostReason = null; }
     // Booking/losing a lead ends its 30-day follow-up sequence automatically
     // (built-in stage keys; custom won stages are hidden from the queue by the
     // client's chaseable check either way). Manually resumable from the modal.
@@ -1138,10 +1141,12 @@ router.post('/api/shop/leads/bulk-status', requireAuth, requireRole('full','tech
   const ids = Array.isArray(req.body.ids) ? req.body.ids.slice(0, 500) : [];
   const status = req.body.status;
   if (!ids.length || !shopStageKeys(db).has(status)) return res.status(400).json({ ok:false, error:'Bad request' });
+  // A bulk mark-lost sweep can carry one shared reason for the whole batch.
+  const lostReason = status === 'lost' && req.body.lostReason ? String(req.body.lostReason).trim().slice(0, 200) : null;
   let updated = 0;
   ids.forEach(id => {
     const lead = h.getById('leads', id);
-    if (lead) { applyLeadStatus(lead, status); h.upsert('leads', lead); updated++; }
+    if (lead) { if (lostReason) lead.lostReason = lostReason; applyLeadStatus(lead, status); h.upsert('leads', lead); updated++; }
   });
   res.json({ ok:true, updated });
 }));
@@ -1237,6 +1242,8 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   const { name, status, notes } = req.body;
   if (name   !== undefined) lead.name = String(name).slice(0,80);
   if (notes  !== undefined) lead.notes = String(notes).slice(0,2000);
+  // Why the lead died — picked when marking lost; feeds the loss-reason report.
+  if (req.body.lostReason !== undefined) lead.lostReason = req.body.lostReason === null ? null : String(req.body.lostReason).trim().slice(0,200);
   // Source is editable so mis-attributed leads (e.g. a Meta lead that came in
   // as a bare call) can be fixed — it drives the channel split + Meta filter.
   // utm.source is kept in sync so both attribution reads stay coherent.

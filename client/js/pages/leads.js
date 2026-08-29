@@ -363,6 +363,7 @@ const Leads = {
       <div class="form-group">
         <label class="form-label">Status</label>
         <div class="lead-status-row">${statusPills}</div>
+        ${l.status==='lost'?`<div style="margin-top:8px;"><input class="form-input" id="lead-lost-reason" placeholder="Why was it lost? — price, ghosted, went elsewhere…" value="${esc(l.lostReason||'')}"/><div style="font-size:11px;color:var(--faint);margin-top:4px;">Saved with the lead — feeds your loss-reason report.</div></div>`:''}
       </div>
 
       <div class="form-group">
@@ -628,6 +629,8 @@ const Leads = {
     if (nameEl) l.name = nameEl.value;
     const qEl = document.getElementById('lead-quoted');
     if (qEl) { const v = parseFloat(qEl.value); l.quotedAmount = (Number.isFinite(v) && v > 0) ? v : null; }
+    const lrEl = document.getElementById('lead-lost-reason');
+    if (lrEl) l.lostReason = lrEl.value.trim() || null;
     l.source = this._sourceValue(l.source);
   },
 
@@ -639,7 +642,9 @@ const Leads = {
     try {
       // Notes are saved per-entry via addNote — never send `notes` here, or a
       // blank value would wipe a pre-history lead's legacy free-text notes.
-      await db.leads.update(id, { name, status: l.status, source, quotedAmount: (Number.isFinite(qv) && qv > 0) ? qv : null });
+      const lr = document.getElementById('lead-lost-reason');
+      await db.leads.update(id, { name, status: l.status, source, quotedAmount: (Number.isFinite(qv) && qv > 0) ? qv : null,
+        ...(l.status === 'lost' && lr ? { lostReason: lr.value.trim() || null } : {}) });
       Modal.close(); toast('Lead saved ✓'); this.render();
     } catch(e) { toast(e.message || 'Could not save', 'error'); }
   },
