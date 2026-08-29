@@ -203,7 +203,7 @@ const Leads = {
     // instead of the hidden list.
     if (typeof Pipeline !== 'undefined' && Pipeline.isActive()) return Pipeline.render();
     const el = document.getElementById('page-leads'); if (!el) return;
-    try { this._leads = await db.leads.all(); } catch(e) { this._leads = []; }
+    try { this._leads = await db.leads.all(); this._fetchedAt = Date.now(); } catch(e) { this._leads = []; }
 
     const counts = { all: this._leads.length };
     Object.keys(this._statusMeta).forEach(k => { counts[k] = 0; });
@@ -281,8 +281,41 @@ const Leads = {
 
   setFilter(f) { this._filter = f; this.render(); },
 
+  // Opening a lead tops up from the server in the background: notes (and other
+  // team activity) added on ANOTHER device/user must show up here, not just for
+  // whoever wrote them. The app is a PWA that stays open for days — without
+  // this, the in-memory list a modal renders from can be ancient.
+  async _freshen(id) {
+    if (Date.now() - (this._fetchedAt || 0) < 8000) return; // just fetched
+    try {
+      const cur = this._leads.find(x => x.id === id);
+      const beforeNotes = cur ? JSON.stringify(cur.noteLog || []) : '';
+      if (cur && document.getElementById('lead-name')) this._captureModalEdits(cur); // keep typing
+      const list = await db.leads.all();
+      this._fetchedAt = Date.now();
+      const fresh = list.find(x => x.id === id);
+      if (fresh && cur) {
+        // The open modal's unsaved intent wins over the server copy while editing.
+        fresh.name = cur.name || fresh.name;
+        if (cur.quotedAmount != null) fresh.quotedAmount = cur.quotedAmount;
+        fresh.source = cur.source || fresh.source;
+        fresh.status = cur.status || fresh.status;
+        if (cur.lostReason != null) fresh.lostReason = cur.lostReason;
+      }
+      this._leads = list;
+      // New notes from someone else while this lead is open → repaint the modal,
+      // preserving a half-typed note draft.
+      if (fresh && document.getElementById('lead-note-new') && JSON.stringify(fresh.noteLog || []) !== beforeNotes) {
+        const draft = document.getElementById('lead-note-new')?.value;
+        this.open(id);
+        const box = document.getElementById('lead-note-new'); if (box && draft) box.value = draft;
+      }
+    } catch (e) {}
+  },
+
   open(id) {
     const l = this._leads.find(x => x.id === id); if (!l) return;
+    this._freshen(id); // background top-up; repaints if teammates added notes
     const m = this._statusMeta[l.status] || this._statusMeta.new;
     const name = l.name || l.phone || 'Unknown caller';
     // Owner's saved quick-reply presets (Settings → Message Templates), shared
