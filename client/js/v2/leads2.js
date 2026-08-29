@@ -213,13 +213,12 @@
 
     let rows = leads.slice();
     if (this._statusFilter2 !== 'all') rows = rows.filter(l => colOf(l) === this._statusFilter2);
-    // Leads already reached out to TODAY sink to the bottom — the top of the
-    // list is always "who still needs me". Within each half: newest activity first.
-    rows.sort((a, b) => {
-      const ta = Leads.touchedToday(a) ? 1 : 0, tb = Leads.touchedToday(b) ? 1 : 0;
-      if (ta !== tb) return ta - tb;
-      return new Date(b.lastContactAt || b.createdAt || 0) - new Date(a.lastContactAt || a.createdAt || 0);
-    });
+    // Most recent inbound contact first (arrival time for never-recontacted
+    // leads) and NOTHING else. lastContactAt moves on customer activity only,
+    // so working the list never reshuffles it under the owner's finger — the
+    // old touched-today sink reordered rows mid-session and made "the next
+    // lead" a moving target. The ✓ today chip alone marks handled leads now.
+    rows.sort((a, b) => new Date(b.lastContactAt || b.createdAt || 0) - new Date(a.lastContactAt || a.createdAt || 0));
     this._shownIds = rows.map(l => l.id);   // Select-all operates on the filtered view
     const selMode = this._selMode;
     const rowClick = (id) => selMode ? `Leads.selToggle('${id}')` : `Leads.open('${id}')`;

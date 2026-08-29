@@ -254,7 +254,11 @@ const Leads = {
       <button class="btn" style="flex-shrink:0;font-size:12px;padding:7px 12px;" onclick="navigator.clipboard.writeText('${esc(leadUrl)}');toast('Link copied ✓')">Copy</button>
     </div>` : '';
 
-    const shown = this._filter==='all' ? this._leads : this._leads.filter(l => l.status===this._filter);
+    // Same deterministic order as the v2 list: most recent inbound contact
+    // first — owner actions never write lastContactAt, so the order is stable
+    // while working the list.
+    const shown = (this._filter==='all' ? this._leads : this._leads.filter(l => l.status===this._filter))
+      .slice().sort((a, b) => new Date(b.lastContactAt || b.createdAt || 0) - new Date(a.lastContactAt || a.createdAt || 0));
 
     const stats = this._convStats();
     const breakdown = this._sourceBreakdown();
@@ -716,10 +720,27 @@ const Leads = {
       // must never re-send a possibly-stale in-memory status (that's what
       // silently moved leads into Worked).
       const lr = document.getElementById('lead-lost-reason');
-      await db.leads.update(id, { name, source, quotedAmount: (Number.isFinite(qv) && qv > 0) ? qv : null,
-        ...(this._pendingStatus ? { status: this._pendingStatus } : {}),
-        ...(this._pendingStatus === 'lost' && lr ? { lostReason: lr.value.trim() || null } : {}) });
-      Modal.close(); toast('Lead saved ✓'); this.render();
+      const st = this._pendingStatus;   // read before Modal.close clears it
+      const quotedAmount = (Number.isFinite(qv) && qv > 0) ? qv : null;
+      const lostReason = (st === 'lost' && lr) ? (lr.value.trim() || null) : undefined;
+      await db.leads.update(id, { name, source, quotedAmount,
+        ...(st ? { status: st } : {}),
+        ...(lostReason !== undefined ? { lostReason } : {}) });
+      // Persisted — mirror the change into both in-memory caches (list + board)
+      // and repaint the board NOW. During the old await-refetch lag the moved
+      // lead's row/card was still on screen, so tapping "the next one" opened
+      // the previous lead's profile.
+      const apply = x => { if (!x) return;
+        x.name = name; x.source = source; x.quotedAmount = quotedAmount;
+        if (st) { x.status = st; x.stageChangedAt = new Date().toISOString(); }
+        if (lostReason !== undefined) x.lostReason = lostReason; };
+      apply(l);
+      Modal.close(); toast('Lead saved ✓');
+      if (typeof Pipeline !== 'undefined' && Pipeline.isActive()) {
+        apply((Pipeline._leads || []).find(x => x.id === id));
+        Pipeline.renderLocal();
+      }
+      this.render();
     } catch(e) { toast(e.message || 'Could not save', 'error'); }
   },
 

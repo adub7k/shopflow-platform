@@ -128,7 +128,20 @@ const Pipeline = {
   async render() {
     const el = document.getElementById('page-pipeline');
     if (!el) return;
-    try { this._leads = await db.leads.all(); } catch (e) { this._leads = []; }
+    // Keep the last good board on a failed refresh — blanking it mid-work is
+    // worse than briefly-stale cards.
+    try { this._leads = await db.leads.all(); } catch (e) { this._leads = this._leads || []; }
+    this._paint(el);
+  },
+  // Synchronous repaint from the in-memory leads. Called right after a modal
+  // save or one-tap move so the board reflects the change instantly — during
+  // the old await-refetch-then-paint lag, the cleared lead's card was still on
+  // screen and a tap on "the next one" opened the previous lead's profile.
+  renderLocal() {
+    const el = document.getElementById('page-pipeline');
+    if (el && this._leads) this._paint(el);
+  },
+  _paint(el) {
     if (this._view === 'days') return this._renderDays(el);
 
     const stages = this.stages();
@@ -136,19 +149,14 @@ const Pipeline = {
     const byStage = {};
     stages.forEach(s => { byStage[s.key] = []; });
     leads.forEach(l => byStage[this._stage(l).key].push(l));
-    // Active columns: anyone already reached out to TODAY sinks to the bottom;
-    // above them, needs-follow-up first, then longest-waiting (FIFO).
+    // Active columns: oldest-contacted at the top, nothing else — the order is
+    // deterministic, so it never reshuffles under the owner's finger. Working a
+    // lead re-stamps its touch time, which naturally sinks it toward the bottom.
     // Terminal columns: most recent first.
     stages.forEach(s => {
       byStage[s.key].sort(s.terminal
         ? (a, b) => this._ageMin(a) - this._ageMin(b)
-        : (a, b) => {
-            const ta = Leads.touchedToday(a) ? 1 : 0, tb = Leads.touchedToday(b) ? 1 : 0;
-            if (ta !== tb) return ta - tb;
-            const oa = this._dueState(a) === 'over', ob = this._dueState(b) === 'over';
-            if (oa !== ob) return oa ? -1 : 1;
-            return this._ageMin(b) - this._ageMin(a);
-          });
+        : (a, b) => this._ageMin(b) - this._ageMin(a));
     });
 
     const openCount = stages.filter(s => !s.terminal).reduce((n, s) => n + byStage[s.key].length, 0);
@@ -470,6 +478,10 @@ const Pipeline = {
     if (btn) btn.disabled = true;
     try {
       await db.leads.update(l.id, Object.assign({ status }, extra || {}));
+      // Persisted — mirror it locally and repaint NOW, so the card moves before
+      // the reconciling refetch (the lag window where taps hit the old card).
+      Object.assign(l, { status, stageChangedAt: new Date().toISOString() }, extra || {});
+      this.renderLocal();
       toast(msg);
     } catch (e) {
       toast(e.message || 'Could not update lead', 'error');
