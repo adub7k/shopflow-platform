@@ -303,16 +303,21 @@ const Leads = {
   // team activity) added on ANOTHER device/user must show up here, not just for
   // whoever wrote them. The app is a PWA that stays open for days — without
   // this, the in-memory list a modal renders from can be ancient.
+  // Every step below is gated on `this._openId === id` — the fetch is slow on a
+  // phone, and by the time it lands the owner may have closed this lead and
+  // opened another. Without the gate this repainted the PREVIOUS lead's modal
+  // over the new one ("taps pull up the lead I hit before") and, worse, stuffed
+  // the new modal's typed fields into the previous lead's record.
   async _freshen(id) {
     if (Date.now() - (this._fetchedAt || 0) < 8000) return; // just fetched
     try {
       const cur = this._leads.find(x => x.id === id);
       const beforeNotes = cur ? JSON.stringify(cur.noteLog || []) : '';
-      if (cur && document.getElementById('lead-name')) this._captureModalEdits(cur); // keep typing
+      if (cur && this._openId === id && document.getElementById('lead-name')) this._captureModalEdits(cur); // keep typing
       const list = await db.leads.all();
       this._fetchedAt = Date.now();
       const fresh = list.find(x => x.id === id);
-      if (fresh && cur) {
+      if (fresh && cur && this._openId === id) {
         // The open modal's unsaved intent wins over the server copy while editing.
         fresh.name = cur.name || fresh.name;
         if (cur.quotedAmount != null) fresh.quotedAmount = cur.quotedAmount;
@@ -321,9 +326,9 @@ const Leads = {
         if (cur.lostReason != null) fresh.lostReason = cur.lostReason;
       }
       this._leads = list;
-      // New notes from someone else while this lead is open → repaint the modal,
-      // preserving a half-typed note draft.
-      if (fresh && document.getElementById('lead-note-new') && JSON.stringify(fresh.noteLog || []) !== beforeNotes) {
+      // New notes from someone else while THIS lead is still the open modal →
+      // repaint it, preserving a half-typed note draft.
+      if (this._openId === id && fresh && document.getElementById('lead-note-new') && JSON.stringify(fresh.noteLog || []) !== beforeNotes) {
         const draft = document.getElementById('lead-note-new')?.value;
         this.open(id);
         const box = document.getElementById('lead-note-new'); if (box && draft) box.value = draft;
@@ -331,8 +336,13 @@ const Leads = {
     } catch (e) {}
   },
 
+  // Reopen the modal for `id` only if that lead still owns it — a slow save's
+  // trailing reopen must never resurrect a modal the owner has moved past.
+  _reopenIf(id) { if (this._openId === id) this.open(id); },
+
   open(id) {
     const l = this._leads.find(x => x.id === id); if (!l) return;
+    this._openId = id;   // this lead owns the modal until it closes or another opens
     this._freshen(id); // background top-up; repaints if teammates added notes
     const m = this._statusMeta[l.status] || this._statusMeta.new;
     const name = l.name || l.phone || 'Unknown caller';
@@ -538,11 +548,11 @@ const Leads = {
   async _fuPersist(l, msg) {
     // Preserve any half-typed modal edits, then reopen so the card reflects the
     // change (same pattern as setStatus).
-    this._captureModalEdits(l);
+    if (this._openId === l.id) this._captureModalEdits(l);
     try {
       await db.leads.update(l.id, { followUp: l.followUp });
       toast(msg);
-      this.open(l.id);
+      this._reopenIf(l.id);
     } catch (e) { toast(e.message || 'Could not update', 'error'); }
   },
 
@@ -604,9 +614,9 @@ const Leads = {
     try {
       const res = await db.leads.note(id, text);
       l.noteLog = (res && res.noteLog) || l.noteLog;
-      this._captureModalEdits(l);   // keep a half-typed name across the re-render
+      if (this._openId === id) this._captureModalEdits(l);   // keep a half-typed name across the re-render
       toast('Note saved ✓');
-      this.open(id);
+      this._reopenIf(id);
     } catch(e) { toast(e.message || 'Could not save note', 'error'); }
   },
   // Template picker → fill the Text-back box with the preset, merge fields resolved
@@ -627,7 +637,7 @@ const Leads = {
       await db.leads.aiIntake(id);
       this._leads = await db.leads.all();   // refetch so transcript + ai both show
       toast('AI analysis ready ✓');
-      this.open(id);
+      this._reopenIf(id);
     } catch(e) {
       toast(e.message || 'Could not analyze', 'error');
       if (btn) { btn.disabled = false; btn.textContent = '✨ Analyze with AI'; }
@@ -803,3 +813,10 @@ const Leads = {
     catch(e) { toast(e.message || 'Could not delete', 'error'); }
   },
 };
+
+// Any modal close (button, overlay tap, another page's flow) releases the lead
+// modal's ownership — so a slow request finishing later can never resurrect it.
+(function () {
+  const origClose = Modal.close.bind(Modal);
+  Modal.close = function () { Leads._openId = null; origClose(); };
+})();
