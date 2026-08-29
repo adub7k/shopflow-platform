@@ -1255,6 +1255,7 @@ async function openDrawer(shopId) {
 const fmtMins = (m) => m == null ? '—' : (m < 90 ? Math.round(m) + 'm' : (m / 60).toFixed(1) + 'h');
 
 function renderDrawer(d) {
+  window._profileData = d; // the client-report builder reads the open profile
   const shop = d.shop, s = d.settings, stats = d.stats;
   const appts = d.recentAppointments || [];
   const ins = d.insights || {};
@@ -1289,6 +1290,7 @@ function renderDrawer(d) {
           <div style="font-size:12.5px;color:var(--muted);margin-top:3px;">${esc(shop.email||'')}${shop.phone?' · '+esc(shop.phone):''} · <span style="font-family:monospace;font-size:11.5px;">/book/${esc(shop.slug)}</span> · joined ${fmtDate(shop.createdAt)} · last active ${shop.lastActivity?relTime(shop.lastActivity):'never'}</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-green btn-sm" onclick="openClientReport()">📄 Client report</button>
           <a href="/shop/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Open App</a>
           <a href="/book/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Booking Page</a>
           <button class="btn btn-outline btn-sm" onclick="resetPassword('${shop.id}','${esc(shop.email||'')}')">🔑 Reset</button>
@@ -1862,6 +1864,100 @@ function renderBilling() {
       <div class="plan-rev">${pct}%</div>
     </div>`;
   }).join('') : '<div class="empty-state">No active shops yet.</div>';
+}
+
+// ── Client-facing performance report ──────────────────────────────────────────
+// Built FOR the shop owner — presents the value ShopFlow is delivering (leads,
+// speed, AI-recovered revenue, what's lined up, goal pace) in their accent
+// color, print-ready to text or hand over. No internal/platform data.
+function openClientReport() {
+  const d = window._profileData; if (!d) { toast('Open a shop first'); return; }
+  const shop = d.shop, s = d.settings || {}, ins = d.insights || {};
+  const L = ins.leads || {}, R = ins.revenue || {}, F = ins.forecast || {}, Qo = ins.quota || {}, AI = ins.ai || {};
+  const accent = s.accentColor || '#065F41';
+  const rate = Number(shop.monthlyRate) || 0;
+  const rev = Number(R.thisMonth) || 0, revLast = Number(R.lastMonth) || 0;
+  const momPct = revLast > 0 ? Math.round((rev - revLast) / revLast * 100) : null;
+  const roi = rate > 0 && rev > 0 ? Math.round(rev / rate * 10) / 10 : null;
+  const now = new Date(), dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const pace = Math.round(rev / Math.max(1, now.getDate()) * dim);
+  const quota = Number(Qo.monthly) || 0;
+  const quotaPct = quota > 0 ? Math.min(999, Math.round(rev / quota * 100)) : null;
+  const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const srcRows = Object.entries(L.sources || {}).sort((a, b) => b[1] - a[1]).slice(0, 6)
+    .map(([src, c]) => `<tr><td style="text-transform:capitalize;">${esc(src)}</td><td class="r">${c}</td></tr>`).join('');
+  const stat = (label, value, sub) => `<div class="kpi"><div class="l">${label}</div><div class="v">${value}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
+
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head><title>${esc(shop.shopName)} — Performance Report</title><style>
+    body{font-family:-apple-system,'SF Pro Text','Segoe UI',sans-serif;color:#141F1A;max-width:720px;margin:0 auto;padding:36px 26px;font-variant-numeric:tabular-nums;}
+    .hd{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;}
+    h1{font-size:22px;letter-spacing:-.02em;margin:0;}
+    .month{color:#93A29A;font-size:13px;font-weight:600;}
+    .sub{color:#5C6B63;font-size:13px;margin:4px 0 22px;}
+    .hero{background:${accent};color:#fff;border-radius:14px;padding:22px 24px;margin-bottom:14px;}
+    .hero .l{font-size:11px;text-transform:uppercase;letter-spacing:.08em;opacity:.8;font-weight:700;}
+    .hero .v{font-size:36px;font-weight:800;letter-spacing:-.03em;line-height:1.1;margin-top:4px;}
+    .hero .m{font-size:13px;opacity:.9;margin-top:6px;}
+    .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:8px;}
+    .kpi{border:1px solid #E5EAE7;border-radius:10px;padding:12px 14px;}
+    .kpi .l{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#93A29A;font-weight:700;}
+    .kpi .v{font-size:20px;font-weight:700;margin-top:3px;}
+    .kpi .s{font-size:11px;color:#93A29A;margin-top:2px;}
+    h2{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:#5C6B63;margin:24px 0 8px;border-bottom:2px solid ${accent};padding-bottom:5px;}
+    table{width:100%;border-collapse:collapse;font-size:13.5px;}
+    td{padding:7px 6px;border-bottom:1px solid #EEF2F0;}
+    td.r{text-align:right;font-weight:700;}
+    .bar{height:9px;background:#EEF2F0;border-radius:100px;overflow:hidden;margin-top:8px;}
+    .bar>div{height:100%;background:${accent};border-radius:100px;}
+    .note{font-size:12px;color:#93A29A;margin-top:6px;}
+    .foot{margin-top:32px;padding-top:14px;border-top:1px solid #E5EAE7;font-size:11.5px;color:#93A29A;text-align:center;}
+    @media print{body{padding:0;}}
+  </style></head><body>
+    <div class="hd"><h1>${esc(shop.shopName)}</h1><span class="month">${esc(monthName)}</span></div>
+    <div class="sub">Monthly performance report — prepared by ShopFlow</div>
+
+    <div class="hero">
+      <div class="l">Revenue this month</div>
+      <div class="v">$${fmt(rev)}</div>
+      <div class="m">${momPct != null ? (momPct >= 0 ? '↑ up ' + momPct + '% from last month' : '↓ ' + Math.abs(momPct) + '% vs last month') : 'last month: $' + fmt(revLast)}${roi != null ? ' · ' + roi + '× your ShopFlow investment' : ''}</div>
+    </div>
+
+    <div class="kpis">
+      ${stat('New leads', L.thisMonth != null ? L.thisMonth : '—', (L.lastMonth || 0) + ' last month')}
+      ${stat('Lead conversion', L.conversionRate != null ? L.conversionRate + '%' : '—', 'inquiries that became jobs')}
+      ${stat('Lined up next', '$' + fmt(F.total || 0), 'booked + estimates out')}
+    </div>
+
+    ${(AI.calls || AI.recovered) ? `<h2>Your AI receptionist</h2>
+    <div class="kpis">
+      ${stat('Calls answered', AI.calls || 0, 'no missed calls, 24/7')}
+      ${stat('Leads captured', AI.leads || 0, 'from answered calls')}
+      ${stat('Revenue recovered', '$' + fmt(AI.recovered || 0), (AI.recoveredThisMonth ? '$' + fmt(AI.recoveredThisMonth) + ' this month' : 'booked work from AI-answered calls'))}
+    </div>` : ''}
+
+    ${srcRows ? `<h2>Where your leads came from</h2>
+    <table><tbody>${srcRows}</tbody></table>` : ''}
+
+    <h2>What's already lined up</h2>
+    <table><tbody>
+      <tr><td>Booked upcoming work</td><td class="r">$${fmt(F.upcomingBooked || 0)}</td></tr>
+      <tr><td>Approved estimates</td><td class="r">$${fmt(F.approvedEstimates || 0)}</td></tr>
+      <tr><td>Open estimates & quotes in play</td><td class="r">$${fmt((F.openEstimates || 0) + (F.leadPipelineValue || 0))}</td></tr>
+      <tr><td style="font-weight:800;">Projected</td><td class="r" style="color:${accent};">$${fmt(F.total || 0)}</td></tr>
+    </tbody></table>
+
+    ${quota > 0 ? `<h2>Monthly goal</h2>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;">
+      <span style="font-size:22px;font-weight:800;color:${accent};">${quotaPct}%</span>
+      <span style="font-size:12.5px;color:#5C6B63;">$${fmt(rev)} of $${fmt(quota)} · on pace for $${fmt(pace)}</span>
+    </div>
+    <div class="bar"><div style="width:${Math.min(100, quotaPct)}%;"></div></div>` : ''}
+
+    <div class="foot">Prepared ${esc(new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))} · ShopFlow — your growth engine</div>
+    <script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
+  </body></html>`);
+  w.document.close();
 }
 
 // ── Business report + CSV export ──────────────────────────────────────────────

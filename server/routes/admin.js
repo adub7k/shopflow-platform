@@ -235,6 +235,26 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   const quota = Number(shop.monthlyQuota) || 0;
   const sources = {};
   leads.forEach(l => { const src = l.channel || l.source || 'call'; sources[src] = (sources[src] || 0) + 1; });
+  // AI receptionist value (compact version of the shop Revenue tab's attribution):
+  // calls the AI answered, leads it captured, and completed work traced back to an
+  // AI-captured lead (booked directly, or same customer/phone closing later).
+  const last10 = p => String(p || '').replace(/\D/g, '').slice(-10);
+  const aiLeads = leads.filter(l => l.ai && l.ai.source === 'voice');
+  const aiCustCap = new Map(), aiPhoneCap = new Map();
+  aiLeads.forEach(l => {
+    const cap = String((l.ai && l.ai.generatedAt) || l.createdAt || '').slice(0, 10);
+    if (l.customerId) aiCustCap.set(l.customerId, cap);
+    const ph = last10(l.phone); if (ph.length === 10) aiPhoneCap.set(ph, cap);
+  });
+  const doneAppts = appointments.filter(a => a.status === 'done');
+  const aiDone = doneAppts.filter(a => {
+    if (a.source === 'ai-voice') return true;
+    const cap = (a.customerId && aiCustCap.get(a.customerId)) || aiPhoneCap.get(last10(a.customerPhone));
+    return !!cap && String(a.date || '') >= cap;
+  });
+  const aiRecovered = aiDone.reduce((s, a) => s + (Number(a.price) || 0), 0);
+  const aiRecoveredThisMonth = aiDone.filter(a => (a.date || '').startsWith(thisMonth)).reduce((s, a) => s + (Number(a.price) || 0), 0);
+  const aiCallCount = calls.filter(c => c && c.voiceAI).length;
   // Why leads die — tallied from the reasons picked when marking lost.
   const lostReasons = {};
   leads.forEach(l => { if (l.lostReason) lostReasons[l.lostReason] = (lostReasons[l.lostReason] || 0) + 1; });
@@ -249,6 +269,7 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
       callsThisMonth: calls.filter(c => (c.startedAt || '').startsWith(thisMonth)).length,
     },
     revenue: { thisMonth: revenueThisMonth, lastMonth: revenueLastMonth },
+    ai: { calls: aiCallCount, leads: aiLeads.length, recovered: Math.round(aiRecovered), recoveredThisMonth: Math.round(aiRecoveredThisMonth) },
     forecast: { total: forecast, upcomingBooked, approvedEstimates, openEstimates,
                 leadPipelineValue, leadPipelineCount: openPipeLeads.length,
                 estAcceptRate: acceptRate, acceptSource: manualAccept != null ? 'manual' : (computedAccept != null ? 'computed' : 'default'),
