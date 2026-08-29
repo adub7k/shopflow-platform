@@ -318,11 +318,12 @@ const Leads = {
       this._fetchedAt = Date.now();
       const fresh = list.find(x => x.id === id);
       if (fresh && cur && this._openId === id) {
-        // The open modal's unsaved intent wins over the server copy while editing.
+        // The open modal's unsaved intent wins over the server copy while
+        // editing. Status is NOT merged — the server copy is truth and any
+        // pill choice lives in _pendingStatus until saved.
         fresh.name = cur.name || fresh.name;
         if (cur.quotedAmount != null) fresh.quotedAmount = cur.quotedAmount;
         fresh.source = cur.source || fresh.source;
-        fresh.status = cur.status || fresh.status;
         if (cur.lostReason != null) fresh.lostReason = cur.lostReason;
       }
       this._leads = list;
@@ -342,9 +343,15 @@ const Leads = {
 
   open(id) {
     const l = this._leads.find(x => x.id === id); if (!l) return;
+    if (this._openId !== id) this._pendingStatus = null;   // fresh lead → no leftover pill choice
     this._openId = id;   // this lead owns the modal until it closes or another opens
     this._freshen(id); // background top-up; repaints if teammates added notes
-    const m = this._statusMeta[l.status] || this._statusMeta.new;
+    // Status pills render a PENDING choice, not a mutation: a tapped pill only
+    // becomes real on Save. Tapping around and closing changes nothing — the
+    // old in-place `l.status = …` lingered in memory and a later unrelated Save
+    // quietly persisted it (leads "moving into Worked by themselves").
+    const eff = this._pendingStatus || l.status;
+    const m = this._statusMeta[eff] || this._statusMeta.new;
     const name = l.name || l.phone || 'Unknown caller';
     // Owner's saved quick-reply presets (Settings → Message Templates), shared
     // with the Messages composer and Response Center via _smsTemplates().
@@ -352,7 +359,7 @@ const Leads = {
 
     const statusPills = Object.keys(this._statusMeta).map(k => {
       const sm = this._statusMeta[k];
-      return `<button class="lead-status-opt ${l.status===k?'active':''}" style="${l.status===k?`background:${sm.bg};color:${sm.fg};border-color:${sm.fg};`:''}" onclick="Leads.setStatus('${l.id}','${k}')">${sm.label}</button>`;
+      return `<button class="lead-status-opt ${eff===k?'active':''}" style="${eff===k?`background:${sm.bg};color:${sm.fg};border-color:${sm.fg};`:''}" onclick="Leads.setStatus('${l.id}','${k}')">${sm.label}</button>`;
     }).join('');
 
     const mediaBtn = (cid, kind, dur) => `<button onclick="event.stopPropagation();Leads.playRecording('${cid}',this,'${kind}')" style="margin:4px 0 8px;padding:6px 12px;border:1px solid var(--green);background:var(--green-lt);color:var(--green);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">▶ Play ${kind}${dur?` · ${dur}s`:''}</button>`;
@@ -424,7 +431,7 @@ const Leads = {
       <div class="form-group">
         <label class="form-label">Status</label>
         <div class="lead-status-row">${statusPills}</div>
-        ${l.status==='lost'?`<div style="margin-top:8px;"><input class="form-input" id="lead-lost-reason" placeholder="Why was it lost? — price, ghosted, went elsewhere…" value="${esc(l.lostReason||'')}"/><div style="font-size:11px;color:var(--faint);margin-top:4px;">Saved with the lead — feeds your loss-reason report.</div></div>`:''}
+        ${eff==='lost'?`<div style="margin-top:8px;"><input class="form-input" id="lead-lost-reason" placeholder="Why was it lost? — price, ghosted, went elsewhere…" value="${esc(l.lostReason||'')}"/><div style="font-size:11px;color:var(--faint);margin-top:4px;">Saved with the lead — feeds your loss-reason report.</div></div>`:''}
       </div>
 
       <div class="form-group">
@@ -650,7 +657,9 @@ const Leads = {
     // otherwise switching status wipes a half-typed name/notes (the re-render
     // reads l.name/l.notes, which only hold the last-saved values).
     this._captureModalEdits(l);
-    l.status = status;
+    // PENDING only — never mutate the shared record here. Save commits it;
+    // closing the modal discards it.
+    this._pendingStatus = status;
     this.open(id); // re-render modal to reflect selection
   },
 
@@ -703,9 +712,13 @@ const Leads = {
     try {
       // Notes are saved per-entry via addNote — never send `notes` here, or a
       // blank value would wipe a pre-history lead's legacy free-text notes.
+      // Status ships ONLY when a pill was tapped in this modal session — a save
+      // must never re-send a possibly-stale in-memory status (that's what
+      // silently moved leads into Worked).
       const lr = document.getElementById('lead-lost-reason');
-      await db.leads.update(id, { name, status: l.status, source, quotedAmount: (Number.isFinite(qv) && qv > 0) ? qv : null,
-        ...(l.status === 'lost' && lr ? { lostReason: lr.value.trim() || null } : {}) });
+      await db.leads.update(id, { name, source, quotedAmount: (Number.isFinite(qv) && qv > 0) ? qv : null,
+        ...(this._pendingStatus ? { status: this._pendingStatus } : {}),
+        ...(this._pendingStatus === 'lost' && lr ? { lostReason: lr.value.trim() || null } : {}) });
       Modal.close(); toast('Lead saved ✓'); this.render();
     } catch(e) { toast(e.message || 'Could not save', 'error'); }
   },
@@ -731,7 +744,7 @@ const Leads = {
       // the new client record — convert() builds the customer from the saved lead.
       if (l) {
         this._captureModalEdits(l);
-        await db.leads.update(id, { name: l.name || '', status: l.status });
+        await db.leads.update(id, { name: l.name || '', ...(this._pendingStatus ? { status: this._pendingStatus } : {}) });
       }
       const res = await db.leads.convert(id);
       if (!res.ok) throw new Error(res.error || 'Convert failed');
@@ -748,7 +761,7 @@ const Leads = {
       // Persist modal edits first so the typed name carries onto the client record.
       if (l) {
         this._captureModalEdits(l);
-        await db.leads.update(id, { name: l.name || '', status: l.status, quotedAmount: l.quotedAmount != null ? l.quotedAmount : null });
+        await db.leads.update(id, { name: l.name || '', quotedAmount: l.quotedAmount != null ? l.quotedAmount : null, ...(this._pendingStatus ? { status: this._pendingStatus } : {}) });
       }
       const res = await db.leads.convert(id);
       if (!res.ok) throw new Error(res.error || 'Could not create the client');
@@ -771,7 +784,7 @@ const Leads = {
     try {
       if (l) {
         this._captureModalEdits(l);
-        await db.leads.update(id, { name: l.name || '', status: l.status, quotedAmount: l.quotedAmount != null ? l.quotedAmount : null });
+        await db.leads.update(id, { name: l.name || '', quotedAmount: l.quotedAmount != null ? l.quotedAmount : null, ...(this._pendingStatus ? { status: this._pendingStatus } : {}) });
       }
       const res = await db.leads.convert(id);
       if (!res.ok) throw new Error(res.error || 'Could not create the client');
@@ -815,8 +828,10 @@ const Leads = {
 };
 
 // Any modal close (button, overlay tap, another page's flow) releases the lead
-// modal's ownership — so a slow request finishing later can never resurrect it.
+// modal's ownership AND discards any unsaved pill choice — so a slow request
+// finishing later can never resurrect the modal, and an abandoned status tap
+// can never sneak into a later save.
 (function () {
   const origClose = Modal.close.bind(Modal);
-  Modal.close = function () { Leads._openId = null; origClose(); };
+  Modal.close = function () { Leads._openId = null; Leads._pendingStatus = null; origClose(); };
 })();

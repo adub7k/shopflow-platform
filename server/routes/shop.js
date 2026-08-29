@@ -1063,7 +1063,7 @@ function shopStageKeys(db) {
 // Apply a (validated) pipeline status to a lead with all its bookkeeping —
 // shared by the single-lead update and the bulk clean-out endpoint so a bulk
 // move behaves exactly like tapping each lead by hand.
-function applyLeadStatus(lead, status) {
+function applyLeadStatus(lead, status, via) {
   const now = new Date().toISOString();
   const prevStage = lead.pipelineStatus || lead.status;
   if (lead.channel === 'website') {
@@ -1095,7 +1095,8 @@ function applyLeadStatus(lead, status) {
   if (prevStage !== status) {
     lead.stageChangedAt = now;
     lead.stageLog = lead.stageLog || [];
-    lead.stageLog.push({ from: prevStage, to: status, at: now });
+    // `via` = forensics for "it moved by itself" reports: manual | bulk | convert.
+    lead.stageLog.push({ from: prevStage, to: status, at: now, via: via || 'manual' });
     if (status === 'closed' && !lead.closedAt) lead.closedAt = now;
     // Lost stamps; a reopened lead sheds them so old reasons don't haunt it.
     if (status === 'lost' && !lead.lostAt) lead.lostAt = now;
@@ -1146,7 +1147,7 @@ router.post('/api/shop/leads/bulk-status', requireAuth, requireRole('full','tech
   let updated = 0;
   ids.forEach(id => {
     const lead = h.getById('leads', id);
-    if (lead) { if (lostReason) lead.lostReason = lostReason; applyLeadStatus(lead, status); h.upsert('leads', lead); updated++; }
+    if (lead) { if (lostReason) lead.lostReason = lostReason; applyLeadStatus(lead, status, 'bulk'); h.upsert('leads', lead); updated++; }
   });
   res.json({ ok:true, updated });
 }));
@@ -1326,17 +1327,22 @@ router.post('/api/shop/leads/:id/convert', requireAuth, requireRole('full','tech
     h.upsert('customers', cust);
   }
   lead.customerId = cust.id;
-  // Converting implies the work is booked: move the lead up to the pipeline's
-  // win line (first stage flagged won — 'booked' on a default pipeline) unless
-  // it's already at or past it, or explicitly lost.
+  // Converting implies the work is booked: move the lead up to the BOOKED
+  // stage — and never past it. The stage keyed 'booked' wins whenever it
+  // exists (renames keep the key); only a pipeline with no booked stage falls
+  // back to its first won middle stage; with neither, the stage stays put.
+  // (The old "first won-flagged stage" resolver shot converted leads into
+  // Worked — or even Closed — on custom configs where booked wasn't flagged.)
   {
     const cfg = (((db.get('settings').value() || {}).pipeline) || {}).stages;
     const stages = (Array.isArray(cfg) && cfg.length) ? cfg : null;
     const keys = stages ? stages.map(s => s && s.key) : ['new','contacted','quoted','booked','worked','closed','lost'];
-    const wonKey = stages ? (((stages.find(s => s && s.won && !s.terminal)) || {}).key || 'closed') : 'booked';
+    const wonKey = keys.includes('booked')
+      ? 'booked'
+      : (stages ? (((stages.find(s => s && s.won && !s.terminal)) || {}).key || null) : 'booked');
     const curIdx = keys.indexOf(lead.status);
-    if (lead.status !== 'lost' && (curIdx === -1 || curIdx < keys.indexOf(wonKey))) {
-      lead.stageLog = (lead.stageLog || []).concat({ from: lead.status, to: wonKey, at: new Date().toISOString() });
+    if (wonKey && lead.status !== 'lost' && (curIdx === -1 || curIdx < keys.indexOf(wonKey))) {
+      lead.stageLog = (lead.stageLog || []).concat({ from: lead.status, to: wonKey, at: new Date().toISOString(), via: 'convert' });
       lead.status = wonKey;
       lead.stageChangedAt = new Date().toISOString();
     }
