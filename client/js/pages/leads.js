@@ -131,6 +131,29 @@ const Leads = {
     return false;
   },
 
+  // ── Quick search (shared by both shells' lists) ─────────────────────────────
+  // Matches name / email / vehicle / services / location as text, and phone by
+  // digits (any 3+ digit run, so "5051" finds +1 505-1…). One predicate so the
+  // base and v2 lists can never drift apart.
+  _searchQ: '',
+  matchesSearch(l, raw) {
+    const q = String(raw || '').trim().toLowerCase();
+    if (!q) return true;
+    const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model, l.vehicle.color].filter(Boolean).join(' ') : '';
+    const hay = [l.name, l.email, veh, (l.servicesInterested || []).join(' '), l.location].filter(Boolean).join(' ').toLowerCase();
+    if (hay.includes(q)) return true;
+    const qd = q.replace(/\D/g, '');
+    return qd.length >= 3 && String(l.phone || '').replace(/\D/g, '').includes(qd);
+  },
+  // Keystrokes repaint from the already-loaded list — no server round-trip per
+  // letter (render honors _skipFetchOnce), so typing stays instant on a phone.
+  searchFilter(v) { this._searchQ = v; this._skipFetchOnce = true; this.render(); },
+  _refocusSearch() {
+    if (!this._searchQ) return;
+    const s = document.getElementById('lead-search');
+    if (s) { s.focus(); s.setSelectionRange(s.value.length, s.value.length); }
+  },
+
   // Badge colors derived from the stage config so custom stages render
   // everywhere: list badges, filter pills, and the modal's status picker.
   get _statusMeta() {
@@ -221,14 +244,16 @@ const Leads = {
     // instead of the hidden list.
     if (typeof Pipeline !== 'undefined' && Pipeline.isActive()) return Pipeline.render();
     const el = document.getElementById('page-leads'); if (!el) return;
-    try { this._leads = await db.leads.all(); this._fetchedAt = Date.now(); } catch(e) { this._leads = []; }
+    if (this._skipFetchOnce && (this._leads || []).length) { this._skipFetchOnce = false; }
+    else { try { this._leads = await db.leads.all(); this._fetchedAt = Date.now(); } catch(e) { this._leads = []; } }
 
     const counts = { all: this._leads.length };
     Object.keys(this._statusMeta).forEach(k => { counts[k] = 0; });
     this._leads.forEach(l => { counts[l.status] = (counts[l.status]||0) + 1; });
 
     const pill = (key, label) => `<button class="lead-pill ${this._filter===key?'active':''}" onclick="Leads.setFilter('${key}')">${label}${counts[key]?` <span class="lead-pill-count">${counts[key]}</span>`:''}</button>`;
-    const filters = `<div class="lead-filters">
+    const filters = `<div style="margin-bottom:10px;"><input class="form-input" id="lead-search" placeholder="Search name, phone, vehicle…" value="${esc(this._searchQ)}" oninput="Leads.searchFilter(this.value)" style="width:100%;max-width:420px;height:38px;padding:0 12px;"/></div>
+    <div class="lead-filters">
       ${pill('all','All')}${Object.keys(this._statusMeta).map(k => pill(k, this._statusMeta[k].label)).join('')}
     </div>`;
 
@@ -258,6 +283,7 @@ const Leads = {
     // first — owner actions never write lastContactAt, so the order is stable
     // while working the list.
     const shown = (this._filter==='all' ? this._leads : this._leads.filter(l => l.status===this._filter))
+      .filter(l => this.matchesSearch(l, this._searchQ))
       .slice().sort((a, b) => new Date(b.lastContactAt || b.createdAt || 0) - new Date(a.lastContactAt || a.createdAt || 0));
 
     const stats = this._convStats();
@@ -266,9 +292,10 @@ const Leads = {
     if (!shown.length) {
       el.innerHTML = banner + linkBanner + stats + breakdown + filters + `<div class="card"><div class="empty-state">
         <div class="empty-icon">📞</div>
-        <div class="empty-text">No ${this._filter==='all'?'':this._filter+' '}leads yet</div>
-        <div style="font-size:12px;color:var(--faint);margin-top:6px;">Inbound calls and lead-form submissions show up here automatically.</div>
+        <div class="empty-text">${this._searchQ ? 'No leads match your search' : `No ${this._filter==='all'?'':this._filter+' '}leads yet`}</div>
+        <div style="font-size:12px;color:var(--faint);margin-top:6px;">${this._searchQ ? `<button class="btn btn-sm" onclick="Leads.searchFilter('')">Clear search</button>` : 'Inbound calls and lead-form submissions show up here automatically.'}</div>
       </div></div>`;
+      this._refocusSearch();
       return;
     }
 
@@ -299,6 +326,7 @@ const Leads = {
     }).join('');
 
     el.innerHTML = banner + linkBanner + stats + breakdown + filters + `<div class="list-card">${rows}</div>`;
+    this._refocusSearch();
   },
 
   setFilter(f) { this._filter = f; this.render(); },

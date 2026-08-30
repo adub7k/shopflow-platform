@@ -147,8 +147,11 @@
     // Keep the last good leads on a failed refresh, and surface the error instead
     // of a deceptive empty page (a 403 otherwise looks like "no leads").
     let loadError = null;
-    try { this._leads = await db.leads.all(); }
-    catch (e) { loadError = (e && e.message) || 'Could not load leads'; this._leads = this._leads || []; }
+    if (this._skipFetchOnce && (this._leads || []).length) { this._skipFetchOnce = false; }   // search keystroke — repaint from cache
+    else {
+      try { this._leads = await db.leads.all(); }
+      catch (e) { loadError = (e && e.message) || 'Could not load leads'; this._leads = this._leads || []; }
+    }
     const leads = this._leads || [];
 
     const counts = { all: leads.length }; orderKeys().forEach(k => counts[k] = 0);
@@ -189,6 +192,7 @@
 
     renderList.call(this, html, leads, counts);
     el.innerHTML = html.join('');
+    Leads._refocusSearch();
   };
 
   Leads.mergeDupes = async function (btn) {
@@ -208,11 +212,13 @@
   function renderList(html, leads, counts) {
     // Compact status filter chips.
     const chip = (key, label, n) => `<button class="v2-chip${this._statusFilter2 === key ? ' on' : ''}" onclick="Leads.setStatusFilter('${key}')">${label}${n ? `<span class="n">${n}</span>` : ''}</button>`;
+    html.push(`<div style="margin-bottom:10px;"><input class="form-input" id="lead-search" placeholder="Search name, phone, vehicle…" value="${esc(Leads._searchQ)}" oninput="Leads.searchFilter(this.value)" style="width:100%;max-width:420px;height:38px;padding:0 12px;"/></div>`);
     html.push(`<div class="v2-chips" style="margin-bottom:12px;">
       ${chip('all', 'All', counts.all)}${stages().map(s => chip(s.key, esc(s.label), counts[s.key])).join('')}</div>`);
 
     let rows = leads.slice();
     if (this._statusFilter2 !== 'all') rows = rows.filter(l => colOf(l) === this._statusFilter2);
+    rows = rows.filter(l => Leads.matchesSearch(l, Leads._searchQ));
     // Most recent inbound contact first (arrival time for never-recontacted
     // leads) and NOTHING else. lastContactAt moves on customer activity only,
     // so working the list never reshuffles it under the owner's finger — the
@@ -225,10 +231,12 @@
     const rowCb = (id) => selMode ? `<input type="checkbox" class="ld-cb" ${this._sel.has(id) ? 'checked' : ''} onclick="event.stopPropagation();Leads.selToggle('${id}')">` : '';
 
     if (!rows.length) {
+      const searching = !!String(Leads._searchQ || '').trim();
       html.push(`<div class="v2-card"><div class="empty-state"><div class="empty-icon">📥</div>
-        <div class="empty-text">${this._statusFilter2 === 'all' ? 'No leads yet' : 'No ' + this._statusFilter2 + ' leads'}</div>
-        <div class="list-sub" style="margin-top:2px;">${this._statusFilter2 === 'all' ? 'New calls and website inquiries will show up here.' : 'Try a different filter.'}</div>
-        ${this._statusFilter2 !== 'all' ? `<div style="margin-top:12px;"><button class="btn btn-sm" onclick="Leads.setStatusFilter('all')">Show all</button></div>` : ''}
+        <div class="empty-text">${searching ? 'No leads match your search' : this._statusFilter2 === 'all' ? 'No leads yet' : 'No ' + this._statusFilter2 + ' leads'}</div>
+        <div class="list-sub" style="margin-top:2px;">${searching ? 'Check the spelling or try part of the phone number.' : this._statusFilter2 === 'all' ? 'New calls and website inquiries will show up here.' : 'Try a different filter.'}</div>
+        ${searching ? `<div style="margin-top:12px;"><button class="btn btn-sm" onclick="Leads.searchFilter('')">Clear search</button></div>`
+          : this._statusFilter2 !== 'all' ? `<div style="margin-top:12px;"><button class="btn btn-sm" onclick="Leads.setStatusFilter('all')">Show all</button></div>` : ''}
       </div></div>`);
       return;
     }
