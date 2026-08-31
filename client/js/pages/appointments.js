@@ -9,9 +9,8 @@ const Appointments = {
   async render() {
     const el = document.getElementById('page-appointments'); if(!el)return;
     try {
-      const month = this._selected.slice(0,7);
       [this._data, this._barbers, this._services] = await Promise.all([
-        db.appointments.all({month}), db.barbers.all(), db.services.all()
+        this._fetchForView(), db.barbers.all(), db.services.all()
       ]);
       const html = [];
 
@@ -151,6 +150,22 @@ const Appointments = {
   },
 
   _ymd(dt){ return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`; },
+
+  // The API filters by a single month, but the week (and the day view's week
+  // strip in v2) can straddle a month boundary — so fetch every month the
+  // visible range touches and merge, or the far side of the week renders empty.
+  async _fetchForView() {
+    const months = new Set([this._selected.slice(0,7)]);
+    if (this._view !== 'month') {
+      const dt = new Date(this._selected+'T12:00:00');
+      const start = new Date(dt); start.setDate(dt.getDate()-dt.getDay());
+      const end = new Date(start); end.setDate(start.getDate()+6);
+      months.add(this._ymd(start).slice(0,7));
+      months.add(this._ymd(end).slice(0,7));
+    }
+    const lists = await Promise.all([...months].map(m => db.appointments.all({month:m})));
+    return lists.flat();
+  },
 
   // Nav arrows step by the granularity of the current view: a day in day view, a
   // week in week view, a month in month view — so paging never overshoots what's

@@ -44,9 +44,10 @@
     const el = document.getElementById('page-appointments'); if (!el) return;
     el.classList.add('v2-wide');
     try {
-      const month = this._selected.slice(0, 7);
+      // _fetchForView (base appointments.js) merges every month the visible
+      // week touches — a single-month fetch left cross-month weeks half empty.
       [this._data, this._barbers, this._services] = await Promise.all([
-        db.appointments.all({ month }), db.barbers.all(), db.services.all()
+        this._fetchForView(), db.barbers.all(), db.services.all()
       ]);
       const dt = new Date(this._selected + 'T12:00:00');
       const monthLabel = dt.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
