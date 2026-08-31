@@ -402,7 +402,7 @@ const Quotes = {
 
   openDetail(id){
     const q=this._data.find(x=>x.id===id); if(!q)return;
-    const link=location.origin+'/quote/'+Auth.getShopSlug()+'/'+q.id;
+    const link=this._publicLink(q);
     Modal.show(`
       <div class="modal-title">${esc(q.number||'Estimate')}</div>
       <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:14px;">
@@ -446,16 +446,23 @@ const Quotes = {
       </div>`);
   },
 
-  // Prefilled estimate text (same copy the server-side sender uses).
+  // Canonical public origin for customer-facing links. Prefer the branded
+  // domain (server PUBLIC_BASE_URL): carrier web filters and family Screen Time
+  // silently block *.railway.app-style hosting domains — a customer taps and
+  // nothing loads — while a real business domain sails through.
+  _publicBase(){ return ((Shop.settings&&Shop.settings.publicBaseUrl)||location.origin).replace(/\/$/,''); },
+  _publicLink(q){ return this._publicBase()+'/quote/'+Auth.getShopSlug()+'/'+q.id; },
+  // Prefilled estimate text (same copy the server-side sender uses). The link
+  // sits on its own line so every messaging app reliably makes it tappable.
   _smsBody(q){
-    const link=location.origin+'/quote/'+Auth.getShopSlug()+'/'+q.id;
+    const link=this._publicLink(q);
     // Two-option estimates lead with the starting-at price and invite the pick;
     // a contract's headline number is the monthly, not the single visit.
     if(q.options&&q.options.length&&!q.chosenOptionId){
-      return `Hi ${(q.customerName||'there').split(' ')[0]}! Here are your options from ${Auth.getShopName()||'us'} (${q.number||''}) — starting at $${q.total}. Compare & approve: ${link}`;
+      return `Hi ${(q.customerName||'there').split(' ')[0]}! Here are your options from ${Auth.getShopName()||'us'} (${q.number||''}) — starting at $${q.total}. Compare & approve:\n${link}`;
     }
     const amount=q.contract?`$${q.monthlyTotal}/mo`:`$${q.total}`;
-    return `Hi ${(q.customerName||'there').split(' ')[0]}! Here's your estimate from ${Auth.getShopName()||'us'} (${q.number||''}) — ${amount}. View & approve: ${link}`;
+    return `Hi ${(q.customerName||'there').split(' ')[0]}! Here's your estimate from ${Auth.getShopName()||'us'} (${q.number||''}) — ${amount}. View & approve:\n${link}`;
   },
   // Collect the balance: build a Square payment link for what's still owed
   // (total minus any paid deposit) and pull up Messages prefilled with it —
@@ -466,7 +473,7 @@ const Quotes = {
       const r=await db.quotes.paymentLink(id);
       if(!r||!r.ok){toast((r&&r.error)||'Could not create the payment link','error');return;}
       const amt=fmtMoney(r.amount);
-      const body=`Hi ${(q.customerName||'there').split(' ')[0]}! Here's your secure link to pay the ${r.depositCredited?amt+' balance (deposit already applied)':amt} for ${q.number||'your service'} with ${Auth.getShopName()||'us'}: ${r.url}`;
+      const body=`Hi ${(q.customerName||'there').split(' ')[0]}! Here's your secure link to pay the ${r.depositCredited?amt+' balance (deposit already applied)':amt} for ${q.number||'your service'} with ${Auth.getShopName()||'us'}:\n${r.url}`;
       if((q.customerPhone||'').replace(/\D/g,'').length>=10){ _cpSms(q.customerPhone, body, q.customerId); }
       else { try{ await navigator.clipboard.writeText(r.url); toast('No phone on file — payment link copied ✓'); }catch(e){ prompt('Payment link:', r.url); } }
     }catch(e){ toast(e.message||'Could not create the payment link','error'); }

@@ -34,6 +34,10 @@ router.get('/api/shop/settings', requireAuth, shopRoute(async (req, res, db) => 
   s.trackingNumber = shopOwnNumber(req.shopId);
   // Public slug (read-only) so the UI can show shareable /book/<slug> links.
   s.shopSlug = (master.get('shops').find({ id: req.shopId }).value() || {}).slug || '';
+  // Canonical customer-facing origin for links the owner texts/copies (read-only,
+  // from env). The branded domain dodges the web filters that silently block
+  // *.railway.app-style hosts on some customers' phones.
+  s.publicBaseUrl = process.env.PUBLIC_BASE_URL || '';
   if (!s.callTracking) s.callTracking = { enabled: true };
   // Surface the resolved industry so the frontend can mount industry-specific
   // navigation/modules (the profile lives outside `settings`, on the shop DB root).
