@@ -1925,7 +1925,7 @@ function openClientReport() {
 
     <div class="kpis">
       ${stat('New leads', L.thisMonth != null ? L.thisMonth : '—', (L.lastMonth || 0) + ' last month')}
-      ${stat('Lead conversion', L.conversionRate != null ? L.conversionRate + '%' : '—', 'inquiries that became jobs')}
+      ${stat('Lead conversion', L.conversionRate != null ? L.conversionRate + '%' : '—', 'inquiries that set an appointment')}
       ${stat('Lined up next', '$' + fmt(F.total || 0), 'booked + estimates out')}
     </div>
 

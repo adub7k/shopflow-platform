@@ -194,7 +194,26 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   // ── Account-management insights: how is this client's business doing, and is
   // ShopFlow visibly earning its keep? Everything the account-review needs.
   const leadCreated = l => l.createdAt || l.created_at || '';
-  const leadWon = l => ['booked', 'closed', 'APPOINTMENT_SET', 'COMPLETED'].includes(l.status);
+  const last10 = p => String(p || '').replace(/\D/g, '').slice(-10);
+  // TEMP (2026-08-31, revert after September): "converted" = lead → appointment
+  // SET, not lead → won paying job. A lead counts if it reached an
+  // appointment-or-later stage, or if an appointment (matched by customer or
+  // last-10 phone) exists dated on/after the day the lead came in.
+  // To revert, replace leadWon (and drop the appt maps) with:
+  //   const leadWon = l => ['booked', 'closed', 'APPOINTMENT_SET', 'COMPLETED'].includes(l.status);
+  const apptByCust = new Map(), apptByPhone = new Map();
+  appointments.forEach(a => {
+    const d = String(a.date || '');
+    if (a.customerId && d > (apptByCust.get(a.customerId) || '')) apptByCust.set(a.customerId, d);
+    const ph = last10(a.customerPhone);
+    if (ph.length === 10 && d > (apptByPhone.get(ph) || '')) apptByPhone.set(ph, d);
+  });
+  const leadWon = l => {
+    if (['booked', 'worked', 'closed', 'APPOINTMENT_SET', 'COMPLETED'].includes(l.status)) return true;
+    const created = String(leadCreated(l)).slice(0, 10);
+    const d = (l.customerId && apptByCust.get(l.customerId)) || apptByPhone.get(last10(l.phone));
+    return !!d && (!created || d >= created);
+  };
   const leadsThisMonth = leads.filter(l => leadCreated(l).startsWith(thisMonth));
   const leadsLastMonth = leads.filter(l => leadCreated(l).startsWith(lastMonth));
   // Avg first-response time in minutes, across leads that have one recorded.
@@ -238,7 +257,6 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   // AI receptionist value (compact version of the shop Revenue tab's attribution):
   // calls the AI answered, leads it captured, and completed work traced back to an
   // AI-captured lead (booked directly, or same customer/phone closing later).
-  const last10 = p => String(p || '').replace(/\D/g, '').slice(-10);
   const aiLeads = leads.filter(l => l.ai && l.ai.source === 'voice');
   const aiCustCap = new Map(), aiPhoneCap = new Map();
   aiLeads.forEach(l => {
