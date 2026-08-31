@@ -22,6 +22,7 @@ const INDUSTRIES = {
     ],
     // `confirmed` = post-deposit/active, `terminal` = paid+counts toward revenue.
     statuses: [
+      { key: 'unconfirmed', label: 'Unconfirmed', occupiesSlot: true },
       { key: 'confirmed',   label: 'Confirmed',   confirmed: true, occupiesSlot: true },
       { key: 'in-progress', label: 'In Progress',                  occupiesSlot: true },
       { key: 'done',        label: 'Done',        terminal: true },
@@ -55,6 +56,7 @@ const INDUSTRIES = {
     // labels differ ("Completed" is the `done` key). The dropped-off/curing/ready
     // keys are new operational states with no business-logic meaning.
     statuses: [
+      { key: 'unconfirmed', label: 'Unconfirmed', occupiesSlot: true },
       { key: 'confirmed',   label: 'Confirmed',           confirmed: true, occupiesSlot: true },
       { key: 'dropped-off', label: 'Vehicle Dropped Off', occupiesSlot: true },
       { key: 'in-progress', label: 'In Progress',         occupiesSlot: true },
@@ -105,6 +107,7 @@ const INDUSTRIES = {
       { name: 'Full Set',       category: 'nails', price: 70, duration: 90 },
     ],
     statuses: [
+      { key: 'unconfirmed', label: 'Unconfirmed', occupiesSlot: true },
       { key: 'confirmed',   label: 'Confirmed',   confirmed: true, occupiesSlot: true },
       { key: 'in-progress', label: 'In Progress',                  occupiesSlot: true },
       { key: 'done',        label: 'Done',        terminal: true },
@@ -134,6 +137,7 @@ const INDUSTRIES = {
     // `en-route` is an operational state (crew on the way); canonical confirmed/
     // done/no-show keys are preserved so revenue/loyalty/reminder logic is unchanged.
     statuses: [
+      { key: 'unconfirmed', label: 'Unconfirmed', occupiesSlot: true },
       { key: 'confirmed',   label: 'Scheduled',   confirmed: true, occupiesSlot: true },
       { key: 'en-route',    label: 'En Route',                     occupiesSlot: true },
       { key: 'in-progress', label: 'In Progress',                  occupiesSlot: true },
@@ -170,6 +174,7 @@ const INDUSTRIES = {
     ],
     // Reuses the detail-shop operational flow (curing/ready) and canonical keys.
     statuses: [
+      { key: 'unconfirmed', label: 'Unconfirmed', occupiesSlot: true },
       { key: 'confirmed',   label: 'Confirmed',           confirmed: true, occupiesSlot: true },
       { key: 'dropped-off', label: 'Vehicle Dropped Off', occupiesSlot: true },
       { key: 'in-progress', label: 'In Progress',         occupiesSlot: true },
@@ -210,6 +215,7 @@ const INDUSTRIES = {
       { name: 'Commercial Flatwork',category: 'commercial',price: 500, duration: 240 },
     ],
     statuses: [
+      { key: 'unconfirmed', label: 'Unconfirmed', occupiesSlot: true },
       { key: 'confirmed',   label: 'Scheduled',   confirmed: true, occupiesSlot: true },
       { key: 'en-route',    label: 'En Route',                     occupiesSlot: true },
       { key: 'in-progress', label: 'In Progress',                  occupiesSlot: true },
@@ -239,6 +245,7 @@ const INDUSTRIES = {
       { name: 'Standard Service',category: 'service', price: 100, duration: 60 },
     ],
     statuses: [
+      { key: 'unconfirmed', label: 'Unconfirmed', occupiesSlot: true },
       { key: 'confirmed',   label: 'Confirmed',   confirmed: true, occupiesSlot: true },
       { key: 'in-progress', label: 'In Progress',                  occupiesSlot: true },
       { key: 'done',        label: 'Done',        terminal: true },

@@ -341,6 +341,7 @@ table.v2-table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:68
 .v2-appt.confirmed{background:var(--green-lt);border-color:var(--green-md);color:var(--green-deep);}
 .v2-appt.progress{background:#FBF1E2;border-color:#EBD3AC;color:var(--orange);}
 .v2-appt.done{background:var(--surface2);border-color:var(--border-md);color:var(--muted);}
+.v2-appt.unconfirmed{background:var(--surface2);border-color:var(--border-md);border-style:dashed;color:var(--muted);}
 
 /* ── Leads on phones: app-like list, not a shrunken desktop table ── */
 .v2-leadlist{display:none;padding:0;}

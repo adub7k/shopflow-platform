@@ -17,6 +17,10 @@ router.get('/api/shop/settings', requireAuth, shopRoute(async (req, res, db) => 
   // Backfill vehicle size classes for shops seeded before per-size pricing existed.
   if (!Array.isArray(s.vehicleSizes)) s.vehicleSizes = resolveProfile(db.get('industry').value()).vehicleSizes || [];
   if (!Array.isArray(s.addons)) s.addons = [];
+  // Backfill the 'Unconfirmed' pre-confirmation status for shops seeded before
+  // it existed (statuses are copied from the industry profile at shop init).
+  if (Array.isArray(s.statuses) && s.statuses.length && !s.statuses.some(st => st && st.key === 'unconfirmed'))
+    s.statuses = [{ key: 'unconfirmed', label: 'Unconfirmed', occupiesSlot: true }, ...s.statuses];
   if (!Array.isArray(s.membershipPlans)) s.membershipPlans = [];
   // Backfill sales-tax config for shops created before tax existed.
   if (!s.tax || typeof s.tax !== 'object') s.tax = { enabled: false, rate: 0, label: 'Sales Tax' };

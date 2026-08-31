@@ -24,7 +24,7 @@
     const start = new Date(dt); start.setDate(dt.getDate() - dt.getDay());
     return Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d.toISOString().split('T')[0]; });
   }
-  const stClass = s => (s === 'done' || s === 'ready') ? 'done' : (s === 'in-progress' || s === 'dropped-off' || s === 'curing') ? 'progress' : 'confirmed';
+  const stClass = s => s === 'unconfirmed' ? 'unconfirmed' : (s === 'done' || s === 'ready') ? 'done' : (s === 'in-progress' || s === 'dropped-off' || s === 'curing') ? 'progress' : 'confirmed';
 
   function dayRows(list) {
     if (!list.length) return `<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">No appointments this day</div><div class="list-sub" style="margin-top:2px;">${canWrite() ? 'Add one with the New appointment button.' : ''}</div></div>`;
@@ -68,7 +68,8 @@
         ${canWrite() ? `<button class="btn btn-green" onclick="Appointments.openForm(null)">＋ New appointment</button>` : ''}</div>`);
 
       if (this._view === 'week') {
-        html.push(`<div style="margin-bottom:10px;" class="legend"><span style="font-size:11.5px;color:var(--muted);"><span style="display:inline-block;width:8px;height:8px;border-radius:3px;background:var(--green);margin-right:5px;vertical-align:-1px;"></span>Confirmed</span>
+        html.push(`<div style="margin-bottom:10px;" class="legend"><span style="font-size:11.5px;color:var(--muted);"><span style="display:inline-block;width:8px;height:8px;border-radius:3px;border:1px dashed var(--border-md);background:var(--surface2);margin-right:5px;vertical-align:-1px;"></span>Unconfirmed</span>
+          <span style="font-size:11.5px;color:var(--muted);margin-left:14px;"><span style="display:inline-block;width:8px;height:8px;border-radius:3px;background:var(--green);margin-right:5px;vertical-align:-1px;"></span>Confirmed</span>
           <span style="font-size:11.5px;color:var(--muted);margin-left:14px;"><span style="display:inline-block;width:8px;height:8px;border-radius:3px;background:var(--orange);margin-right:5px;vertical-align:-1px;"></span>In progress</span>
           <span style="font-size:11.5px;color:var(--muted);margin-left:14px;"><span style="display:inline-block;width:8px;height:8px;border-radius:3px;background:var(--faint);margin-right:5px;vertical-align:-1px;"></span>Done</span></div>`);
         html.push(this._v2Week(days));
