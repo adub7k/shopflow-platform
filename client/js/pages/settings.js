@@ -346,6 +346,7 @@ const Settings = {
       } else {
         html.push(`<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">Your call-tracking number is managed by ShopFlow. Contact support to activate it for this shop.</div>`);
       }
+      html.push(`<div class="form-group"><label class="form-label">Ring a second phone <span style="font-weight:400;color:var(--faint);">(optional)</span></label><input class="form-input" id="s-fwd2" type="tel" value="${esc(s.forwardPhone2||'')}" placeholder="(505) 555-0100" /><div style="font-size:11px;color:var(--muted);margin-top:6px;">Incoming calls ring your shop phone (the <b>Phone</b> field above) and this number at the same time — whoever presses a key first takes the call. Leave blank to ring only your shop phone.</div></div>`);
       html.push(`<div style="font-size:12px;color:var(--muted);">Missed calls are logged as leads — follow up with one tap from the <b>Tasks</b> worklist. Texts open in your Messages app; ShopFlow never auto-texts on your behalf.</div>`);
       html.push('</div>');
 
@@ -983,6 +984,7 @@ const Settings = {
     const mp=document.getElementById('s-metapixel'); if(mp)data.metaPixelId=mp.value.trim();
     const tpl=document.getElementById('s-leadtpl'); if(tpl)data.leadPageTemplate=tpl.value;
     const pp=document.getElementById('s-publicphone'); if(pp)data.publicPhone=pp.value.trim();
+    const f2=document.getElementById('s-fwd2'); if(f2)data.forwardPhone2=f2.value.trim();
     const ar=document.getElementById('s-aireceptionist'); if(ar)data.aiReceptionist={enabled:ar.checked};
     const vam=document.getElementById('s-voiceai-mode'); if(vam){ data.voiceAI={ mode:vam.value, engine:document.getElementById('s-voiceai-engine')?.value||'gather', greeting:(document.getElementById('s-voiceai-greeting')?.value||'').trim(), assistantName:(document.getElementById('s-voiceai-name')?.value||'').trim(), notes:(document.getElementById('s-voiceai-notes')?.value||'').trim(), voice:document.getElementById('s-voiceai-voice')?.value||'Polly.Joanna-Neural', relayVoice:(document.getElementById('s-voiceai-relayvoice')?.value||'').trim(), speechTimeout:document.getElementById('s-voiceai-pace')?.value||'1' }; }
     const lv=document.getElementById('s-lvis')?.value; if(lv)data.loyalty={visitsForReward:parseInt(lv),rewardDescription:document.getElementById('s-lrew')?.value.trim()||'One free service'};

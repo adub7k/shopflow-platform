@@ -129,7 +129,13 @@ router.post('/api/twilio/voice/:shopId', verifyTwilio, (req, res) => {
   // Thread the parent (inbound) CallSid through the whisper/screen legs so the
   // screen handler can mark THIS call as genuinely accepted (the whisper/screen
   // run on the child leg, whose own CallSid differs from the parent's).
-  dial.number({ url: `/api/twilio/voice/whisper/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`, method: 'POST' }, realE164);
+  const whisperUrl = `/api/twilio/voice/whisper/${ctx.shopId}?callSid=${encodeURIComponent(callSid)}`;
+  dial.number({ url: whisperUrl, method: 'POST' }, realE164);
+  // Optional second line (settings.forwardPhone2): both ring at once and the
+  // whisper keypress gate decides the winner — first HUMAN to press a key gets
+  // bridged, so a voicemail picking up one leg can't steal the call.
+  const fwd2 = toE164(ctx.settings.forwardPhone2);
+  if (fwd2 && fwd2 !== realE164) dial.number({ url: whisperUrl, method: 'POST' }, fwd2);
   res.type('text/xml').send(vr.toString());
 });
 
