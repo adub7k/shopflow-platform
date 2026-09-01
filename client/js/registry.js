@@ -64,12 +64,17 @@ const NavRegistry = {
   },
 
   // Grouped layout. `industry: true` appends the active vertical's INDUSTRY_PAGES.
+  // `messages` and `automations` are deliberately absent: both keep working in
+  // the background (texts still log to client profiles, automations still run
+  // server-side, App.nav() still opens the pages from deep links) — they're
+  // just out of the nav until there's a reason to surface them again
+  // (messages: no real chat inbox until A2P approval).
   GROUPS: [
     { title: 'Overview',   pages: ['dashboard'] },
-    { title: 'CRM',        pages: ['response', 'pipeline', 'leads', 'clients', 'tasks', 'messages'] },
+    { title: 'CRM',        pages: ['response', 'pipeline', 'leads', 'clients', 'tasks'] },
     { title: 'Operations', pages: ['appointments'], industry: true },
     { title: 'Money',      pages: ['quotes', 'revenue'] },
-    { title: 'Growth',     pages: ['reviews', 'automations', 'newsletter'] },
+    { title: 'Growth',     pages: ['reviews', 'newsletter'] },
     // Owners manage push inside Settings, so `notifications` is technician-only
     // (ROLE_PAGES in app.js) — this group simply disappears for everyone else.
     { title: 'Account',    pages: ['notifications'] },
