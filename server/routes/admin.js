@@ -797,4 +797,164 @@ router.post('/api/admin/accounts/create-client', requireAdmin, async (req, res) 
   }
 });
 
+// ── ADMIN: proof sheet — the sales evidence for one shop ─────────────────────
+// Rolls the shop's real call history + AI attribution into the numbers a sales
+// conversation needs: calls handled, after-hours saves, the AI funnel, revenue
+// recovered, and the best transcripts. Read-only. `:shopKey` accepts slug or id.
+//
+// The revenue/funnel math deliberately MIRRORS the owner dashboard
+// (GET /api/shop/revenue in routes/shop.js) — the proof sheet must never quote
+// a number the owner's own screen would contradict. If that block changes,
+// change this one to match.
+router.get('/api/admin/shop/:shopKey/proof', requireAdmin, (req, res) => {
+  try {
+    const key = req.params.shopKey;
+    const shop = master.get('shops').find(s => s.slug === key || s.id === key).value();
+    if (!shop) return res.status(404).json({ error: 'No shop matches ' + key });
+    const db = getShopDb(shop.id);
+    const settings = db.get('settings').value() || {};
+    const calls = (db.get('calls').value() || []).filter(c => c && c.direction !== 'outbound');
+    const leads = db.get('leads').value() || [];
+    const appointments = db.get('appointments').value() || [];
+
+    const onlyDigits = s => String(s || '').replace(/\D/g, '');
+    const last10 = s => onlyDigits(s).slice(-10);
+    const round2 = n => Math.round(n * 100) / 100;
+
+    // After-hours: outside 8am–6pm or Sunday, in the shop's timezone. A blunt
+    // definition on purpose — it's a sales stat, not payroll; the label in the
+    // rendered sheet says exactly this.
+    const TZ = shop.timezone || settings.timezone || process.env.DEFAULT_TZ || 'America/Denver';
+    const fmt = new Intl.DateTimeFormat('en-US', { timeZone: TZ, hour: 'numeric', hour12: false, weekday: 'short' });
+    const afterHours = iso => {
+      if (!iso) return false;
+      try {
+        const parts = fmt.formatToParts(new Date(iso));
+        const hour = Number(parts.find(p => p.type === 'hour')?.value);
+        const wd = parts.find(p => p.type === 'weekday')?.value;
+        return wd === 'Sun' || hour < 8 || hour >= 18;
+      } catch { return false; }
+    };
+
+    const staffAnswered = calls.filter(c => c.accepted);
+    const aiCalls = calls.filter(c => c.voiceAI);
+    const voicemails = calls.filter(c => !c.accepted && !c.voiceAI && (c.transcript || c.recording));
+    const missedUnhandled = calls.filter(c => c.missed && !c.voiceAI && !c.transcript && !c.recording);
+    const afterHoursCalls = calls.filter(c => afterHours(c.startedAt));
+
+    // ── AI funnel + Revenue Recovered — mirrored from /api/shop/revenue ──────
+    const quoteOf = l => Number(
+      l.quotedAmount != null ? l.quotedAmount
+      : (l.ai && l.ai.quotedPrice != null) ? l.ai.quotedPrice
+      : (l.ai && l.ai.budget));
+    const aiLeads = leads.filter(l => l.ai && l.ai.source === 'voice');
+    const aiCustCap = new Map(), aiPhoneCap = new Map();
+    aiLeads.forEach(l => {
+      const cap = String(l.ai.generatedAt || l.createdAt || '').slice(0, 10);
+      if (l.customerId) aiCustCap.set(l.customerId, cap);
+      const ph = last10(l.phone); if (ph.length === 10) aiPhoneCap.set(ph, cap);
+    });
+    const done = appointments.filter(a => a.status === 'done');
+    const aiDone = done.filter(a => {
+      if (a.source === 'ai-voice') return true;
+      const cap = (a.customerId && aiCustCap.get(a.customerId)) || aiPhoneCap.get(last10(a.customerPhone));
+      return !!cap && String(a.date || '') >= cap;
+    });
+    const realizedCust = new Set(aiDone.map(a => a.customerId).filter(Boolean));
+    const realizedPhone = new Set(aiDone.map(a => last10(a.customerPhone)).filter(p => p.length === 10));
+    const aiPipeline = aiLeads.filter(l => {
+      if (!(quoteOf(l) > 0)) return false;
+      const ph = last10(l.phone);
+      return !((l.customerId && realizedCust.has(l.customerId)) || (ph.length === 10 && realizedPhone.has(ph)));
+    });
+    const outcomeType = c => (c.voiceAI.outcome && c.voiceAI.outcome.type) || null;
+    const leadById = new Map(leads.map(l => [l.id, l]));
+    const gaveQuote = c => {
+      const o = c.voiceAI.outcome || {};
+      return o.type === 'quoted' || o.quotedPrice != null || o.price != null;
+    };
+    const callQuoted = c => gaveQuote(c) || (c.leadId && leadById.has(c.leadId) && quoteOf(leadById.get(c.leadId)) > 0);
+
+    // Response time (same sources the Response Center reads).
+    const leadCreated = l => l.createdAt || l.created_at || '';
+    const respTimes = leads.map(l => {
+      if (l.response_time_seconds != null) return l.response_time_seconds / 60;
+      if (l.firstResponseAt && leadCreated(l)) return Math.max(0, (new Date(l.firstResponseAt) - new Date(leadCreated(l))) / 60000);
+      return null;
+    }).filter(v => v != null && isFinite(v));
+
+    // Best transcripts: engaged AI calls, booked > quoted > captured, then by
+    // quoted price. Turns are joined and capped so the payload stays sane.
+    const rank = { booked: 3, quoted: 2, captured: 1 };
+    const topCalls = aiCalls
+      .filter(c => (c.voiceAI.turns || []).some(t => t.role === 'user'))
+      .map(c => {
+        const o = c.voiceAI.outcome || {};
+        return {
+          at: c.startedAt || null,
+          afterHours: afterHours(c.startedAt),
+          outcome: o.type || (c.voiceAI.status || 'engaged'),
+          quality: o.quality || null,
+          service: o.serviceNeeded || o.service || null,
+          quotedPrice: o.quotedPrice != null ? Number(o.quotedPrice) : (o.price != null ? Number(o.price) : null),
+          summary: o.summary || null,
+          transcript: (c.voiceAI.turns || [])
+            .map(t => `${t.role === 'user' ? 'Caller' : 'ShopFlow'}: ${String(t.text || '').trim()}`)
+            .join('\n').slice(0, 4000),
+        };
+      })
+      .sort((a, b) => (rank[b.outcome] || 0) - (rank[a.outcome] || 0) || (b.quotedPrice || 0) - (a.quotedPrice || 0))
+      .slice(0, Math.min(Number(req.query.transcripts) || 5, 10));
+
+    const callDates = calls.map(c => c.startedAt).filter(Boolean).sort();
+    res.json({
+      shop: { id: shop.id, slug: shop.slug, shopName: shop.shopName, monthlyRate: shop.monthlyRate != null ? shop.monthlyRate : null },
+      generatedAt: new Date().toISOString(),
+      timezone: TZ,
+      window: {
+        firstCallAt: callDates[0] || null,
+        lastCallAt: callDates[callDates.length - 1] || null,
+        days: callDates.length ? Math.max(1, Math.round((new Date(callDates[callDates.length - 1]) - new Date(callDates[0])) / 86400000)) : 0,
+      },
+      calls: {
+        total: calls.length,
+        staffAnswered: staffAnswered.length,
+        aiHandled: aiCalls.length,
+        voicemail: voicemails.length,
+        missedUnhandled: missedUnhandled.length,
+        afterHours: afterHoursCalls.length,
+        afterHoursAiHandled: afterHoursCalls.filter(c => c.voiceAI).length,
+      },
+      aiFunnel: {
+        answered: aiCalls.length,
+        engaged: aiCalls.filter(c => (c.voiceAI.turns || []).some(t => t.role === 'user')).length,
+        quoted: aiCalls.filter(callQuoted).length,
+        captured: aiCalls.filter(c => outcomeType(c) === 'captured').length,
+        booked: aiCalls.filter(c => outcomeType(c) === 'booked').length,
+        transfer: aiCalls.filter(c => outcomeType(c) === 'transfer').length,
+        quotedTotal: round2(aiLeads.reduce((s, l) => s + (quoteOf(l) > 0 ? quoteOf(l) : 0), 0)),
+      },
+      revenue: {
+        aiRecoveredTotal: round2(aiDone.reduce((s, a) => s + Number(a.price || 0), 0)),
+        aiRecoveredJobs: aiDone.length,
+        aiPipelineOpen: round2(aiPipeline.reduce((s, l) => s + (quoteOf(l) || 0), 0)),
+        aiPipelineCount: aiPipeline.length,
+      },
+      responseTime: {
+        avgMin: respTimes.length ? round2(respTimes.reduce((a, b) => a + b, 0) / respTimes.length) : null,
+        pctUnder5: respTimes.length ? Math.round(respTimes.filter(v => v <= 5).length / respTimes.length * 100) : null,
+        sampled: respTimes.length,
+      },
+      leads: {
+        total: leads.length,
+        fromCalls: leads.filter(l => l.ai && l.ai.source === 'voice').length,
+      },
+      topCalls,
+    });
+  } catch (e) {
+    console.error('Admin proof-sheet error:', e.message);
+    res.status(500).json({ error: 'Failed to build proof sheet' });
+  }
+});
+
 module.exports = router;
