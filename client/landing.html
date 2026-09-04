@@ -186,6 +186,37 @@ nav.scrolled{background:rgba(255,255,255,.85);backdrop-filter:saturate(180%) blu
 .fdesc{font-size:14px;color:var(--muted);margin-top:7px;line-height:1.65;}
 @media(max-width:860px){.grid-3{grid-template-columns:1fr;}}
 
+/* ── Pricing ── */
+.price-grid{display:grid;grid-template-columns:1fr 1.15fr 1fr;gap:18px;margin-top:48px;align-items:stretch;text-align:left;}
+.tier{background:#fff;border:1px solid var(--line);border-radius:18px;padding:30px 28px;display:flex;flex-direction:column;box-shadow:var(--shadow-sm);}
+.tier .tname{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-family:var(--mono);}
+.tier .tprice{font-size:40px;font-weight:800;letter-spacing:-.04em;margin-top:12px;font-variant-numeric:tabular-nums;}
+.tier .tprice span{font-size:15px;font-weight:500;color:var(--muted);letter-spacing:0;}
+.tier .tfor{font-size:14px;color:var(--muted);margin-top:8px;line-height:1.55;min-height:44px;}
+.tier ul{list-style:none;margin-top:20px;flex:1;}
+.tier li{display:flex;gap:10px;align-items:flex-start;font-size:14px;font-weight:500;padding:6px 0;line-height:1.5;}
+.tier li .ic{width:16px;height:16px;color:var(--green-d);margin-top:2.5px;}
+.tier .btn{margin-top:22px;width:100%;}
+.tier.feat{background:var(--dark);color:#fff;border-color:var(--dark);box-shadow:var(--shadow-lg);position:relative;}
+.tier.feat .tname{color:#4ADE80;}
+.tier.feat .tfor{color:#94A3B8;}
+.tier.feat li{color:#E2E8F0;}
+.tier.feat li .ic{color:#4ADE80;}
+.tier .flag{position:absolute;top:-13px;left:50%;transform:translateX(-50%);background:var(--green-d);color:#fff;font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;border-radius:100px;padding:6px 16px;white-space:nowrap;}
+.price-note{max-width:680px;margin:26px auto 0;font-size:13.5px;color:var(--muted);line-height:1.65;}
+.guarantee{max-width:760px;margin:40px auto 0;background:var(--green-tint);border:1px solid #DCFCE7;border-radius:16px;padding:22px 28px;display:flex;gap:16px;align-items:flex-start;text-align:left;}
+.guarantee .ic{width:26px;height:26px;color:var(--green-deep);flex-shrink:0;margin-top:2px;}
+.guarantee b{font-size:15.5px;letter-spacing:-.01em;}
+.guarantee p{font-size:14px;color:var(--muted);margin-top:4px;line-height:1.6;}
+.replace{max-width:760px;margin:44px auto 0;}
+.replace .rrow{display:flex;justify-content:space-between;gap:16px;padding:12px 4px;border-bottom:1px solid var(--line);font-size:14.5px;}
+.replace .rrow .rl{color:var(--muted);}
+.replace .rrow .rn{font-family:var(--mono);font-weight:600;font-variant-numeric:tabular-nums;}
+.replace .rrow.sum{border-bottom:none;border-top:2px solid var(--text);font-weight:700;font-size:15.5px;}
+.replace .rrow.sum .rl{color:var(--text);}
+.replace .rrow.sum .rn{color:var(--green-deep);}
+@media(max-width:920px){.price-grid{grid-template-columns:1fr;max-width:460px;margin-left:auto;margin-right:auto;}}
+
 /* ── FAQ ── */
 .faq{max-width:740px;margin:44px auto 0;}
 .qa{border-bottom:1px solid var(--line);}
@@ -264,6 +295,7 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
       <a class="lnk" href="#platform">Platform</a>
       <a class="lnk" href="#how">How it works</a>
       <a class="lnk" href="#industries">Industries</a>
+      <a class="lnk" href="#pricing">Pricing</a>
       <a class="lnk" href="#fit">Working with us</a>
       <a class="lnk" href="#faq">FAQ</a>
       <span class="nav-sep"></span>
@@ -277,6 +309,7 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
   <a href="#platform">Platform</a>
   <a href="#how">How it works</a>
   <a href="#industries">Industries</a>
+  <a href="#pricing">Pricing</a>
   <a href="#fit">Working with us</a>
   <a href="#faq">FAQ</a>
   <a href="/login">Client login</a>
@@ -288,7 +321,7 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
   <div class="wrap hero-inner">
     <div class="kicker rv">The operating system for service businesses</div>
     <h1 class="rv rv-d1">Never miss another <span class="accent">customer.</span></h1>
-    <p class="hero-sub rv rv-d2">ShopFlow captures every lead, answers every call with a 24/7 AI receptionist, books the job, collects the deposit, and brings customers back — so nothing slips while you're doing the work.</p>
+    <p class="hero-sub rv rv-d2">ShopFlow is a full front office for your shop: a 24/7 AI receptionist on your line, every lead chased in minutes, quotes that collect deposits, and a monthly report proving what it earned you — for less than a front-desk hire.</p>
     <div class="hero-btns rv rv-d3">
       <a class="btn btn-green btn-lg" href="/demo">Book a call <svg class="ic" style="width:17px;height:17px;"><use href="#i-arrow"/></svg></a>
       <a class="btn btn-ghost btn-lg" href="#how">See how it works</a>
@@ -296,9 +329,9 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
     <div class="hero-stats rv rv-d4">
       <div class="hstat"><div class="n"><em>$</em><span data-count="5.89">5.89</span></div><div class="l">of booked work for every $1.00 spent on ads — first 7 days of a live campaign</div></div>
       <div class="hstat"><div class="n"><em>$</em><span data-count="3600">3,600</span></div><div class="l">booked by the AI receptionist in its first 10 days</div></div>
-      <div class="hstat"><div class="n">24<em>/</em>7</div><div class="l">every call answered — nights, weekends, mid-job</div></div>
+      <div class="hstat"><div class="n"><span data-count="100">100</span><em>+</em></div><div class="l">real calls handled on live shop lines — nights, weekends, mid-job</div></div>
     </div>
-    <div class="hstat-note rv rv-d4">Early numbers from live shops</div>
+    <div class="hstat-note rv rv-d4">Numbers from live shops, not projections</div>
 
     <!-- Product mockup -->
     <div class="shot rv">
@@ -333,7 +366,7 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
           <div>
             <div class="pt">Missed calls while you're on a job</div>
             <div class="pd">You're mid-install with gloves on. The phone rings, goes to voicemail, and that customer calls the next shop on the list.</div>
-            <div class="fix"><svg class="ic"><use href="#i-arrow"/></svg> The AI receptionist answers 24/7, quotes, books the job, and texts the caller back instantly.</div>
+            <div class="fix"><svg class="ic"><use href="#i-arrow"/></svg> The AI receptionist answers 24/7, quotes your real prices, and books the job on the spot.</div>
           </div>
         </div>
         <div class="prob rv">
@@ -349,7 +382,7 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
           <div>
             <div class="pt">Customers who never come back</div>
             <div class="pd">A great job should mean a customer for life — but nobody has time to chase rebookings by hand.</div>
-            <div class="fix"><svg class="ic"><use href="#i-arrow"/></svg> Win-back tasks, service-due reminders and review requests run automatically in the background.</div>
+            <div class="fix"><svg class="ic"><use href="#i-arrow"/></svg> Win-backs, service-due reminders and review asks queue up daily — cleared with one tap each.</div>
           </div>
         </div>
         <div class="prob rv">
@@ -392,7 +425,7 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
           <li><svg class="ic"><use href="#i-check"/></svg> Answers 24/7 with natural, human-quality voice</li>
           <li><svg class="ic"><use href="#i-check"/></svg> Quotes your services and books jobs on the spot</li>
           <li><svg class="ic"><use href="#i-check"/></svg> Transfers to you live when the call needs a human</li>
-          <li><svg class="ic"><use href="#i-check"/></svg> Missed-call text-back keeps every lead warm</li>
+          <li><svg class="ic"><use href="#i-check"/></svg> Rings two phones at once — the AI only steps in if nobody grabs it</li>
           <li><svg class="ic"><use href="#i-check"/></svg> Every call logged with summary and full transcript</li>
         </ul>
       </div>
@@ -448,7 +481,7 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
         <ul>
           <li><svg class="ic"><use href="#i-check"/></svg> Customer profiles with vehicles, photos and history</li>
           <li><svg class="ic"><use href="#i-check"/></svg> A daily task list of win-backs and service-due customers</li>
-          <li><svg class="ic"><use href="#i-check"/></svg> Review requests fire after every finished job</li>
+          <li><svg class="ic"><use href="#i-check"/></svg> One-tap review requests tied to real finished jobs</li>
           <li><svg class="ic"><use href="#i-check"/></svg> Email newsletters to your whole list, built in</li>
           <li><svg class="ic"><use href="#i-check"/></svg> Revenue dashboard shows exactly what's working</li>
         </ul>
@@ -510,7 +543,7 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
     <div class="results rv">
       <div class="kicker">Real numbers, not projections</div>
       <h3>What happened when real shops turned it on</h3>
-      <p>We publish early numbers from live shops — not stock-photo testimonials. These come straight from a client's 7-day ad report and real phone lines. Ask on your call and we'll walk you through the full report.</p>
+      <p>We publish early numbers from live shops — not stock-photo testimonials. The receptionist has handled 100+ real calls on live shop lines; these figures come straight from a client's 7-day ad report and the call log. Ask on your call and we'll walk you through the full report.</p>
       <div class="res-grid">
         <div class="res"><div class="n"><em>$</em><span data-count="5.89">5.89</span></div><div class="l">of booked work for every $1.00 spent on ads — a window-tint shop's first 7 days, $147.70 in, $870 booked</div></div>
         <div class="res"><div class="n"><span data-count="23">23</span> <em>leads</em></div><div class="l">captured in those 7 days at $6.42 a lead — every one called, texted and emailed</div></div>
@@ -520,13 +553,88 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
   </div>
 </section>
 
+<!-- ═══ PRICING ═══ -->
+<section class="section" id="pricing">
+  <div class="wrap center">
+    <div class="rv" style="max-width:680px;margin:0 auto;">
+      <div class="kicker">Pricing</div>
+      <h2 class="h2">Priced like the department it replaces</h2>
+      <p class="lead">You're not buying software — you're replacing a front-desk hire, an ads agency and a stack of subscriptions with one system that reports its own ROI. Straight prices, no surprises on the call.</p>
+    </div>
+
+    <div class="price-grid">
+      <div class="tier rv">
+        <div class="tname">Receptionist</div>
+        <div class="tprice">$349<span> /month</span></div>
+        <div class="tfor">Stop losing the calls you already earn. For shops that want the phone handled first.</div>
+        <ul>
+          <li><svg class="ic"><use href="#i-check"/></svg> 24/7 AI receptionist on your business line</li>
+          <li><svg class="ic"><use href="#i-check"/></svg> Missed-call rescue — quotes, captures, books</li>
+          <li><svg class="ic"><use href="#i-check"/></svg> Every call logged with summary + transcript</li>
+          <li><svg class="ic"><use href="#i-check"/></svg> Full CRM: leads, pipeline, customer profiles</li>
+          <li><svg class="ic"><use href="#i-check"/></svg> Instant alerts to your phone on every lead</li>
+        </ul>
+        <a class="btn btn-ghost" href="/demo">Book a call</a>
+      </div>
+
+      <div class="tier feat rv rv-d1">
+        <div class="flag">The Growth Engine</div>
+        <div class="tname">Growth Engine</div>
+        <div class="tprice">$3,000<span style="color:#94A3B8;"> /month</span></div>
+        <div class="tfor">The full revenue department: we fill the calendar, answer the phone, chase every lead and prove the return.</div>
+        <ul>
+          <li><svg class="ic"><use href="#i-check"/></svg> Everything in Receptionist</li>
+          <li><svg class="ic"><use href="#i-check"/></svg> Managed Meta ads + landing pages, done for you</li>
+          <li><svg class="ic"><use href="#i-check"/></svg> Speed-to-lead system with response-time scoreboard</li>
+          <li><svg class="ic"><use href="#i-check"/></svg> Branded two-option estimates with online deposits</li>
+          <li><svg class="ic"><use href="#i-check"/></svg> Daily follow-up worklist: win-backs, service-due, new leads</li>
+          <li><svg class="ic"><use href="#i-check"/></svg> Monthly performance report + strategy call</li>
+          <li><svg class="ic"><use href="#i-check"/></svg> White-glove setup — live within a week</li>
+        </ul>
+        <a class="btn btn-green" href="/demo">Book a call</a>
+      </div>
+
+      <div class="tier rv rv-d2">
+        <div class="tname">Market Leader</div>
+        <div class="tprice">$5,000<span> /month</span></div>
+        <div class="tfor">For multi-location shops and operators chasing fleet, dealer and commercial accounts.</div>
+        <ul>
+          <li><svg class="ic"><use href="#i-check"/></svg> Everything in Growth Engine</li>
+          <li><svg class="ic"><use href="#i-check"/></svg> Second location or brand included</li>
+          <li><svg class="ic"><use href="#i-check"/></svg> Fleet &amp; recurring-contract estimating</li>
+          <li><svg class="ic"><use href="#i-check"/></svg> Priority buildouts for your workflow</li>
+          <li><svg class="ic"><use href="#i-check"/></svg> Quarterly in-depth business review</li>
+        </ul>
+        <a class="btn btn-ghost" href="/demo">Book a call</a>
+      </div>
+    </div>
+    <p class="price-note rv">Growth Engine and Market Leader: your ad budget is paid directly to Meta and is separate — most shops run $1,500–3,000/month. Every dollar of spend reaches customers, not us. 90-day initial term, then month-to-month.</p>
+
+    <div class="guarantee rv">
+      <svg class="ic"><use href="#i-shield"/></svg>
+      <div>
+        <b>The 90-day promise</b>
+        <p>The system tracks every dollar it touches — you watch it on your own dashboard, not our spreadsheet. If after 90 days the tracked revenue it recovered and booked doesn't beat what you paid us, month four is free and you can walk.</p>
+      </div>
+    </div>
+
+    <div class="replace rv">
+      <div class="kicker" style="text-align:left;margin-bottom:10px;">What the Growth Engine replaces</div>
+      <div class="rrow"><span class="rl">Front-desk hire (answers 40 hrs, not 168)</span><span class="rn">$2,800+/mo</span></div>
+      <div class="rrow"><span class="rl">Marketing agency running your ads</span><span class="rn">$1,500+/mo</span></div>
+      <div class="rrow"><span class="rl">CRM, booking, invoicing &amp; reminder subscriptions</span><span class="rn">$200+/mo</span></div>
+      <div class="rrow sum"><span class="rl">Doing it the old way</span><span class="rn">$4,500+/mo — disconnected</span></div>
+    </div>
+  </div>
+</section>
+
 <!-- ═══ HOW WE START ═══ -->
 <section class="section" id="fit">
   <div class="wrap center">
     <div class="rv" style="max-width:640px;margin:0 auto;">
       <div class="kicker">How we start</div>
-      <h2 class="h2">We look under the hood before we talk numbers</h2>
-      <p class="lead">No price list, no pitch deck. We dig into how your shop actually gets and keeps customers — and only move forward if we're confident we can grow it.</p>
+      <h2 class="h2">We look under the hood before we take your money</h2>
+      <p class="lead">The prices are public — the fit isn't automatic. Before we start, we dig into how your shop actually gets and keeps customers, and we only move forward if we're confident we can grow it.</p>
     </div>
     <div class="grid-3" style="text-align:left;">
       <div class="card rv">
@@ -542,7 +650,7 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
       <div class="card rv rv-d2">
         <div class="fic" style="font-family:var(--mono);font-size:15px;font-weight:600;color:var(--green-deep);">03</div>
         <div class="fname">You get a straight answer</div>
-        <div class="fdesc">If we're confident we can move your revenue, we'll show you exactly how and what it costs. If we're not the right fit, we'll tell you that too — and you keep the audit.</div>
+        <div class="fdesc">If we're confident we can move your revenue, we'll tell you which tier fits and exactly what the first 90 days look like. If we're not the right fit, we'll tell you that too — and you keep the audit.</div>
       </div>
     </div>
     <a class="btn btn-green btn-lg rv" href="/demo" style="margin-top:40px;">Book a call <svg class="ic" style="width:17px;height:17px;"><use href="#i-arrow"/></svg></a>
@@ -562,7 +670,7 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
       <details class="qa rv"><summary>Can my employees use it? Do I need to be technical? <span class="pm"><svg class="ic"><use href="#i-plus"/></svg></span></summary><div class="ans">If your team can use a phone, they can use ShopFlow. It runs in any browser, installs to a home screen like an app, and the daily flow is simple: check the queue, tap to reply, mark jobs done. No training courses, no IT person.</div></details>
       <details class="qa rv"><summary>I already have a CRM. Can I switch? <span class="pm"><svg class="ic"><use href="#i-plus"/></svg></span></summary><div class="ans">Yes — bring your customer list and we'll import it during onboarding, so your history comes with you. Nothing starts from zero.</div></details>
       <details class="qa rv"><summary>What does the AI receptionist actually do? <span class="pm"><svg class="ic"><use href="#i-plus"/></svg></span></summary><div class="ans">It answers your line 24/7 in a natural voice, answers questions, quotes your real prices, books appointments on your schedule, and texts callers back. When a call needs you, it transfers live. Every call is logged in your CRM with a summary and transcript — nothing disappears into voicemail.</div></details>
-      <details class="qa rv"><summary>What does it cost? <span class="pm"><svg class="ic"><use href="#i-plus"/></svg></span></summary><div class="ans">It depends on what your shop actually needs — which is why we start with an audit, not a price list. On the call we dig into your lead flow, phones and follow-up. If we're confident we can grow your revenue, we'll scope the work and quote it straight. If we're not the right fit, we'll say so. If we run ads for you, your ad budget is paid directly to Meta — every dollar of spend goes toward reaching customers, not to us.</div></details>
+      <details class="qa rv"><summary>What does it cost? <span class="pm"><svg class="ic"><use href="#i-plus"/></svg></span></summary><div class="ans">Prices are public: the Receptionist is $349/month, the Growth Engine is $3,000/month, and Market Leader is $5,000/month — see the <a href="#pricing" style="color:var(--green-deep);font-weight:600;">pricing section</a> for what's in each. If we run ads for you, your ad budget is paid directly to Meta and is separate — every dollar of spend goes toward reaching customers, not to us. And the Growth Engine carries the 90-day promise: if the tracked revenue it recovers and books doesn't beat what you paid, month four is free.</div></details>
       <details class="qa rv"><summary>What support do I get? <span class="pm"><svg class="ic"><use href="#i-plus"/></svg></span></summary><div class="ans">A direct line to the team that built it — not a ticket queue. Onboarding is white-glove, and you're in regular strategy meetings with us, reviewing real numbers and adjusting together.</div></details>
     </div>
   </div>
@@ -590,7 +698,7 @@ footer{padding:60px 0 44px;border-top:1px solid var(--line);}
       </div>
       <div class="foot-cols">
         <div class="foot-col"><h4>Product</h4>
-          <a href="#platform">Platform</a><a href="#how">How it works</a><a href="#industries">Industries</a><a href="#fit">Working with us</a></div>
+          <a href="#platform">Platform</a><a href="#how">How it works</a><a href="#industries">Industries</a><a href="#pricing">Pricing</a><a href="#fit">Working with us</a></div>
         <div class="foot-col"><h4>Company</h4>
           <a href="/demo">Book a call</a><a href="#faq">FAQ</a><a href="/login">Client login</a></div>
         <div class="foot-col"><h4>Legal</h4>
