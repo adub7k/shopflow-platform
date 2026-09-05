@@ -242,16 +242,31 @@ const Q = {
     const parts=location.pathname.replace(/^\/quote\/?/,'').split('/');
     this.slug=(parts[0]||'').split('?')[0]; this.id=(parts[1]||'').split('?')[0];
     if(!this.slug||!this.id) return this.finish('gone');
-    try{
-      const info=await fetch('/api/public/'+this.slug+'/quote/'+this.id).then(r=>r.json());
-      if(info.error||!info.quote) return this.finish('gone');
+    // The first tap after a deploy/cold start (or on one bar of signal) can be
+    // slow or drop — a customer only ever taps this link once, so be patient:
+    // retry with backoff before giving up, and never call a NETWORK failure
+    // "estimate not found". Only a real answer from the server decides that.
+    const delays=[0,2000,5000,8000];
+    for(let i=0;i<delays.length;i++){
+      if(delays[i]) await new Promise(r=>setTimeout(r,delays[i]));
+      let res;
+      try{ res=await fetch('/api/public/'+this.slug+'/quote/'+this.id,{cache:'no-store'}); }
+      catch(e){ continue; }                    // network hiccup → retry
+      if(res.status>=500){ continue; }         // server mid-restart → retry
+      let info; try{ info=await res.json(); }catch(e){ continue; }
+      if(info.error||!info.quote) return this.finish('gone');   // real 404
       this.info=info;
       document.documentElement.style.setProperty('--accent', info.accentColor||'#16a34a');
       document.title='Estimate — '+(info.shopName||'');
       this._letterhead(info);
       this._render(info.quote);
-      this.finish('view');
-    }catch(e){ this.finish('gone'); }
+      return this.finish('view');
+    }
+    // Retries exhausted — it's a connection problem, not a missing estimate.
+    const g=document.getElementById('gone');
+    if(g){ g.querySelector('h2').textContent='Having trouble connecting';
+      g.querySelector('p').textContent='Please check your signal and refresh this page — your estimate is still here.'; }
+    this.finish('gone');
   },
   // Reveal the sheet with `id` as the visible section.
   finish(id){

@@ -243,13 +243,16 @@ router.get('/api/public/:shopSlug/quote/:quoteId', async (req, res) => {
       h.upsert('quotes', q);
     } catch (e) {}
     // Self-heal paid-but-unflipped payments (customer paid on Square but the
-    // success redirect was missed): every open of the estimate reconciles both
-    // the deposit and the full-balance payment link.
+    // success redirect was missed): opening the estimate reconciles both the
+    // deposit and the full-balance order. FIRE-AND-FORGET — this is a backstop
+    // (the payment success redirect already fulfills the normal path), and
+    // awaiting Square's API here made the customer's first page load hang when
+    // Square was slow. A missed redirect shows correctly on the next open.
     if (q.squareOrderId && q.depositRequired && !q.depositPaid) {
-      try { await reconcileSquareQuoteDeposit(ctx.db, s, h, q); } catch (e) {}
+      reconcileSquareQuoteDeposit(ctx.db, s, h, q).catch(() => {});
     }
     if (q.squareBalanceOrderId && !q.balancePaid) {
-      try { await reconcileSquareQuoteBalance(ctx.db, s, h, q); } catch (e) {}
+      reconcileSquareQuoteBalance(ctx.db, s, h, q).catch(() => {});
     }
     const stripeReady = !!(s.stripe && s.stripe.connectAccountId && s.stripe.onboardingComplete);
     res.json({
