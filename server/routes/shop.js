@@ -1343,13 +1343,11 @@ router.post('/api/shop/leads/:id/convert', requireAuth, requireRole('full','tech
     h.upsert('customers', cust);
   }
   lead.customerId = cust.id;
-  // Converting implies the work is booked: move the lead up to the BOOKED
-  // stage — and never past it. The stage keyed 'booked' wins whenever it
-  // exists (renames keep the key); only a pipeline with no booked stage falls
-  // back to its first won middle stage; with neither, the stage stays put.
-  // (The old "first won-flagged stage" resolver shot converted leads into
-  // Worked — or even Closed — on custom configs where booked wasn't flagged.)
-  {
+  // Converting FOR BOOKING implies the work is booked: move the lead up to the
+  // BOOKED stage — and never past it. But a convert that only needs the client
+  // record (e.g. "Send an estimate" linking the lead to a customer) passes
+  // keepStage — nothing is booked yet, so the pipeline stage must not move.
+  if (!req.body.keepStage) {
     const cfg = (((db.get('settings').value() || {}).pipeline) || {}).stages;
     const stages = (Array.isArray(cfg) && cfg.length) ? cfg : null;
     const keys = stages ? stages.map(s => s && s.key) : ['new','contacted','quoted','booked','worked','closed','lost'];

@@ -848,7 +848,9 @@ const Leads = {
         this._captureModalEdits(l);
         await db.leads.update(id, { name: l.name || '', quotedAmount: l.quotedAmount != null ? l.quotedAmount : null, ...(this._pendingStatus ? { status: this._pendingStatus } : {}) });
       }
-      const res = await db.leads.convert(id);
+      // keepStage: we only need the client record to hang the estimate on —
+      // nothing is booked, so the lead must stay in its pipeline stage.
+      const res = await db.leads.convert(id, { keepStage: true });
       if (!res.ok) throw new Error(res.error || 'Could not create the client');
       Modal.close();
       App.nav('quotes');
