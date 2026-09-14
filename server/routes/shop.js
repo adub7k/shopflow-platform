@@ -708,6 +708,42 @@ router.delete('/api/shop/expenses/:id', requireAuth, requireRole('full'), shopRo
 }));
 
 // ── PROTECTED: Revenue ────────────────────────────────────────────────────────
+// ── Lead-source attribution for appointments ─────────────────────────────────
+// Which channel a booking came from. The lead record is the truth when there is
+// one (matched to the appointment's customer, or by phone); otherwise the
+// customer's own source (stamped at convert / online booking), otherwise the
+// appointment's source. Raw values are bucketed into a short list of channels
+// so the Revenue tab reads as "Phone call / Meta ads / Website…" instead of
+// a dozen spellings.
+function bucketLeadSource(raw) {
+  const s = String(raw || '').toLowerCase().trim();
+  if (!s || ['seed', 'crm', 'manual', 'estimate', 'direct'].includes(s)) return { key: 'direct', label: 'Direct / manual' };
+  if (/\b(meta|facebook|fb|instagram|ig)\b/.test(s))                    return { key: 'meta', label: 'Meta ads' };
+  if (/\b(google|gmb|lsa|maps)\b/.test(s))                              return { key: 'google', label: 'Google' };
+  if (/\b(call|phone|missed|voicemail|receptionist|ai-voice)\b/.test(s)) return { key: 'call', label: 'Phone call' };
+  if (/\b(booking-page|booking|online)\b/.test(s))                      return { key: 'online', label: 'Online booking' };
+  if (/\b(website|web|form|landing)\b/.test(s))                         return { key: 'website', label: 'Website' };
+  if (/\breferral\b/.test(s))                                            return { key: 'referral', label: 'Referral' };
+  if (/\bwalk/.test(s))                                                   return { key: 'walk-in', label: 'Walk-in' };
+  return { key: s.slice(0, 30), label: s.charAt(0).toUpperCase() + s.slice(1, 30) };
+}
+function apptLeadSourceResolver(h) {
+  const leads = h.getAll('leads'), customers = h.getAll('customers');
+  const last10 = (p) => { const d = String(p || '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : ''; };
+  const byCust = {}, byPhone = {};
+  // Earliest lead wins — that's the channel that first brought the customer in.
+  const stamp = (l) => new Date(l.createdAt || l.created_at || l.firstContactAt || 0).getTime();
+  [...leads].sort((a, b) => stamp(a) - stamp(b)).forEach(l => {
+    if (l.customerId && !byCust[l.customerId]) byCust[l.customerId] = l;
+    const p = last10(l.phone); if (p && !byPhone[p]) byPhone[p] = l;
+  });
+  return (a) => {
+    const cust = a.customerId ? customers.find(c => c.id === a.customerId) : null;
+    const lead = (a.customerId && byCust[a.customerId]) || byPhone[last10(a.customerPhone || (cust && cust.phone))] || null;
+    return bucketLeadSource(lead ? (lead.source || 'call') : ((cust && cust.source) || a.source || ''));
+  };
+}
+
 // ── Monthly history ──────────────────────────────────────────────────────────
 // One closed month, fully broken down: the numbers the P&L card shows for "this
 // month", but for any past month, plus the job-level and expense-level rows
@@ -771,9 +807,21 @@ router.get('/api/shop/revenue/month/:ym', requireAuth, requireRole('full'), shop
   });
   const byCreator = Object.values(creators).map(r => ({ ...r, booked: round2(r.booked), closed: round2(r.closed) })).sort((a, b) => b.closed - a.closed || b.booked - a.booked);
 
+  // Bookings by lead source — every live appointment dated that month, done or
+  // not, credited to the channel that brought the customer in.
+  const srcOf = apptLeadSourceResolver(h);
+  const bookedSrc = {};
+  all.forEach(a => {
+    if (DEAD.includes(a.status) || monthOf(a.date) !== ym) return;
+    const b = srcOf(a);
+    const row = bookedSrc[b.key] || (bookedSrc[b.key] = { source: b.key, label: b.label, count: 0, completed: 0, value: 0 });
+    row.count++; row.value += Number(a.price || 0); if (a.status === 'done') row.completed++;
+  });
+  const bookedBySource = Object.values(bookedSrc).map(r => ({ ...r, value: round2(r.value) })).sort((a, b) => b.count - a.count || b.value - a.value);
+
   res.json({
     ok: true, summary, prev,
-    byService, byBarber, byCreator,
+    byService, byBarber, byCreator, bookedBySource,
     expenses: expensesIn(ym).map(e => ({ id: e.id, date: e.date, category: e.category, description: e.description || '', amount: round2(Number(e.amount) || 0), recurring: e.recurring === 'monthly' })).sort((a, b) => b.amount - a.amount),
     jobs: jobs.map(a => ({ id: a.id, date: a.date, time: a.time || '', customerName: a.customerName, service: a.service, staff: a.barberName,
                            price: round2(Number(a.price) || 0), cost: round2(Number(a.cost) || 0), tax: round2(Number(a.taxAmount) || 0), source: a.source || '', bookedBy: a.createdByName || '' })),
@@ -900,6 +948,23 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
     .map(r => ({ ...r, bookedMonth: round2(r.bookedMonth), closedMonth: round2(r.closedMonth), closedTotal: round2(r.closedTotal) }))
     .sort((a, b) => b.bookedMonth - a.bookedMonth || b.closedTotal - a.closedTotal);
 
+  // ── Bookings by lead source ────────────────────────────────────────────────
+  // Which channel each appointment on the calendar came from (any live status,
+  // done or not; cancelled/no-show excluded), bucketed by appointment date.
+  const srcOf = apptLeadSourceResolver(h);
+  const bookedSrcMap = {};
+  h.getAll('appointments').forEach(a => {
+    if (DEAD_STATUSES.includes(a.status)) return;
+    const b = srcOf(a);
+    const row = bookedSrcMap[b.key] || (bookedSrcMap[b.key] = { source: b.key, label: b.label, month: 0, monthValue: 0, total: 0, totalValue: 0 });
+    const price = Number(a.price || 0);
+    row.total++; row.totalValue += price;
+    if (monthOf(a.date) === curMonth) { row.month++; row.monthValue += price; }
+  });
+  const bookedBySource = Object.values(bookedSrcMap)
+    .map(r => ({ ...r, monthValue: round2(r.monthValue), totalValue: round2(r.totalValue) }))
+    .sort((a, b) => b.month - a.month || b.total - a.total);
+
   // ── Revenue Recovered (AI receptionist) ────────────────────────────────────
   // Money the AI voice receptionist brought in on calls the shop would otherwise
   // have missed. Two sources, deduped by appointment id:
@@ -998,7 +1063,7 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
     monthDeposits, totalDeposits,
     monthJobs: thisMonth.length,
     avgTicket: thisMonth.length?Math.round(thisMonth.reduce((s,a)=>s+Number(a.price||0),0)/thisMonth.length):0,
-    byCreator,
+    byCreator, bookedBySource,
     byBarber: Object.values(byBarber).sort((a,b)=>b.revenue-a.revenue),
     byMonth: Object.entries(byMonth).sort((a,b)=>a[0].localeCompare(b[0])).map(([month,revenue])=>({month,revenue})),
     recentDone: [...done].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,5),

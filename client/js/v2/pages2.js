@@ -433,6 +433,28 @@
         html.push('</div></div>');
       }
 
+      // Bookings by lead source: which channel each appointment on the calendar
+      // came from (phone call, Meta ads, website…), done or not. This month,
+      // falling back to all-time when nothing is booked yet this month.
+      const bsrc = data.bookedBySource || [];
+      if (bsrc.length) {
+        const thisMonth = bsrc.filter(x => x.month > 0);
+        const usingAll = !thisMonth.length;
+        const shown = usingAll ? bsrc : thisMonth;
+        const monthTotal = shown.reduce((s, x) => s + (usingAll ? x.total : x.month), 0);
+        const maxB = Math.max(...shown.map(x => usingAll ? x.total : x.month), 1);
+        html.push(`<div class="v2-card"><div class="v2-chd"><div class="t">Bookings by lead source</div><span class="sub">${usingAll ? 'all time · nothing booked this month yet' : `${monthTotal} booked this month`}</span></div><div style="padding:10px 16px 12px;">`);
+        shown.forEach(x => {
+          const n = usingAll ? x.total : x.month, val = usingAll ? x.totalValue : x.monthValue;
+          const pct = Math.round(n / maxB * 100), share = monthTotal ? Math.round(n / monthTotal * 100) : 0;
+          html.push(`<div style="display:flex;align-items:center;gap:10px;padding:4px 0;">
+            <span style="font-size:12px;color:var(--muted);width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(x.label)}</span>
+            <div class="bar-bg" style="flex:1;"><div class="bar-fill" style="width:${pct}%;background:var(--green);"></div></div>
+            <span class="num" style="font-size:12px;font-weight:650;width:140px;text-align:right;font-variant-numeric:tabular-nums;">${n} <span style="color:var(--faint);font-weight:500;">· ${share}% · ${fmtMoney(val)}</span></span></div>`);
+        });
+        html.push(`<div style="font-size:11px;color:var(--faint);margin-top:8px;">Appointments on the calendar by date, done or not (cancelled and no-shows excluded), credited to the lead that first brought the customer in${usingAll ? '' : ` · ${bsrc.reduce((s, x) => s + x.total, 0)} all time`}.</div></div></div>`);
+      }
+
       // Booked by: sales attribution — who ENTERED each job (from the login that
       // created it), vs. "Revenue by barber" below which is who PERFORMS the work.
       // Booked = money they put on the calendar this month; Closed = their jobs
@@ -542,6 +564,7 @@
     html.push(`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0 28px;">`);
     html.push(`<div>${sec('Profit & loss')}${pl('Revenue', s.revenue, { strong: true })}${pl('Materials (cost of goods)', s.cost, { neg: true })}${pl('Gross profit', s.gross, { strong: true, rule: true })}${pl('Operating expenses', s.opEx, { neg: true })}${pl('Net profit', s.net, { strong: true, rule: true, color: netColor })}</div>`);
     if (r.byService.length) html.push(`<div>${sec('By service')}${table(th('Service') + th('Jobs', 1) + th('Revenue', 1) + th('Margin', 1), r.byService.map(x => `<tr>${td(esc(x.service))}${td(x.count, 1)}${td(fmtMoney(x.revenue), 1)}${td(fmtMoney(x.margin), 1)}</tr>`).join(''))}</div>`);
+    if ((r.bookedBySource || []).length) html.push(`<div>${sec('Bookings by lead source', `${r.bookedBySource.reduce((s, x) => s + x.count, 0)} booked · done or not`)}${table(th('Source') + th('Booked', 1) + th('Completed', 1) + th('Value', 1), r.bookedBySource.map(x => `<tr>${td(esc(x.label))}${td(x.count, 1)}${td(x.completed, 1)}${td(fmtMoney(x.value), 1)}</tr>`).join(''))}</div>`);
     if (r.byBarber.length > 1) html.push(`<div>${sec('By ' + esc(V('staffPlural', 'Staff').toLowerCase()))}${table(th('Name') + th('Jobs', 1) + th('Revenue', 1), r.byBarber.map(x => `<tr>${td(esc(x.name))}${td(x.count, 1)}${td(fmtMoney(x.revenue), 1)}</tr>`).join(''))}</div>`);
     // Always shown — it's the sales-attribution read owners look for, so an
     // empty month says so instead of the section silently disappearing.
@@ -569,6 +592,7 @@
            row('Operating expenses', s.opEx), row('Net profit', s.net), row('Net margin %', s.netMarginPct), row('Sales tax collected', s.tax), row('Deposits collected', s.deposits), '');
     L.push(row('BY SERVICE'), row('Service', 'Jobs', 'Revenue', 'Cost', 'Margin'));
     r.byService.forEach(x => L.push(row(x.service, x.count, x.revenue, x.cost, x.margin))); L.push('');
+    if ((r.bookedBySource || []).length) { L.push(row('BOOKINGS BY LEAD SOURCE'), row('Source', 'Booked', 'Completed', 'Booked value')); r.bookedBySource.forEach(x => L.push(row(x.label, x.count, x.completed, x.value))); L.push(''); }
     if (r.byBarber.length) { L.push(row('BY STAFF'), row('Name', 'Jobs', 'Revenue', 'Cost', 'Margin')); r.byBarber.forEach(x => L.push(row(x.name, x.count, x.revenue, x.cost, x.margin))); L.push(''); }
     if (r.byCreator.length) { L.push(row('BOOKED BY'), row('Person', 'Booked $', 'Booked jobs', 'Closed $', 'Closed jobs')); r.byCreator.forEach(x => L.push(row(x.name, x.booked, x.bookedJobs, x.closed, x.closedJobs))); L.push(''); }
     L.push(row('OPERATING EXPENSES'), row('Date', 'Category', 'Description', 'Amount', 'Recurring'));
