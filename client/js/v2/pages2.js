@@ -433,27 +433,26 @@
         html.push('</div></div>');
       }
 
-      // Bookings by lead source: which channel each appointment on the calendar
-      // came from (phone call, Meta ads, website…), done or not. This month,
-      // falling back to all-time when nothing is booked yet this month.
-      const bsrc = data.bookedBySource || [];
-      if (bsrc.length) {
-        const thisMonth = bsrc.filter(x => x.month > 0);
-        const usingAll = !thisMonth.length;
-        const shown = usingAll ? bsrc : thisMonth;
-        const monthTotal = shown.reduce((s, x) => s + (usingAll ? x.total : x.month), 0);
-        const maxB = Math.max(...shown.map(x => usingAll ? x.total : x.month), 1);
-        html.push(`<div class="v2-card"><div class="v2-chd"><div class="t">Bookings by lead source</div><span class="sub">${usingAll ? 'all time · nothing booked this month yet' : `${monthTotal} booked this month`}</span></div><div style="padding:10px 16px 12px;">`);
-        shown.forEach(x => {
-          const n = usingAll ? x.total : x.month, val = usingAll ? x.totalValue : x.monthValue;
-          const pct = Math.round(n / maxB * 100), share = monthTotal ? Math.round(n / monthTotal * 100) : 0;
+      // Bookings by lead source, month to date: which channel each appointment
+      // on the calendar this month came from (phone call, Meta ads, website…),
+      // done or not. Strictly MTD — past months live in Monthly history below.
+      const bsrc = (data.bookedBySource || []).filter(x => x.month > 0);
+      const mtdTotal = bsrc.reduce((s, x) => s + x.month, 0);
+      const maxB = Math.max(...bsrc.map(x => x.month), 1);
+      html.push(`<div class="v2-card"><div class="v2-chd"><div class="t">Bookings by lead source</div><span class="sub">month to date · ${mtdTotal} booked</span></div><div style="padding:10px 16px 12px;">`);
+      if (!bsrc.length) {
+        html.push(`<div style="font-size:12px;color:var(--muted);">Nothing booked yet this month. Each appointment that lands on the calendar gets credited to the lead that first brought the customer in.</div>`);
+      } else {
+        bsrc.forEach(x => {
+          const pct = Math.round(x.month / maxB * 100), share = Math.round(x.month / mtdTotal * 100);
           html.push(`<div style="display:flex;align-items:center;gap:10px;padding:4px 0;">
             <span style="font-size:12px;color:var(--muted);width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(x.label)}</span>
             <div class="bar-bg" style="flex:1;"><div class="bar-fill" style="width:${pct}%;background:var(--green);"></div></div>
-            <span class="num" style="font-size:12px;font-weight:650;width:140px;text-align:right;font-variant-numeric:tabular-nums;">${n} <span style="color:var(--faint);font-weight:500;">· ${share}% · ${fmtMoney(val)}</span></span></div>`);
+            <span class="num" style="font-size:12px;font-weight:650;width:140px;text-align:right;font-variant-numeric:tabular-nums;">${x.month} <span style="color:var(--faint);font-weight:500;">· ${share}% · ${fmtMoney(x.monthValue)}</span></span></div>`);
         });
-        html.push(`<div style="font-size:11px;color:var(--faint);margin-top:8px;">Appointments on the calendar by date, done or not (cancelled and no-shows excluded), credited to the lead that first brought the customer in${usingAll ? '' : ` · ${bsrc.reduce((s, x) => s + x.total, 0)} all time`}.</div></div></div>`);
+        html.push(`<div style="font-size:11px;color:var(--faint);margin-top:8px;">Appointments dated this month, done or not (cancelled and no-shows excluded), credited to the lead that first brought the customer in.</div>`);
       }
+      html.push('</div></div>');
 
       // Booked by: sales attribution — who ENTERED each job (from the login that
       // created it), vs. "Revenue by barber" below which is who PERFORMS the work.
