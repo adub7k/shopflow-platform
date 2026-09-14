@@ -377,6 +377,23 @@
           </div></div>`);
       }
 
+      // Monthly history: any closed month, readable here and exportable as CSV.
+      // Picker lists every month with completed jobs (except the current one,
+      // which the cards above already cover) and always offers last month.
+      {
+        const cur = new Date().toISOString().slice(0, 7);
+        const lastM = (() => { const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1); return d.toISOString().slice(0, 7); })();
+        const months = Array.from(new Set([lastM, ...(data.netByMonth || []).map(m => m.month)])).filter(m => m && m < cur).sort().reverse();
+        if (!this._histMonth || !months.includes(this._histMonth)) this._histMonth = months[0] || lastM;
+        const label = m => new Date(m + '-15T00:00:00Z').toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+        html.push(`<div class="v2-card" id="rev-hist"><div class="v2-chd"><div class="t">Monthly history</div><span class="sub">any past month, exportable</span>
+            <div class="sp"></div>
+            <select class="form-input" id="rev-hist-month" style="width:auto;padding:5px 28px 5px 10px;font-size:12.5px;" onchange="Revenue.loadMonth(this.value)">
+              ${months.map(m => `<option value="${m}" ${m === this._histMonth ? 'selected' : ''}>${label(m)}</option>`).join('')}</select>
+            <button class="act" onclick="Revenue.exportMonth()" title="Download this month as a CSV">⬇ Export CSV</button></div>
+          <div id="rev-hist-body" style="padding:12px 16px 14px;font-size:12.5px;color:var(--muted);">Loading…</div></div>`);
+      }
+
       html.push('<div class="v2-dgrid"><div class="v2-col">');
       html.push(`<div class="v2-card"><div class="v2-chd"><div class="t">Profit &amp; loss</div><span class="sub">this month</span></div><div style="padding:6px 16px 10px;">
         ${line('Revenue', data.monthRevenue, { strong: true, color: 'var(--text)' })}
@@ -487,7 +504,80 @@
       }
       html.push('</div></div>');
       el.innerHTML = html.join('');
+      this.loadMonth();
     } catch (e) { el.innerHTML = '<div class="card"><p style="color:var(--muted)">Could not load revenue</p></div>'; }
+  };
+
+  // ── Monthly history (past-month breakdown + CSV export) ──────────────────
+  Revenue._histMonth = null;
+  Revenue._hist = null;
+  Revenue.loadMonth = async function (ym) {
+    if (ym) this._histMonth = ym;
+    const body = document.getElementById('rev-hist-body'); if (!body) return;
+    body.innerHTML = '<span style="color:var(--muted);">Loading…</span>';
+    let r;
+    try { r = await db.revenue.month(this._histMonth); } catch (e) { body.innerHTML = `<span style="color:var(--red);">${esc(e.message || 'Could not load that month')}</span>`; return; }
+    if (!r || !r.ok) { body.innerHTML = '<span style="color:var(--red);">Could not load that month</span>'; return; }
+    this._hist = r;
+    const s = r.summary, p = r.prev || {};
+    const mom = (cur, prev) => prev ? `${cur >= prev ? '▲' : '▼'} ${Math.abs(Math.round((cur - prev) / prev * 100))}% vs prior month` : 'no prior-month data';
+    const netColor = s.net >= 0 ? 'var(--green-deep)' : 'var(--red)';
+    const money = v => (v < 0 ? '−' : '') + fmtMoney(Math.abs(v));
+    const stat = (label, value, sub, color) => `<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:600;">${label}</div>
+      <div class="num" style="font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;${color ? 'color:' + color + ';' : ''}">${value}</div><div style="font-size:11px;color:var(--faint);">${sub}</div></div>`;
+    const th = (t, right) => `<th style="text-align:${right ? 'right' : 'left'};font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:600;padding:4px 6px;border-bottom:1px solid var(--border);white-space:nowrap;">${t}</th>`;
+    const td = (t, right, extra) => `<td style="text-align:${right ? 'right' : 'left'};padding:5px 6px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums;white-space:nowrap;${extra || ''}">${t}</td>`;
+    const table = (head, rows) => `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12.5px;"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`;
+    const sec = (title, sub) => `<div style="display:flex;justify-content:space-between;align-items:baseline;margin:16px 0 6px;"><span style="font-weight:700;font-size:13px;">${title}</span><span style="font-size:11px;color:var(--faint);">${sub || ''}</span></div>`;
+    const pl = (label, val, opts = {}) => `<div style="display:flex;justify-content:space-between;padding:5px 0;${opts.rule ? 'border-top:1px solid var(--border);margin-top:2px;padding-top:8px;' : ''}">
+      <span style="${opts.strong ? 'font-weight:700;color:var(--text);' : 'color:var(--muted);'}">${label}</span><span class="num" style="font-variant-numeric:tabular-nums;${opts.strong ? 'font-weight:700;' : ''}${opts.color ? 'color:' + opts.color + ';' : ''}">${opts.neg ? '−' + fmtMoney(val) : money(val)}</span></div>`;
+    const dfmt = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+    const html = [];
+    html.push(`<div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:6px;">
+      ${stat('Revenue', fmtMoney(s.revenue), `${s.jobs} job${s.jobs === 1 ? '' : 's'} · ${mom(s.revenue, p.revenue)}`, 'var(--green-deep)')}
+      ${stat('Net profit', money(s.net), `${s.netMarginPct}% margin · ${mom(s.net, p.net)}`, netColor)}
+      ${stat('Avg ticket', fmtMoney(s.avgTicket), 'per completed job')}
+      ${s.deposits ? stat('Deposits', fmtMoney(s.deposits), 'collected this month') : ''}
+      ${s.tax ? stat('Sales tax', fmtMoney(s.tax), 'collected — set aside') : ''}</div>`);
+    html.push(`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0 28px;">`);
+    html.push(`<div>${sec('Profit & loss')}${pl('Revenue', s.revenue, { strong: true })}${pl('Materials (cost of goods)', s.cost, { neg: true })}${pl('Gross profit', s.gross, { strong: true, rule: true })}${pl('Operating expenses', s.opEx, { neg: true })}${pl('Net profit', s.net, { strong: true, rule: true, color: netColor })}</div>`);
+    if (r.byService.length) html.push(`<div>${sec('By service')}${table(th('Service') + th('Jobs', 1) + th('Revenue', 1) + th('Margin', 1), r.byService.map(x => `<tr>${td(esc(x.service))}${td(x.count, 1)}${td(fmtMoney(x.revenue), 1)}${td(fmtMoney(x.margin), 1)}</tr>`).join(''))}</div>`);
+    if (r.byBarber.length > 1) html.push(`<div>${sec('By ' + esc(V('staffPlural', 'Staff').toLowerCase()))}${table(th('Name') + th('Jobs', 1) + th('Revenue', 1), r.byBarber.map(x => `<tr>${td(esc(x.name))}${td(x.count, 1)}${td(fmtMoney(x.revenue), 1)}</tr>`).join(''))}</div>`);
+    if (r.byCreator.length) html.push(`<div>${sec('Booked by', 'entered · closed')}${table(th('Person') + th('Booked', 1) + th('Closed', 1), r.byCreator.map(x => `<tr>${td(esc(x.name))}${td(fmtMoney(x.booked) + ` <span style="color:var(--faint);font-size:10.5px;">×${x.bookedJobs}</span>`, 1)}${td(fmtMoney(x.closed) + ` <span style="color:var(--faint);font-size:10.5px;">×${x.closedJobs}</span>`, 1, 'color:var(--green-deep);font-weight:650;')}</tr>`).join(''))}</div>`);
+    if (r.expenses.length) html.push(`<div>${sec('Operating expenses', fmtMoney(s.opEx))}${table(th('Category') + th('Detail') + th('Amount', 1), r.expenses.map(x => `<tr>${td(esc(x.category) + (x.recurring ? ' <span class="badge badge-green">monthly</span>' : ''))}${td(esc(x.description || dfmt(x.date)), 0, 'white-space:normal;')}${td(fmtMoney(x.amount), 1)}</tr>`).join(''))}</div>`);
+    html.push('</div>');
+    html.push(sec('Completed jobs', `${r.jobs.length} · ${fmtMoney(s.revenue)}`));
+    html.push(r.jobs.length
+      ? `<div style="max-height:360px;overflow:auto;">${table(th('Date') + th('Customer') + th('Service') + th(esc(V('staff', 'Staff'))) + th('Price', 1) + th('Cost', 1), r.jobs.map(j => `<tr>${td(dfmt(j.date))}${td(esc(j.customerName))}${td(esc(j.service))}${td(esc(j.staff))}${td(fmtMoney(j.price), 1)}${td(j.cost ? fmtMoney(j.cost) : '—', 1)}</tr>`).join(''))}</div>`
+      : '<div style="color:var(--muted);">No completed jobs that month.</div>');
+    html.push(`<div style="font-size:11px;color:var(--faint);margin-top:10px;">Same math as the cards above: completed jobs by appointment date; monthly expenses count every month from their start date. Export CSV downloads all of this, job by job, for your books.</div>`);
+    body.innerHTML = html.join('');
+  };
+
+  Revenue.exportMonth = async function () {
+    if (!this._hist || this._hist.summary.month !== this._histMonth) {
+      try { this._hist = await db.revenue.month(this._histMonth); } catch (e) { toast(e.message || 'Could not export', 'error'); return; }
+    }
+    const r = this._hist, s = r.summary;
+    const q = v => { const t = String(v == null ? '' : v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    const row = (...c) => c.map(q).join(',');
+    const L = [];
+    L.push(row('Shop', Auth.getShopName() || ''), row('Month', s.month), '');
+    L.push(row('SUMMARY'), row('Revenue', s.revenue), row('Completed jobs', s.jobs), row('Average ticket', s.avgTicket), row('Materials (COGS)', s.cost), row('Gross profit', s.gross), row('Gross margin %', s.grossMarginPct),
+           row('Operating expenses', s.opEx), row('Net profit', s.net), row('Net margin %', s.netMarginPct), row('Sales tax collected', s.tax), row('Deposits collected', s.deposits), '');
+    L.push(row('BY SERVICE'), row('Service', 'Jobs', 'Revenue', 'Cost', 'Margin'));
+    r.byService.forEach(x => L.push(row(x.service, x.count, x.revenue, x.cost, x.margin))); L.push('');
+    if (r.byBarber.length) { L.push(row('BY STAFF'), row('Name', 'Jobs', 'Revenue', 'Cost', 'Margin')); r.byBarber.forEach(x => L.push(row(x.name, x.count, x.revenue, x.cost, x.margin))); L.push(''); }
+    if (r.byCreator.length) { L.push(row('BOOKED BY'), row('Person', 'Booked $', 'Booked jobs', 'Closed $', 'Closed jobs')); r.byCreator.forEach(x => L.push(row(x.name, x.booked, x.bookedJobs, x.closed, x.closedJobs))); L.push(''); }
+    L.push(row('OPERATING EXPENSES'), row('Date', 'Category', 'Description', 'Amount', 'Recurring'));
+    r.expenses.forEach(x => L.push(row(x.date, x.category, x.description, x.amount, x.recurring ? 'monthly' : ''))); L.push('');
+    L.push(row('COMPLETED JOBS'), row('Date', 'Time', 'Customer', 'Service', 'Staff', 'Price', 'Cost', 'Tax', 'Source', 'Booked by'));
+    r.jobs.forEach(j => L.push(row(j.date, j.time, j.customerName, j.service, j.staff, j.price, j.cost, j.tax, j.source, j.bookedBy)));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['﻿' + L.join('\n')], { type: 'text/csv' }));
+    a.download = 'revenue-' + s.month + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    toast('Exported ' + s.month + ' ✓');
   };
 })();
 

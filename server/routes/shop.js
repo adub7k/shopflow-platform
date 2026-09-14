@@ -708,6 +708,78 @@ router.delete('/api/shop/expenses/:id', requireAuth, requireRole('full'), shopRo
 }));
 
 // ── PROTECTED: Revenue ────────────────────────────────────────────────────────
+// ── Monthly history ──────────────────────────────────────────────────────────
+// One closed month, fully broken down: the numbers the P&L card shows for "this
+// month", but for any past month, plus the job-level and expense-level rows
+// behind them so the owner can read it on the page or export it as a CSV for
+// their bookkeeper. Same math as /api/shop/revenue (done jobs bucketed by
+// appointment date; recurring expenses count every month from their start).
+router.get('/api/shop/revenue/month/:ym', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
+  const ym = String(req.params.ym || '');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(ym)) return res.status(400).json({ ok:false, error:'Month must look like 2026-08' });
+  const round2 = n => Math.round(n*100)/100;
+  const monthOf = d => String(d||'').slice(0,7);
+  const prevOf = (m) => { const [y,mo]=m.split('-').map(Number); const d=new Date(Date.UTC(y, mo-2, 1)); return d.toISOString().slice(0,7); };
+  const barbers = h.getAll('barbers'), customers = h.getAll('customers'), services = h.getAll('services');
+  const shopAccounts = master.get('accounts').filter({ shopId: req.shopId }).value() || [];
+  const resolve = (a) => {
+    const barber = barbers.find(b => b.id === a.barberId);
+    const customer = a.customerId ? customers.find(c => c.id === a.customerId) : null;
+    const service = a.serviceId ? services.find(s => s.id === a.serviceId) : null;
+    return { ...a, customerName: a.customerName || customer?.name || 'Unknown Client', barberName: a.barberName || barber?.name || 'Unknown', service: a.service || service?.name || 'Service' };
+  };
+  const all = h.getAll('appointments');
+  const doneIn = (m) => all.filter(a => a.status === 'done' && monthOf(a.date) === m).map(resolve);
+  const expenses = h.getAll('expenses');
+  const expensesIn = (m) => expenses.filter(e => e.recurring === 'monthly' ? (monthOf(e.date) <= m) : (monthOf(e.date) === m));
+  const sum = (arr, k) => round2(arr.reduce((s, x) => s + (Number(x[k]) || 0), 0));
+
+  const summarize = (m) => {
+    const jobs = doneIn(m), ex = expensesIn(m);
+    const revenue = sum(jobs, 'price'), cost = sum(jobs, 'cost'), opEx = sum(ex, 'amount');
+    const gross = round2(revenue - cost), net = round2(gross - opEx);
+    const deposits = round2(customers.flatMap(c => (c.deposits || []).filter(d => d.status === 'paid' && monthOf(d.paidAt) === m)).reduce((s, d) => s + Number(d.amount || 0), 0));
+    return { month: m, jobs: jobs.length, revenue, cost, gross, opEx, net, tax: sum(jobs, 'taxAmount'), deposits,
+             avgTicket: jobs.length ? Math.round(revenue / jobs.length) : 0,
+             grossMarginPct: revenue ? Math.round(gross / revenue * 100) : 0, netMarginPct: revenue ? Math.round(net / revenue * 100) : 0 };
+  };
+
+  const jobs = doneIn(ym).sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.time||'').localeCompare(String(b.time||'')));
+  const summary = summarize(ym), prev = summarize(prevOf(ym));
+
+  const group = (key, label) => {
+    const map = {};
+    jobs.forEach(a => { const k = a[key] || 'Other'; (map[k] || (map[k] = { [label]: k, count: 0, revenue: 0, cost: 0 })); map[k].count++; map[k].revenue += Number(a.price || 0); map[k].cost += Number(a.cost || 0); });
+    return Object.values(map).map(r => ({ ...r, revenue: round2(r.revenue), cost: round2(r.cost), margin: round2(r.revenue - r.cost) })).sort((a, b) => b.revenue - a.revenue);
+  };
+  const byService = group('service', 'service');
+  const byBarber = group('barberName', 'name');
+
+  // Booked by — same attribution as the live card, for this month.
+  const DEAD = ['cancelled', 'canceled', 'declined', 'no-show'];
+  const creators = {};
+  all.forEach(a => {
+    if (!a.createdBy) return;
+    const inBooked = monthOf(a.createdAt) === ym && !DEAD.includes(a.status);
+    const inClosed = a.status === 'done' && monthOf(a.date) === ym;
+    if (!inBooked && !inClosed) return;
+    const live = shopAccounts.find(x => x.id === a.createdBy);
+    const row = creators[a.createdBy] || (creators[a.createdBy] = { name: (live && (live.name || live.email)) || a.createdByName || 'Former staff', booked: 0, bookedJobs: 0, closed: 0, closedJobs: 0 });
+    const price = Number(a.price || 0);
+    if (inBooked) { row.booked += price; row.bookedJobs++; }
+    if (inClosed) { row.closed += price; row.closedJobs++; }
+  });
+  const byCreator = Object.values(creators).map(r => ({ ...r, booked: round2(r.booked), closed: round2(r.closed) })).sort((a, b) => b.closed - a.closed || b.booked - a.booked);
+
+  res.json({
+    ok: true, summary, prev,
+    byService, byBarber, byCreator,
+    expenses: expensesIn(ym).map(e => ({ id: e.id, date: e.date, category: e.category, description: e.description || '', amount: round2(Number(e.amount) || 0), recurring: e.recurring === 'monthly' })).sort((a, b) => b.amount - a.amount),
+    jobs: jobs.map(a => ({ id: a.id, date: a.date, time: a.time || '', customerName: a.customerName, service: a.service, staff: a.barberName,
+                           price: round2(Number(a.price) || 0), cost: round2(Number(a.cost) || 0), tax: round2(Number(a.taxAmount) || 0), source: a.source || '', bookedBy: a.createdByName || '' })),
+  });
+}));
+
 router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   const barbers   = h.getAll('barbers');
   const customers = h.getAll('customers');
