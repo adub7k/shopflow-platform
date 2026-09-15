@@ -1877,19 +1877,20 @@ function openClientReport(period) {
   const shop = d.shop, s = d.settings || {}, ins = d.insights || {};
   const L = ins.leads || {}, R = ins.revenue || {}, F = ins.forecast || {}, Qo = ins.quota || {}, AI = ins.ai || {}, BW = ins.biweekly || {};
   const accent = s.accentColor || '#065F41';
-  const rate = Number(shop.monthlyRate) || 0;
-  // Bi-weekly mode: last 14 days vs the 14 before; ROI compares against half a
-  // month's rate. Monthly mode is untouched.
+  // The ShopFlow investment is ALWAYS the shop's real monthly rate (admin
+  // profile → Monthly rate field) — never a hardcoded or prorated figure.
+  const rate = Number(shop.monthlyRate) || Number((ins.billing || {}).rate) || 0;
+  // Bi-weekly mode: last 14 days vs the 14 before. Monthly mode is untouched.
   const rev = biweekly ? (Number(BW.revenue) || 0) : (Number(R.thisMonth) || 0);
   const revLast = biweekly ? (Number(BW.revenuePrior) || 0) : (Number(R.lastMonth) || 0);
-  const periodRate = biweekly ? rate / 2 : rate;
   const momPct = revLast > 0 ? Math.round((rev - revLast) / revLast * 100) : null;
-  const roi = periodRate > 0 && rev > 0 ? Math.round(rev / periodRate * 10) / 10 : null;
+  const roi = rate > 0 && rev > 0 ? Math.round(rev / rate * 10) / 10 : null;
   const now = new Date(), dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const monthRev = Number(R.thisMonth) || 0;
   const pace = Math.round(monthRev / Math.max(1, now.getDate()) * dim);
   const quota = Number(Qo.monthly) || 0;
   const quotaPct = quota > 0 ? Math.min(999, Math.round(monthRev / quota * 100)) : null;
+  const pacePct = quota > 0 ? Math.min(999, Math.round(pace / quota * 100)) : null;
   const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   const fmtD = ds => ds ? new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
   const periodLabel = biweekly && BW.start ? `${fmtD(BW.start)} – ${fmtD(BW.end)}, ${now.getFullYear()}` : monthName;
@@ -1961,12 +1962,16 @@ function openClientReport(period) {
       <tr><td style="font-weight:800;">Projected</td><td class="r" style="color:${accent};">$${fmt(F.total || 0)}</td></tr>
     </tbody></table>
 
-    ${(!biweekly && quota > 0) ? `<h2>Monthly goal</h2>
-    <div style="display:flex;justify-content:space-between;align-items:baseline;">
-      <span style="font-size:22px;font-weight:800;color:${accent};">${quotaPct}%</span>
-      <span style="font-size:12.5px;color:#5C6B63;">$${fmt(monthRev)} of $${fmt(quota)} · on pace for $${fmt(pace)}</span>
+    ${quota > 0 ? `<h2>Monthly goal</h2>
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:4px;">
+      <span style="font-size:22px;font-weight:800;color:${accent};">on pace: ${pacePct}%</span>
+      <span style="font-size:12.5px;color:#5C6B63;">$${fmt(monthRev)} booked of $${fmt(quota)} goal · pacing to $${fmt(pace)}</span>
     </div>
-    <div class="bar"><div style="width:${Math.min(100, quotaPct)}%;"></div></div>` : ''}
+    <div class="bar" style="position:relative;">
+      <div style="position:absolute;top:0;left:0;bottom:0;width:${Math.min(100, pacePct)}%;background:${accent};opacity:.3;"></div>
+      <div style="position:relative;width:${Math.min(100, quotaPct)}%;"></div>
+    </div>
+    <div class="note">solid — booked so far this month · shaded — where the month is pacing</div>` : ''}
 
     <div class="foot">Prepared ${esc(new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))} · ShopFlow — your growth engine</div>
     <script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
