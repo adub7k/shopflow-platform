@@ -995,7 +995,10 @@ const advisorPlaybook = () => {
   const ps = master.get('platformSettings').value() || {};
   return typeof ps.advisorPlaybook === 'string' ? ps.advisorPlaybook : advisor.DEFAULT_PLAYBOOK;
 };
-const publicReport = (r) => r && ({ id: r.id, createdAt: r.createdAt, model: r.model, trigger: r.trigger, result: r.result, feedback: r.feedback || {}, flags: (r.metrics && r.metrics.flags) || [] });
+const publicReport = (r) => r && ({ id: r.id, createdAt: r.createdAt, model: r.model, trigger: r.trigger, window: r.window || null, result: r.result, feedback: r.feedback || {}, flags: (r.metrics && r.metrics.flags) || [] });
+// Period selection from query/body: ?preset=7d|14d|30d|60d|90d|this_month|last_month
+// or ?from=YYYY-MM-DD&to=YYYY-MM-DD (inclusive, shop-local calendar dates).
+const rangeOf = (src) => ({ preset: src.preset ? String(src.preset) : undefined, from: src.from ? String(src.from).slice(0, 10) : undefined, to: src.to ? String(src.to).slice(0, 10) : undefined });
 const withShop = (req, res) => {
   const shop = master.get('shops').find({ id: req.params.shopId }).value();
   if (!shop) { res.status(404).json({ error: 'Shop not found' }); return null; }
@@ -1015,14 +1018,18 @@ router.patch('/api/admin/advisor/playbook', requireAdmin, (req, res) => {
 router.get('/api/admin/shop/:shopId/advisor', requireAdmin, (req, res) => {
   const shop = withShop(req, res); if (!shop) return;
   const db = getShopDb(shop.id);
-  const { metrics, spendRows, leadCount } = advisor.snapshot(db, shop);
+  let snap;
+  try { snap = advisor.snapshot(db, shop, { range: rangeOf(req.query) }); }
+  catch (e) { return res.status(422).json({ error: e.message }); }
+  const { metrics, window, spendRows, leadCount, tz } = snap;
   const store = advisor.loadStore(db);
   const reports = store.reports || [];
   res.json({
     configured: advisor.configured(), model: advisor.MODEL, running: advisorRunning.has(shop.id),
-    leadCount, metrics,
+    leadCount, metrics, tz,
+    window: { preset: window.preset, from: window.from, to: window.to, days: window.days, label: window.label, prior: window.prior.label, partial: window.partial },
     latest: publicReport(reports[reports.length - 1]) || null,
-    history: reports.slice(0, -1).reverse().slice(0, 12).map(r => ({ id: r.id, createdAt: r.createdAt, health: r.result && r.result.health, headline: r.result && r.result.headline, trigger: r.trigger })),
+    history: reports.slice(0, -1).reverse().slice(0, 12).map(r => ({ id: r.id, createdAt: r.createdAt, health: r.result && r.result.health, headline: r.result && r.result.headline, trigger: r.trigger, window: r.window || null })),
     spend: spendRows.slice(-20).reverse(),
     shopNotes: shop.advisorNotes || '', autoRun: shop.advisorAuto !== false,
     lastAutoRunAt: store.lastAutoRunAt || null,
@@ -1038,11 +1045,13 @@ router.get('/api/admin/shop/:shopId/advisor/report/:reportId', requireAdmin, (re
 
 router.post('/api/admin/shop/:shopId/advisor/run', requireAdmin, async (req, res) => {
   const shop = withShop(req, res); if (!shop) return;
+  const range = rangeOf(req.body || {});
+  try { advisor.resolveWindow({ ...range, now: Date.now() }); } catch (e) { return res.status(422).json({ error: e.message }); }
   if (!advisor.configured()) return res.status(400).json({ error: 'AI is not configured. Set ANTHROPIC_API_KEY to enable the Growth Advisor.' });
   if (advisorRunning.has(shop.id)) return res.status(409).json({ error: 'A review is already running for this shop.' });
   advisorRunning.add(shop.id);
   try {
-    const report = await advisor.runAdvisor({ db: getShopDb(shop.id), shop, playbook: advisorPlaybook(), trigger: 'manual' });
+    const report = await advisor.runAdvisor({ db: getShopDb(shop.id), shop, playbook: advisorPlaybook(), range, trigger: 'manual' });
     res.json({ report: publicReport(report) });
   } catch (e) {
     console.error('[advisor]', shop.id, e.message);

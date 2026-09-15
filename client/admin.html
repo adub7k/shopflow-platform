@@ -219,6 +219,11 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 .adv-table th:first-child,.adv-table td:first-child{text-align:left;}
 .adv-table td{padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;}
 .adv-table td:first-child{white-space:normal;color:var(--muted);}
+.adv-period{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;padding:10px 12px;background:var(--off);border:1px solid var(--border);border-radius:10px;}
+.adv-period-label{font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;}
+.adv-period-custom{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.adv-period-custom .form-input{margin:0;width:150px;padding:6px 8px;font-size:12px;}
+.adv-period-text{font-size:12px;color:var(--muted);}
 .adv-spend-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
 .adv-spend-form .form-input{margin:0;}
 
@@ -2747,7 +2752,8 @@ document.getElementById('modal-overlay').addEventListener('click',function(e){if
 // Weekly AI review of one shop's lead funnel. GET returns fresh metrics + flags
 // with no model call; "Run review" spends one Claude call and stores the report
 // on the shop db. Feedback (👍/👎/done/note) feeds the next review's prompt.
-let advState = { shopId: null, data: null, viewing: null, busy: false };
+let advState = { shopId: null, data: null, viewing: null, busy: false, range: { preset: '7d' } };
+const advQuery = () => { const r = advState.range || {}; return r.from && r.to ? `?from=${r.from}&to=${r.to}` : `?preset=${r.preset || '7d'}`; };
 const advApi = async (shopId, path, opts = {}) => {
   const res = await fetch('/api/admin/shop/' + shopId + '/advisor' + path, { ...opts, headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json', ...(opts.headers || {}) } });
   const body = await res.json().catch(() => ({}));
@@ -2756,9 +2762,9 @@ const advApi = async (shopId, path, opts = {}) => {
 };
 async function loadAdvisor(shopId) {
   const host = document.getElementById('sp-advisor'); if (!host) return;
-  advState = { shopId, data: null, viewing: null, busy: false };
+  advState = { shopId, data: null, viewing: null, busy: false, range: { preset: '7d' } };
   host.innerHTML = '<div class="card"><div style="padding:18px;color:var(--muted);font-size:13px;"><span class="spinner"></span> Loading growth advisor…</div></div>';
-  try { advState.data = await advApi(shopId, ''); renderAdvisor(); }
+  try { advState.data = await advApi(shopId, advQuery()); renderAdvisor(); }
   catch(e) { host.innerHTML = '<div class="card"><div style="padding:18px;color:var(--red);font-size:13px;">Growth Advisor failed to load: ' + esc(e.message) + '</div></div>'; }
 }
 const advMoney = (n) => n == null ? '—' : '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -2767,7 +2773,7 @@ const advNum = (n) => n == null ? '—' : n;
 const advCap = (s) => String(s || '').replace(/_/g, ' ');
 function renderAdvisor(status) {
   const host = document.getElementById('sp-advisor'); if (!host || !advState.data) return;
-  const d = advState.data, m = d.metrics || {}, W = m.this_week || {}, P = m.last_week || {}, T = m.last_30_days || {};
+  const d = advState.data, m = d.metrics || {}, W = m.period || {}, P = m.prior_period || {}, T = m.last_30_days || {}, win = d.window || {};
   const report = advState.viewing || d.latest;
   const r = report && report.result;
   const isPast = !!(advState.viewing && d.latest && advState.viewing.id !== d.latest.id);
@@ -2806,7 +2812,8 @@ function renderAdvisor(status) {
   };
   const list = (title, items) => (items && items.length) ? `<div class="adv-list"><div class="adv-list-title">${title}</div><ul>${items.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
   const row = (label, a, b, c, fmtf = advNum) => `<tr><td>${label}</td><td>${fmtf(a)}</td><td>${fmtf(b)}</td><td>${fmtf(c)}</td></tr>`;
-  const numbers = `<table class="adv-table"><thead><tr><th></th><th>This week</th><th>Last week</th><th>30 days</th></tr></thead><tbody>
+  const numbers = `<div style="font-size:11.5px;color:var(--faint);margin-bottom:6px;">Period ${esc(win.label || '')} · prior ${esc(win.prior || '')} · 30 days = the 30 days ending ${esc(win.to || '')} · ${esc(d.tz || '')}. Each column counts leads created in that window and their outcomes to date.</div>
+  <table class="adv-table"><thead><tr><th></th><th>Period</th><th>Prior period</th><th>30 days</th></tr></thead><tbody>
     ${row('Leads', W.leads, P.leads, T.leads)}
     ${row('Contacted', W.contacted, P.contacted, T.contacted)}
     ${row('Contact rate', W.contact_rate_pct, P.contact_rate_pct, T.contact_rate_pct, advPct)}
@@ -2820,8 +2827,8 @@ function renderAdvisor(status) {
     ${row('Cost per lead', W.cost_per_lead, P.cost_per_lead, T.cost_per_lead, advMoney)}
     ${row('Cost per booking', W.cost_per_booking, P.cost_per_booking, T.cost_per_booking, advMoney)}
   </tbody></table>`;
-  const byAd = (m.by_ad_30d || []);
-  const adTable = byAd.length ? `<table class="adv-table" style="margin-top:12px;"><thead><tr><th>Ad / source (30d)</th><th>Leads</th><th>Contacted</th><th>Booked</th><th>Spend</th><th>$/lead</th><th>$/booking</th><th>Booked $</th></tr></thead><tbody>
+  const byAd = (m.by_ad || []);
+  const adTable = byAd.length ? `<table class="adv-table" style="margin-top:12px;"><thead><tr><th>Ad / source (period)</th><th>Leads</th><th>Contacted</th><th>Booked</th><th>Spend</th><th>$/lead</th><th>$/booking</th><th>Booked $</th></tr></thead><tbody>
     ${byAd.map(a => `<tr><td>${esc(a.ad)}</td><td>${a.leads}</td><td>${a.contacted}</td><td>${a.booked}</td><td>${advMoney(a.ad_spend)}</td><td>${advMoney(a.cost_per_lead)}</td><td>${advMoney(a.cost_per_booking)}</td><td>${advMoney(a.booked_value)}</td></tr>`).join('')}
   </tbody></table>` : '';
   const oldest = ((m.open_leads || {}).oldest_uncontacted || []);
@@ -2834,7 +2841,7 @@ function renderAdvisor(status) {
   host.innerHTML = `
   <div class="card" id="adv-card">
     <div class="card-header" style="flex-wrap:wrap;gap:10px;">
-      <div><div class="card-title">🧭 Growth Advisor</div><div class="card-sub">weekly review of their lead funnel — ShopFlow computes the numbers, Claude ranks the moves</div></div>
+      <div><div class="card-title">🧭 Growth Advisor</div><div class="card-sub">review of their lead funnel over any period — ShopFlow computes the numbers, Claude ranks the moves</div></div>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;" title="Runs automatically every Monday (shop-local) when the shop had a lead in the last 30 days">
           <input type="checkbox" ${d.autoRun ? 'checked' : ''} onchange="advisorToggleAuto(this.checked)"/> auto Mondays
@@ -2843,6 +2850,19 @@ function renderAdvisor(status) {
       </div>
     </div>
     <div style="padding:16px 18px;">
+      <div class="adv-period">
+        <span class="adv-period-label">Period</span>
+        <select class="adv-select" id="adv-preset" onchange="advisorPreset(this.value)">
+          ${[['7d','Last 7 days'],['14d','Last 14 days'],['30d','Last 30 days'],['60d','Last 60 days'],['90d','Last 90 days'],['this_month','This month'],['last_month','Last month'],['custom','Custom dates…']].map(([v,l]) => `<option value="${v}" ${(win.preset||'7d')===v?'selected':''}>${l}</option>`).join('')}
+        </select>
+        <span class="adv-period-custom" ${(win.preset||'7d')==='custom'?'':'hidden'}>
+          <input class="form-input" type="date" id="adv-from" value="${esc(win.from||'')}" max="${esc(win.to||'')}"/>
+          <span style="color:var(--faint);">to</span>
+          <input class="form-input" type="date" id="adv-to" value="${esc(win.to||'')}"/>
+          <button class="btn btn-outline btn-sm" onclick="advisorApplyDates()">Apply</button>
+        </span>
+        <span class="adv-period-text">${esc(win.label||'')}${win.partial?' · includes today so far':''} · vs ${esc(win.prior||'')}</span>
+      </div>
       ${!d.configured ? `<div class="adv-notice">AI reviews are off: <code>ANTHROPIC_API_KEY</code> is not set on the server. The numbers and flags below still update live.</div>` : ''}
       ${status ? `<div class="adv-notice" style="color:var(--red);">${esc(status)}</div>` : ''}
       ${flags.length ? `<div class="adv-flags">${flags.map(f => `<span class="adv-flag">${esc(f)}</span>`).join('')}</div>` : `<div class="adv-flags"><span class="adv-flag adv-flag-ok">No flags right now — ${d.leadCount || 0} leads on file, ${T.leads || 0} in the last 30 days.</span></div>`}
@@ -2852,9 +2872,9 @@ function renderAdvisor(status) {
           <span class="adv-health" style="color:${healthColor[r.health] || 'var(--text)'};background:${healthBg[r.health] || 'var(--off)'};">${esc(r.health)}</span>
           <div style="flex:1;min-width:0;">
             <div style="font-size:15px;font-weight:700;letter-spacing:-.01em;line-height:1.35;">${esc(r.headline)}</div>
-            <div style="font-size:11.5px;color:var(--faint);margin-top:3px;">${isPast ? 'Past review · ' : ''}${relTime(report.createdAt)} · ${esc(report.trigger === 'auto' ? 'auto (Monday)' : 'manual')} · ${esc(report.model || '')}${isPast ? ` · <a href="#" onclick="advState.viewing=null;renderAdvisor();return false;">back to latest</a>` : ''}</div>
+            <div style="font-size:11.5px;color:var(--faint);margin-top:3px;">${isPast ? 'Past review · ' : ''}${report.window && report.window.label ? 'reviewed ' + esc(report.window.label) + ' · ' : ''}${relTime(report.createdAt)} · ${esc(report.trigger === 'auto' ? 'auto (Monday)' : 'manual')} · ${esc(report.model || '')}${isPast ? ` · <a href="#" onclick="advState.viewing=null;renderAdvisor();return false;">back to latest</a>` : ''}</div>
           </div>
-          ${(d.history || []).length ? `<select class="adv-select" onchange="advisorOpenReport(this.value)"><option value="">History (${d.history.length})</option>${d.history.map(h => `<option value="${esc(h.id)}">${fmtDate(h.createdAt)} · ${esc(h.health || '')} · ${esc((h.headline || '').slice(0, 60))}</option>`).join('')}</select>` : ''}
+          ${(d.history || []).length ? `<select class="adv-select" onchange="advisorOpenReport(this.value)"><option value="">History (${d.history.length})</option>${d.history.map(h => `<option value="${esc(h.id)}">${fmtDate(h.createdAt)}${h.window && h.window.label ? ' (' + esc(h.window.label.replace(/, \d{4}/g, '')) + ')' : ''} · ${esc(h.health || '')} · ${esc((h.headline || '').slice(0, 50))}</option>`).join('')}</select>` : ''}
         </div>
         ${(r.actions || []).length ? (r.actions || []).map(actionRow).join('') : '<div class="adv-notice">Nothing worth changing this week.</div>'}
         <div class="adv-lists">${list('Working', r.wins)}${list('Watch', r.watch)}${list('Data gaps', r.data_gaps)}</div>
@@ -2881,13 +2901,32 @@ function renderAdvisor(status) {
   const s = document.getElementById('adv-sp-start');
   if (s && !s.value) s.value = new Date().toISOString().slice(0, 10);
 }
+async function advisorReload() {
+  try { advState.data = await advApi(advState.shopId, advQuery()); renderAdvisor(); }
+  catch(e) { toast(e.message); }
+}
+function advisorPreset(v) {
+  if (v === 'custom') {
+    const win = (advState.data && advState.data.window) || {};
+    advState.range = { from: win.from, to: win.to };
+    const c = document.querySelector('.adv-period-custom'); if (c) c.hidden = false;
+    return;
+  }
+  advState.range = { preset: v }; advisorReload();
+}
+function advisorApplyDates() {
+  const from = document.getElementById('adv-from').value, to = document.getElementById('adv-to').value;
+  if (!from || !to) return toast('Pick both dates');
+  if (to < from) return toast('End date must be on or after start');
+  advState.range = { from, to }; advisorReload();
+}
 async function advisorRun() {
   if (advState.busy) return;
   advState.busy = true; renderAdvisor();
   try {
-    const { report } = await advApi(advState.shopId, '/run', { method: 'POST' });
+    const { report } = await advApi(advState.shopId, '/run', { method: 'POST', body: JSON.stringify(advState.range || {}) });
     advState.busy = false;
-    advState.data = await advApi(advState.shopId, '');
+    advState.data = await advApi(advState.shopId, advQuery());
     advState.viewing = null;
     renderAdvisor();
     toast('Review ready ✓');
@@ -2909,16 +2948,16 @@ async function advisorOpenReport(id) {
 }
 async function advisorAddSpend() {
   const body = { campaign: document.getElementById('adv-sp-campaign').value.trim(), source: document.getElementById('adv-sp-source').value.trim(), period_start: document.getElementById('adv-sp-start').value, period_end: document.getElementById('adv-sp-end').value, daily: document.getElementById('adv-sp-daily').value };
-  try { await advApi(advState.shopId, '/spend', { method: 'POST', body: JSON.stringify(body) }); advState.data = await advApi(advState.shopId, ''); renderAdvisor(); toast('Budget saved ✓'); }
+  try { await advApi(advState.shopId, '/spend', { method: 'POST', body: JSON.stringify(body) }); advState.data = await advApi(advState.shopId, advQuery()); renderAdvisor(); toast('Budget saved ✓'); }
   catch(e) { toast(e.message); }
 }
 async function advisorStopSpend(id) {
-  try { await advApi(advState.shopId, '/spend/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify({ period_end: new Date().toISOString().slice(0, 10) }) }); advState.data = await advApi(advState.shopId, ''); renderAdvisor(); toast('Budget stopped as of today ✓'); }
+  try { await advApi(advState.shopId, '/spend/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify({ period_end: new Date().toISOString().slice(0, 10) }) }); advState.data = await advApi(advState.shopId, advQuery()); renderAdvisor(); toast('Budget stopped as of today ✓'); }
   catch(e) { toast(e.message); }
 }
 async function advisorDelSpend(id) {
   if (!confirm('Remove this budget row?')) return;
-  try { await advApi(advState.shopId, '/spend/' + encodeURIComponent(id), { method: 'DELETE' }); advState.data = await advApi(advState.shopId, ''); renderAdvisor(); }
+  try { await advApi(advState.shopId, '/spend/' + encodeURIComponent(id), { method: 'DELETE' }); advState.data = await advApi(advState.shopId, advQuery()); renderAdvisor(); }
   catch(e) { toast(e.message); }
 }
 async function advisorSaveNotes(v) { await updateShop(advState.shopId, 'advisorNotes', v); if (advState.data) advState.data.shopNotes = v; toast('Notes saved ✓'); }
