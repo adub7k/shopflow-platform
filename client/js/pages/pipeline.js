@@ -343,7 +343,7 @@ const Pipeline = {
 
     return `<div class="pipe-card ${due === 'over' ? 'overdue' : ''}" onclick="Pipeline.openLead('${l.id}')">
       <div class="pipe-card-top">
-        <div class="pipe-card-name">${esc(name)}</div>
+        <div class="pipe-card-name">${l.hot ? '<span title="Hot lead">🔥</span> ' : ''}${esc(name)}</div>
         ${ageChip}
       </div>
       <div class="pipe-card-sub">${tag}<span class="t" title="${esc(sub)}">${esc(sub)}</span>${money}</div>

@@ -442,7 +442,7 @@ const Leads = {
       <div class="modal-title" style="display:flex;align-items:center;gap:10px;">
         ${avatarEl(l.name || sm.icon, 38)}
         <div style="flex:1;min-width:0;">
-          <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</div>
+          <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}${l.hot?' <span class="badge" style="background:#fff1e6;color:#c2410c;font-size:10.5px;vertical-align:middle;" title="Hot lead">🔥 Hot</span>':''}</div>
           ${l.phone?`<a href="tel:${esc(l.phone)}" style="font-size:12px;font-weight:500;color:var(--green);text-decoration:none;">${esc(l.phone)} ↗</a>`:''}
         </div>
       </div>
@@ -503,6 +503,7 @@ const Leads = {
       <div class="modal-actions" style="flex-wrap:wrap;gap:8px;">
         <button class="btn btn-green btn-full" onclick="Leads.book('${l.id}')">📅 Book appointment</button>
         <button class="btn btn-full" onclick="Leads.estimate('${l.id}')">📄 Send an estimate</button>
+        <button class="btn btn-full" style="${l.hot?'':'color:#c2410c;'}" onclick="Leads.toggleHot('${l.id}')">${l.hot?'Remove from hot leads':'🔥 Mark as hot lead'}</button>
         <button class="btn btn-primary btn-full" onclick="Leads.save('${l.id}')">Save</button>
         ${(l.calls&&l.calls.length)?`<button class="btn btn-full" onclick="Leads.analyze('${l.id}',this)">✨ ${l.ai?'Re-analyze':'Analyze'} with AI</button>`:''}
         ${l.customerId?`<button class="btn btn-full" onclick="ClientProfile.open('${l.customerId}')">View client</button>`:`<button class="btn btn-full" onclick="Leads.convert('${l.id}')">Convert to client</button>`}
@@ -797,6 +798,23 @@ const Leads = {
     _cpSms(l.phone, body);
     // Touch stamp: today's reached-out leads sink below the untouched ones.
     db.leads.note(id, 'Texted').catch(() => {});
+  },
+
+  // Hot flag: the owner's "call this one first" marker. Saves immediately
+  // (it's a one-tap toggle, not part of the Save form), then repaints the
+  // modal in place so the badge/button flip without losing typed edits.
+  async toggleHot(id) {
+    const l = this._leads.find(x => x.id === id); if (!l) return;
+    const hot = !l.hot;
+    try {
+      this._captureModalEdits(l);
+      await db.leads.update(id, { hot });
+      l.hot = hot; l.hotAt = hot ? new Date().toISOString() : null;
+      if (typeof Pipeline !== 'undefined' && Pipeline._leads) { const p = Pipeline._leads.find(x => x.id === id); if (p) { p.hot = hot; p.hotAt = l.hotAt; } }
+      toast(hot ? '🔥 Marked hot' : 'Removed from hot leads');
+      this.open(id);
+      this.render();
+    } catch(e) { toast(e.message || 'Could not update', 'error'); }
   },
 
   async convert(id) {

@@ -156,6 +156,7 @@
 
     const counts = { all: leads.length }; orderKeys().forEach(k => counts[k] = 0);
     leads.forEach(l => { counts[colOf(l)]++; });
+    counts.hot = leads.filter(l => l.hot).length;
 
     const html = [];
 
@@ -214,10 +215,11 @@
     const chip = (key, label, n) => `<button class="v2-chip${this._statusFilter2 === key ? ' on' : ''}" onclick="Leads.setStatusFilter('${key}')">${label}${n ? `<span class="n">${n}</span>` : ''}</button>`;
     html.push(`<div style="margin-bottom:10px;"><input class="form-input" id="lead-search" placeholder="Search name, phone, vehicle…" value="${esc(Leads._searchQ)}" oninput="Leads.searchFilter(this.value)" style="width:100%;max-width:420px;height:38px;padding:0 12px;"/></div>`);
     html.push(`<div class="v2-chips" style="margin-bottom:12px;">
-      ${chip('all', 'All', counts.all)}${stages().map(s => chip(s.key, esc(s.label), counts[s.key])).join('')}</div>`);
+      ${chip('all', 'All', counts.all)}${chip('hot', '🔥 Hot', counts.hot)}${stages().map(s => chip(s.key, esc(s.label), counts[s.key])).join('')}</div>`);
 
     let rows = leads.slice();
-    if (this._statusFilter2 !== 'all') rows = rows.filter(l => colOf(l) === this._statusFilter2);
+    if (this._statusFilter2 === 'hot') rows = rows.filter(l => l.hot);
+    else if (this._statusFilter2 !== 'all') rows = rows.filter(l => colOf(l) === this._statusFilter2);
     rows = rows.filter(l => Leads.matchesSearch(l, Leads._searchQ));
     // Most recent inbound contact first (arrival time for never-recontacted
     // leads) and NOTHING else. lastContactAt moves on customer activity only,
@@ -233,8 +235,8 @@
     if (!rows.length) {
       const searching = !!String(Leads._searchQ || '').trim();
       html.push(`<div class="v2-card"><div class="empty-state"><div class="empty-icon">📥</div>
-        <div class="empty-text">${searching ? 'No leads match your search' : this._statusFilter2 === 'all' ? 'No leads yet' : 'No ' + this._statusFilter2 + ' leads'}</div>
-        <div class="list-sub" style="margin-top:2px;">${searching ? 'Check the spelling or try part of the phone number.' : this._statusFilter2 === 'all' ? 'New calls and website inquiries will show up here.' : 'Try a different filter.'}</div>
+        <div class="empty-text">${searching ? 'No leads match your search' : this._statusFilter2 === 'all' ? 'No leads yet' : (this._statusFilter2 === 'hot' ? 'No hot leads yet' : 'No ' + this._statusFilter2 + ' leads')}</div>
+        <div class="list-sub" style="margin-top:2px;">${searching ? 'Check the spelling or try part of the phone number.' : this._statusFilter2 === 'all' ? 'New calls and website inquiries will show up here.' : this._statusFilter2 === 'hot' ? 'Open a lead and tap “Mark as hot lead” to pin it here.' : 'Try a different filter.'}</div>
         ${searching ? `<div style="margin-top:12px;"><button class="btn btn-sm" onclick="Leads.searchFilter('')">Clear search</button></div>`
           : this._statusFilter2 !== 'all' ? `<div style="margin-top:12px;"><button class="btn btn-sm" onclick="Leads.setStatusFilter('all')">Show all</button></div>` : ''}
       </div></div>`);
@@ -258,7 +260,7 @@
         const email = l.email ? `<div style="color:var(--muted);font-size:12px;">${esc(l.email)}</div>` : '';
         html.push(`<tr data-selrow="${l.id}" class="${this._sel.has(l.id) ? 'on' : ''}" onclick="${rowClick(l.id)}">
           <td><div style="display:flex;align-items:center;gap:8px;">${rowCb(l.id)}<span class="v2-src">${sm.icon} ${esc(sm.label)}</span></div>
-            <div style="font-weight:600;margin-top:4px;">${esc(name)}</div></td>
+            <div style="font-weight:600;margin-top:4px;">${l.hot ? '<span title="Hot lead">🔥</span> ' : ''}${esc(name)}</div></td>
           <td>${reqLines.join('')}</td>
           <td style="color:var(--muted);">${esc(l.phone || '—')}${email}</td>
           <td>${statusPill(colOf(l))}${Leads.touchedToday(l) ? ' <span class="badge badge-green" title="Already reached out today">✓ today</span>' : ''}</td>
@@ -285,7 +287,7 @@
           ${rowCb(l.id)}${avatarEl(name, 42)}
           <div style="flex:1;min-width:0;">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-              <div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(name)}</div>
+              <div style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${l.hot ? '🔥 ' : ''}${esc(name)}</div>
               <div style="font-size:11px;color:var(--faint);white-space:nowrap;flex-shrink:0;">${when ? _msgTime(when) : ''}</div>
             </div>
             <div style="display:flex;align-items:center;gap:6px;margin-top:3px;min-width:0;">

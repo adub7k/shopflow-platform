@@ -155,10 +155,13 @@
 
       html.push(renderOnboarding(settings, barbers));
 
+      // Hot leads = the owner's call-first list; the header button jumps to it.
+      const hotCount = (leads || []).filter(l => l.hot).length;
       html.push(`<div class="v2-pagehd"><div>
         <h1>Good ${greet}</h1>
         <div class="sub">${esc(settings.shopName || 'ShopFlow')} &nbsp;·&nbsp; ${dateLabel}</div></div>
         <div class="sp"></div>
+        <button class="btn" style="color:#c2410c;" onclick="Leads._statusFilter2='hot';App.nav('leads')" title="Leads you've marked hot">🔥 Hot leads${hotCount ? ` (${hotCount})` : ''}</button>
         <button class="btn" onclick="App.nav('revenue')">Reports</button>
         <button class="btn btn-green" onclick="App.nav('appointments')">＋ New booking</button></div>`);
 

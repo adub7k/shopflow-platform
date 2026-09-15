@@ -1412,6 +1412,10 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   // submits). Owner touches bumping it made every worked lead leap to the top
   // of the Leads list stamped with the touch time — reading as a brand-new
   // lead. Owner-side send times live in followUp.log / dripLog / noteLog.
+  // Hot-lead flag — the owner's "call this one first" marker, toggled from
+  // the lead modal. The Leads page 🔥 chip and the Dashboard's Hot leads
+  // button filter to these. hotAt lets the list order by when it was flagged.
+  if (req.body.hot !== undefined) { lead.hot = !!req.body.hot; lead.hotAt = lead.hot ? (lead.hotAt || new Date().toISOString()) : null; }
   if (req.body.followUp !== undefined) {
     const fu = cleanFollowUp(req.body.followUp);
     if (fu) {
