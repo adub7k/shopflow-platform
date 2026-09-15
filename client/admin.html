@@ -2827,9 +2827,9 @@ function renderAdvisor(status) {
   const oldest = ((m.open_leads || {}).oldest_uncontacted || []);
   const worklist = oldest.length ? `<div class="adv-list" style="margin-top:12px;"><div class="adv-list-title">Oldest uncontacted leads</div><ul>${oldest.map(l => `<li>${l.hot ? '🔥 ' : ''}${esc(l.name || l.id)} · ${esc(l.service || 'service not stated')} · ${esc(l.ad)} · ${l.age_hours}h old</li>`).join('')}</ul></div>` : '';
   const spendRows = (d.spend || []);
-  const spendList = spendRows.length ? `<table class="adv-table" style="margin-top:10px;"><thead><tr><th>Campaign / ad</th><th>Source</th><th>Period</th><th>Amount</th><th></th></tr></thead><tbody>
-    ${spendRows.map(s => `<tr><td>${esc(s.campaign)}</td><td>${esc(s.source || '')}</td><td>${esc(s.period_start || '')}${s.period_end && s.period_end !== s.period_start ? ' → ' + esc(s.period_end) : ''}</td><td>${advMoney(s.amount)}</td><td>${s.id ? `<button class="adv-fb-btn" onclick="advisorDelSpend('${esc(s.id)}')">✕</button>` : ''}</td></tr>`).join('')}
-  </tbody></table>` : '<div style="font-size:12px;color:var(--faint);margin-top:8px;">No ad spend entered yet — cost per lead / per booking stay blank until you add it.</div>';
+  const spendList = spendRows.length ? `<table class="adv-table" style="margin-top:10px;"><thead><tr><th>Campaign / ad</th><th>Source</th><th>Per day</th><th>Running</th><th></th></tr></thead><tbody>
+    ${spendRows.map(s => `<tr><td>${esc(s.campaign)}</td><td>${esc(s.source || '')}</td><td>${s.daily != null ? advMoney(s.daily) + '/day' : advMoney(s.amount) + ' total'}</td><td>${esc(s.period_start || '')}${s.daily != null ? (s.period_end ? ' → ' + esc(s.period_end) : ' → <b style="color:var(--green-deep);">now</b>') : (s.period_end && s.period_end !== s.period_start ? ' → ' + esc(s.period_end) : '')}</td><td style="white-space:nowrap;">${s.id ? `${s.daily != null && !s.period_end ? `<button class="adv-fb-btn" title="Stop counting this budget as of today" onclick="advisorStopSpend('${esc(s.id)}')">Stop today</button> ` : ''}<button class="adv-fb-btn" onclick="advisorDelSpend('${esc(s.id)}')">✕</button>` : ''}</td></tr>`).join('')}
+  </tbody></table>` : '<div style="font-size:12px;color:var(--faint);margin-top:8px;">No ad budgets entered yet — cost per lead / per booking stay blank until you add one.</div>';
   const runLabel = advState.busy ? '<span class="spinner"></span> Reviewing… (about a minute)' : '▶ Run review';
   host.innerHTML = `
   <div class="card" id="adv-card">
@@ -2864,12 +2864,12 @@ function renderAdvisor(status) {
         <div class="adv-spend-form">
           <input class="form-input" id="adv-sp-campaign" placeholder="Campaign or ad name (matches utm_content / utm_campaign)" style="flex:2;min-width:180px;"/>
           <input class="form-input" id="adv-sp-source" placeholder="facebook" value="facebook" style="width:110px;"/>
-          <input class="form-input" id="adv-sp-start" type="date" style="width:150px;"/>
-          <input class="form-input" id="adv-sp-end" type="date" style="width:150px;"/>
-          <input class="form-input" id="adv-sp-amount" type="number" min="0" step="0.01" placeholder="$ spend" style="width:110px;"/>
+          <input class="form-input" id="adv-sp-daily" type="number" min="0" step="0.01" placeholder="$ per day" style="width:110px;"/>
+          <input class="form-input" id="adv-sp-start" type="date" title="Start date" style="width:150px;"/>
+          <input class="form-input" id="adv-sp-end" type="date" title="End date (leave blank while it's running)" style="width:150px;"/>
           <button class="btn btn-outline btn-sm" onclick="advisorAddSpend()">Add</button>
         </div>
-        <div style="font-size:11.5px;color:var(--faint);margin-top:6px;">Enter a total for a date range; it's prorated by day into the weekly windows. Name it exactly like the ad's utm_content so it lands on the right row.</div>
+        <div style="font-size:11.5px;color:var(--faint);margin-top:6px;">Enter the daily budget you set in Ads Manager and the day it started. Leave the end date blank while it's running — the advisor multiplies by the days in each window. Name it exactly like the ad's utm_content so it lands on the right row.</div>
         ${spendList}
       </details>
       <details class="adv-details"><summary>Notes for this shop's reviews</summary>
@@ -2878,8 +2878,8 @@ function renderAdvisor(status) {
       </details>
     </div>
   </div>`;
-  const s = document.getElementById('adv-sp-start'), e = document.getElementById('adv-sp-end');
-  if (s && e && !s.value) { const t = new Date(); const a = new Date(t); a.setDate(a.getDate() - 6); s.value = a.toISOString().slice(0, 10); e.value = t.toISOString().slice(0, 10); }
+  const s = document.getElementById('adv-sp-start');
+  if (s && !s.value) s.value = new Date().toISOString().slice(0, 10);
 }
 async function advisorRun() {
   if (advState.busy) return;
@@ -2908,12 +2908,16 @@ async function advisorOpenReport(id) {
   catch(e) { toast(e.message); }
 }
 async function advisorAddSpend() {
-  const body = { campaign: document.getElementById('adv-sp-campaign').value.trim(), source: document.getElementById('adv-sp-source').value.trim(), period_start: document.getElementById('adv-sp-start').value, period_end: document.getElementById('adv-sp-end').value, amount: document.getElementById('adv-sp-amount').value };
-  try { await advApi(advState.shopId, '/spend', { method: 'POST', body: JSON.stringify(body) }); advState.data = await advApi(advState.shopId, ''); renderAdvisor(); toast('Spend saved ✓'); }
+  const body = { campaign: document.getElementById('adv-sp-campaign').value.trim(), source: document.getElementById('adv-sp-source').value.trim(), period_start: document.getElementById('adv-sp-start').value, period_end: document.getElementById('adv-sp-end').value, daily: document.getElementById('adv-sp-daily').value };
+  try { await advApi(advState.shopId, '/spend', { method: 'POST', body: JSON.stringify(body) }); advState.data = await advApi(advState.shopId, ''); renderAdvisor(); toast('Budget saved ✓'); }
+  catch(e) { toast(e.message); }
+}
+async function advisorStopSpend(id) {
+  try { await advApi(advState.shopId, '/spend/' + encodeURIComponent(id), { method: 'PATCH', body: JSON.stringify({ period_end: new Date().toISOString().slice(0, 10) }) }); advState.data = await advApi(advState.shopId, ''); renderAdvisor(); toast('Budget stopped as of today ✓'); }
   catch(e) { toast(e.message); }
 }
 async function advisorDelSpend(id) {
-  if (!confirm('Remove this spend row?')) return;
+  if (!confirm('Remove this budget row?')) return;
   try { await advApi(advState.shopId, '/spend/' + encodeURIComponent(id), { method: 'DELETE' }); advState.data = await advApi(advState.shopId, ''); renderAdvisor(); }
   catch(e) { toast(e.message); }
 }

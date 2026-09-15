@@ -157,18 +157,31 @@ function leadFacts(db) {
 }
 
 // ── 2. Metrics ───────────────────────────────────────────────────────────────
-// Spend rows are the platform's ad_spend records: { campaign, source, amount,
-// period_start, period_end }. A row's spend is prorated by how many of its
-// days fall inside the window, so a monthly total contributes ~7/30 to a week.
+// Spend rows are the platform's ad_spend records. Two shapes:
+//   { campaign, source, daily, period_start, period_end? }  — a DAILY budget
+//     (the admin card writes these); period_end blank = still running. Spend
+//     in a window = daily × the days of the window the row covers.
+//   { campaign, source, amount, period_start, period_end }  — a TOTAL over a
+//     date range (legacy rows from POST /api/ad-spend), prorated by day.
 function spendIn(rows, from, to, match = () => true) {
   let total = 0, hit = false;
   rows.forEach(r => {
     if (!match(r)) return;
-    const amount = Number(r.amount != null ? r.amount : r.spend) || 0;
-    let ps = ms(r.period_start || r.date || r.created_at), pe = ms(r.period_end || r.period_start || r.date || r.created_at);
+    const ps = ms(r.period_start || r.date || r.created_at);
     if (ps == null) return;
+    const daily = r.daily != null ? Number(r.daily) : null;
+    if (daily != null && Number.isFinite(daily)) {
+      const pe = r.period_end ? ms(r.period_end) + DAY : Infinity;   // inclusive end date
+      const overlap = Math.max(0, Math.min(pe, to) - Math.max(ps, from));
+      if (overlap <= 0) return;
+      hit = true;
+      total += daily * (overlap / DAY);
+      return;
+    }
+    const amount = Number(r.amount != null ? r.amount : r.spend) || 0;
+    let pe = ms(r.period_end || r.period_start || r.date || r.created_at);
     if (pe == null || pe < ps) pe = ps;
-    pe += DAY;                                  // period_end is inclusive
+    pe += DAY;
     const days = Math.max(1, Math.round((pe - ps) / DAY));
     const overlap = Math.max(0, Math.min(pe, to) - Math.max(ps, from));
     if (overlap <= 0) return;

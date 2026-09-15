@@ -1066,20 +1066,36 @@ router.post('/api/admin/shop/:shopId/advisor/feedback', requireAdmin, (req, res)
   }
 });
 
-// Ad spend entry — same record shape as POST /api/ad-spend (platform.router.js)
-// so the marketing dashboard and the advisor read one table.
+// Ad spend entry — a DAILY budget per campaign/ad with a start date and an
+// optional end date (blank = still running). Lands in the same `ad_spend`
+// table the platform router's marketing analytics read; legacy total-amount
+// rows from POST /api/ad-spend keep working (prorated by day).
 router.post('/api/admin/shop/:shopId/advisor/spend', requireAdmin, (req, res) => {
   const shop = withShop(req, res); if (!shop) return;
-  const amount = Number(req.body.amount);
+  const daily = Number(req.body.daily);
   const campaign = String(req.body.campaign || '').trim().slice(0, 200);
-  const start = String(req.body.period_start || '').slice(0, 10), end = String(req.body.period_end || start).slice(0, 10);
-  if (!campaign || !Number.isFinite(amount) || amount < 0) return res.status(422).json({ error: 'campaign and amount required' });
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || end < start) return res.status(422).json({ error: 'period_start / period_end must be YYYY-MM-DD, end on or after start' });
+  const start = String(req.body.period_start || '').slice(0, 10), end = String(req.body.period_end || '').slice(0, 10);
+  if (!campaign || !Number.isFinite(daily) || daily < 0) return res.status(422).json({ error: 'campaign and daily amount required' });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start)) return res.status(422).json({ error: 'start date must be YYYY-MM-DD' });
+  if (end && (!/^\d{4}-\d{2}-\d{2}$/.test(end) || end < start)) return res.status(422).json({ error: 'end date must be YYYY-MM-DD, on or after start (blank = still running)' });
   const db = getShopDb(shop.id);
   const rows = db.get('ad_spend').value() || [];
-  const row = { id: uuidv4(), campaign, source: String(req.body.source || 'facebook').toLowerCase().slice(0, 40), amount, period_start: start, period_end: end, created_at: new Date().toISOString(), enteredBy: 'admin' };
+  const row = { id: uuidv4(), campaign, source: String(req.body.source || 'facebook').toLowerCase().slice(0, 40), daily, period_start: start, period_end: end || null, created_at: new Date().toISOString(), enteredBy: 'admin' };
   db.set('ad_spend', rows.concat(row)).write();
   res.status(201).json({ ok: true, row });
+});
+// Stop a running daily budget on a date (or edit its end date).
+router.patch('/api/admin/shop/:shopId/advisor/spend/:rowId', requireAdmin, (req, res) => {
+  const shop = withShop(req, res); if (!shop) return;
+  const db = getShopDb(shop.id);
+  const rows = db.get('ad_spend').value() || [];
+  const row = rows.find(r => r.id === req.params.rowId);
+  if (!row) return res.status(404).json({ error: 'Spend row not found' });
+  const end = req.body.period_end == null || req.body.period_end === '' ? null : String(req.body.period_end).slice(0, 10);
+  if (end && (!/^\d{4}-\d{2}-\d{2}$/.test(end) || end < row.period_start)) return res.status(422).json({ error: 'end date must be YYYY-MM-DD, on or after start' });
+  row.period_end = end;
+  db.set('ad_spend', rows).write();
+  res.json({ ok: true, row });
 });
 router.delete('/api/admin/shop/:shopId/advisor/spend/:rowId', requireAdmin, (req, res) => {
   const shop = withShop(req, res); if (!shop) return;

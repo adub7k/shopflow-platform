@@ -123,6 +123,20 @@ ok('flag: median contact time', m.flags.some(f => /median time to first contact 
 ok('no spend-missing flag when spend exists', !m.flags.some(f => /no ad spend entered/.test(f)));
 ok('no missed-call flag when AI answered a call', !m.flags.some(f => /missed call/.test(f)));
 
+// Daily budgets: $20/day from Sep 5 (date-only = midnight), still running → this
+// week = 7 days = $140; last week (Sep 1 18:00 → Sep 8 18:00) = 3.75 days = $75;
+// a stopped budget ($5/day, Sep 2 → Sep 4 inclusive) adds 3 days = $15 to last week.
+const dailyRows = [
+  { id: 'd1', campaign: 'phone-video', daily: 20, period_start: dstr(10), period_end: null },
+  { id: 'd2', campaign: 'phone-video', daily: 5, period_start: dstr(13), period_end: dstr(11) },
+];
+const md = adv.computeMetrics({ facts, spendRows: dailyRows, calls: [], now: NOW });
+eq('daily budget: this week = 7 days × $20', md.this_week.ad_spend, 140);
+eq('daily budget: last week = 3.75 days × $20 + stopped budget 3 days × $5', md.last_week.ad_spend, 90);
+eq('daily budget: 30 days = 10.75 days × $20 + $15', md.last_30_days.ad_spend, 230);
+eq('daily budget: cost per booking this week', md.this_week.cost_per_booking, 70);
+eq('daily budget: future start date contributes nothing yet', adv.spendIn([{ campaign: 'x', daily: 99, period_start: dstr(-3) }], NOW - 7 * 86400000, NOW + 1), null);
+
 // Empty shop → no crash, sane nulls.
 const e = adv.computeMetrics({ facts: [], spendRows: [], calls: [], now: NOW });
 eq('empty: contact rate null, spend flag present', [e.this_week.contact_rate_pct, e.flags.includes('no ad spend entered, so cost metrics are unavailable')], [null, true]);
@@ -196,15 +210,19 @@ const shop = master.get('shops').find({ id: shopId }).value();
   eq('route feedback', [r.status, r.body.feedback.rating], [200, 'helpful']);
   r = await call('POST', `/api/admin/shop/${shopId}/advisor/feedback`, { reportId: report.id, actionIndex: 0, rating: 'meh' });
   eq('route feedback: bad rating', r.status, 400);
-  r = await call('POST', `/api/admin/shop/${shopId}/advisor/spend`, { campaign: 'phone-video', amount: '42.5', period_start: dstr(3), period_end: dstr(0) });
-  eq('route spend add', [r.status, r.body.row.amount, r.body.row.source], [201, 42.5, 'facebook']);
+  r = await call('POST', `/api/admin/shop/${shopId}/advisor/spend`, { campaign: 'phone-video', daily: '12.5', period_start: dstr(3) });
+  eq('route spend add: daily budget, still running', [r.status, r.body.row.daily, r.body.row.period_end, r.body.row.source], [201, 12.5, null, 'facebook']);
   const rowId = r.body.row.id;
   db.read();   // the route writes through its own lowdb handle; refresh this one from disk
   eq('spend row landed in ad_spend (shared with marketing analytics)', db.get('ad_spend').value().length, 3);
-  r = await call('POST', `/api/admin/shop/${shopId}/advisor/spend`, { campaign: '', amount: 5, period_start: dstr(0) });
+  r = await call('POST', `/api/admin/shop/${shopId}/advisor/spend`, { campaign: '', daily: 5, period_start: dstr(0) });
   eq('route spend: campaign required', r.status, 422);
-  r = await call('POST', `/api/admin/shop/${shopId}/advisor/spend`, { campaign: 'x', amount: 5, period_start: dstr(0), period_end: dstr(2) });
+  r = await call('POST', `/api/admin/shop/${shopId}/advisor/spend`, { campaign: 'x', daily: 5, period_start: dstr(0), period_end: dstr(2) });
   eq('route spend: end before start rejected', r.status, 422);
+  r = await call('PATCH', `/api/admin/shop/${shopId}/advisor/spend/${rowId}`, { period_end: dstr(1) });
+  eq('route spend stop: end date set', [r.status, r.body.row.period_end], [200, dstr(1)]);
+  r = await call('PATCH', `/api/admin/shop/${shopId}/advisor/spend/${rowId}`, { period_end: dstr(9) });
+  eq('route spend stop: end before start rejected', r.status, 422);
   r = await call('DELETE', `/api/admin/shop/${shopId}/advisor/spend/${rowId}`);
   db.read();
   eq('route spend delete', [r.status, db.get('ad_spend').value().length], [200, 2]);
