@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Book a ShopFlow Demo</title>
+<title>Book a 15-minute call — ShopFlow</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -28,7 +28,7 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:18px 4
 /* ── Left: pitch ── */
 .pitch{padding:60px 48px;display:flex;flex-direction:column;justify-content:center;position:relative;overflow:hidden;}
 .pitch::before{content:'';position:absolute;top:-100px;left:-100px;width:500px;height:500px;background:radial-gradient(circle,rgba(22,163,74,.15) 0%,transparent 70%);pointer-events:none;}
-.pitch-eyebrow{display:inline-flex;align-items:center;gap:8px;background:rgba(22,163,74,.12);border:1px solid rgba(22,163,74,.25);border-radius:100px;padding:6px 14px;font-size:12px;font-weight:700;color:var(--green-bright);letter-spacing:.04em;text-transform:uppercase;margin-bottom:28px;width:fit-content;}
+.pitch-eyebrow{display:inline-flex;align-items:center;gap:8px;background:rgba(22,163,74,.12);border:1px solid rgba(22,163,74,.25);border-radius:100px;padding:6px 14px;font-size:12px;font-weight:700;color:#fff;letter-spacing:.04em;text-transform:uppercase;margin-bottom:28px;width:fit-content;}
 .pitch-dot{width:6px;height:6px;background:var(--green-bright);border-radius:50%;animation:pulse 2s infinite;}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
 .pitch-title{font-size:42px;font-weight:900;letter-spacing:-.05em;line-height:1.05;margin-bottom:16px;}
@@ -40,7 +40,7 @@ nav{display:flex;align-items:center;justify-content:space-between;padding:18px 4
 .pitch-point-text strong{display:block;font-size:14px;font-weight:700;color:#fff;margin-bottom:2px;}
 .pitch-point-text span{font-size:13px;color:rgba(255,255,255,.4);line-height:1.5;}
 .pitch-note{margin-top:40px;padding:16px 18px;background:rgba(22,163,74,.06);border:1px solid rgba(22,163,74,.15);border-radius:12px;font-size:13px;color:rgba(255,255,255,.4);line-height:1.5;}
-.pitch-note strong{color:var(--green-bright);}
+.pitch-note strong{color:#fff;}
 
 /* ── Right: form ── */
 .form-side{padding:48px 48px;background:rgba(255,255,255,.02);border-left:1px solid rgba(255,255,255,.06);display:flex;flex-direction:column;justify-content:center;}
@@ -116,32 +116,32 @@ select.form-input option{background:#1a1a1a;color:#fff;}
 
   <!-- Left: pitch -->
   <div class="pitch">
-    <div class="pitch-eyebrow"><span class="pitch-dot"></span> Free 15-minute demo</div>
-    <div class="pitch-title">See it running<br/>in your <span class="green">shop.</span></div>
-    <div class="pitch-sub">We'll walk you through the whole platform live — the AI receptionist answering a call, missed-call text-back, online booking, customer profiles and the revenue dashboard. No slides, no fluff.</div>
+    <div class="pitch-eyebrow"><span class="pitch-dot"></span> Free 15-minute call</div>
+    <div class="pitch-title">Tell me about<br/>your shop.</div>
+    <div class="pitch-sub">You tell me your ticket size and how many calls you miss. I'll tell you straight whether this will work for you. No slides, no pitch deck.</div>
     <div class="pitch-points">
       <div class="pitch-point">
         <div class="pitch-check"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
-        <div class="pitch-point-text"><strong>We set it up with your shop info</strong><span>Come to the demo and see ShopFlow with your shop name, your services and your pricing already loaded.</span></div>
+        <div class="pitch-point-text"><strong>We go over your numbers</strong><span>Average ticket, calls you miss, what you spend on ads today. Ten minutes of honest math.</span></div>
       </div>
       <div class="pitch-point">
         <div class="pitch-check"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
-        <div class="pitch-point-text"><strong>Live lead-to-booked flow, start to finish</strong><span>We'll call the AI receptionist, book a test job, fire a reminder, and show you the customer profile in real time.</span></div>
+        <div class="pitch-point-text"><strong>I'll show you the tint shop case study</strong><span>$385 in ads, 98 leads, $4,345 collected in 14 days. Every number, and how we did it.</span></div>
       </div>
       <div class="pitch-point">
         <div class="pitch-check"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
-        <div class="pitch-point-text"><strong>15 minutes, no pressure</strong><span>Ask anything. If it's not the right fit we'll tell you. No hard sell, ever.</span></div>
+        <div class="pitch-point-text"><strong>If it won't work, I'll say so</strong><span>Some shops aren't a fit yet. You'll hear that on the call, not after a contract.</span></div>
       </div>
     </div>
     <div class="pitch-note">
-      <strong>No price list — we scope it to your shop.</strong> Setup handled for you.<br/>We'll dive into your business on the call and quote it straight. No hard sell.
+      <strong>$3,000 a month. Ad spend billed to you separately.</strong><br/>One price, no tiers. We'll go over exactly what's included on the call. I'm in Albuquerque and happy to come by the shop instead.
     </div>
   </div>
 
   <!-- Right: form -->
   <div class="form-side">
     <div class="form-card">
-      <div class="form-title">Book your demo</div>
+      <div class="form-title">Book your 15-minute call</div>
       <div class="form-sub">Pick a time and we'll send a confirmation to your phone.</div>
 
       <div id="form-wrap">
@@ -185,7 +185,7 @@ select.form-input option{background:#1a1a1a;color:#fff;}
         </div>
 
         <div class="form-err" id="form-err"></div>
-        <button class="submit-btn" id="submit-btn" onclick="submitDemo()">Book My Demo →</button>
+        <button class="submit-btn" id="submit-btn" onclick="submitDemo()">Book my call →</button>
       </div>
     </div>
   </div>
@@ -261,7 +261,7 @@ async function submitDemo() {
   try {
     const res  = await fetch('/api/public/demo/book', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name,shopName:shop,phone,currentTool:tool,date:selectedDate,time:selectedTime}) });
     const data = await res.json();
-    if (!data.ok) { errEl.textContent=data.error||'Booking failed. Try again.'; errEl.style.display='block'; btn.textContent='Book My Demo →'; btn.disabled=false; return; }
+    if (!data.ok) { errEl.textContent=data.error||'Booking failed. Try again.'; errEl.style.display='block'; btn.textContent='Book my call →'; btn.disabled=false; return; }
     document.getElementById('form-wrap').innerHTML = `
       <div class="success-wrap">
         <div class="success-icon">🎉</div>
@@ -271,7 +271,7 @@ async function submitDemo() {
       </div>`;
   } catch(e) {
     errEl.textContent='Something went wrong. Please try again.'; errEl.style.display='block';
-    btn.textContent='Book My Demo →'; btn.disabled=false;
+    btn.textContent='Book my call →'; btn.disabled=false;
   }
 }
 
