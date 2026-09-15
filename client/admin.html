@@ -1894,7 +1894,7 @@ function openClientReport(period) {
   const fmtD = ds => ds ? new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
   const periodLabel = biweekly && BW.start ? `${fmtD(BW.start)} – ${fmtD(BW.end)}, ${now.getFullYear()}` : monthName;
   const priorLabel = biweekly ? 'the 2 weeks before' : 'last month';
-  const srcRows = Object.entries(L.sources || {}).sort((a, b) => b[1] - a[1]).slice(0, 6)
+  const srcRows = Object.entries((biweekly ? BW.sources : L.sources) || {}).sort((a, b) => b[1] - a[1]).slice(0, 6)
     .map(([src, c]) => `<tr><td style="text-transform:capitalize;">${esc(src)}</td><td class="r">${c}</td></tr>`).join('');
   const stat = (label, value, sub) => `<div class="kpi"><div class="l">${label}</div><div class="v">${value}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
 
@@ -1937,11 +1937,13 @@ function openClientReport(period) {
       ${biweekly
         ? stat('New leads', BW.leads != null ? BW.leads : '—', (BW.leadsPrior || 0) + ' the 2 weeks before')
         : stat('New leads', L.thisMonth != null ? L.thisMonth : '—', (L.lastMonth || 0) + ' last month')}
-      ${stat('Lead conversion', L.conversionRate != null ? L.conversionRate + '%' : '—', 'inquiries that set an appointment')}
+      ${biweekly
+        ? stat('Lead conversion', BW.conversionRate != null ? BW.conversionRate + '%' : '—', 'inquiries this period that set an appointment')
+        : stat('Lead conversion', L.conversionRate != null ? L.conversionRate + '%' : '—', 'inquiries that set an appointment')}
       ${stat('Lined up next', '$' + fmt(F.total || 0), 'booked + estimates out')}
     </div>
 
-    ${(AI.calls || AI.recovered) ? `<h2>Your AI receptionist</h2>
+    ${(!biweekly && (AI.calls || AI.recovered)) ? `<h2>Your AI receptionist</h2>
     <div class="kpis">
       ${stat('Calls answered', AI.calls || 0, 'no missed calls, 24/7')}
       ${stat('Leads captured', AI.leads || 0, 'from answered calls')}
@@ -1959,7 +1961,7 @@ function openClientReport(period) {
       <tr><td style="font-weight:800;">Projected</td><td class="r" style="color:${accent};">$${fmt(F.total || 0)}</td></tr>
     </tbody></table>
 
-    ${quota > 0 ? `<h2>Monthly goal</h2>
+    ${(!biweekly && quota > 0) ? `<h2>Monthly goal</h2>
     <div style="display:flex;justify-content:space-between;align-items:baseline;">
       <span style="font-size:22px;font-weight:800;color:${accent};">${quotaPct}%</span>
       <span style="font-size:12.5px;color:#5C6B63;">$${fmt(monthRev)} of $${fmt(quota)} · on pace for $${fmt(pace)}</span>

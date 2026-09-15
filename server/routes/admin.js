@@ -279,12 +279,17 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   const dayStr = (back) => { const d = new Date(now); d.setDate(d.getDate() - back); return d.toISOString().slice(0, 10); };
   const bwStart = dayStr(13), bwPriorStart = dayStr(27), bwPriorEnd = dayStr(14);
   const inWin = (ds, from, to) => !!ds && ds >= from && ds <= to;
+  const bwLeads = leads.filter(l => inWin(leadCreated(l).slice(0, 10), bwStart, today));
   const biweekly = {
     start: bwStart, end: today,
     revenue: doneRevenue(appointments.filter(a => inWin(String(a.date || '').slice(0, 10), bwStart, today))),
     revenuePrior: doneRevenue(appointments.filter(a => inWin(String(a.date || '').slice(0, 10), bwPriorStart, bwPriorEnd))),
-    leads: leads.filter(l => inWin(leadCreated(l).slice(0, 10), bwStart, today)).length,
+    leads: bwLeads.length,
     leadsPrior: leads.filter(l => inWin(leadCreated(l).slice(0, 10), bwPriorStart, bwPriorEnd)).length,
+    // Conversion + sources over THIS window's leads only, so the bi-weekly
+    // report carries no all-time numbers.
+    conversionRate: bwLeads.length ? Math.round(bwLeads.filter(leadWon).length / bwLeads.length * 100) : null,
+    sources: bwLeads.reduce((m, l) => { const src = l.channel || l.source || 'call'; m[src] = (m[src] || 0) + 1; return m; }, {}),
     calls: calls.filter(c => inWin(String(c.startedAt || '').slice(0, 10), bwStart, today)).length,
     aiRecovered: Math.round(aiDone.filter(a => inWin(String(a.date || '').slice(0, 10), bwStart, today)).reduce((s, a) => s + (Number(a.price) || 0), 0)),
   };
