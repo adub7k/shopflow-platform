@@ -285,7 +285,11 @@
           ${!this._data.length && canWrite() ? '<div class="list-sub" style="margin-top:2px;">Create one to quote a ceramic, PPF, or correction job.</div>' : ''}</div></div>`);
       } else {
         html.push(`<div class="v2-card v2-tablewrap"><table class="v2-table">
-          <thead><tr><th>Estimate</th><th>Customer</th><th>Vehicle</th><th class="r">Items</th><th class="r">Total</th><th>Status</th></tr></thead><tbody>`);
+          <thead><tr><th>Estimate</th><th>Customer</th><th>Vehicle</th><th class="r">Items</th><th class="r">Total</th><th>Status</th><th></th></tr></thead><tbody>`);
+        // Row-level follow-up actions: dial the customer / open their lead
+        // profile without opening the estimate first — the "work the Sent
+        // tab" loop for estimates that are out.
+        const rowBtn = 'display:inline-block;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:3px 8px;cursor:pointer;font-size:14px;line-height:1.3;text-decoration:none;color:inherit;font-family:inherit;';
         filtered.forEach(q => {
           // Fleet rows swap the single vehicle for the fleet + its terms, and
           // show the recurring value with the per-visit price under it.
@@ -302,7 +306,8 @@
             <td style="color:var(--muted);">${veh}</td>
             <td class="r">${(q.lineItems || []).length}</td>
             <td class="r">${money}</td>
-            <td>${this._badge(q.status)}</td></tr>`);
+            <td>${this._badge(q.status)}</td>
+            <td class="r" style="white-space:nowrap;" onclick="event.stopPropagation()">${q.customerPhone ? `<a href="tel:${esc(String(q.customerPhone).replace(/[^\d+]/g, ''))}" style="${rowBtn}" title="Call ${esc(q.customerPhone)}" onclick="Quotes._logCall('${q.id}')">📞</a> ` : ''}${(q.customerId || q.customerPhone) ? `<button style="${rowBtn}" title="Open lead profile" onclick="Quotes.openLead('${q.id}')">👤</button>` : ''}</td></tr>`);
         });
         html.push('</tbody></table></div>');
       }

@@ -400,6 +400,34 @@ const Quotes = {
     }catch(e){ toast('Could not save','error'); enableBtn(btn); }
   },
 
+  // Jump from an estimate to the person behind it — the follow-up read for
+  // "estimates that are out": open the lead modal (call history, notes, texts,
+  // follow-up sequence) when a lead exists for this customer, else the client
+  // profile. Leads are fetched here because the Estimates page never loads them.
+  async openLead(id){
+    const q=this._data.find(x=>x.id===id); if(!q)return;
+    const last10=p=>{const d=String(p||'').replace(/\D/g,'');return d.length>=10?d.slice(-10):'';};
+    let leads=[];
+    try{ leads=await db.leads.all(); }catch(e){ leads=[]; }
+    const stamp=l=>new Date(l.createdAt||l.created_at||l.firstContactAt||0).getTime();
+    const mine=leads.filter(l=>(q.customerId&&l.customerId===q.customerId)||(last10(q.customerPhone)&&last10(l.phone)===last10(q.customerPhone)))
+                    .sort((a,b)=>stamp(b)-stamp(a));   // newest lead first — that's the live conversation
+    if(mine.length&&typeof Leads!=='undefined'&&Leads.open){
+      // The lead modal reads from Leads._leads; seed it so open() finds the record.
+      Leads._leads=leads;
+      Leads.open(mine[0].id);
+      return;
+    }
+    if(q.customerId&&typeof ClientProfile!=='undefined'&&ClientProfile.open){ ClientProfile.open(q.customerId); return; }
+    toast('No lead or client on file for this estimate','warning');
+  },
+  // Stamp the client's activity log when the owner dials from an estimate, so
+  // the follow-up shows in the profile like texts do. Fire-and-forget.
+  _logCall(id){
+    const q=this._data.find(x=>x.id===id);
+    if(q&&q.customerId&&typeof logClientNote==='function') logClientNote(q.customerId,'Called about '+(q.number||'estimate'));
+  },
+
   openDetail(id){
     const q=this._data.find(x=>x.id===id); if(!q)return;
     const link=this._publicLink(q);
@@ -434,6 +462,8 @@ const Quotes = {
         <button class="btn btn-full" onclick="navigator.clipboard.writeText('${link}');toast('Link copied ✓')">🔗 Copy estimate link</button>
         ${q.customerEmail?`<button class="btn btn-full" onclick="Quotes.sendEmail('${q.id}')">✉️ Email to customer</button>`:''}
         ${(q.customerPhone||q.customerId)?`<button class="btn btn-full" onclick="Quotes.sendLink('${q.id}')">📱 Text to customer</button>`:''}
+        ${q.customerPhone?`<a class="btn btn-full" href="tel:${esc(String(q.customerPhone).replace(/[^\d+]/g,''))}" style="text-decoration:none;text-align:center;" onclick="Quotes._logCall('${q.id}')">📞 Call ${esc(q.customerPhone)}</a>`:''}
+        ${(q.customerId||q.customerPhone)?`<button class="btn btn-full" onclick="Quotes.openLead('${q.id}')">👤 View lead profile</button>`:''}
         ${q.status==='approved'?`<button class="btn btn-green btn-full" onclick="Quotes.schedule('${q.id}')">📅 Schedule appointment</button>`:''}
         ${['approved','scheduled','completed'].includes(q.status)&&!q.balancePaid&&!q.contract&&Number(q.total)>0?`<button class="btn btn-full" onclick="Quotes.paymentLink('${q.id}')">💳 Text payment link${q.depositPaid?` — ${fmtMoney(Math.max(0,(Number(q.total)||0)-(Number(q.depositAmount)||0)))} balance`:` — ${fmtMoney(q.total)}`}</button>`:''}
         ${q.status==='sent'?`<button class="btn btn-full" onclick="Quotes.mark('${q.id}','approved')">Mark approved</button>`:''}
