@@ -4,6 +4,7 @@ const { runAutomations } = require('./automation/engine');
 const { sendQuoteEmail, shopReplyTo } = require('./email');
 const { resumeStalledCampaigns } = require('./newsletter');
 const { sendPush } = require('./push-instance');
+const advisor = require('./advisor/growthAdvisor');
 
 const _DAY = 24 * 60 * 60 * 1000;
 function publicBase() {
@@ -144,6 +145,19 @@ async function remindUpcomingAppointments(db, shop, s, TZ, todayStr) {
 }
 
 // ── Scheduler: 24hr reminders + 21-day rebook nudges ─────────────────────────
+// ── Growth Advisor auto-run ──────────────────────────────────────────────────
+// Due when it's Monday in the shop's timezone, the last auto-run is 6+ days
+// old, the shop hasn't opted out (advisorAuto === false), and there was at
+// least one lead in the last 30 days. Manual runs from admin don't reset the
+// weekly clock, so the operator always gets a Monday review to start the week.
+async function maybeRunAdvisor(db, shop, TZ) {
+  const dow = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(new Date().toLocaleDateString('en-US', { timeZone: TZ, weekday: 'short' }));
+  if (!advisor.autoRunDue(db, shop, dow)) return;
+  const ps = master.get('platformSettings').value() || {};
+  const playbook = typeof ps.advisorPlaybook === 'string' ? ps.advisorPlaybook : advisor.DEFAULT_PLAYBOOK;
+  await advisor.runAdvisor({ db, shop, playbook, trigger: 'auto' });
+}
+
 async function runScheduler() {
   try {
     const shops = master.get('shops').value().filter(s => s.active);
@@ -177,6 +191,11 @@ async function runScheduler() {
         // normally drives the whole send in-process).
         try { resumeStalledCampaigns(db, shop); } catch(e){}
 
+        // ── Growth Advisor weekly review (Mondays, shop-local; no SMS needed) ──
+        // One Claude call per opted-in shop with recent leads; the report lands
+        // on the shop's admin profile card. Skipped entirely without an API key.
+        try { await maybeRunAdvisor(db, shop, TZ); } catch(e) { console.error('[advisor] auto-run failed', shop.id, e.message); }
+
         // ── SMS-gated automation campaigns ──
         // The campaign engine runs each enabled campaign (24h reminder + rebook
         // by default, plus optional review requests). Reminder/rebook behavior is
@@ -191,4 +210,4 @@ async function runScheduler() {
 }
 setInterval(runScheduler, 5*60*1000);
 
-module.exports = { runScheduler, remindStaleQuotes, remindUpcomingAppointments, apptStartMs };
+module.exports = { runScheduler, remindStaleQuotes, remindUpcomingAppointments, apptStartMs, maybeRunAdvisor };

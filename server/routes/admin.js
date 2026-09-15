@@ -359,7 +359,7 @@ router.patch('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
   // metaPageId routes inbound Meta lead-ad webhooks to this tenant; metaPageToken
   // is that page's long-lived access token (falls back to META_PAGE_ACCESS_TOKEN).
-  const allowed = ['plan', 'monthlyRate', 'monthlyQuota', 'estAcceptRate', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber', 'metaPageId', 'metaPageToken', 'features', 'notes'];
+  const allowed = ['plan', 'monthlyRate', 'monthlyQuota', 'estAcceptRate', 'active', 'shopName', 'phone', 'email', 'twilioFromNumber', 'metaPageId', 'metaPageToken', 'features', 'notes', 'advisorNotes', 'advisorAuto'];
   const updates = {};
   allowed.forEach(k => { if (req.body[k] !== undefined) updates[k] = req.body[k]; });
   // Custom rate: number, or null/'' to clear.
@@ -369,6 +369,9 @@ router.patch('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   // Manual estimate-accept-rate override (0–100); null/'' clears back to computed.
   if (updates.estAcceptRate !== undefined) updates.estAcceptRate = (updates.estAcceptRate === null || updates.estAcceptRate === '') ? null : Math.min(100, Math.max(0, Number(updates.estAcceptRate) || 0));
   if (updates.plan !== undefined) updates.plan = String(updates.plan).trim().slice(0, 40) || 'custom';
+  // Growth Advisor: per-shop playbook notes (free text) + weekly auto-run opt-out.
+  if (updates.advisorNotes !== undefined) updates.advisorNotes = String(updates.advisorNotes || '').slice(0, 4000);
+  if (updates.advisorAuto !== undefined) updates.advisorAuto = updates.advisorAuto !== false && updates.advisorAuto !== 'false';
   // Trimmed so a value pasted from the Meta dashboard with stray whitespace
   // still matches the page_id on an inbound webhook. '' clears the mapping.
   if (updates.metaPageId !== undefined) updates.metaPageId = String(updates.metaPageId || '').trim().slice(0, 40);
@@ -976,6 +979,116 @@ router.get('/api/admin/shop/:shopKey/proof', requireAdmin, (req, res) => {
     console.error('Admin proof-sheet error:', e.message);
     res.status(500).json({ error: 'Failed to build proof sheet' });
   }
+});
+
+// ── ADMIN: Growth Advisor ─────────────────────────────────────────────────────
+// Weekly AI account-management review per shop (server/advisor/growthAdvisor.js).
+// The code computes every number from the shop db; Claude only ranks the moves.
+// Reports + feedback persist on the shop db (db.advisor); the shared playbook
+// lives on master.platformSettings.advisorPlaybook; per-shop notes on the shop
+// record (advisorNotes). Ad spend rows are the same `ad_spend` records the
+// platform router's marketing analytics already read.
+const advisor = require('../advisor/growthAdvisor');
+const advisorRunning = new Set();   // one paid run per shop at a time
+
+const advisorPlaybook = () => {
+  const ps = master.get('platformSettings').value() || {};
+  return typeof ps.advisorPlaybook === 'string' ? ps.advisorPlaybook : advisor.DEFAULT_PLAYBOOK;
+};
+const publicReport = (r) => r && ({ id: r.id, createdAt: r.createdAt, model: r.model, trigger: r.trigger, result: r.result, feedback: r.feedback || {}, flags: (r.metrics && r.metrics.flags) || [] });
+const withShop = (req, res) => {
+  const shop = master.get('shops').find({ id: req.params.shopId }).value();
+  if (!shop) { res.status(404).json({ error: 'Shop not found' }); return null; }
+  return shop;
+};
+
+router.get('/api/admin/advisor/playbook', requireAdmin, (req, res) => {
+  res.json({ playbook: advisorPlaybook(), isDefault: typeof (master.get('platformSettings').value() || {}).advisorPlaybook !== 'string', model: advisor.MODEL, configured: advisor.configured() });
+});
+router.patch('/api/admin/advisor/playbook', requireAdmin, (req, res) => {
+  const text = String(req.body.playbook || '').slice(0, 20000);
+  master.get('platformSettings').assign({ advisorPlaybook: text }).write();
+  res.json({ ok: true });
+});
+
+// Card payload: fresh metrics + flags (no model call), latest report, history.
+router.get('/api/admin/shop/:shopId/advisor', requireAdmin, (req, res) => {
+  const shop = withShop(req, res); if (!shop) return;
+  const db = getShopDb(shop.id);
+  const { metrics, spendRows, leadCount } = advisor.snapshot(db, shop);
+  const store = advisor.loadStore(db);
+  const reports = store.reports || [];
+  res.json({
+    configured: advisor.configured(), model: advisor.MODEL, running: advisorRunning.has(shop.id),
+    leadCount, metrics,
+    latest: publicReport(reports[reports.length - 1]) || null,
+    history: reports.slice(0, -1).reverse().slice(0, 12).map(r => ({ id: r.id, createdAt: r.createdAt, health: r.result && r.result.health, headline: r.result && r.result.headline, trigger: r.trigger })),
+    spend: spendRows.slice(-20).reverse(),
+    shopNotes: shop.advisorNotes || '', autoRun: shop.advisorAuto !== false,
+    lastAutoRunAt: store.lastAutoRunAt || null,
+  });
+});
+
+router.get('/api/admin/shop/:shopId/advisor/report/:reportId', requireAdmin, (req, res) => {
+  const shop = withShop(req, res); if (!shop) return;
+  const r = (advisor.loadStore(getShopDb(shop.id)).reports || []).find(x => x.id === req.params.reportId);
+  if (!r) return res.status(404).json({ error: 'Report not found' });
+  res.json({ report: { ...publicReport(r), metrics: r.metrics } });
+});
+
+router.post('/api/admin/shop/:shopId/advisor/run', requireAdmin, async (req, res) => {
+  const shop = withShop(req, res); if (!shop) return;
+  if (!advisor.configured()) return res.status(400).json({ error: 'AI is not configured. Set ANTHROPIC_API_KEY to enable the Growth Advisor.' });
+  if (advisorRunning.has(shop.id)) return res.status(409).json({ error: 'A review is already running for this shop.' });
+  advisorRunning.add(shop.id);
+  try {
+    const report = await advisor.runAdvisor({ db: getShopDb(shop.id), shop, playbook: advisorPlaybook(), trigger: 'manual' });
+    res.json({ report: publicReport(report) });
+  } catch (e) {
+    console.error('[advisor]', shop.id, e.message);
+    res.status(500).json({ error: 'Review failed: ' + e.message });
+  } finally {
+    advisorRunning.delete(shop.id);
+  }
+});
+
+router.post('/api/admin/shop/:shopId/advisor/feedback', requireAdmin, (req, res) => {
+  const shop = withShop(req, res); if (!shop) return;
+  const { reportId, actionIndex, rating, note, done } = req.body || {};
+  if (rating !== undefined && rating !== null && !['helpful', 'not_helpful'].includes(rating)) return res.status(400).json({ error: 'Bad rating' });
+  try {
+    const fb = advisor.recordFeedback(getShopDb(shop.id), String(reportId || ''), Number(actionIndex), {
+      rating, note: typeof note === 'string' ? note.slice(0, 500) : undefined, done: typeof done === 'boolean' ? done : undefined,
+    });
+    res.json({ feedback: fb });
+  } catch (e) {
+    res.status(404).json({ error: e.message });
+  }
+});
+
+// Ad spend entry — same record shape as POST /api/ad-spend (platform.router.js)
+// so the marketing dashboard and the advisor read one table.
+router.post('/api/admin/shop/:shopId/advisor/spend', requireAdmin, (req, res) => {
+  const shop = withShop(req, res); if (!shop) return;
+  const amount = Number(req.body.amount);
+  const campaign = String(req.body.campaign || '').trim().slice(0, 200);
+  const start = String(req.body.period_start || '').slice(0, 10), end = String(req.body.period_end || start).slice(0, 10);
+  if (!campaign || !Number.isFinite(amount) || amount < 0) return res.status(422).json({ error: 'campaign and amount required' });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end) || end < start) return res.status(422).json({ error: 'period_start / period_end must be YYYY-MM-DD, end on or after start' });
+  const db = getShopDb(shop.id);
+  const rows = db.get('ad_spend').value() || [];
+  const row = { id: uuidv4(), campaign, source: String(req.body.source || 'facebook').toLowerCase().slice(0, 40), amount, period_start: start, period_end: end, created_at: new Date().toISOString(), enteredBy: 'admin' };
+  db.set('ad_spend', rows.concat(row)).write();
+  res.status(201).json({ ok: true, row });
+});
+router.delete('/api/admin/shop/:shopId/advisor/spend/:rowId', requireAdmin, (req, res) => {
+  const shop = withShop(req, res); if (!shop) return;
+  const db = getShopDb(shop.id);
+  const rows = db.get('ad_spend').value() || [];
+  const next = rows.filter(r => r.id !== req.params.rowId);
+  if (next.length === rows.length) return res.status(404).json({ error: 'Spend row not found' });
+  db.set('ad_spend', next).write();
+  res.json({ ok: true });
 });
 
 module.exports = router;

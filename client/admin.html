@@ -183,6 +183,44 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 .btn-outline{background:var(--white);color:var(--text);border:1px solid var(--border-md);}
 .btn-red{background:var(--red-lt);color:var(--red);border:1px solid #F4C7C3;}
 .btn-sm{padding:6px 12px;font-size:12px;}
+/* Growth Advisor card */
+.adv-notice{font-size:12.5px;color:var(--muted);background:var(--off);border:1px solid var(--border);border-radius:8px;padding:9px 12px;margin-bottom:12px;line-height:1.45;}
+.adv-notice code{font-family:monospace;font-size:11.5px;background:var(--white);padding:1px 5px;border-radius:4px;border:1px solid var(--border);}
+.adv-flags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;}
+.adv-flag{font-size:11.5px;font-weight:600;color:var(--yellow);background:var(--yellow-lt);border:1px solid #F5E0B0;border-radius:100px;padding:4px 10px;}
+.adv-flag-ok{color:var(--green-deep);background:var(--green-lt);border-color:var(--green-md);}
+.adv-report{border-top:1px solid var(--border);padding-top:14px;}
+.adv-report-head{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:6px;}
+.adv-health{display:inline-flex;align-items:center;padding:4px 10px;border-radius:100px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;margin-top:2px;}
+.adv-select{font-family:var(--font);font-size:12px;padding:6px 8px;border:1px solid var(--border-md);border-radius:8px;background:var(--white);color:var(--text);max-width:260px;}
+.adv-act{border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-top:12px;background:var(--white);}
+.adv-act-head{display:flex;gap:12px;align-items:flex-start;}
+.adv-num{width:26px;height:26px;border-radius:50%;background:var(--green-deep);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.adv-pill{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;background:var(--off);border:1px solid var(--border);color:var(--muted);border-radius:100px;padding:2px 8px;}
+.adv-pill-high{background:var(--green-lt);color:var(--green-deep);border-color:var(--green-md);}
+.adv-pill-medium{background:var(--blue-lt);color:var(--blue);border-color:#C7D7FD;}
+.adv-act-body{margin-top:10px;font-size:13px;line-height:1.5;}
+.adv-act-body p{margin:4px 0;}
+.adv-fb{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:10px;}
+.adv-fb-btn{font-family:var(--font);font-size:12px;font-weight:600;padding:5px 10px;border-radius:8px;border:1px solid var(--border-md);background:var(--white);color:var(--text);cursor:pointer;}
+.adv-fb-btn.on{background:var(--green-deep);border-color:var(--green-deep);color:#fff;}
+.adv-note{flex:1;min-width:160px;font-family:var(--font);font-size:12px;padding:5px 9px;border:1px solid var(--border);border-radius:8px;background:var(--off);color:var(--text);outline:none;}
+.adv-note:focus{border-color:var(--green);background:var(--white);}
+.adv-lists{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:14px;}
+.adv-list{font-size:12.5px;line-height:1.45;}
+.adv-list-title{font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;}
+.adv-list ul{margin:0;padding-left:18px;}
+.adv-list li{margin:2px 0;}
+.adv-details{margin-top:14px;border-top:1px solid var(--border);padding-top:10px;}
+.adv-details summary{font-size:12.5px;font-weight:700;color:var(--muted);cursor:pointer;user-select:none;}
+.adv-details[open] summary{margin-bottom:8px;}
+.adv-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.adv-table th{font-size:10.5px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;text-align:right;padding:6px 8px;border-bottom:1px solid var(--border);}
+.adv-table th:first-child,.adv-table td:first-child{text-align:left;}
+.adv-table td{padding:6px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap;}
+.adv-table td:first-child{white-space:normal;color:var(--muted);}
+.adv-spend-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.adv-spend-form .form-input{margin:0;}
 
 /* ── Checklist ── */
 .cl-section{background:var(--white);border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:16px;overflow:hidden;}
@@ -885,6 +923,18 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         </div>
       </div>
 
+      <div class="card" style="max-width:760px;">
+        <div class="card-header">
+          <div><div class="card-title">🧭 Growth Advisor playbook</div><div class="card-sub">Lessons and constraints sent with every shop's weekly review. Add a dated line whenever a test settles; list anything the advisor must never recommend under Constraints.</div></div>
+          <button class="btn btn-green btn-sm" onclick="saveAdvisorPlaybook()">Save</button>
+        </div>
+        <div style="padding:18px;">
+          <div id="adv-playbook-status" style="font-size:12px;color:var(--muted);margin-bottom:10px;">Checking…</div>
+          <textarea class="form-input" id="adv-playbook" rows="18" style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.5;" placeholder="Loading…"></textarea>
+          <div style="font-size:11.5px;color:var(--faint);margin-top:8px;">Reviews run every Monday for shops with recent leads (toggle per shop on its profile), or on demand from the shop profile. Per-shop notes live on each profile.</div>
+        </div>
+      </div>
+
       <div class="card" style="max-width:560px;">
         <div class="card-header">
           <div><div class="card-title">Demo Data</div><div class="card-sub">Seed a realistic demo shop for testing.</div></div>
@@ -1300,6 +1350,9 @@ function renderDrawer(d) {
       </div>
     </div>
 
+    <!-- Growth Advisor (loads async; see loadAdvisor) -->
+    <div id="sp-advisor"></div>
+
     <!-- Top metrics -->
     <div class="metrics-grid">
       <div class="metric-card">
@@ -1533,6 +1586,7 @@ function renderDrawer(d) {
     </div>` : ''}
       </div>
     </div>`;
+  loadAdvisor(shop.id);
 }
 
 function closeDrawer() {
@@ -2444,6 +2498,7 @@ async function loadPlatformSettings() {
     updatePaymentGateStatus(d.requirePayment !== false);
   } catch(e) {}
   loadSmsStatus();
+  loadAdvisorPlaybook();
 }
 
 async function loadSmsStatus() {
@@ -2687,6 +2742,206 @@ document.getElementById('modal-overlay').addEventListener('click',function(e){if
   const saved=sessionStorage.getItem('sf_admin_key');
   if(saved){document.getElementById('admin-key-input').value=saved;doLogin();}
 })();
+
+// ── Growth Advisor (shop profile card) ───────────────────────────────────────
+// Weekly AI review of one shop's lead funnel. GET returns fresh metrics + flags
+// with no model call; "Run review" spends one Claude call and stores the report
+// on the shop db. Feedback (👍/👎/done/note) feeds the next review's prompt.
+let advState = { shopId: null, data: null, viewing: null, busy: false };
+const advApi = async (shopId, path, opts = {}) => {
+  const res = await fetch('/api/admin/shop/' + shopId + '/advisor' + path, { ...opts, headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json', ...(opts.headers || {}) } });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || ('Request failed (' + res.status + ')'));
+  return body;
+};
+async function loadAdvisor(shopId) {
+  const host = document.getElementById('sp-advisor'); if (!host) return;
+  advState = { shopId, data: null, viewing: null, busy: false };
+  host.innerHTML = '<div class="card"><div style="padding:18px;color:var(--muted);font-size:13px;"><span class="spinner"></span> Loading growth advisor…</div></div>';
+  try { advState.data = await advApi(shopId, ''); renderAdvisor(); }
+  catch(e) { host.innerHTML = '<div class="card"><div style="padding:18px;color:var(--red);font-size:13px;">Growth Advisor failed to load: ' + esc(e.message) + '</div></div>'; }
+}
+const advMoney = (n) => n == null ? '—' : '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
+const advPct = (n) => n == null ? '—' : n + '%';
+const advNum = (n) => n == null ? '—' : n;
+const advCap = (s) => String(s || '').replace(/_/g, ' ');
+function renderAdvisor(status) {
+  const host = document.getElementById('sp-advisor'); if (!host || !advState.data) return;
+  const d = advState.data, m = d.metrics || {}, W = m.this_week || {}, P = m.last_week || {}, T = m.last_30_days || {};
+  const report = advState.viewing || d.latest;
+  const r = report && report.result;
+  const isPast = !!(advState.viewing && d.latest && advState.viewing.id !== d.latest.id);
+  const flags = (m.flags || []);
+  const healthColor = { good: 'var(--green-deep)', watch: 'var(--yellow)', urgent: 'var(--red)' };
+  const healthBg = { good: 'var(--green-lt)', watch: 'var(--yellow-lt)', urgent: 'var(--red-lt)' };
+  const ownerLabel = { shopflow: 'ShopFlow', sales: 'Sales', shop: 'Shop owner' };
+  const actionRow = (a, i) => {
+    const fb = (report.feedback || {})[i] || {};
+    return `<div class="adv-act">
+      <div class="adv-act-head">
+        <span class="adv-num">${i + 1}</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:14px;font-weight:700;letter-spacing:-.01em;">${esc(a.title)}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px;">
+            <span class="adv-pill">${esc(ownerLabel[a.owner] || a.owner)}</span>
+            <span class="adv-pill">${esc(advCap(a.category))}</span>
+            <span class="adv-pill adv-pill-${a.impact}">${esc(a.impact)} impact</span>
+            <span class="adv-pill">${esc(a.effort)} effort</span>
+          </div>
+        </div>
+      </div>
+      <div class="adv-act-body">
+        <p><b>Why.</b> ${esc(a.why)}</p>
+        <p><b>Do this.</b> ${esc(a.do_this)}</p>
+        <p style="color:var(--muted);"><b>Measure.</b> ${esc(a.measure)}</p>
+      </div>
+      <div class="adv-fb">
+        <button class="adv-fb-btn ${fb.rating === 'helpful' ? 'on' : ''}" title="Helpful — more like this" onclick="advisorFeedback(${i},{rating:${fb.rating === 'helpful' ? 'null' : "'helpful'"}})">👍</button>
+        <button class="adv-fb-btn ${fb.rating === 'not_helpful' ? 'on' : ''}" title="Not helpful — don't repeat" onclick="advisorFeedback(${i},{rating:${fb.rating === 'not_helpful' ? 'null' : "'not_helpful'"}})">👎</button>
+        <button class="adv-fb-btn ${fb.done ? 'on' : ''}" onclick="advisorFeedback(${i},{done:${fb.done ? 'false' : 'true'}})">${fb.done ? '✓ Done' : 'Mark done'}</button>
+        <input class="adv-note" id="adv-note-${i}" placeholder="Why? (teaches the advisor)" value="${esc(fb.note || '')}" onkeydown="if(event.key==='Enter')advisorFeedback(${i},{note:this.value})"/>
+        <button class="adv-fb-btn" onclick="advisorFeedback(${i},{note:document.getElementById('adv-note-${i}').value})">Save note</button>
+      </div>
+    </div>`;
+  };
+  const list = (title, items) => (items && items.length) ? `<div class="adv-list"><div class="adv-list-title">${title}</div><ul>${items.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>` : '';
+  const row = (label, a, b, c, fmtf = advNum) => `<tr><td>${label}</td><td>${fmtf(a)}</td><td>${fmtf(b)}</td><td>${fmtf(c)}</td></tr>`;
+  const numbers = `<table class="adv-table"><thead><tr><th></th><th>This week</th><th>Last week</th><th>30 days</th></tr></thead><tbody>
+    ${row('Leads', W.leads, P.leads, T.leads)}
+    ${row('Contacted', W.contacted, P.contacted, T.contacted)}
+    ${row('Contact rate', W.contact_rate_pct, P.contact_rate_pct, T.contact_rate_pct, advPct)}
+    ${row('Median mins to contact', W.median_minutes_to_contact, P.median_minutes_to_contact, T.median_minutes_to_contact)}
+    ${row('Booked', W.booked, P.booked, T.booked)}
+    ${row('Booking rate', W.booking_rate_pct, P.booking_rate_pct, T.booking_rate_pct, advPct)}
+    ${row('Booked value', W.booked_value, P.booked_value, T.booked_value, advMoney)}
+    ${row('Completed revenue', W.completed_revenue, P.completed_revenue, T.completed_revenue, advMoney)}
+    ${row('No-shows', W.no_shows, P.no_shows, T.no_shows)}
+    ${row('Ad spend', W.ad_spend, P.ad_spend, T.ad_spend, advMoney)}
+    ${row('Cost per lead', W.cost_per_lead, P.cost_per_lead, T.cost_per_lead, advMoney)}
+    ${row('Cost per booking', W.cost_per_booking, P.cost_per_booking, T.cost_per_booking, advMoney)}
+  </tbody></table>`;
+  const byAd = (m.by_ad_30d || []);
+  const adTable = byAd.length ? `<table class="adv-table" style="margin-top:12px;"><thead><tr><th>Ad / source (30d)</th><th>Leads</th><th>Contacted</th><th>Booked</th><th>Spend</th><th>$/lead</th><th>$/booking</th><th>Booked $</th></tr></thead><tbody>
+    ${byAd.map(a => `<tr><td>${esc(a.ad)}</td><td>${a.leads}</td><td>${a.contacted}</td><td>${a.booked}</td><td>${advMoney(a.ad_spend)}</td><td>${advMoney(a.cost_per_lead)}</td><td>${advMoney(a.cost_per_booking)}</td><td>${advMoney(a.booked_value)}</td></tr>`).join('')}
+  </tbody></table>` : '';
+  const oldest = ((m.open_leads || {}).oldest_uncontacted || []);
+  const worklist = oldest.length ? `<div class="adv-list" style="margin-top:12px;"><div class="adv-list-title">Oldest uncontacted leads</div><ul>${oldest.map(l => `<li>${l.hot ? '🔥 ' : ''}${esc(l.name || l.id)} · ${esc(l.service || 'service not stated')} · ${esc(l.ad)} · ${l.age_hours}h old</li>`).join('')}</ul></div>` : '';
+  const spendRows = (d.spend || []);
+  const spendList = spendRows.length ? `<table class="adv-table" style="margin-top:10px;"><thead><tr><th>Campaign / ad</th><th>Source</th><th>Period</th><th>Amount</th><th></th></tr></thead><tbody>
+    ${spendRows.map(s => `<tr><td>${esc(s.campaign)}</td><td>${esc(s.source || '')}</td><td>${esc(s.period_start || '')}${s.period_end && s.period_end !== s.period_start ? ' → ' + esc(s.period_end) : ''}</td><td>${advMoney(s.amount)}</td><td>${s.id ? `<button class="adv-fb-btn" onclick="advisorDelSpend('${esc(s.id)}')">✕</button>` : ''}</td></tr>`).join('')}
+  </tbody></table>` : '<div style="font-size:12px;color:var(--faint);margin-top:8px;">No ad spend entered yet — cost per lead / per booking stay blank until you add it.</div>';
+  const runLabel = advState.busy ? '<span class="spinner"></span> Reviewing… (about a minute)' : '▶ Run review';
+  host.innerHTML = `
+  <div class="card" id="adv-card">
+    <div class="card-header" style="flex-wrap:wrap;gap:10px;">
+      <div><div class="card-title">🧭 Growth Advisor</div><div class="card-sub">weekly review of their lead funnel — ShopFlow computes the numbers, Claude ranks the moves</div></div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer;" title="Runs automatically every Monday (shop-local) when the shop had a lead in the last 30 days">
+          <input type="checkbox" ${d.autoRun ? 'checked' : ''} onchange="advisorToggleAuto(this.checked)"/> auto Mondays
+        </label>
+        <button class="btn btn-green btn-sm" id="adv-run-btn" ${(!d.configured || advState.busy) ? 'disabled' : ''} onclick="advisorRun()">${runLabel}</button>
+      </div>
+    </div>
+    <div style="padding:16px 18px;">
+      ${!d.configured ? `<div class="adv-notice">AI reviews are off: <code>ANTHROPIC_API_KEY</code> is not set on the server. The numbers and flags below still update live.</div>` : ''}
+      ${status ? `<div class="adv-notice" style="color:var(--red);">${esc(status)}</div>` : ''}
+      ${flags.length ? `<div class="adv-flags">${flags.map(f => `<span class="adv-flag">${esc(f)}</span>`).join('')}</div>` : `<div class="adv-flags"><span class="adv-flag adv-flag-ok">No flags right now — ${d.leadCount || 0} leads on file, ${T.leads || 0} in the last 30 days.</span></div>`}
+      ${r ? `
+      <div class="adv-report">
+        <div class="adv-report-head">
+          <span class="adv-health" style="color:${healthColor[r.health] || 'var(--text)'};background:${healthBg[r.health] || 'var(--off)'};">${esc(r.health)}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:15px;font-weight:700;letter-spacing:-.01em;line-height:1.35;">${esc(r.headline)}</div>
+            <div style="font-size:11.5px;color:var(--faint);margin-top:3px;">${isPast ? 'Past review · ' : ''}${relTime(report.createdAt)} · ${esc(report.trigger === 'auto' ? 'auto (Monday)' : 'manual')} · ${esc(report.model || '')}${isPast ? ` · <a href="#" onclick="advState.viewing=null;renderAdvisor();return false;">back to latest</a>` : ''}</div>
+          </div>
+          ${(d.history || []).length ? `<select class="adv-select" onchange="advisorOpenReport(this.value)"><option value="">History (${d.history.length})</option>${d.history.map(h => `<option value="${esc(h.id)}">${fmtDate(h.createdAt)} · ${esc(h.health || '')} · ${esc((h.headline || '').slice(0, 60))}</option>`).join('')}</select>` : ''}
+        </div>
+        ${(r.actions || []).length ? (r.actions || []).map(actionRow).join('') : '<div class="adv-notice">Nothing worth changing this week.</div>'}
+        <div class="adv-lists">${list('Working', r.wins)}${list('Watch', r.watch)}${list('Data gaps', r.data_gaps)}</div>
+      </div>` : (d.configured ? `<div class="adv-notice" style="margin-top:12px;">No review yet. Run one now, or wait for Monday’s auto-run.</div>` : '')}
+      <details class="adv-details"><summary>The numbers behind it</summary>${numbers}${adTable}${worklist}</details>
+      <details class="adv-details"><summary>Ad spend (${spendRows.length})</summary>
+        <div class="adv-spend-form">
+          <input class="form-input" id="adv-sp-campaign" placeholder="Campaign or ad name (matches utm_content / utm_campaign)" style="flex:2;min-width:180px;"/>
+          <input class="form-input" id="adv-sp-source" placeholder="facebook" value="facebook" style="width:110px;"/>
+          <input class="form-input" id="adv-sp-start" type="date" style="width:150px;"/>
+          <input class="form-input" id="adv-sp-end" type="date" style="width:150px;"/>
+          <input class="form-input" id="adv-sp-amount" type="number" min="0" step="0.01" placeholder="$ spend" style="width:110px;"/>
+          <button class="btn btn-outline btn-sm" onclick="advisorAddSpend()">Add</button>
+        </div>
+        <div style="font-size:11.5px;color:var(--faint);margin-top:6px;">Enter a total for a date range; it's prorated by day into the weekly windows. Name it exactly like the ad's utm_content so it lands on the right row.</div>
+        ${spendList}
+      </details>
+      <details class="adv-details"><summary>Notes for this shop's reviews</summary>
+        <textarea class="form-input" id="adv-shop-notes" rows="4" placeholder="Shop-specific context the advisor should know: their capacity, what they won't do, current offers, seasonality…" onblur="advisorSaveNotes(this.value)">${esc(d.shopNotes || '')}</textarea>
+        <div style="font-size:11.5px;color:var(--faint);margin-top:6px;">Sent with every review for this shop. The shared playbook (lessons + constraints for all shops) is under Settings.</div>
+      </details>
+    </div>
+  </div>`;
+  const s = document.getElementById('adv-sp-start'), e = document.getElementById('adv-sp-end');
+  if (s && e && !s.value) { const t = new Date(); const a = new Date(t); a.setDate(a.getDate() - 6); s.value = a.toISOString().slice(0, 10); e.value = t.toISOString().slice(0, 10); }
+}
+async function advisorRun() {
+  if (advState.busy) return;
+  advState.busy = true; renderAdvisor();
+  try {
+    const { report } = await advApi(advState.shopId, '/run', { method: 'POST' });
+    advState.busy = false;
+    advState.data = await advApi(advState.shopId, '');
+    advState.viewing = null;
+    renderAdvisor();
+    toast('Review ready ✓');
+    void report;
+  } catch(e) { advState.busy = false; renderAdvisor(e.message); }
+}
+async function advisorFeedback(i, patch) {
+  const report = advState.viewing || (advState.data && advState.data.latest); if (!report) return;
+  try {
+    const { feedback } = await advApi(advState.shopId, '/feedback', { method: 'POST', body: JSON.stringify({ reportId: report.id, actionIndex: i, ...patch }) });
+    report.feedback = report.feedback || {}; report.feedback[i] = feedback;
+    renderAdvisor(); toast('Saved ✓');
+  } catch(e) { toast(e.message); }
+}
+async function advisorOpenReport(id) {
+  if (!id) { advState.viewing = null; renderAdvisor(); return; }
+  try { advState.viewing = (await advApi(advState.shopId, '/report/' + encodeURIComponent(id))).report; renderAdvisor(); }
+  catch(e) { toast(e.message); }
+}
+async function advisorAddSpend() {
+  const body = { campaign: document.getElementById('adv-sp-campaign').value.trim(), source: document.getElementById('adv-sp-source').value.trim(), period_start: document.getElementById('adv-sp-start').value, period_end: document.getElementById('adv-sp-end').value, amount: document.getElementById('adv-sp-amount').value };
+  try { await advApi(advState.shopId, '/spend', { method: 'POST', body: JSON.stringify(body) }); advState.data = await advApi(advState.shopId, ''); renderAdvisor(); toast('Spend saved ✓'); }
+  catch(e) { toast(e.message); }
+}
+async function advisorDelSpend(id) {
+  if (!confirm('Remove this spend row?')) return;
+  try { await advApi(advState.shopId, '/spend/' + encodeURIComponent(id), { method: 'DELETE' }); advState.data = await advApi(advState.shopId, ''); renderAdvisor(); }
+  catch(e) { toast(e.message); }
+}
+async function advisorSaveNotes(v) { await updateShop(advState.shopId, 'advisorNotes', v); if (advState.data) advState.data.shopNotes = v; toast('Notes saved ✓'); }
+async function advisorToggleAuto(on) { await updateShop(advState.shopId, 'advisorAuto', on); if (advState.data) advState.data.autoRun = on; }
+
+// Settings → shared playbook (lessons + constraints sent with every review).
+async function loadAdvisorPlaybook() {
+  const ta = document.getElementById('adv-playbook'); if (!ta) return;
+  try {
+    const res = await fetch('/api/admin/advisor/playbook', { headers: { 'x-admin-key': adminKey } });
+    const d = await res.json();
+    ta.value = d.playbook || '';
+    const st = document.getElementById('adv-playbook-status');
+    if (st) st.innerHTML = d.configured
+      ? `<span style="color:var(--green-deep);font-weight:600;">● AI enabled</span> · model <code>${esc(d.model)}</code>${d.isDefault ? ' · using the default playbook (edit and save to customize)' : ''}`
+      : `<span style="color:var(--yellow);font-weight:600;">● AI off</span> — set <code>ANTHROPIC_API_KEY</code> in Railway to enable reviews. Metrics and flags still work.`;
+  } catch(e) {}
+}
+async function saveAdvisorPlaybook() {
+  const ta = document.getElementById('adv-playbook'); if (!ta) return;
+  try {
+    const res = await fetch('/api/admin/advisor/playbook', { method: 'PATCH', headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json' }, body: JSON.stringify({ playbook: ta.value }) });
+    if (!res.ok) throw new Error('Save failed');
+    toast('Playbook saved ✓'); loadAdvisorPlaybook();
+  } catch(e) { toast(e.message); }
+}
+
 </script>
 </body>
 </html>
