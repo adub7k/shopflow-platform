@@ -147,6 +147,7 @@ nav.scrolled{background:rgba(255,255,255,.85);backdrop-filter:saturate(180%) blu
 
 /* ── Case study ── */
 .case{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:start;margin-top:8px;}
+.case > *{min-width:0;}
 .ledger{background:#fff;border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-md);overflow:hidden;}
 .ledger .lh{padding:18px 24px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--soft);}
 .ledger .lh .lt{font-weight:700;font-size:15px;letter-spacing:-.01em;}
@@ -161,11 +162,12 @@ nav.scrolled{background:rgba(255,255,255,.85);backdrop-filter:saturate(180%) blu
 .ledger .lf{padding:12px 24px;font-size:12.5px;color:var(--faint);background:var(--soft);border-top:1px solid var(--line-soft);}
 .case-copy p{font-size:16px;color:var(--muted);line-height:1.7;margin-top:14px;}
 .case-copy p b{color:var(--text);font-weight:600;}
-/* Ad screenshot placeholder. Replace with the real Ads Manager screenshot. */
-.shot-ph{margin-top:24px;border:1.5px dashed #CBD5E1;border-radius:14px;background:var(--soft);aspect-ratio:16/10;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--muted);}
-.shot-ph .ic{width:28px;height:28px;color:var(--faint);}
-.shot-ph b{display:block;font-size:14px;color:var(--text);margin-top:10px;}
-.shot-ph span{font-size:12.5px;margin-top:4px;line-height:1.5;max-width:34ch;}
+/* Real Ads Manager screenshot (wide table) — scrolls sideways on small screens */
+.adshot{margin-top:24px;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:var(--shadow-md);overflow:hidden;}
+.adshot-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.adshot-scroll img{display:block;width:100%;height:auto;min-width:720px;}
+.adshot-cap{padding:10px 14px;font-size:12.5px;color:var(--faint);border-top:1px solid var(--line-soft);background:var(--soft);}
+@media(min-width:700px){.adshot-cap .m{display:none;}}
 .vs{margin-top:64px;padding-top:56px;border-top:1px solid var(--line);}
 .vs-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:32px;max-width:760px;}
 .vs-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:22px 24px;box-shadow:var(--shadow-sm);}
@@ -179,23 +181,18 @@ nav.scrolled{background:rgba(255,255,255,.85);backdrop-filter:saturate(180%) blu
 @media(max-width:860px){.case{grid-template-columns:1fr;gap:34px;}.vs-grid{grid-template-columns:1fr;}}
 
 /* ── Why local ── */
-.local{display:grid;grid-template-columns:.9fr 1.1fr;gap:56px;align-items:center;}
+.local{max-width:720px;}
 .local p{font-size:16.5px;color:var(--muted);line-height:1.7;margin-top:16px;}
 .local p b{color:var(--text);font-weight:600;}
 .local .sig{margin-top:22px;font-size:14.5px;color:var(--faint);}
 .local .sig b{display:block;color:var(--text);font-size:15.5px;}
-/* Owner photo placeholder. Replace with a real photo (you at a shop). */
-.photo-ph{border:1.5px dashed #CBD5E1;border-radius:18px;background:var(--soft);aspect-ratio:4/5;max-height:520px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;color:var(--muted);}
-.photo-ph .ic{width:28px;height:28px;color:var(--faint);}
-.photo-ph b{display:block;font-size:14px;color:var(--text);margin-top:10px;}
-.photo-ph span{font-size:12.5px;margin-top:4px;line-height:1.5;max-width:30ch;}
 .local-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:48px;}
 .fact{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px 20px;}
 .fact .fic{width:38px;height:38px;border-radius:10px;background:var(--green-tint);color:var(--green-deep);display:flex;align-items:center;justify-content:center;margin-bottom:12px;}
 .fact .fic .ic{width:18px;height:18px;}
 .fact .ft{font-size:15.5px;font-weight:700;letter-spacing:-.01em;}
 .fact .fd{font-size:13.5px;color:var(--muted);margin-top:5px;line-height:1.55;}
-@media(max-width:860px){.local{grid-template-columns:1fr;gap:30px;}.local-facts{grid-template-columns:1fr;}.photo-ph{max-height:360px;aspect-ratio:4/3;}}
+@media(max-width:860px){.local-facts{grid-template-columns:1fr;}}
 
 /* ── Pricing ── */
 .price{max-width:820px;margin:44px auto 0;background:#fff;border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow-lg);overflow:hidden;text-align:left;}
@@ -409,13 +406,9 @@ footer{padding:56px 0 40px;border-top:1px solid var(--line);}
         <p>This is a window tint shop in Albuquerque with a couple of bays. <b>The owner does the installs himself.</b> He didn't have time to run ads or chase leads, so we did both.</p>
         <p>We put $385.29 into Facebook and Instagram ads over two weeks. That brought in 98 leads through the website, about $3.93 each. We answered every one, quoted from his price list, and booked the jobs onto his calendar.</p>
         <p>The shop collected <b>$4,345 from those leads in 14 days.</b> The average ticket was $451.44. That's not a testimonial. It's the ledger.</p>
-        <!-- REAL ASSET NEEDED: screenshot of the Meta Ads Manager results for this campaign
-             (spend, results, cost per result visible). Replace this placeholder <div> with
-             <div class="appshot"><img src="/img/marketing/tint-ads-results.png" loading="lazy" ... /></div> -->
-        <div class="shot-ph" aria-label="Ad results screenshot placeholder">
-          <svg class="ic"><use href="#i-image"/></svg>
-          <b>Ad results screenshot goes here</b>
-          <span>Real Ads Manager screenshot for this campaign. Spend, leads and cost per lead visible.</span>
+        <div class="adshot">
+          <div class="adshot-scroll"><img src="/img/marketing/tint-ads-results.png" loading="lazy" decoding="async" width="1400" height="283" alt="Meta Ads Manager, Sep 1 to Sep 14 2026: two ads, 98 website leads, $3.93 per lead, $385.29 total spent"/></div>
+          <div class="adshot-cap">Straight out of Ads Manager. Sep 1 to Sep 14, 2026.<span class="m"> Swipe sideways to see it all.</span></div>
         </div>
       </div>
       <div class="ledger rv rv-d1">
@@ -456,13 +449,6 @@ footer{padding:56px 0 40px;border-top:1px solid var(--line);}
 <section class="section soft" id="local">
   <div class="wrap">
     <div class="local">
-      <!-- REAL ASSET NEEDED: a photo of you at a client's shop (in the bay, not a headshot).
-           Replace this placeholder with <img class="appshot" src="/img/marketing/owner.jpg" loading="lazy" width=".." height=".." alt="..."/> -->
-      <div class="photo-ph rv" aria-label="Owner photo placeholder">
-        <svg class="ic"><use href="#i-user"/></svg>
-        <b>Photo goes here</b>
-        <span>You at a client's shop. Phone photo is fine. No headshot.</span>
-      </div>
       <div class="rv rv-d1">
         <div class="kicker">Why local</div>
         <h2 class="h2">I'm in Albuquerque. I'll come to your shop.</h2>
