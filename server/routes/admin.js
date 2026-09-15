@@ -273,6 +273,21 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   const aiRecovered = aiDone.reduce((s, a) => s + (Number(a.price) || 0), 0);
   const aiRecoveredThisMonth = aiDone.filter(a => (a.date || '').startsWith(thisMonth)).reduce((s, a) => s + (Number(a.price) || 0), 0);
   const aiCallCount = calls.filter(c => c && c.voiceAI).length;
+  // Bi-weekly window (last 14 days, vs the 14 days before) for the client-facing
+  // bi-weekly performance report. Inclusive YYYY-MM-DD string bounds, same UTC
+  // date basis as `today`/`thisMonth` above.
+  const dayStr = (back) => { const d = new Date(now); d.setDate(d.getDate() - back); return d.toISOString().slice(0, 10); };
+  const bwStart = dayStr(13), bwPriorStart = dayStr(27), bwPriorEnd = dayStr(14);
+  const inWin = (ds, from, to) => !!ds && ds >= from && ds <= to;
+  const biweekly = {
+    start: bwStart, end: today,
+    revenue: doneRevenue(appointments.filter(a => inWin(String(a.date || '').slice(0, 10), bwStart, today))),
+    revenuePrior: doneRevenue(appointments.filter(a => inWin(String(a.date || '').slice(0, 10), bwPriorStart, bwPriorEnd))),
+    leads: leads.filter(l => inWin(leadCreated(l).slice(0, 10), bwStart, today)).length,
+    leadsPrior: leads.filter(l => inWin(leadCreated(l).slice(0, 10), bwPriorStart, bwPriorEnd)).length,
+    calls: calls.filter(c => inWin(String(c.startedAt || '').slice(0, 10), bwStart, today)).length,
+    aiRecovered: Math.round(aiDone.filter(a => inWin(String(a.date || '').slice(0, 10), bwStart, today)).reduce((s, a) => s + (Number(a.price) || 0), 0)),
+  };
   // Why leads die — tallied from the reasons picked when marking lost.
   const lostReasons = {};
   leads.forEach(l => { if (l.lostReason) lostReasons[l.lostReason] = (lostReasons[l.lostReason] || 0) + 1; });
@@ -287,6 +302,7 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
       callsThisMonth: calls.filter(c => (c.startedAt || '').startsWith(thisMonth)).length,
     },
     revenue: { thisMonth: revenueThisMonth, lastMonth: revenueLastMonth },
+    biweekly,
     ai: { calls: aiCallCount, leads: aiLeads.length, recovered: Math.round(aiRecovered), recoveredThisMonth: Math.round(aiRecoveredThisMonth) },
     forecast: { total: forecast, upcomingBooked, approvedEstimates, openEstimates,
                 leadPipelineValue, leadPipelineCount: openPipeLeads.length,

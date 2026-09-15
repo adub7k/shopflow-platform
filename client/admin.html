@@ -1291,6 +1291,7 @@ function renderDrawer(d) {
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-green btn-sm" onclick="openClientReport()">📄 Client report</button>
+          <button class="btn btn-green btn-sm" onclick="openClientReport('biweekly')">📄 Bi-weekly report</button>
           <a href="/shop/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Open App</a>
           <a href="/book/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Booking Page</a>
           <button class="btn btn-outline btn-sm" onclick="resetPassword('${shop.id}','${esc(shop.email||'')}')">🔑 Reset</button>
@@ -1870,26 +1871,35 @@ function renderBilling() {
 // Built FOR the shop owner — presents the value ShopFlow is delivering (leads,
 // speed, AI-recovered revenue, what's lined up, goal pace) in their accent
 // color, print-ready to text or hand over. No internal/platform data.
-function openClientReport() {
+function openClientReport(period) {
   const d = window._profileData; if (!d) { toast('Open a shop first'); return; }
+  const biweekly = period === 'biweekly';
   const shop = d.shop, s = d.settings || {}, ins = d.insights || {};
-  const L = ins.leads || {}, R = ins.revenue || {}, F = ins.forecast || {}, Qo = ins.quota || {}, AI = ins.ai || {};
+  const L = ins.leads || {}, R = ins.revenue || {}, F = ins.forecast || {}, Qo = ins.quota || {}, AI = ins.ai || {}, BW = ins.biweekly || {};
   const accent = s.accentColor || '#065F41';
   const rate = Number(shop.monthlyRate) || 0;
-  const rev = Number(R.thisMonth) || 0, revLast = Number(R.lastMonth) || 0;
+  // Bi-weekly mode: last 14 days vs the 14 before; ROI compares against half a
+  // month's rate. Monthly mode is untouched.
+  const rev = biweekly ? (Number(BW.revenue) || 0) : (Number(R.thisMonth) || 0);
+  const revLast = biweekly ? (Number(BW.revenuePrior) || 0) : (Number(R.lastMonth) || 0);
+  const periodRate = biweekly ? rate / 2 : rate;
   const momPct = revLast > 0 ? Math.round((rev - revLast) / revLast * 100) : null;
-  const roi = rate > 0 && rev > 0 ? Math.round(rev / rate * 10) / 10 : null;
+  const roi = periodRate > 0 && rev > 0 ? Math.round(rev / periodRate * 10) / 10 : null;
   const now = new Date(), dim = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-  const pace = Math.round(rev / Math.max(1, now.getDate()) * dim);
+  const monthRev = Number(R.thisMonth) || 0;
+  const pace = Math.round(monthRev / Math.max(1, now.getDate()) * dim);
   const quota = Number(Qo.monthly) || 0;
-  const quotaPct = quota > 0 ? Math.min(999, Math.round(rev / quota * 100)) : null;
+  const quotaPct = quota > 0 ? Math.min(999, Math.round(monthRev / quota * 100)) : null;
   const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const fmtD = ds => ds ? new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '';
+  const periodLabel = biweekly && BW.start ? `${fmtD(BW.start)} – ${fmtD(BW.end)}, ${now.getFullYear()}` : monthName;
+  const priorLabel = biweekly ? 'the 2 weeks before' : 'last month';
   const srcRows = Object.entries(L.sources || {}).sort((a, b) => b[1] - a[1]).slice(0, 6)
     .map(([src, c]) => `<tr><td style="text-transform:capitalize;">${esc(src)}</td><td class="r">${c}</td></tr>`).join('');
   const stat = (label, value, sub) => `<div class="kpi"><div class="l">${label}</div><div class="v">${value}</div>${sub ? `<div class="s">${sub}</div>` : ''}</div>`;
 
   const w = window.open('', '_blank');
-  w.document.write(`<!DOCTYPE html><html><head><title>${esc(shop.shopName)} — Performance Report</title><style>
+  w.document.write(`<!DOCTYPE html><html><head><title>${esc(shop.shopName)} — ${biweekly ? 'Bi-Weekly ' : ''}Performance Report</title><style>
     body{font-family:-apple-system,'SF Pro Text','Segoe UI',sans-serif;color:#141F1A;max-width:720px;margin:0 auto;padding:36px 26px;font-variant-numeric:tabular-nums;}
     .hd{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;}
     h1{font-size:22px;letter-spacing:-.02em;margin:0;}
@@ -1914,17 +1924,19 @@ function openClientReport() {
     .foot{margin-top:32px;padding-top:14px;border-top:1px solid #E5EAE7;font-size:11.5px;color:#93A29A;text-align:center;}
     @media print{body{padding:0;}}
   </style></head><body>
-    <div class="hd"><h1>${esc(shop.shopName)}</h1><span class="month">${esc(monthName)}</span></div>
-    <div class="sub">Monthly performance report — prepared by ShopFlow</div>
+    <div class="hd"><h1>${esc(shop.shopName)}</h1><span class="month">${esc(periodLabel)}</span></div>
+    <div class="sub">${biweekly ? 'Bi-weekly' : 'Monthly'} performance report — prepared by ShopFlow</div>
 
     <div class="hero">
-      <div class="l">Revenue this month</div>
+      <div class="l">${biweekly ? 'Revenue · last 14 days' : 'Revenue this month'}</div>
       <div class="v">$${fmt(rev)}</div>
-      <div class="m">${momPct != null ? (momPct >= 0 ? '↑ up ' + momPct + '% from last month' : '↓ ' + Math.abs(momPct) + '% vs last month') : 'last month: $' + fmt(revLast)}${roi != null ? ' · ' + roi + '× your ShopFlow investment' : ''}</div>
+      <div class="m">${momPct != null ? (momPct >= 0 ? '↑ up ' + momPct + '% from ' + priorLabel : '↓ ' + Math.abs(momPct) + '% vs ' + priorLabel) : priorLabel + ': $' + fmt(revLast)}${roi != null ? ' · ' + roi + '× your ShopFlow investment' : ''}</div>
     </div>
 
     <div class="kpis">
-      ${stat('New leads', L.thisMonth != null ? L.thisMonth : '—', (L.lastMonth || 0) + ' last month')}
+      ${biweekly
+        ? stat('New leads', BW.leads != null ? BW.leads : '—', (BW.leadsPrior || 0) + ' the 2 weeks before')
+        : stat('New leads', L.thisMonth != null ? L.thisMonth : '—', (L.lastMonth || 0) + ' last month')}
       ${stat('Lead conversion', L.conversionRate != null ? L.conversionRate + '%' : '—', 'inquiries that set an appointment')}
       ${stat('Lined up next', '$' + fmt(F.total || 0), 'booked + estimates out')}
     </div>
@@ -1933,7 +1945,7 @@ function openClientReport() {
     <div class="kpis">
       ${stat('Calls answered', AI.calls || 0, 'no missed calls, 24/7')}
       ${stat('Leads captured', AI.leads || 0, 'from answered calls')}
-      ${stat('Revenue recovered', '$' + fmt(AI.recovered || 0), (AI.recoveredThisMonth ? '$' + fmt(AI.recoveredThisMonth) + ' this month' : 'booked work from AI-answered calls'))}
+      ${stat('Revenue recovered', '$' + fmt(AI.recovered || 0), (biweekly && BW.aiRecovered ? '$' + fmt(BW.aiRecovered) + ' in the last 14 days' : AI.recoveredThisMonth ? '$' + fmt(AI.recoveredThisMonth) + ' this month' : 'booked work from AI-answered calls'))}
     </div>` : ''}
 
     ${srcRows ? `<h2>Where your leads came from</h2>
@@ -1950,7 +1962,7 @@ function openClientReport() {
     ${quota > 0 ? `<h2>Monthly goal</h2>
     <div style="display:flex;justify-content:space-between;align-items:baseline;">
       <span style="font-size:22px;font-weight:800;color:${accent};">${quotaPct}%</span>
-      <span style="font-size:12.5px;color:#5C6B63;">$${fmt(rev)} of $${fmt(quota)} · on pace for $${fmt(pace)}</span>
+      <span style="font-size:12.5px;color:#5C6B63;">$${fmt(monthRev)} of $${fmt(quota)} · on pace for $${fmt(pace)}</span>
     </div>
     <div class="bar"><div style="width:${Math.min(100, quotaPct)}%;"></div></div>` : ''}
 
