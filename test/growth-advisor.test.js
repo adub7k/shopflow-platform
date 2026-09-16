@@ -286,6 +286,27 @@ const shop = master.get('shops').find({ id: shopId }).value();
   ok('empty playbook renders as (empty)', captured.includes('PLAYBOOK\n(empty)'));
   eq('two reports kept, auto run stamped, default window is 7d', [adv.loadStore(db).reports.length, adv.loadStore(db).lastAutoRunAt, adv.loadStore(db).reports[1].window.preset], [2, new Date(NOW + 1000).toISOString(), '7d']);
 
+  // ── ask the advisor (model stubbed) ───────────────────────────────────────
+  let askCaptured = null;
+  const askModel = async (messages, system) => { askCaptured = { messages, system }; return { answer: 'Two leads from phone-video have not booked: Stalled and Hot.', usage: { input_tokens: 9, output_tokens: 3 } }; };
+  const a1 = await adv.askAdvisor({ db, shop, playbook: 'PLAYBOOK LINE', question: '  Which leads haven\'t booked?  ', range: { preset: '7d' }, now: NOW, model: askModel });
+  eq('ask: entry stored with trimmed question, window, answer', [a1.question, a1.window.preset, a1.window.days, a1.answer.startsWith('Two leads')], ["Which leads haven't booked?", '7d', 7, true]);
+  eq('ask: system prompt is the ask prompt', askCaptured.system, adv.ASK_SYSTEM_PROMPT);
+  eq('ask: first question has a single user turn', [askCaptured.messages.length, askCaptured.messages[0].role], [1, 'user']);
+  const body = askCaptured.messages[0].content;
+  ok('ask: prompt carries playbook, notes, period, metrics, and the question last', body.includes('PLAYBOOK LINE') && body.includes('Owner only works Tue–Sat.') && body.includes('Period: Sep 9, 2026 – Sep 15, 2026 (7 days)') && body.includes('"uncontacted_over_15_min": 1') && body.trim().endsWith("QUESTION\nWhich leads haven't booked?"));
+  ok('ask: prompt carries the latest review summary', body.includes('LATEST REVIEW') && body.includes('Contact the hot lead today.'));
+  const rowsJson = body.slice(body.indexOf('LEADS in the period'));
+  ok('ask: lead list has only period leads with names + statuses', rowsJson.includes('"name":"Fast"') && rowsJson.includes('"status":"booked"') && rowsJson.includes('"name":"Hot"') && rowsJson.includes('"status":"uncontacted"') && !rowsJson.includes('"name":"Old"') && rowsJson.includes('(4 of 4 shown'));
+  const a2 = await adv.askAdvisor({ db, shop, playbook: '', question: 'And the month before?', range: { preset: 'last_month' }, now: NOW + 1000, model: askModel });
+  eq('ask: follow-up carries the earlier Q&A as prior turns before the fresh context', [askCaptured.messages.length, askCaptured.messages[0].role, askCaptured.messages[1].role, askCaptured.messages[1].content, askCaptured.messages[2].role], [3, 'user', 'assistant', a1.answer, 'user']);
+  ok('ask: prior turn is labelled with its date and period', askCaptured.messages[0].content.includes('(earlier question, 2026-09-15, period Sep 9, 2026 – Sep 15, 2026 (7 days))'));
+  ok('ask: follow-up context is for the new period', askCaptured.messages[2].content.includes('Period: Aug 1, 2026 – Aug 31, 2026 (31 days)'));
+  eq('ask: two questions stored, newest last', adv.loadStore(db).questions.map(q => q.id), [a1.id, a2.id]);
+  ok('ask: empty question throws', await adv.askAdvisor({ db, shop, playbook: '', question: '   ', model: askModel }).then(() => false, () => true));
+  eq('ask: lead rows cap', adv.leadRowsFor(facts, adv.resolveWindow({ preset: '90d', tz: TZ, now: NOW }), NOW, 3).shown, 3);
+  eq('ask: delete question', [adv.deleteQuestion(db, a2.id), adv.deleteQuestion(db, 'nope'), adv.loadStore(db).questions.length], [true, false, 1]);
+
   // ── weekly auto-run gate ───────────────────────────────────────────────────
   eq('autoRunDue: off without API key', adv.autoRunDue(db, shop, 1, NOW + 8 * DAY), false);
   process.env.ANTHROPIC_API_KEY = 'test-key';
@@ -323,6 +344,18 @@ const shop = master.get('shops').find({ id: shopId }).value();
   eq('route run: 400 without API key', r.status, 400);
   r = await call('POST', `/api/admin/shop/${shopId}/advisor/run`, { from: '2026-09-09', to: '2026-09-01' });
   eq('route run: bad range → 422 before any model call', r.status, 422);
+  r = await call('POST', `/api/admin/shop/${shopId}/advisor/ask`, { question: '' });
+  eq('route ask: empty question → 422', r.status, 422);
+  r = await call('POST', `/api/admin/shop/${shopId}/advisor/ask`, { question: 'hi', from: '2026-09-09', to: '2026-09-01' });
+  eq('route ask: bad range → 422', r.status, 422);
+  r = await call('POST', `/api/admin/shop/${shopId}/advisor/ask`, { question: 'hi' });
+  eq('route ask: 400 without API key', r.status, 400);
+  r = await call('GET', `/api/admin/shop/${shopId}/advisor`);
+  eq('route GET: stored questions returned newest first', [r.body.questions.length, r.body.questions[0].id], [1, a1.id]);
+  r = await call('DELETE', `/api/admin/shop/${shopId}/advisor/ask/${a1.id}`);
+  eq('route ask delete', r.status, 200);
+  r = await call('DELETE', `/api/admin/shop/${shopId}/advisor/ask/${a1.id}`);
+  eq('route ask delete: gone → 404', r.status, 404);
   r = await call('POST', `/api/admin/shop/${shopId}/advisor/feedback`, { reportId: report.id, actionIndex: 0, rating: 'helpful' });
   eq('route feedback', [r.status, r.body.feedback.rating], [200, 'helpful']);
   r = await call('POST', `/api/admin/shop/${shopId}/advisor/feedback`, { reportId: report.id, actionIndex: 0, rating: 'meh' });

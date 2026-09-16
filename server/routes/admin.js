@@ -1031,6 +1031,7 @@ router.get('/api/admin/shop/:shopId/advisor', requireAdmin, (req, res) => {
     latest: publicReport(reports[reports.length - 1]) || null,
     history: reports.slice(0, -1).reverse().slice(0, 12).map(r => ({ id: r.id, createdAt: r.createdAt, health: r.result && r.result.health, headline: r.result && r.result.headline, trigger: r.trigger, window: r.window || null })),
     spend: spendRows.slice(-20).reverse(),
+    questions: (store.questions || []).slice(-20).reverse(),
     shopNotes: shop.advisorNotes || '', autoRun: shop.advisorAuto !== false,
     lastAutoRunAt: store.lastAutoRunAt || null,
   });
@@ -1059,6 +1060,30 @@ router.post('/api/admin/shop/:shopId/advisor/run', requireAdmin, async (req, res
   } finally {
     advisorRunning.delete(shop.id);
   }
+});
+
+// Ask a direct question about this shop; answered from the same computed
+// numbers (for the chosen period) plus a per-lead list. Saved per shop so
+// follow-up questions have context.
+router.post('/api/admin/shop/:shopId/advisor/ask', requireAdmin, async (req, res) => {
+  const shop = withShop(req, res); if (!shop) return;
+  const question = String((req.body || {}).question || '').trim();
+  if (!question) return res.status(422).json({ error: 'Type a question first.' });
+  const range = rangeOf(req.body || {});
+  try { advisor.resolveWindow({ ...range, now: Date.now() }); } catch (e) { return res.status(422).json({ error: e.message }); }
+  if (!advisor.configured()) return res.status(400).json({ error: 'AI is not configured. Set ANTHROPIC_API_KEY to enable the Growth Advisor.' });
+  try {
+    const entry = await advisor.askAdvisor({ db: getShopDb(shop.id), shop, playbook: advisorPlaybook(), question, range });
+    res.json({ entry });
+  } catch (e) {
+    console.error('[advisor ask]', shop.id, e.message);
+    res.status(500).json({ error: 'Could not answer: ' + e.message });
+  }
+});
+router.delete('/api/admin/shop/:shopId/advisor/ask/:id', requireAdmin, (req, res) => {
+  const shop = withShop(req, res); if (!shop) return;
+  if (!advisor.deleteQuestion(getShopDb(shop.id), req.params.id)) return res.status(404).json({ error: 'Question not found' });
+  res.json({ ok: true });
 });
 
 router.post('/api/admin/shop/:shopId/advisor/feedback', requireAdmin, (req, res) => {

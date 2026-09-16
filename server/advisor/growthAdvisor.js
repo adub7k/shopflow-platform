@@ -514,6 +514,124 @@ METRICS (computed by ShopFlow; treat as the only source of numbers)
 ${JSON.stringify(metrics, null, 2)}`;
 }
 
+// ── 3b. Ask the advisor ──────────────────────────────────────────────────────
+// A direct question about one shop, answered from the same computed metrics
+// for the selected period, plus a compact per-lead list so questions like
+// "which Meta leads from last week haven't booked?" can be answered by name.
+const ASK_SYSTEM_PROMPT = `You are ShopFlow's Growth Advisor, answering a direct question from the ShopFlow operator about one client shop (auto detailing, window tint, PPF, ceramic coating, car audio, and similar service shops).
+
+You are given METRICS computed by ShopFlow for a chosen PERIOD (with the equal-length prior period and the trailing 30 days), a LEADS list for that period (one row per lead with its outcome to date), the operator's PLAYBOOK (lessons and constraints), notes for this shop, and the most recent review if there is one.
+
+RULES
+- Every number you state must come from the data given. Never calculate new figures, estimate missing ones, or round differently. Counting rows in the LEADS list is fine; say what you counted.
+- If the data can't answer the question, say exactly what is missing (for example "no ad budget is entered, so cost per lead is unknown") rather than guessing.
+- Name the period when you cite a number. Small samples (under 10 leads or 3 bookings) are not conclusions; say so.
+- Respect the playbook's constraints; never recommend anything listed there as unavailable.
+- Answer the question that was asked. Lead with the answer, then the supporting numbers, then at most one suggested next step if it's useful. Plain text, short paragraphs or a short list; no headings, no hype.
+- When you refer to leads, use their names as given in the LEADS list.`;
+
+// Compact per-lead rows for the period (capped) — the fields the operator asks about.
+function leadRowsFor(facts, win, now, cap = 200) {
+  const rows = facts.filter(r => r.created >= win.fromMs && r.created < win.toMs)
+    .sort((a, b) => b.created - a.created);
+  const hrs = (a, b) => (a != null && b != null) ? Math.round((a - b) / 360000) / 10 : null;
+  return {
+    total: rows.length, shown: Math.min(rows.length, cap),
+    rows: rows.slice(0, cap).map(r => ({
+      name: r.name || '(no name)', id: r.id, created: r.createdDate, source: r.source, ad: r.ad, service: r.service,
+      hours_to_first_response: hrs(r.responded, r.created),
+      status: r.lost ? 'lost' : r.completed ? 'completed' : r.booked ? 'booked' : r.responded != null ? 'contacted' : 'uncontacted',
+      no_show: r.noShow || undefined, hot: r.hot || undefined, value: r.value || undefined, revenue: r.revenue || undefined,
+    })),
+  };
+}
+
+function buildAskMessages({ shopName, industry, question, metrics, leadRows, playbook, shopNotes, latestReport, history }) {
+  const context = `Shop: ${shopName}${industry ? ` (${industry})` : ''}
+Period: ${metrics.window.period.label} · prior period: ${metrics.window.prior_period.label} · timezone ${metrics.window.timezone}
+
+PLAYBOOK
+${(playbook || '').trim() || '(empty)'}
+
+NOTES FOR THIS SHOP
+${(shopNotes || '').trim() || '(none)'}
+
+LATEST REVIEW${latestReport ? ` (${latestReport.window && latestReport.window.label ? latestReport.window.label : 'period not recorded'}, ${String(latestReport.createdAt).slice(0, 10)})` : ''}
+${latestReport ? JSON.stringify({ health: latestReport.result.health, headline: latestReport.result.headline, actions: (latestReport.result.actions || []).map(a => a.title) }) : '(no review yet)'}
+
+METRICS (computed by ShopFlow; the only source of numbers)
+${JSON.stringify(metrics, null, 2)}
+
+LEADS in the period (${leadRows.shown} of ${leadRows.total} shown, newest first)
+${JSON.stringify(leadRows.rows)}`;
+  const messages = [{ role: 'user', content: `${context}\n\nQUESTION\n${question}` }];
+  // Prior Q&A on this shop (oldest first) so follow-ups like "and last month?" work.
+  // They go BEFORE the fresh context turn, as assistant/user pairs.
+  const prior = [];
+  (history || []).forEach(q => {
+    prior.push({ role: 'user', content: `(earlier question, ${String(q.createdAt).slice(0, 10)}, period ${q.window && q.window.label ? q.window.label : 'n/a'}) ${q.question}` });
+    prior.push({ role: 'assistant', content: q.answer });
+  });
+  return prior.concat(messages);
+}
+
+async function callModelText(messages, system) {
+  const client = getClient();
+  if (!client) throw new Error('ANTHROPIC_API_KEY is not set');
+  const res = await client.messages.create({
+    model: MODEL,
+    max_tokens: 1500,
+    system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
+    messages,
+  });
+  if (res.stop_reason === 'refusal') throw new Error('The model declined to answer');
+  const text = (res.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+  if (!text) throw new Error('Empty model response');
+  return { answer: text, usage: res.usage || null };
+}
+
+const KEEP_QUESTIONS = 40;
+const ASK_HISTORY_TURNS = 6;
+// opts.model lets tests inject a fake model; production uses callModelText.
+async function askAdvisor({ db, shop, playbook, question, range = {}, now = Date.now(), model = callModelText }) {
+  const q = String(question || '').trim().slice(0, 1000);
+  if (!q) throw new Error('Ask a question');
+  const tz = shopTz(db);
+  const window = resolveWindow({ ...range, tz, now });
+  const facts = leadFacts(db);
+  const spendRows = db.get('ad_spend').value() || [];
+  const calls = db.get('calls').value() || [];
+  const metrics = computeMetrics({ facts, spendRows, calls, now, tz, window });
+  const leadRows = leadRowsFor(facts, window, now);
+  const store = loadStore(db);
+  const latestReport = (store.reports || [])[store.reports.length - 1] || null;
+  const history = (store.questions || []).slice(-ASK_HISTORY_TURNS);
+  const messages = buildAskMessages({
+    shopName: shop.shopName || shop.name || shop.slug || shop.id, industry: shop.industry || null,
+    question: q, metrics, leadRows, playbook: playbook != null ? playbook : DEFAULT_PLAYBOOK,
+    shopNotes: shop.advisorNotes || '', latestReport, history,
+  });
+  const { answer, usage } = await model(messages, ASK_SYSTEM_PROMPT);
+  const entry = {
+    id: 'ask_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+    createdAt: new Date(now).toISOString(), model: MODEL, usage,
+    window: { preset: window.preset, from: window.from, to: window.to, days: window.days, label: window.label },
+    question: q, answer,
+  };
+  store.questions = (store.questions || []).concat(entry).slice(-KEEP_QUESTIONS);
+  saveStore(db, store);
+  return entry;
+}
+
+function deleteQuestion(db, id) {
+  const store = loadStore(db);
+  const before = (store.questions || []).length;
+  store.questions = (store.questions || []).filter(q => q.id !== id);
+  if (store.questions.length === before) return false;
+  saveStore(db, store);
+  return true;
+}
+
 // ── 4. Storage (on the shop db, so it survives deploys like everything else) ─
 function loadStore(db) {
   const s = db.get('advisor').value();
@@ -627,4 +745,5 @@ module.exports = {
   configured, localDate, localMidnight, addDays, resolveWindow,
   leadFacts, computeMetrics, buildFlags, spendIn, buildUserMessage,
   loadStore, saveStore, recentFeedback, snapshot, runAdvisor, recordFeedback, autoRunDue,
+  ASK_SYSTEM_PROMPT, leadRowsFor, buildAskMessages, askAdvisor, deleteQuestion,
 };
