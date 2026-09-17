@@ -336,6 +336,37 @@
         <div class="metric-card"><div class="metric-label">Avg ticket</div><div class="metric-value">${fmtMoney(data.avgTicket)}</div><div class="metric-sub">this month</div></div>
         <div class="metric-card"><div class="metric-label">All time</div><div class="metric-value">${fmtMoney(data.totalRevenue)}</div><div class="metric-sub">${fmtMoney(data.totalNetProfit)} net profit</div></div></div>`);
 
+      // Quotes given: every dollar put in front of a customer (formal estimates
+      // + phone quotes logged on leads), this month and all time, with how much
+      // of it turned into won work. Always shown — an empty card tells the
+      // owner the number exists and that logging quotes feeds it.
+      {
+        const qg = data.quotesGiven || {}, qm = qg.month || {}, qt = qg.total || {};
+        const n = (c, one, many) => `${c || 0} ${c === 1 ? one : many}`;
+        const mix = r => [r.estimates ? n(r.estimates, 'estimate', 'estimates') : '', r.phone ? n(r.phone, 'phone quote', 'phone quotes') : ''].filter(Boolean).join(' + ') || 'no quotes yet';
+        const qstat = (label, value, sub, color) => `<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:600;">${label}</div>
+          <div class="num" style="font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;${color ? 'color:' + color + ';' : ''}">${value}</div>
+          <div style="font-size:11.5px;color:var(--faint);">${sub}</div></div>`;
+        const tv = qt.value || 0;
+        const pct = v => tv > 0 ? Math.round(v / tv * 100) : 0;
+        const seg = (v, color, title) => v > 0 ? `<div title="${title}" style="width:${pct(v)}%;background:${color};"></div>` : '';
+        html.push(`<div class="v2-card"><div class="v2-chd"><div class="t">📋 Quotes given</div><span class="sub">estimates + phone quotes · what you put in front of customers</span></div>
+          <div style="padding:14px 16px;">
+            <div style="display:flex;gap:32px;flex-wrap:wrap;margin-bottom:14px;">
+              ${qstat('Quoted this month', fmtMoney(qm.value || 0), mix(qm))}
+              ${qstat('Quoted all time', fmtMoney(tv), mix(qt))}
+              ${qstat('Won', fmtMoney(qt.wonValue || 0), qt.winRate != null ? `${qt.winRate}% of decided quotes · ${n(qt.won, 'job', 'jobs')}` : 'no decided quotes yet', 'var(--green-deep)')}
+              ${qstat('Still open', fmtMoney(qt.openValue || 0), n(qt.open, 'quote awaiting a decision', 'quotes awaiting a decision'))}
+            </div>
+            ${tv > 0 ? `<div class="bar-bg" style="display:flex;overflow:hidden;">${seg(qt.wonValue, 'var(--green)', 'Won')}${seg(qt.openValue, 'var(--blue)', 'Open')}${seg(qt.lostValue, 'var(--red)', 'Lost')}</div>
+            <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--faint);margin-top:6px;">
+              <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--green);margin-right:4px;"></span>Won ${pct(qt.wonValue)}%</span>
+              <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--blue);margin-right:4px;"></span>Open ${pct(qt.openValue)}%</span>
+              <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--red);margin-right:4px;"></span>Lost ${pct(qt.lostValue)}%</span></div>` : ''}
+            <div style="font-size:11px;color:var(--faint);margin-top:9px;">Counts every estimate you send plus any “Quoted amount” logged on a lead (owner-entered or captured by the AI receptionist). Fleet contracts count at full term.</div>
+          </div></div>`);
+      }
+
       // Lead conversion by channel (phone vs Meta) — moved here from the Leads
       // page: it's the ad-spend ROI read, so it belongs with the money numbers.
       // The builder still lives in leads2.js next to the source definitions.
@@ -563,6 +594,7 @@
       ${stat('Revenue', fmtMoney(s.revenue), `${s.jobs} job${s.jobs === 1 ? '' : 's'} · ${mom(s.revenue, p.revenue)}`, 'var(--green-deep)')}
       ${stat('Net profit', money(s.net), `${s.netMarginPct}% margin · ${mom(s.net, p.net)}`, netColor)}
       ${stat('Avg ticket', fmtMoney(s.avgTicket), 'per completed job')}
+      ${s.quotes ? stat('Quotes given', fmtMoney(s.quotes.value || 0), `${s.quotes.count || 0} quote${s.quotes.count === 1 ? '' : 's'} · ${mom(s.quotes.value || 0, (p.quotes || {}).value)}${s.quotes.won ? ` · ${fmtMoney(s.quotes.wonValue)} won` : ''}`) : ''}
       ${s.deposits ? stat('Deposits', fmtMoney(s.deposits), 'collected this month') : ''}
       ${s.tax ? stat('Sales tax', fmtMoney(s.tax), 'collected — set aside') : ''}</div>`);
     html.push(`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0 28px;">`);
@@ -593,7 +625,8 @@
     const L = [];
     L.push(row('Shop', Auth.getShopName() || ''), row('Month', s.month), '');
     L.push(row('SUMMARY'), row('Revenue', s.revenue), row('Completed jobs', s.jobs), row('Average ticket', s.avgTicket), row('Materials (COGS)', s.cost), row('Gross profit', s.gross), row('Gross margin %', s.grossMarginPct),
-           row('Operating expenses', s.opEx), row('Net profit', s.net), row('Net margin %', s.netMarginPct), row('Sales tax collected', s.tax), row('Deposits collected', s.deposits), '');
+           row('Operating expenses', s.opEx), row('Net profit', s.net), row('Net margin %', s.netMarginPct), row('Sales tax collected', s.tax), row('Deposits collected', s.deposits),
+           row('Quotes given', (s.quotes || {}).count || 0), row('Quoted value', (s.quotes || {}).value || 0), row('Quotes won', (s.quotes || {}).won || 0), row('Quotes won value', (s.quotes || {}).wonValue || 0), row('Quote win rate %', (s.quotes || {}).winRate == null ? '' : s.quotes.winRate), '');
     L.push(row('BY SERVICE'), row('Service', 'Jobs', 'Revenue', 'Cost', 'Margin'));
     r.byService.forEach(x => L.push(row(x.service, x.count, x.revenue, x.cost, x.margin))); L.push('');
     if ((r.bookedBySource || []).length) { L.push(row('BOOKINGS BY LEAD SOURCE'), row('Source', 'Booked', 'Completed', 'Booked value')); r.bookedBySource.forEach(x => L.push(row(x.label, x.count, x.completed, x.value))); L.push(''); }
@@ -601,6 +634,7 @@
     if (r.byCreator.length) { L.push(row('BOOKED BY'), row('Person', 'Booked $', 'Booked jobs', 'Closed $', 'Closed jobs')); r.byCreator.forEach(x => L.push(row(x.name, x.booked, x.bookedJobs, x.closed, x.closedJobs))); L.push(''); }
     L.push(row('OPERATING EXPENSES'), row('Date', 'Category', 'Description', 'Amount', 'Recurring'));
     r.expenses.forEach(x => L.push(row(x.date, x.category, x.description, x.amount, x.recurring ? 'monthly' : ''))); L.push('');
+    if ((r.quotes || []).length) { L.push(row('QUOTES GIVEN'), row('Date', 'Estimate #', 'Customer', 'Service', 'Value', 'Status', 'Type')); r.quotes.forEach(x => L.push(row(x.date, x.number, x.customerName, x.service, x.value, x.status, x.kind === 'phone' ? 'phone quote' : 'estimate'))); L.push(''); }
     L.push(row('COMPLETED JOBS'), row('Date', 'Time', 'Customer', 'Service', 'Staff', 'Price', 'Cost', 'Tax', 'Source', 'Booked by'));
     r.jobs.forEach(j => L.push(row(j.date, j.time, j.customerName, j.service, j.staff, j.price, j.cost, j.tax, j.source, j.bookedBy)));
     const a = document.createElement('a');

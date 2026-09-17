@@ -750,6 +750,59 @@ function apptLeadSourceResolver(h) {
 // behind them so the owner can read it on the page or export it as a CSV for
 // their bookkeeper. Same math as /api/shop/revenue (done jobs bucketed by
 // appointment date; recurring expenses count every month from their start).
+// ── Quotes given ──────────────────────────────────────────────────────────────
+// "Total quotes given" = every dollar the shop put in front of a customer. Two
+// sources, merged: formal Estimates (the quotes collection — a fleet contract
+// counts at full term, same as the Estimates page) plus phone quotes logged on
+// a lead ("Quoted amount" typed by the owner, or the price the AI receptionist
+// gave) that never became a formal estimate. A lead whose customer/phone
+// matches an estimate IS that estimate, so it's not counted twice.
+// `inRange(isoDate)` scopes the rollup (null = all time); an estimate is dated
+// by createdAt, a phone quote by quotedAt (stamped when the amount is entered)
+// falling back to the lead's createdAt for quotes logged before the stamp existed.
+const QUOTE_WON  = ['approved', 'scheduled', 'completed'];
+const QUOTE_LOST = ['declined', 'lost'];
+const LEAD_WON   = ['booked', 'worked', 'closed'];
+function quotesGivenRollup(h, inRange) {
+  const last10 = p => { const d = String(p || '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : ''; };
+  const round2 = n => Math.round(n * 100) / 100;
+  const inR = d => !inRange || inRange(d);
+  const quotes = Array.isArray(h.getAll('quotes')) ? h.getAll('quotes') : [];
+  const custs = new Set(), phones = new Set();
+  quotes.forEach(q => { if (q.customerId) custs.add(q.customerId); const p = last10(q.customerPhone); if (p) phones.add(p); });
+  const rows = [];
+  quotes.forEach(q => {
+    if (!inR(q.createdAt)) return;
+    const value = Number(q.contractValue) || Number(q.total) || 0;
+    rows.push({ kind: 'estimate', id: q.id, number: q.number || '', date: String(q.createdAt || '').slice(0, 10), customerName: q.customerName || '',
+                service: q.contract ? (q.fleetName || 'Fleet contract') : ((q.lineItems || [])[0] || {}).name || (q.options ? q.options.map(o => o.name).join(' / ') : ''),
+                value: round2(value), status: q.status || 'sent',
+                won: QUOTE_WON.includes(q.status), lost: QUOTE_LOST.includes(q.status) });
+  });
+  const leads = Array.isArray(h.getAll('leads')) ? h.getAll('leads') : [];
+  leads.forEach(l => {
+    const amt = Number(l.quotedAmount != null ? l.quotedAmount : (l.ai && l.ai.quotedPrice));
+    if (!(amt > 0)) return;
+    if ((l.customerId && custs.has(l.customerId)) || phones.has(last10(l.phone))) return; // already a formal estimate
+    const when = l.quotedAt || l.createdAt;
+    if (!inR(when)) return;
+    rows.push({ kind: 'phone', id: l.id, number: '', date: String(when || '').slice(0, 10), customerName: l.name || '',
+                service: l.service || l.interest || (l.ai && l.ai.service) || '', value: round2(amt), status: l.status || 'new',
+                won: LEAD_WON.includes(l.status), lost: l.status === 'lost' });
+  });
+  const sum = arr => round2(arr.reduce((s, r) => s + r.value, 0));
+  const won = rows.filter(r => r.won), lost = rows.filter(r => r.lost);
+  const decided = won.length + lost.length;
+  return {
+    count: rows.length, value: sum(rows),
+    estimates: rows.filter(r => r.kind === 'estimate').length, phone: rows.filter(r => r.kind === 'phone').length,
+    won: won.length, wonValue: sum(won), lost: lost.length, lostValue: sum(lost),
+    open: rows.length - decided, openValue: round2(sum(rows) - sum(won) - sum(lost)),
+    winRate: decided ? Math.round(won.length / decided * 100) : null,
+    rows: rows.sort((a, b) => String(a.date).localeCompare(String(b.date))),
+  };
+}
+
 router.get('/api/shop/revenue/month/:ym', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   const ym = String(req.params.ym || '');
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(ym)) return res.status(400).json({ ok:false, error:'Month must look like 2026-08' });
@@ -819,8 +872,16 @@ router.get('/api/shop/revenue/month/:ym', requireAuth, requireRole('full'), shop
   });
   const bookedBySource = Object.values(bookedSrc).map(r => ({ ...r, value: round2(r.value) })).sort((a, b) => b.count - a.count || b.value - a.value);
 
+  // Quotes given that month (estimates + phone quotes), with the prior month
+  // for the MoM read. The rows ride along for the CSV export.
+  const quotesIn = (m) => quotesGivenRollup(h, d => monthOf(d) === m);
+  const quotesMonth = quotesIn(ym), quotesPrev = quotesIn(prevOf(ym));
+  summary.quotes = { ...quotesMonth, rows: undefined };
+  prev.quotes = { ...quotesPrev, rows: undefined };
+
   res.json({
     ok: true, summary, prev,
+    quotes: quotesMonth.rows,
     byService, byBarber, byCreator, bookedBySource,
     expenses: expensesIn(ym).map(e => ({ id: e.id, date: e.date, category: e.category, description: e.description || '', amount: round2(Number(e.amount) || 0), recurring: e.recurring === 'monthly' })).sort((a, b) => b.amount - a.amount),
     jobs: jobs.map(a => ({ id: a.id, date: a.date, time: a.time || '', customerName: a.customerName, service: a.service, staff: a.barberName,
@@ -1036,8 +1097,16 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
     quotedTotal: round2(aiLeads.reduce((s, l) => s + (quoteOf(l) > 0 ? quoteOf(l) : 0), 0)),
   };
 
+  // Total quotes given — this month + all time. Live counterpart of the
+  // per-month figure in /revenue/month/:ym (same rollup).
+  const strip = r => ({ ...r, rows: undefined });
+  const quotesGiven = {
+    month: strip(quotesGivenRollup(h, d => monthOf(d) === curMonth)),
+    total: strip(quotesGivenRollup(h, null)),
+  };
+
   res.json({
-    aiReceptionist,
+    aiReceptionist, quotesGiven,
     mrr, activeMembers: activeMembers.length,
     aiRecoveredTotal: round2(aiDone.reduce((s, a) => s + Number(a.price || 0), 0)),
     aiRecoveredMonth: round2(aiDoneMonth.reduce((s, a) => s + Number(a.price || 0), 0)),
@@ -1405,6 +1474,10 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   if (req.body.quotedAmount !== undefined) {
     const q = Number(req.body.quotedAmount);
     lead.quotedAmount = (Number.isFinite(q) && q > 0) ? Math.round(q * 100) / 100 : null;
+    // Date the phone quote so "quotes given" can bucket it by month; a later
+    // price edit keeps the original date, clearing the amount clears the stamp.
+    if (lead.quotedAmount == null) lead.quotedAt = null;
+    else if (!lead.quotedAt) lead.quotedAt = new Date().toISOString();
   }
   // 30-day sequence state (Tasks page queue). Sends are manual (sms: deep link
   // client-side); this just persists the bookkeeping. Deliberately does NOT
