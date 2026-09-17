@@ -31,7 +31,7 @@ function fulfillQuoteDeposit(shopId, quoteId, session) {
   const db = getShopDb(shopId); const h = shopHelpers(db);
   const q = h.getById('quotes', quoteId);
   if (q && !q.depositPaid) {
-    q.depositPaid = true; q.depositSessionId = session.id; q.depositAmount = session.amount_total / 100;
+    q.depositPaid = true; q.depositPaidAt = new Date().toISOString(); q.depositSessionId = session.id; q.depositAmount = session.amount_total / 100;
     if (q.status !== 'scheduled') q.status = 'approved';
     q.approvedAt = q.approvedAt || new Date().toISOString();
     h.upsert('quotes', q);

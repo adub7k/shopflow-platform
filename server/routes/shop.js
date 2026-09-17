@@ -760,6 +760,14 @@ function apptLeadSourceResolver(h) {
 // `inRange(isoDate)` scopes the rollup (null = all time); an estimate is dated
 // by createdAt, a phone quote by quotedAt (stamped when the amount is entered)
 // falling back to the lead's createdAt for quotes logged before the stamp existed.
+// Deposits paid on estimates (Approve & pay on the public /quote page) live on
+// the quote record, not customer.deposits — normalise them into the same
+// {amount, paidAt} shape so every deposits figure counts both streams.
+function quoteDeposits(h) {
+  const quotes = Array.isArray(h.getAll('quotes')) ? h.getAll('quotes') : [];
+  return quotes.filter(q => q.depositPaid && Number(q.depositAmount) > 0)
+    .map(q => ({ amount: Number(q.depositAmount), paidAt: q.depositPaidAt || q.approvedAt || q.createdAt, quoteId: q.id, status: 'paid' }));
+}
 const QUOTE_WON  = ['approved', 'scheduled', 'completed'];
 const QUOTE_LOST = ['declined', 'lost'];
 const LEAD_WON   = ['booked', 'worked', 'closed'];
@@ -827,7 +835,8 @@ router.get('/api/shop/revenue/month/:ym', requireAuth, requireRole('full'), shop
     const jobs = doneIn(m), ex = expensesIn(m);
     const revenue = sum(jobs, 'price'), cost = sum(jobs, 'cost'), opEx = sum(ex, 'amount');
     const gross = round2(revenue - cost), net = round2(gross - opEx);
-    const deposits = round2(customers.flatMap(c => (c.deposits || []).filter(d => d.status === 'paid' && monthOf(d.paidAt) === m)).reduce((s, d) => s + Number(d.amount || 0), 0));
+    const deposits = round2(customers.flatMap(c => (c.deposits || []).filter(d => d.status === 'paid' && monthOf(d.paidAt) === m))
+      .concat(quoteDeposits(h).filter(d => monthOf(d.paidAt) === m)).reduce((s, d) => s + Number(d.amount || 0), 0));
     return { month: m, jobs: jobs.length, revenue, cost, gross, opEx, net, tax: sum(jobs, 'taxAmount'), deposits,
              avgTicket: jobs.length ? Math.round(revenue / jobs.length) : 0,
              grossMarginPct: revenue ? Math.round(gross / revenue * 100) : 0, netMarginPct: revenue ? Math.round(net / revenue * 100) : 0 };
@@ -973,9 +982,20 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
 
   // Deposits collected (standalone, profile-requested). Tracked as their own
   // stream so the P&L stays service-based; bucketed by when they were paid.
-  const paidDeposits = customers.flatMap(c => (c.deposits || []).filter(d => d.status === 'paid'));
-  const totalDeposits = round2(paidDeposits.reduce((s, d) => s + Number(d.amount || 0), 0));
-  const monthDeposits = round2(paidDeposits.filter(d => monthOf(d.paidAt) === curMonth).reduce((s, d) => s + Number(d.amount || 0), 0));
+  // Two streams: booking deposits on the customer record + estimate deposits
+  // on the quote record (Approve & pay). Both count; the split is reported so
+  // the card can say where the money came from.
+  const bookingDeposits = customers.flatMap(c => (c.deposits || []).filter(d => d.status === 'paid'));
+  const estimateDeposits = quoteDeposits(h);
+  const paidDeposits = bookingDeposits.concat(estimateDeposits);
+  const sumDep = arr => round2(arr.reduce((s, d) => s + Number(d.amount || 0), 0));
+  const totalDeposits = sumDep(paidDeposits);
+  const monthDeposits = sumDep(paidDeposits.filter(d => monthOf(d.paidAt) === curMonth));
+  const depositSplit = {
+    bookingMonth: sumDep(bookingDeposits.filter(d => monthOf(d.paidAt) === curMonth)), bookingTotal: sumDep(bookingDeposits),
+    estimateMonth: sumDep(estimateDeposits.filter(d => monthOf(d.paidAt) === curMonth)), estimateTotal: sumDep(estimateDeposits),
+    estimateCount: estimateDeposits.length,
+  };
 
   // ── Booked by (who ENTERED the appointment) ────────────────────────────────
   // Per-account sales attribution: every staff-created appointment carries a
@@ -1129,7 +1149,7 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
     hasExpenses: expenses.length > 0,
     monthTaxCollected: round2(thisMonth.reduce((s,a)=>s+Number(a.taxAmount||0),0)),
     totalTaxCollected: round2(done.reduce((s,a)=>s+Number(a.taxAmount||0),0)),
-    monthDeposits, totalDeposits,
+    monthDeposits, totalDeposits, depositSplit,
     monthJobs: thisMonth.length,
     avgTicket: thisMonth.length?Math.round(thisMonth.reduce((s,a)=>s+Number(a.price||0),0)/thisMonth.length):0,
     byCreator, bookedBySource,

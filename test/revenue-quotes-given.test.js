@@ -26,16 +26,19 @@ const lastMonth = (() => { const d = new Date(td + 'T00:00:00Z'); d.setUTCDate(1
 const db = getShopDb(shopId);
 db.set('settings', { shopName: 'QuotesGiven Test', loyalty: { enabled: false }, quoteCounter: 1000 }).write();
 db.set('services', []).write(); db.set('barbers', []).write(); db.set('expenses', []).write(); db.set('appointments', []).write();
-db.set('customers', [{ id: 'c1', name: 'Cust One', phone: '5550000001' }]).write();
+// c1 also paid a $50 BOOKING deposit this month (customer.deposits stream).
+db.set('customers', [{ id: 'c1', name: 'Cust One', phone: '5550000001', deposits: [{ id: 'd1', amount: 50, status: 'paid', paidAt: td + 'T08:00:00.000Z' }] }]).write();
 db.set('quotes', [
   // Won this month, $500
-  { id: 'q1', number: 'Q-1001', status: 'approved',  total: 500,  customerId: 'c1', customerName: 'Cust One', customerPhone: '5550000001', lineItems: [{ name: 'Ceramic tint', price: 500, qty: 1 }], createdAt: td + 'T10:00:00.000Z' },
+  // ...and paid a $100 ESTIMATE deposit on it (Approve & pay) — lives on the quote, must count too
+  { id: 'q1', number: 'Q-1001', status: 'approved',  total: 500,  customerId: 'c1', customerName: 'Cust One', customerPhone: '5550000001', lineItems: [{ name: 'Ceramic tint', price: 500, qty: 1 }], createdAt: td + 'T10:00:00.000Z', depositRequired: true, depositAmount: 100, depositPaid: true, depositPaidAt: td + 'T10:30:00.000Z' },
   // Still out this month, $300
-  { id: 'q2', number: 'Q-1002', status: 'sent',      total: 300,  customerName: 'Cust Two', customerPhone: '5550000002', lineItems: [{ name: 'Carbon tint', price: 300, qty: 1 }], createdAt: td + 'T11:00:00.000Z' },
+  { id: 'q2', number: 'Q-1002', status: 'sent',      total: 300, depositRequired: true, depositAmount: 75, depositPaid: false,  customerName: 'Cust Two', customerPhone: '5550000002', lineItems: [{ name: 'Carbon tint', price: 300, qty: 1 }], createdAt: td + 'T11:00:00.000Z' },
   // Lost LAST month, $200
   { id: 'q3', number: 'Q-1003', status: 'lost',      total: 200,  customerName: 'Cust Three', customerPhone: '5550000003', lineItems: [{ name: 'Wash', price: 200, qty: 1 }], createdAt: lastMonth + '-05T10:00:00.000Z' },
   // Fleet contract last month: counts at full term ($12,000), not per-visit ($1,000)
-  { id: 'q4', number: 'Q-1004', status: 'completed', total: 1000, contract: { frequency: 'monthly', termMonths: 12 }, contractValue: 12000, fleetName: 'ABQ Plumbing', customerName: 'Fleet Co', customerPhone: '5550000004', lineItems: [{ name: 'Fleet wash', price: 100, qty: 10 }], createdAt: lastMonth + '-20T10:00:00.000Z' },
+  // Last-month fleet estimate with a $300 deposit paid but no depositPaidAt (pre-stamp Stripe) → dated by approvedAt
+  { id: 'q4', number: 'Q-1004', status: 'completed', total: 1000, depositAmount: 300, depositPaid: true, approvedAt: lastMonth + '-21T10:00:00.000Z', contract: { frequency: 'monthly', termMonths: 12 }, contractValue: 12000, fleetName: 'ABQ Plumbing', customerName: 'Fleet Co', customerPhone: '5550000004', lineItems: [{ name: 'Fleet wash', price: 100, qty: 10 }], createdAt: lastMonth + '-20T10:00:00.000Z' },
 ]).write();
 db.set('leads', [
   // Phone quote on a lead with NO estimate → counts ($150, open) this month
@@ -74,11 +77,18 @@ const server = app.listen(0, async () => {
     eq('total win rate (3 won / 4 decided)', t.winRate, 75);
     eq('rows not shipped on live route', t.rows, undefined);
 
+    // Deposits: booking deposit ($50, this month) + estimate deposits ($100 this
+    // month, $300 last month). Unpaid estimate deposit (q2) is ignored.
+    eq('month deposits = booking + estimate', rev.monthDeposits, 150);
+    eq('total deposits', rev.totalDeposits, 450);
+    eq('deposit split', rev.depositSplit, { bookingMonth: 50, bookingTotal: 50, estimateMonth: 100, estimateTotal: 400, estimateCount: 2 });
+
     // Month history: last month = q3, q4, l3
     const hist = await get('/api/shop/revenue/month/' + lastMonth);
     eq('hist ok', hist.ok, true);
     eq('hist last-month count/value', [hist.summary.quotes.count, hist.summary.quotes.value], [3, 12450]);
     eq('hist last-month won', [hist.summary.quotes.won, hist.summary.quotes.wonValue], [2, 12250]);
+    eq('hist last-month deposits include estimate deposit', hist.summary.deposits, 300);
     eq('hist rows for CSV', hist.quotes.map(r => [r.number || r.kind, r.value]), [['Q-1003', 200], ['phone', 250], ['Q-1004', 12000]]);
     const histNow = await get('/api/shop/revenue/month/' + thisMonth);
     eq('hist this-month prev = last month', histNow.prev.quotes.value, 12450);

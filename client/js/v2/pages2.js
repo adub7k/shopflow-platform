@@ -336,37 +336,6 @@
         <div class="metric-card"><div class="metric-label">Avg ticket</div><div class="metric-value">${fmtMoney(data.avgTicket)}</div><div class="metric-sub">this month</div></div>
         <div class="metric-card"><div class="metric-label">All time</div><div class="metric-value">${fmtMoney(data.totalRevenue)}</div><div class="metric-sub">${fmtMoney(data.totalNetProfit)} net profit</div></div></div>`);
 
-      // Quotes given: every dollar put in front of a customer (formal estimates
-      // + phone quotes logged on leads), this month and all time, with how much
-      // of it turned into won work. Always shown — an empty card tells the
-      // owner the number exists and that logging quotes feeds it.
-      {
-        const qg = data.quotesGiven || {}, qm = qg.month || {}, qt = qg.total || {};
-        const n = (c, one, many) => `${c || 0} ${c === 1 ? one : many}`;
-        const mix = r => [r.estimates ? n(r.estimates, 'estimate', 'estimates') : '', r.phone ? n(r.phone, 'phone quote', 'phone quotes') : ''].filter(Boolean).join(' + ') || 'no quotes yet';
-        const qstat = (label, value, sub, color) => `<div><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:600;">${label}</div>
-          <div class="num" style="font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;${color ? 'color:' + color + ';' : ''}">${value}</div>
-          <div style="font-size:11.5px;color:var(--faint);">${sub}</div></div>`;
-        const tv = qt.value || 0;
-        const pct = v => tv > 0 ? Math.round(v / tv * 100) : 0;
-        const seg = (v, color, title) => v > 0 ? `<div title="${title}" style="width:${pct(v)}%;background:${color};"></div>` : '';
-        html.push(`<div class="v2-card"><div class="v2-chd"><div class="t">📋 Quotes given</div><span class="sub">estimates + phone quotes · what you put in front of customers</span></div>
-          <div style="padding:14px 16px;">
-            <div style="display:flex;gap:32px;flex-wrap:wrap;margin-bottom:14px;">
-              ${qstat('Quoted this month', fmtMoney(qm.value || 0), mix(qm))}
-              ${qstat('Quoted all time', fmtMoney(tv), mix(qt))}
-              ${qstat('Won', fmtMoney(qt.wonValue || 0), qt.winRate != null ? `${qt.winRate}% of decided quotes · ${n(qt.won, 'job', 'jobs')}` : 'no decided quotes yet', 'var(--green-deep)')}
-              ${qstat('Still open', fmtMoney(qt.openValue || 0), n(qt.open, 'quote awaiting a decision', 'quotes awaiting a decision'))}
-            </div>
-            ${tv > 0 ? `<div class="bar-bg" style="display:flex;overflow:hidden;">${seg(qt.wonValue, 'var(--green)', 'Won')}${seg(qt.openValue, 'var(--blue)', 'Open')}${seg(qt.lostValue, 'var(--red)', 'Lost')}</div>
-            <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--faint);margin-top:6px;">
-              <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--green);margin-right:4px;"></span>Won ${pct(qt.wonValue)}%</span>
-              <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--blue);margin-right:4px;"></span>Open ${pct(qt.openValue)}%</span>
-              <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--red);margin-right:4px;"></span>Lost ${pct(qt.lostValue)}%</span></div>` : ''}
-            <div style="font-size:11px;color:var(--faint);margin-top:9px;">Counts every estimate you send plus any “Quoted amount” logged on a lead (owner-entered or captured by the AI receptionist). Fleet contracts count at full term.</div>
-          </div></div>`);
-      }
-
       // Lead conversion by channel (phone vs Meta) — moved here from the Leads
       // page: it's the ad-spend ROI read, so it belongs with the money numbers.
       // The builder still lives in leads2.js next to the source definitions.
@@ -555,9 +524,28 @@
           <div style="text-align:right;"><b class="num">${fmtMoney(data.monthTaxCollected)}</b><div style="font-size:11px;color:var(--faint);">${fmtMoney(data.totalTaxCollected)} all time</div></div></div></div>`);
       }
       if (data.monthDeposits || data.totalDeposits) {
+        // Booking deposits + estimate deposits (Approve & pay) both land here;
+        // the sub line names the estimate share when there is one.
+        const ds = data.depositSplit || {};
+        const depSub = ds.estimateTotal ? `Prepaid · ${fmtMoney(ds.estimateMonth || 0)} this month from ${ds.estimateCount} approved estimate${ds.estimateCount === 1 ? '' : 's'}` : 'Prepaid — applied to the balance at checkout.';
         html.push(`<div class="v2-card"><div class="list-row" style="cursor:default;"><div class="list-main"><div class="list-name">Deposits collected</div>
-          <div class="list-sub">Prepaid — applied to the balance at checkout.</div></div>
+          <div class="list-sub">${depSub}</div></div>
           <div style="text-align:right;"><b class="num" style="color:var(--green-deep);">${fmtMoney(data.monthDeposits)}</b><div style="font-size:11px;color:var(--faint);">${fmtMoney(data.totalDeposits)} all time</div></div></div></div>`);
+      }
+      // Quotes given: every dollar put in front of a customer — formal
+      // estimates plus phone quotes logged on leads — with how much of it won.
+      // Same compact row as deposits/tax; always shown so the number exists
+      // for a shop before its first quote.
+      {
+        const qg = data.quotesGiven || {}, qm = qg.month || {}, qt = qg.total || {};
+        const n = (c, one, many) => `${c || 0} ${c === 1 ? one : many}`;
+        const mix = [qt.estimates ? n(qt.estimates, 'estimate', 'estimates') : '', qt.phone ? n(qt.phone, 'phone quote', 'phone quotes') : ''].filter(Boolean).join(' + ');
+        const sub = qt.count
+          ? `${n(qm.count, 'quote', 'quotes')} this month · ${mix} · ${fmtMoney(qt.wonValue || 0)} won${qt.winRate != null ? ` (${qt.winRate}%)` : ''}`
+          : 'Estimates you send + “Quoted amount” logged on leads.';
+        html.push(`<div class="v2-card"><div class="list-row" style="cursor:default;"><div class="list-main" style="min-width:0;"><div class="list-name">Quotes given</div>
+          <div class="list-sub">${sub}</div></div>
+          <div style="text-align:right;flex-shrink:0;white-space:nowrap;"><b class="num">${fmtMoney(qm.value || 0)}</b><div style="font-size:11px;color:var(--faint);">${fmtMoney(qt.value || 0)} all time</div></div></div></div>`);
       }
       html.push('</div></div>');
       el.innerHTML = html.join('');
