@@ -21,6 +21,7 @@ const { runIntake } = require('../receptionist/intake');
 const { transcribeEnabled, transcribeTwilioRecording } = require('../receptionist/transcribe');
 const voice = require('../receptionist/voice');
 const relay = require('../receptionist/relay');
+const { toSpokenForm } = require('../receptionist/speak');
 const { notifyNewLead } = require('../email');
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
@@ -381,14 +382,16 @@ function aiGather(vr, ctx, callSid, prompt) {
     method: 'POST',
     actionOnEmptyResult: true,
   });
-  g.say({ voice: cfg.voice }, prompt);
+  // Spoken form: "$450" → "four hundred fifty dollars", "PPF" → "P P F" (idempotent).
+  g.say({ voice: cfg.voice }, toSpokenForm(prompt));
 }
 
 // Mirror the AI conversation onto call.transcript so the existing Leads
-// transcript UI shows it (mutates only; caller upserts).
+// transcript UI shows it (mutates only; caller upserts). Caller lines show the
+// normalized text, with the raw transcription alongside when it was corrected.
 function syncVoiceTranscript(call) {
   if (!call.voiceAI || !call.voiceAI.turns) return;
-  call.transcript = call.voiceAI.turns.map(t => `${t.role === 'assistant' ? 'AI' : 'Caller'}: ${t.text}`).join('\n');
+  call.transcript = call.voiceAI.turns.map(t => `${t.role === 'assistant' ? 'AI' : 'Caller'}: ${t.text}${t.heard && t.heard !== t.text ? ` (heard: "${t.heard}")` : ''}`).join('\n');
   call.transcriptStatus = 'done';
 }
 
@@ -409,7 +412,7 @@ function endAiCall(vr, ctx, call, res, sayText) {
   voice.stampCallAttribution(call);
   ctx.h.upsert('calls', call);
   // Always speak a closing line before hanging up — never an abrupt cut-off.
-  vr.say({ voice: voice.voiceConfig(ctx.settings).voice }, sayText || voice.FAREWELL);
+  vr.say({ voice: voice.voiceConfig(ctx.settings).voice }, toSpokenForm(sayText || voice.FAREWELL));
   vr.hangup();
   return res.type('text/xml').send(vr.toString());
 }

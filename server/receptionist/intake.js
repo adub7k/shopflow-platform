@@ -7,6 +7,7 @@
 // Degrades gracefully: with no ANTHROPIC_API_KEY the telephony flow is untouched
 // — we still store the transcript, we just skip the AI enrichment.
 const { resolveProfile } = require('../industries');
+const { normalizeTranscript } = require('./normalize');
 
 // House rule (claude-api skill): default to claude-opus-4-8. For high-volume
 // voicemail summarization the owner may prefer the cheaper/faster claude-haiku-4-5
@@ -46,8 +47,14 @@ const INTAKE_SCHEMA = {
 async function analyzeTranscript(transcript, { shopName, industryLabel, callerPhone, location, kind } = {}) {
   const client = getClient();
   if (!client) return null;
-  const text = String(transcript || '').trim();
-  if (!text) return null;
+  const rawText = String(transcript || '').trim();
+  if (!rawText) return null;
+  // Voicemail / answered-call STT has no vocabulary hints at all, so run the
+  // same terminology normalization the live receptionist uses ("pain
+  // correction" → "paint correction") before the model reads it. The raw
+  // transcript stays on the call; corrections are reported on the intake.
+  const norm = normalizeTranscript(rawText);
+  const text = norm.text;
 
   // 'call' = a two-way answered conversation (speaker-labelled); 'voicemail' (the
   // default) = a one-way message. The framing changes how the model reads the text.
@@ -90,6 +97,7 @@ async function analyzeTranscript(transcript, { shopName, industryLabel, callerPh
     const data = JSON.parse(block.text);
     data.model = MODEL;
     data.generatedAt = new Date().toISOString();
+    if (norm.corrections.length) data.corrections = norm.corrections;
     return data;
   } catch (e) {
     console.error('AI intake failed:', e.message);

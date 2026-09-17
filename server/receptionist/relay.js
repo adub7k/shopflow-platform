@@ -12,7 +12,12 @@
 //   us → Twilio:  {type:'text',token,last}  (speak),  {type:'end',handoffData} (hang up)
 const crypto = require('crypto');
 const { master, getShopDb, shopHelpers, today } = require('../db');
+const { getMenu } = require('../booking');
+const { notifyNewLead } = require('../email');
 const voice = require('./voice');
+const { SpeakBuffer, toSpokenForm } = require('./speak');
+const { allowedPrices, guardReply } = require('./guard');
+const { buildShopVocab } = require('./normalize');
 
 const RELAY_PATH = '/api/twilio/voice/relay';
 const MAX_TURNS = 16;
@@ -107,7 +112,13 @@ function onConnection(ws, params) {
 
   const call = ctx.h.getById('calls', callSid) || { id: callSid, from: params.get('from') || '', leadId: null };
   if (!call.voiceAI) call.voiceAI = voice.initState('relay');
-  const session = { ws, ctx, call, cfg: voice.voiceConfig(ctx.settings), messages: [], busy: false, ended: false, gen: 0, stream: null };
+  // Per-call accuracy context, built once: the shop's vocabulary for the
+  // normalizer and the whitelist of real menu prices for the reply guard.
+  const menu = getMenu(ctx.db);
+  const session = {
+    ws, ctx, call, cfg: voice.voiceConfig(ctx.settings), messages: [], busy: false, ended: false, gen: 0, stream: null,
+    menu, shopVocab: buildShopVocab(menu), allowed: allowedPrices(menu, ctx.settings), guardHits: [],
+  };
 
   ws.on('message', data => { onMessage(session, data).catch(e => console.error('[relay] message error', e.message)); });
   ws.on('close', () => finalize(session));
@@ -148,9 +159,21 @@ async function onMessage(session, data) {
 // Speak text (streams straight to TTS). last:true finalizes the turn.
 function send(session, obj) { try { if (session.ws.readyState === 1) session.ws.send(JSON.stringify(obj)); } catch (e) { /* socket gone */ } }
 function speak(session, token, last) { send(session, { type: 'text', token: token || '', last: !!last }); }
+// Guard a chunk of model text (no invented prices), convert it to spoken form,
+// and stream it. Returns the guarded (still written-form) text for the transcript.
+function sayGuarded(session, chunk) {
+  if (!chunk) return '';
+  const g = guardReply(chunk, session.allowed);
+  if (g.hits.length) session.guardHits.push(...g.hits.map(h => ({ ...h, at: new Date().toISOString() })));
+  speak(session, toSpokenForm(g.text) + (/\s$/.test(chunk) ? ' ' : ''), false);
+  session.turnSpoken = (session.turnSpoken || '') + g.text; // survives a mid-stream abort
+  return g.text;
+}
 
-// One streaming model call for a relay turn. Streams tokens straight to TTS as
-// they arrive (unless the caller has barged in — session.gen has moved on).
+// One streaming model call for a relay turn. Streams tokens to TTS as they
+// arrive (unless the caller has barged in — session.gen has moved on), but only
+// at WORD boundaries: deltas can split "$4|50" or "PP|F", and the guard/spoken-
+// form pass needs whole tokens.
 //
 // Retry parity with the gather engine (voice.js createMessage): a transient API
 // blip must NOT drop a live call. The blip that actually drops calls hits the
@@ -164,12 +187,14 @@ async function streamTurn(session, params, myGen, { retries = 2 } = {}) {
   const client = voice.getClient();
   for (let attempt = 0; ; attempt++) {
     let spokeText = '';
+    const buf = new SpeakBuffer({ raw: true });
     const stream = client.messages.stream(params);
     session.stream = stream;
-    stream.on('text', delta => { if (session.gen === myGen) { spokeText += delta; speak(session, delta, false); } });
+    stream.on('text', delta => { if (session.gen === myGen) { const chunk = buf.push(delta); if (chunk) spokeText += sayGuarded(session, chunk); } });
     try {
       const final = await stream.finalMessage();
       session.stream = null;
+      if (session.gen === myGen) { const tail = buf.flush(); if (tail) spokeText += sayGuarded(session, tail); }
       return { final, spokeText };
     } catch (e) {
       session.stream = null;
@@ -188,28 +213,54 @@ async function handlePrompt(session, promptText) {
   if (!text) return;                 // Twilio handles silence/re-listen itself
   if (session.busy) return;          // one turn at a time (Twilio waits for last:true)
   session.busy = true;
+  try {
+    await runRelayTurn(session, text);
+  } finally {
+    // ALWAYS release the turn lock. Before this, a barge-in mid-generation left
+    // busy=true forever and every later caller utterance was silently dropped
+    // (the session went deaf for the rest of the call).
+    session.busy = false;
+  }
+}
+
+async function runRelayTurn(session, text) {
   const myGen = ++session.gen;
   const { ctx, call } = session;
+  const started = Date.now();
 
-  call.voiceAI.turns.push({ role: 'user', text, at: new Date().toISOString() });
-  session.messages.push({ role: 'user', content: text });
+  // Terminology layer: fix known STT garbles, tag ambiguity, extract entities.
+  const heard = voice.hearCaller(ctx, call, text, { shopVocab: session.shopVocab });
+  call.voiceAI.turns.push(heard.turn);
+  session.messages.push({ role: 'user', content: heard.forModel });
 
   const client = voice.getClient();
   if (!client) { speak(session, "I'm sorry, I'm having trouble right now. The shop will call you right back. Goodbye!", true); return endSession(session, 'no-key'); }
 
   const quoteFirst = voice.isQuoteFirst(ctx.settings, ctx.industry);
-  const system = voice.buildSystemPrompt({ ...ctx, callerPhone: call.from }, { ...session.cfg, _greeting: call.voiceAI.turns[0] && call.voiceAI.turns[0].text });
-  const tools = voice.toolsFor(quoteFirst, session.cfg);
   const used = call.voiceAI.turns.filter(t => t.role === 'assistant').length;
+  const finalTurn = used >= (session.cfg.maxTurns || MAX_TURNS);
+  const lead = call.leadId ? ctx.h.getById('leads', call.leadId) : null;
+  const system = voice.buildSystemBlocks({ ...ctx, callerPhone: call.from, lead }, { ...session.cfg, _greeting: call.voiceAI.turns[0] && call.voiceAI.turns[0].text }, { finalTurn });
+  const tools = voice.toolsFor(quoteFirst, session.cfg, session.menu);
   let ended = null;
   let spoken = '';
   let closed = false; // did a terminal tool already speak a goodbye?
+  let usage = null;
+  const toolLog = [];
+  session.guardHits = [];
+  session.turnSpoken = '';
 
   try {
     for (let hop = 0; hop < 4; hop++) {
-      const { final, spokeText } = await streamTurn(session, { model: voice.MODEL, max_tokens: 320, system, messages: session.messages, tools }, myGen);
+      const { final, spokeText } = await streamTurn(session, voice.modelParams({ system, messages: session.messages, tools }), myGen);
       spoken += spokeText;
-      if (session.gen !== myGen) return;                 // interrupted mid-turn
+      usage = voice.sumUsage(usage, voice.usageOf(final));
+      if (session.gen !== myGen) { noteInterrupted(session); return; } // interrupted mid-turn
+      if (final.stop_reason === 'refusal') {
+        voice.recordTrace(ctx, call, { heard: text, latencyMs: Date.now() - started, usage, error: 'refusal' });
+        speak(session, "I'm sorry, I can't help with that one. The shop will call you right back. Goodbye!", true);
+        return endSession(session, 'error');
+      }
 
       session.messages.push({ role: 'assistant', content: final.content });
       const toolUses = (final.content || []).filter(b => b.type === 'tool_use');
@@ -219,43 +270,65 @@ async function handlePrompt(session, promptText) {
       for (const tu of toolUses) {
         const a = tu.input || {};
         const out = voice.runTool(ctx, call, tu.name, a);
+        toolLog.push({ name: tu.name, ok: !(out && (out.error || out.captured === false || out.booked === false)) });
         results.push({ type: 'tool_result', tool_use_id: tu.id, content: JSON.stringify(out) });
         // Terminal tools speak their closing line and end the call (see voice.js).
-        if (tu.name === 'end_call') { ended = a; if (a.farewell) { spoken += a.farewell; speak(session, a.farewell, false); closed = true; } }
-        else if (tu.name === 'capture_lead' && out && out.captured) { ended = { outcome: 'captured' }; if (a.closingLine) { spoken += a.closingLine; speak(session, a.closingLine, false); closed = true; } }
-        else if (tu.name === 'book_appointment' && out && out.booked) { ended = { outcome: 'booked' }; if (a.closingLine) { spoken += a.closingLine; speak(session, a.closingLine, false); closed = true; } }
-        else if (tu.name === 'transfer_to_human' && out && out.transferred) { ended = { outcome: 'transfer' }; if (a.closingLine) { spoken += a.closingLine; speak(session, a.closingLine, false); closed = true; } }
+        const close = (line) => { if (line) { spoken += ' ' + sayGuarded(session, line); closed = true; } };
+        if (tu.name === 'end_call') { ended = a; close(a.farewell); }
+        else if (tu.name === 'capture_lead' && out && out.captured) { ended = { outcome: 'captured' }; close(a.closingLine); }
+        else if (tu.name === 'book_appointment' && out && out.booked) { ended = { outcome: 'booked' }; close(a.closingLine); }
+        else if (tu.name === 'transfer_to_human' && out && out.transferred) { ended = { outcome: 'transfer' }; close(a.closingLine); }
       }
       session.messages.push({ role: 'user', content: results });
       if (ended) break;
-      if (used + 1 >= (session.cfg.maxTurns || MAX_TURNS)) { ended = { outcome: 'captured' }; break; }
     }
   } catch (e) {
     session.stream = null;
-    if (session.gen !== myGen) return;                   // aborted by interrupt — fine
+    if (session.gen !== myGen) { noteInterrupted(session); return; } // aborted by interrupt — fine
     console.error('[relay] turn failed:', e.message);
+    voice.recordTrace(ctx, call, { heard: text, latencyMs: Date.now() - started, usage, tools: toolLog, error: e.message });
     speak(session, "I'm sorry, something went wrong. The shop will call you right back. Goodbye!", true);
     return endSession(session, 'error');
   }
 
+  // Turn cap reached without a capture: the final-turn nudge asked the model to
+  // wrap up; if it still didn't, end the call honestly (outcome 'ended', so the
+  // never-miss email in finalize() fires) — never report a capture that didn't happen.
+  if (!ended && finalTurn) ended = { outcome: 'ended' };
+
   // Guarantee a warm goodbye if the call is ending and the model didn't give one.
-  if (ended && !closed) { speak(session, voice.FAREWELL, false); spoken += ' ' + voice.FAREWELL; }
+  if (ended && !closed) { speak(session, toSpokenForm(voice.FAREWELL), false); spoken += ' ' + voice.FAREWELL; }
   speak(session, '', true);                              // finalize this TTS turn
-  if (spoken.trim()) call.voiceAI.turns.push({ role: 'assistant', text: spoken.trim(), at: new Date().toISOString() });
+  if (spoken.trim()) call.voiceAI.turns.push({ role: 'assistant', text: spoken.replace(/\s+/g, ' ').trim(), at: new Date().toISOString() });
+  if (session.guardHits.length) call.voiceAI.guardHits = [...(call.voiceAI.guardHits || []), ...session.guardHits];
+  voice.recordTrace(ctx, call, {
+    heard: text, normalized: heard.norm.changed ? heard.norm.text : undefined,
+    corrections: heard.norm.corrections, tags: heard.norm.tags,
+    latencyMs: Date.now() - started, usage, tools: toolLog, guardHits: session.guardHits.slice(), reply: spoken.replace(/\s+/g, ' ').trim(),
+  });
   syncTranscript(call);
   ctx.h.upsert('calls', call);
-  session.busy = false;
 
   if (ended) {
-    if (!call.voiceAI.outcome) call.voiceAI.outcome = { type: ended.outcome || 'ended' };
+    if (!call.voiceAI.outcome && ended.outcome !== 'ended') call.voiceAI.outcome = { type: ended.outcome };
     endSession(session, ended.outcome || 'ended');
   }
 }
 
+// A barge-in cut the reply short: keep what was actually spoken in the
+// transcript (marked), so the owner sees the real conversation.
+function noteInterrupted(session) {
+  const s = String(session.turnSpoken || '').replace(/\s+/g, ' ').trim();
+  session.turnSpoken = '';
+  if (s) session.call.voiceAI.turns.push({ role: 'assistant', text: s + ' —', interrupted: true, at: new Date().toISOString() });
+}
+
 // Mirror the conversation onto call.transcript for the Leads UI (matches gather).
+// Caller lines show the normalized text, with the raw transcription alongside
+// when the terminology layer changed it.
 function syncTranscript(call) {
   if (!call.voiceAI || !call.voiceAI.turns) return;
-  call.transcript = call.voiceAI.turns.map(t => `${t.role === 'assistant' ? 'AI' : 'Caller'}: ${t.text}`).join('\n');
+  call.transcript = call.voiceAI.turns.map(t => `${t.role === 'assistant' ? 'AI' : 'Caller'}: ${t.text}${t.heard && t.heard !== t.text ? ` (heard: "${t.heard}")` : ''}`).join('\n');
   call.transcriptStatus = 'done';
 }
 
@@ -273,10 +346,19 @@ function finalize(session) {
     call.voiceAI.endedAt = new Date().toISOString();
     if (call.voiceAI.status === 'active') call.voiceAI.status = call.voiceAI.outcome ? call.voiceAI.outcome.type : 'ended';
     call.aiHandled = true;
+    // Never-miss safety net (parity with the gather engine's endAiCall): if the
+    // caller hung up — or the call otherwise ended — without a booking/capture/
+    // transfer, the owner still hears about it. book/capture/transfer already
+    // emailed; this covers everything else, at most once.
+    if (!call.voiceAI.outcome && !call.voiceAI.ownerNotified) {
+      call.voiceAI.ownerNotified = true;
+      const lead = call.leadId ? ctx.h.getById('leads', call.leadId) : null;
+      notifyNewLead({ shop: ctx.shop, settings: ctx.settings, kind: 'missed-call', lead: lead || { phone: call.from, source: 'call' } });
+    }
     syncTranscript(call);
     voice.stampCallAttribution(call);
     ctx.h.upsert('calls', call);
   } catch (e) { console.error('[relay] finalize error', e.message); }
 }
 
-module.exports = { attach, available, connectTwiml, relayToken, RELAY_PATH, __test: { onMessage, handlePrompt, shopCtxFor } };
+module.exports = { attach, available, connectTwiml, relayToken, RELAY_PATH, __test: { onMessage, handlePrompt, shopCtxFor, finalize, syncTranscript } };

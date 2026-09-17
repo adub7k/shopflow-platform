@@ -409,8 +409,35 @@ const Leads = {
       if (va && va.turns && va.turns.length) {
         const oc = va.outcome;
         const badge = oc ? `<div style="font-size:11px;font-weight:800;color:var(--green);margin-bottom:6px;">${oc.type==='booked'?`✅ Booked ${esc(oc.service||'appointment')} · ${esc(oc.date||'')} ${esc(oc.time||'')}`:oc.type==='captured'?'📝 Qualified lead captured':'Call ended'}</div>` : '';
-        const thread = va.turns.map(t=>`<div style="margin:3px 0;"><strong style="color:${t.role==='assistant'?'var(--green)':'var(--text)'};">${t.role==='assistant'?'🤖 AI':'📞 Caller'}:</strong> ${esc(t.text)}</div>`).join('');
-        tr = `<div style="font-size:12px;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px 10px;margin:4px 0 8px;line-height:1.5;">${badge}${thread}</div>`;
+        // Caller lines show the corrected transcription; when the terminology
+        // layer changed something, the raw "heard" text sits beside it.
+        const thread = va.turns.map(t=>{
+          const heard = t.role!=='assistant' && t.heard && t.heard!==t.text ? ` <span style="color:var(--faint);font-size:11px;" title="Raw speech-to-text before correction">(heard: “${esc(t.heard)}”)</span>` : '';
+          const cut = t.interrupted ? ` <span style="color:var(--faint);font-size:11px;">(caller interrupted)</span>` : '';
+          return `<div style="margin:3px 0;"><strong style="color:${t.role==='assistant'?'var(--green)':'var(--text)'};">${t.role==='assistant'?'🤖 AI':'📞 Caller'}:</strong> ${esc(t.text)}${heard}${cut}</div>`;
+        }).join('');
+        // 🧠 Brain panel: per-turn latency, tokens (and how much came from the
+        // prompt cache), corrections made, ambiguous terms, tools called, and
+        // any guard hits (an invented price the system neutralized).
+        let brain = '';
+        if (va.trace && va.trace.length) {
+          const fmtTok = u => u ? `${u.input_tokens||0} in${u.cache_read_input_tokens?` (${u.cache_read_input_tokens} cached)`:''} · ${u.output_tokens||0} out` : '—';
+          const rows = va.trace.map(r=>{
+            const fixes = (r.corrections||[]).map(c=>`${esc(c.from)} → ${esc(c.to)}`).join(', ');
+            const amb = (r.tags||[]).map(x=>esc(x.term)).join(', ');
+            const tools = (r.tools||[]).map(x=>esc(x.name)+(x.ok===false?' ✗':'')).join(', ');
+            const guard = (r.guardHits||[]).map(h=>`${esc(h.kind)} ${esc(String(h.value))}`).join(', ');
+            return `<div style="padding:5px 0;border-top:1px solid var(--border);">
+              <div><strong>#${r.n}</strong> · ${r.latencyMs!=null?r.latencyMs+' ms':'—'} · ${fmtTok(r.usage)}${r.effort?` · ${esc(r.model)} (${esc(r.effort)})`:r.model?` · ${esc(r.model)}`:''}${r.error?` · <span style="color:#dc2626;">error: ${esc(r.error)}</span>`:''}</div>
+              ${fixes?`<div>🔧 corrected: ${fixes}</div>`:''}${amb?`<div>❓ ambiguous: ${amb}</div>`:''}${tools?`<div>🛠 tools: ${tools}</div>`:''}${guard?`<div style="color:#dc2626;">🛡 guard: ${guard}</div>`:''}
+            </div>`;
+          }).join('');
+          const total = va.trace.reduce((a,r)=>{ const u=r.usage||{}; a.in+=u.input_tokens||0; a.cached+=u.cache_read_input_tokens||0; a.out+=u.output_tokens||0; a.ms+=r.latencyMs||0; return a; },{in:0,cached:0,out:0,ms:0});
+          const nFix = va.trace.reduce((a,r)=>a+((r.corrections||[]).length),0);
+          const nGuard = va.trace.reduce((a,r)=>a+((r.guardHits||[]).length),0);
+          brain = `<div style="margin-top:6px;"><button onclick="event.stopPropagation();const p=this.nextElementSibling;p.style.display=p.style.display==='none'?'block':'none';" style="padding:4px 10px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:8px;font-size:11px;font-weight:600;cursor:pointer;">🧠 Brain · ${va.trace.length} turns · avg ${Math.round(total.ms/va.trace.length)} ms · ${total.in+total.out} tokens${total.cached?` (${Math.round(100*total.cached/Math.max(1,total.in))}% cached)`:''}${nFix?` · ${nFix} corrected`:''}${nGuard?` · <span style="color:#dc2626;">${nGuard} guard</span>`:''}</button><div style="display:none;margin-top:4px;font-size:11px;">${rows}</div></div>`;
+        }
+        tr = `<div style="font-size:12px;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px 10px;margin:4px 0 8px;line-height:1.5;">${badge}${thread}${brain}</div>`;
       } else {
         tr = c.transcript ? `<div style="font-size:12px;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px 10px;margin:4px 0 8px;line-height:1.45;"><strong>🎙 Transcript:</strong> ${esc(c.transcript)}</div>` : '';
       }
