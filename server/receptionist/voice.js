@@ -81,27 +81,39 @@ const _sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 // A 400 means the API rejected the request SHAPE — a schema keyword, a parameter
 // this model doesn't take, a cache marker — not the conversation. A live caller
-// must never pay for that with a dropped call, so the request is retried ONCE in
-// a conservative shape (no strict tools, no effort, no cache_control) and the
-// rejection is logged loudly so the incompatibility gets fixed properly.
+// must never pay for that with a dropped call, so the request is retried in
+// progressively more conservative shapes, ONE change at a time, so the log and
+// the brain panel say exactly which piece the API refused:
+//   1. drop `strict` from the tools     (schema keyword the grammar compiler rejects)
+//   2. also drop output_config.effort   (model doesn't take effort)
+//   3. also drop cache_control          (last — losing the cache triples the cost of a call)
+// The API's own error text is kept on the call (voiceAI.compat.reason) so the
+// incompatibility gets fixed properly instead of living in compat mode.
 const isBadRequest = (e) => !!e && (e.status === 400 || e.statusCode === 400);
-function compatParams(p) {
+const COMPAT_STEPS = ['strict tools', 'effort', 'prompt cache'];
+function compatParams(p, step = COMPAT_STEPS.length - 1) {
   const q = { ...p };
-  delete q.output_config;
-  if (Array.isArray(q.system)) q.system = q.system.map(b => { const { cache_control, ...rest } = b; return rest; });
-  if (Array.isArray(q.tools)) q.tools = q.tools.map(t => { const { strict, ...rest } = t; return rest; });
-  q._compat = true;
+  if (step >= 0 && Array.isArray(q.tools)) q.tools = q.tools.map(t => { const { strict, ...rest } = t; return rest; });
+  if (step >= 1) delete q.output_config;
+  if (step >= 2 && Array.isArray(q.system)) q.system = q.system.map(b => { const { cache_control, ...rest } = b; return rest; });
+  q._compat = { step: COMPAT_STEPS[step], removed: COMPAT_STEPS.slice(0, step + 1) };
   return q;
 }
+const compatNote = (c) => c ? `request shape rejected by the API (${c.reason || 'no detail'}); served without ${c.removed ? c.removed.join(' + ') : c.step}` : undefined;
 async function createMessage(client, params, { retries = 2 } = {}) {
-  let compat = false;
+  let step = -1, reason = null;
   for (let attempt = 0; ; attempt++) {
-    try { const { _compat, ...send } = params; const res = await client.messages.create(send); if (compat) res._compat = true; return res; }
-    catch (e) {
-      if (isBadRequest(e) && !compat) {
-        compat = true;
-        console.error(`[brain] request rejected (400) — retrying in compat mode. API said: ${e.message}`);
-        params = compatParams(params);
+    try {
+      const { _compat, ...send } = params;
+      const res = await client.messages.create(send);
+      if (_compat) res._compat = { ..._compat, reason };
+      return res;
+    } catch (e) {
+      if (isBadRequest(e) && step < COMPAT_STEPS.length - 1) {
+        step++;
+        reason = reason || String(e.message || '').replace(/^\d+\s*/, '').slice(0, 300);
+        console.error(`[brain] request rejected (400) — retrying without ${COMPAT_STEPS.slice(0, step + 1).join(' + ')}. API said: ${e.message}`);
+        params = compatParams(params, step);
         continue;
       }
       if (attempt >= retries || !isRetryableApiError(e)) throw e;
@@ -371,8 +383,12 @@ function buildSystemPrompt(ctx, cfg, opts) {
 function toolsFor(quoteFirst, cfg, menu) {
   const ids = (menu && menu.services || []).map(s => s.id).filter(Boolean);
   const idList = ids.length ? ` One of: ${ids.join(', ')}.` : '';
+  // Nullable enums use the anyOf form the structured-outputs grammar documents
+  // (a mixed-type `enum: [..., null]` is the likeliest thing a strict schema
+  // compiler refuses).
+  const nullableEnum = (values, description) => ({ anyOf: [{ type: 'string', enum: values }, { type: 'null' }], description });
   const serviceIdSchema = ids.length
-    ? { type: ['string', 'null'], enum: [...ids, null], description: `The menu serviceId of the main service they want (from the SERVICE MENU), or null if nothing on the menu fits.${idList}` }
+    ? nullableEnum(ids, `The menu serviceId of the main service they want (from the SERVICE MENU), or null if nothing on the menu fits.${idList}`)
     : { type: ['string', 'null'], description: 'The menu serviceId of the main service they want, or null.' };
   const discussedSchema = ids.length
     ? { type: 'array', items: { type: 'string', enum: ids }, description: 'Menu serviceIds of every service the caller asked about (empty if none matched the menu).' }
@@ -390,7 +406,7 @@ function toolsFor(quoteFirst, cfg, menu) {
         serviceId: serviceIdSchema,
         otherRequested: { type: ['string', 'null'], description: 'Anything they asked for that is NOT a menu line (a partial job, an add-on, an off-menu service), in the caller\'s words — the shop will price it. Null if everything matched the menu.' },
         vehicle: { type: ['string', 'null'], description: 'Vehicle as "year make model color" if relevant, else null.' },
-        vehicleSize: { type: ['string', 'null'], enum: ['sedan', 'suv', 'truck', null], description: 'Rough vehicle size class if relevant, else null.' },
+        vehicleSize: nullableEnum(['sedan', 'suv', 'truck'], 'Rough vehicle size class if relevant, else null.'),
         quotedPrice: { type: ['number', 'null'], description: 'The starting-at menu price you quoted for the main service (if you quoted two tint levels, the one the caller leaned toward — carbon if unclear), or null if you quoted nothing. Must be a number from the menu.' },
         callOutcome: { type: 'string', enum: ['booked', 'quoted', 'captured'], description: 'booked = they agreed to one of the days you offered; quoted = you gave a price but they did not commit to a day; captured = you got their info to follow up (no price and no day).' },
         agreedTime: { type: ['string', 'null'], description: 'The specific day/time the caller agreed to (from the two you offered), e.g. "Thursday at 2 PM", or null if they did not commit.' },
@@ -469,7 +485,7 @@ function toolsFor(quoteFirst, cfg, menu) {
         date: { type: 'string', description: 'Date as YYYY-MM-DD.' },
         time: { type: 'string', description: 'Start time exactly as returned by check_availability, e.g. "2:30 PM".' },
         vehicle: { type: ['string', 'null'], description: '"year make model color" if relevant, else null.' },
-        vehicleSize: { type: ['string', 'null'], enum: ['sedan', 'suv', 'truck', null] },
+        vehicleSize: nullableEnum(['sedan', 'suv', 'truck'], 'Rough vehicle size class if relevant, else null.'),
         notes: { type: ['string', 'null'], description: 'Anything the shop should know, or null.' },
         closingLine: { type: 'string', description: 'A short, warm confirmation to say after booking (service, date, time). This ends the call.' },
       },
@@ -757,7 +773,7 @@ async function runTurn(ctx, call, userSpeech, { finalTurn = false } = {}) {
     for (let hop = 0; hop < 4; hop++) {
       const res = await createMessage(client, modelParams({ system, messages, tools }));
       usage = sumUsage(usage, usageOf(res));
-      if (res._compat) state.compat = true; // surfaced in the brain panel: fix the request shape
+      if (res._compat) state.compat = res._compat; // surfaced in the brain panel with the API's reason: fix the request shape
       // A safety-classifier decline (HTTP 200, stop_reason "refusal") has no
       // usable content — hand off gracefully rather than reading an empty reply.
       if (res.stop_reason === 'refusal') { recordTrace(ctx, call, { heard: speech, latencyMs: Date.now() - started, usage, error: 'refusal' }); return { say: "I'm sorry, I can't help with that one. The shop will call you right back. Goodbye!", end: true, error: true }; }
@@ -808,7 +824,7 @@ async function runTurn(ctx, call, userSpeech, { finalTurn = false } = {}) {
     heard: speech, normalized: heard && heard.norm.changed ? heard.norm.text : undefined,
     corrections: heard ? heard.norm.corrections : [], tags: heard ? heard.norm.tags : [],
     latencyMs: Date.now() - started, usage, tools: toolLog, guardHits, reply: sayText,
-    compat: state.compat ? 'request shape rejected by the API; served in compat mode (see server log)' : undefined,
+    compat: compatNote(state.compat),
   });
 
   // The engine speaks the reply; hand it over already converted for the voice.
@@ -856,7 +872,7 @@ module.exports = {
   // Exported so the ConversationRelay engine (receptionist/relay.js) reuses the
   // exact same client, system prompt, tools, and server-authoritative tool
   // execution — the transport differs, the brain does not.
-  getClient, runTool, FAREWELL, createMessage, isRetryableApiError, isBadRequest, compatParams, speechHints,
+  getClient, runTool, FAREWELL, createMessage, isRetryableApiError, isBadRequest, compatParams, compatNote, COMPAT_STEPS, speechHints,
   stampCallAttribution, proposeSlots, resolveCallbackPhone, businessHours,
   hearCaller, recordTrace, usageOf, sumUsage,
 };

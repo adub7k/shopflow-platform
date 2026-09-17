@@ -416,3 +416,55 @@ setTimeout(() => {
   console.log(`\n${failures === 0 ? '✓ ALL PASSED' : `✗ ${failures} FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);
 }, 1500);
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n— 400 compat fallback is staged: strict → effort → cache, with the API reason kept —');
+(async () => {
+  const base = () => ({
+    model: 'm', max_tokens: 10,
+    system: [{ type: 'text', text: 'stable', cache_control: { type: 'ephemeral' } }, { type: 'text', text: 'volatile' }],
+    messages: [{ role: 'user', content: 'hi' }],
+    tools: [{ name: 't', strict: true, input_schema: { type: 'object', additionalProperties: false, properties: {}, required: [] } }],
+    output_config: { effort: 'low' },
+  });
+  const ok = { stop_reason: 'end_turn', content: [{ type: 'text', text: 'fine' }], usage: {} };
+  const rejectWhile = (pred, msg) => { const sent = []; return { sent, client: { messages: { create: async (p) => { sent.push(p); if (pred(p)) throw Object.assign(new Error(msg), { status: 400 }); return { ...ok }; } } } }; };
+
+  // 1. strict is the culprit → only strict removed; cache + effort survive.
+  let s = rejectWhile(p => p.tools.some(t => t.strict), '400 {"type":"error","error":{"message":"tools.0.input_schema: enum values must match type"}}');
+  let res = await voice.createMessage(s.client, base());
+  check('staged: strict rejected → served without strict only', res._compat && res._compat.step === 'strict tools' && JSON.stringify(res._compat.removed) === '["strict tools"]', JSON.stringify(res._compat));
+  check('staged: API reason kept on the response', /enum values must match type/.test(res._compat.reason), res._compat.reason);
+  check('staged: cache marker + effort still sent on the winning attempt', s.sent.length === 2 && !!s.sent[1].system[0].cache_control && !!s.sent[1].output_config && !s.sent[1].tools[0].strict);
+  check('staged: no _compat leaks into the wire params', s.sent.every(p => !('_compat' in p)));
+  check('staged: brain-panel note names the piece + reason', /served without strict tools/.test(voice.compatNote(res._compat)) && /enum values/.test(voice.compatNote(res._compat)));
+
+  // 2. effort is the culprit → strict then effort removed; cache survives.
+  s = rejectWhile(p => !!p.output_config, '400 output_config.effort is not supported');
+  res = await voice.createMessage(s.client, base());
+  check('staged: effort rejected → strict + effort removed, cache kept', res._compat.step === 'effort' && s.sent.length === 3 && !!s.sent[2].system[0].cache_control && !s.sent[2].output_config, JSON.stringify(res._compat));
+
+  // 3. cache marker is the culprit → all three removed on the 4th attempt.
+  s = rejectWhile(p => !!p.system[0].cache_control, '400 cache_control not allowed');
+  res = await voice.createMessage(s.client, base());
+  check('staged: cache rejected → removed last', res._compat.step === 'prompt cache' && s.sent.length === 4 && !s.sent[3].system[0].cache_control);
+
+  // 4. Still 400 after every step → surfaces the error (no infinite loop).
+  s = rejectWhile(() => true, '400 something else entirely');
+  let threw = null; try { await voice.createMessage(s.client, base()); } catch (e) { threw = e; }
+  check('staged: 400 after all steps throws', !!threw && threw.status === 400 && s.sent.length === 4);
+
+  // 5. A clean request never enters compat.
+  s = rejectWhile(() => false, '');
+  res = await voice.createMessage(s.client, base());
+  check('staged: clean request has no _compat', !res._compat && s.sent.length === 1);
+
+  // Nullable enums are sent in the anyOf form (no mixed-type enum with null).
+  const tools = voice.toolsFor(true, { canBook: false }, { services: [{ id: 'svc_a' }, { id: 'svc_b' }] });
+  const cap = tools.find(t => t.name === 'capture_lead');
+  const sid = cap.input_schema.properties.serviceId, vs = cap.input_schema.properties.vehicleSize;
+  check('schema: serviceId nullable enum uses anyOf', Array.isArray(sid.anyOf) && sid.anyOf[0].enum.join() === 'svc_a,svc_b' && sid.anyOf[1].type === 'null' && !sid.enum, JSON.stringify(sid));
+  check('schema: vehicleSize nullable enum uses anyOf', Array.isArray(vs.anyOf) && vs.anyOf[0].enum.join() === 'sedan,suv,truck' && !vs.enum, JSON.stringify(vs));
+  const noNullEnum = (o) => JSON.stringify(o).indexOf('null]') === -1;
+  check('schema: no tool carries a null inside an enum', tools.every(t => noNullEnum(t.input_schema)));
+})();

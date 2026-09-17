@@ -185,7 +185,7 @@ function sayGuarded(session, chunk) {
 // Returns { final, spokeText }; throws the last error only when it can't recover.
 async function streamTurn(session, params, myGen, { retries = 2 } = {}) {
   const client = voice.getClient();
-  let compat = false;
+  let step = -1, reason = null;
   for (let attempt = 0; ; attempt++) {
     let spokeText = '';
     const buf = new SpeakBuffer({ raw: true });
@@ -197,18 +197,21 @@ async function streamTurn(session, params, myGen, { retries = 2 } = {}) {
       const final = await stream.finalMessage();
       session.stream = null;
       if (session.gen === myGen) { const tail = buf.flush(); if (tail) spokeText += sayGuarded(session, tail); }
-      if (compat) session.call.voiceAI.compat = true;
+      if (_compat) session.call.voiceAI.compat = { ..._compat, reason };
       return { final, spokeText };
     } catch (e) {
       session.stream = null;
       if (session.gen !== myGen) throw e;                              // barge-in — not ours to retry
-      // Request shape rejected (400): retry once with the conservative shape —
-      // same policy as voice.createMessage — so the caller never hears "something
-      // went wrong" because of a schema keyword. Logged so it gets fixed for real.
-      if (voice.isBadRequest(e) && !compat && !spokeText) {
-        compat = true;
-        console.error(`[brain] request rejected (400) — retrying in compat mode. API said: ${e.message}`);
-        params = voice.compatParams(params);
+      // Request shape rejected (400): retry one conservative step at a time —
+      // same staged policy as voice.createMessage (strict → effort → cache) — so
+      // the caller never hears "something went wrong" because of a schema
+      // keyword, the cache survives unless it is the culprit, and the brain
+      // panel names the rejected piece + the API's own words.
+      if (voice.isBadRequest(e) && step < voice.COMPAT_STEPS.length - 1 && !spokeText) {
+        step++;
+        reason = reason || String(e.message || '').replace(/^\d+\s*/, '').slice(0, 300);
+        console.error(`[brain] request rejected (400) — retrying without ${voice.COMPAT_STEPS.slice(0, step + 1).join(' + ')}. API said: ${e.message}`);
+        params = voice.compatParams(params, step);
         continue;
       }
       if (attempt >= retries || spokeText || !voice.isRetryableApiError(e)) throw e;
@@ -317,7 +320,7 @@ async function runRelayTurn(session, text) {
     heard: text, normalized: heard.norm.changed ? heard.norm.text : undefined,
     corrections: heard.norm.corrections, tags: heard.norm.tags,
     latencyMs: Date.now() - started, usage, tools: toolLog, guardHits: session.guardHits.slice(), reply: spoken.replace(/\s+/g, ' ').trim(),
-    compat: call.voiceAI.compat ? 'request shape rejected by the API; served in compat mode (see server log)' : undefined,
+    compat: voice.compatNote(call.voiceAI.compat),
   });
   syncTranscript(call);
   ctx.h.upsert('calls', call);
