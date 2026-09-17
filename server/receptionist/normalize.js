@@ -121,14 +121,31 @@ function splitName(raw) {
 
 // Clean hint phrases for the speech recognizer: shop names split into spoken
 // parts + the industry list. No punctuation, ≤100 chars each, ≤500 entries.
-function hintPhrases(menu) {
+//
+// HARD BUDGET: Deepgram (both engines' recognizer) caps keyterms at 500 tokens
+// per request and REJECTS the stream above that — which drops the whole call
+// before the greeting (2026-09-16 staging: busy tone, TwiML fine). So hints are
+// added in priority order — the shop's own menu names first, then core industry
+// terms, vehicle names last — and stop at a conservative token estimate.
+const HINT_TOKEN_BUDGET = 200;               // well under Deepgram's 500 (our estimate undercounts subword tokens)
+const estTokens = (s) => s.split(' ').reduce((n, w) => n + (w.length > 7 ? 2 : 1), 0) + 1; // words + separator
+function hintPhrases(menu, { budget = HINT_TOKEN_BUDGET } = {}) {
   const out = [];
   const seen = new Set();
-  const push = (p) => { const s = String(p || '').replace(/[^A-Za-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim(); if (!s || s.length > 100) return; const k = s.toLowerCase(); if (seen.has(k)) return; seen.add(k); out.push(s); };
+  let used = 0;
+  const push = (p) => {
+    const s = String(p || '').replace(/[^A-Za-z0-9' ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!s || s.length > 100) return;
+    const k = s.toLowerCase();
+    if (seen.has(k)) return;
+    const t = estTokens(s);
+    if (used + t > budget || out.length >= 500) return;
+    seen.add(k); out.push(s); used += t;
+  };
   const names = [...((menu && menu.services) || []).map(s => s.name), ...((menu && menu.addons) || []).map(a => a.name)];
   names.forEach(n => splitName(n).forEach(push));
   vocab.HINTS.forEach(push);
-  return out.slice(0, 500);
+  return out;
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -285,4 +302,4 @@ function describeCorrections(corrections) {
   return (corrections || []).map(c => `${c.from}→${c.to}(${c.method}${c.method === 'fuzzy' ? ' ' + c.score : ''})`).join(', ');
 }
 
-module.exports = { normalizeUtterance, normalizeTranscript, buildShopVocab, hintPhrases, describeCorrections, editDistance, splitName, __tables: { PHRASES, VOCAB_WORDS } };
+module.exports = { normalizeUtterance, normalizeTranscript, buildShopVocab, hintPhrases, describeCorrections, editDistance, splitName, estTokens, HINT_TOKEN_BUDGET, __tables: { PHRASES, VOCAB_WORDS } };

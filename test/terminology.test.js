@@ -127,6 +127,14 @@ console.log('\n— entities / shop vocabulary / hints —');
   check('hints: no em-dash / parentheses', hints.every(h => !/[—–()&]/.test(h)), hints.filter(h => /[—–()&]/.test(h)).join('|'));
   check('hints: shop names split into spoken parts', hints.includes('Window Tint') && hints.includes('Full Vehicle') && hints.includes('PPF Full Front'), hints.slice(0, 8).join('|'));
   check('hints: ≤100 chars, ≤500 entries, deduped', hints.length <= 500 && hints.every(h => h.length <= 100) && new Set(hints.map(h => h.toLowerCase())).size === hints.length);
+  // Deepgram rejects >500 keyterm tokens and the call drops — keep well under.
+  const { estTokens, HINT_TOKEN_BUDGET } = require('../server/receptionist/normalize');
+  const tok = hints.reduce((n, h) => n + estTokens(h), 0);
+  check(`hints: token estimate ${tok} ≤ budget ${HINT_TOKEN_BUDGET} (Deepgram hard limit 500)`, tok <= HINT_TOKEN_BUDGET && HINT_TOKEN_BUDGET <= 300);
+  const bigMenu = { services: Array.from({ length: 40 }, (_, i) => ({ name: `Premium Service Package Number ${i} — Full Vehicle` })), addons: [] };
+  const bigHints = hintPhrases(bigMenu);
+  check('hints: a huge menu still stays under budget (shop names take priority)', bigHints.reduce((n, h) => n + estTokens(h), 0) <= HINT_TOKEN_BUDGET && bigHints[0] === 'Premium Service Package Number 0 Full Vehicle');
+  check('hints: core terms survive, vehicle brands are what gets cut', hints.includes('ceramic tint') && hints.includes('PPF') && hints.includes('paint correction') && hints.includes('windshield strip'));
   const t = normalizeTranscript('Speaker 1: hi I want pain correction\nSpeaker 2: sure what car');
   check('transcript normalization keeps speaker prefixes', /^Speaker 1: hi I want paint correction\nSpeaker 2: sure what car$/.test(t.text), t.text);
 }
