@@ -185,20 +185,32 @@ function sayGuarded(session, chunk) {
 // Returns { final, spokeText }; throws the last error only when it can't recover.
 async function streamTurn(session, params, myGen, { retries = 2 } = {}) {
   const client = voice.getClient();
+  let compat = false;
   for (let attempt = 0; ; attempt++) {
     let spokeText = '';
     const buf = new SpeakBuffer({ raw: true });
-    const stream = client.messages.stream(params);
+    const { _compat, ...send } = params;
+    const stream = client.messages.stream(send);
     session.stream = stream;
     stream.on('text', delta => { if (session.gen === myGen) { const chunk = buf.push(delta); if (chunk) spokeText += sayGuarded(session, chunk); } });
     try {
       const final = await stream.finalMessage();
       session.stream = null;
       if (session.gen === myGen) { const tail = buf.flush(); if (tail) spokeText += sayGuarded(session, tail); }
+      if (compat) session.call.voiceAI.compat = true;
       return { final, spokeText };
     } catch (e) {
       session.stream = null;
       if (session.gen !== myGen) throw e;                              // barge-in — not ours to retry
+      // Request shape rejected (400): retry once with the conservative shape —
+      // same policy as voice.createMessage — so the caller never hears "something
+      // went wrong" because of a schema keyword. Logged so it gets fixed for real.
+      if (voice.isBadRequest(e) && !compat && !spokeText) {
+        compat = true;
+        console.error(`[brain] request rejected (400) — retrying in compat mode. API said: ${e.message}`);
+        params = voice.compatParams(params);
+        continue;
+      }
       if (attempt >= retries || spokeText || !voice.isRetryableApiError(e)) throw e;
       console.warn(`[relay] stream retry ${attempt + 1}/${retries} after ${e.status || e.code || e.type || e.message}`);
       await new Promise(r => setTimeout(r, 200 * (attempt + 1)));
@@ -305,6 +317,7 @@ async function runRelayTurn(session, text) {
     heard: text, normalized: heard.norm.changed ? heard.norm.text : undefined,
     corrections: heard.norm.corrections, tags: heard.norm.tags,
     latencyMs: Date.now() - started, usage, tools: toolLog, guardHits: session.guardHits.slice(), reply: spoken.replace(/\s+/g, ' ').trim(),
+    compat: call.voiceAI.compat ? 'request shape rejected by the API; served in compat mode (see server log)' : undefined,
   });
   syncTranscript(call);
   ctx.h.upsert('calls', call);

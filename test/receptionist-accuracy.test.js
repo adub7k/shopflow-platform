@@ -245,6 +245,35 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     check('transcript line shows heard text when corrected', (() => { call.voiceAI.turns[0].heard = 'ceramic tent'; relay.__test.syncTranscript(call); return /\(heard: "ceramic tent"\)/.test(call.transcript); })(), call.transcript);
   }
 
+  console.log('\n— 400 request-shape rejection → compat retry, call survives —');
+  {
+    const db = tintShop(); const ctx = ctxFor(db);
+    // Gather path: first create() throws a 400, second succeeds.
+    const call = { id: 'CA9', from: '+15551234567', leadId: 'lead1', voiceAI: voice.initState('always') };
+    const seen = [];
+    let n = 0;
+    voice.__setTestClient({ messages: { create: async (p) => { seen.push(p); if (n++ === 0) { const e = new Error('tools.0.input_schema: unsupported keyword'); e.status = 400; throw e; } return { stop_reason: 'end_turn', content: [{ type: 'text', text: 'What year is the Tacoma?' }], usage: { input_tokens: 5, output_tokens: 5 } }; } } });
+    const r = await voice.runTurn(ctx, call, 'ppf on my tacoma');
+    check('gather: caller still gets a real reply after a 400', /What year/.test(r.say) && r.end === false, JSON.stringify(r));
+    check('gather: retry stripped strict / effort / cache_control', seen.length === 2 && !seen[1].output_config && seen[1].tools.every(t => t.strict === undefined) && seen[1].system.every(b => !b.cache_control) && seen[0].tools[0].strict === true, JSON.stringify(Object.keys(seen[1])));
+    check('gather: compat flagged in the brain trace', call.voiceAI.compat === true && /compat mode/.test(call.voiceAI.trace[0].compat || ''));
+    // Relay path: first stream() rejects with a 400 before any token, second streams.
+    const call2 = { id: 'CA10', from: '+15551234567', leadId: 'lead1', voiceAI: voice.initState('relay') };
+    const seen2 = []; let m = 0;
+    voice.__setTestClient({ messages: { stream: (p) => {
+      seen2.push(p);
+      const handlers = {}; let res, rej; const pr = new Promise((a, b) => { res = a; rej = b; });
+      const s = { on: (ev, cb) => { handlers[ev] = cb; return s; }, finalMessage: () => pr, abort: () => rej(new Error('aborted')) };
+      setTimeout(() => { if (m++ === 0) { const e = new Error('output_config.effort: not supported'); e.status = 400; rej(e); return; } handlers.text('Sure, what year?'); res({ stop_reason: 'end_turn', content: [{ type: 'text', text: 'Sure, what year?' }], usage: { input_tokens: 5, output_tokens: 5 } }); }, 5);
+      return s;
+    } } });
+    const s2 = relaySession(ctx, call2);
+    await relay.__test.handlePrompt(s2, 'ppf quote please');
+    check('relay: reply spoken after a 400 (no "something went wrong")', /what year/.test(spokenText(s2.sent)) && !/something went wrong/.test(spokenText(s2.sent)), spokenText(s2.sent));
+    check('relay: compat retry stripped the new request features', seen2.length === 2 && !seen2[1].output_config && seen2[1].tools.every(t => t.strict === undefined), JSON.stringify(Object.keys(seen2[1])));
+    check('relay: call not ended by the 400', !s2.sent.some(x => x.type === 'end'));
+  }
+
   console.log(`\n${failures === 0 ? 'ALL PASS' : failures + ' FAILURE(S)'}`);
   process.exit(failures === 0 ? 0 : 1);
 })().catch(e => { console.error(e); process.exit(1); });

@@ -78,10 +78,32 @@ function isRetryableApiError(e) {
   return ['ETIMEDOUT', 'ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'ENOTFOUND', 'EAI_AGAIN'].includes(e.code);
 }
 const _sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// A 400 means the API rejected the request SHAPE — a schema keyword, a parameter
+// this model doesn't take, a cache marker — not the conversation. A live caller
+// must never pay for that with a dropped call, so the request is retried ONCE in
+// a conservative shape (no strict tools, no effort, no cache_control) and the
+// rejection is logged loudly so the incompatibility gets fixed properly.
+const isBadRequest = (e) => !!e && (e.status === 400 || e.statusCode === 400);
+function compatParams(p) {
+  const q = { ...p };
+  delete q.output_config;
+  if (Array.isArray(q.system)) q.system = q.system.map(b => { const { cache_control, ...rest } = b; return rest; });
+  if (Array.isArray(q.tools)) q.tools = q.tools.map(t => { const { strict, ...rest } = t; return rest; });
+  q._compat = true;
+  return q;
+}
 async function createMessage(client, params, { retries = 2 } = {}) {
+  let compat = false;
   for (let attempt = 0; ; attempt++) {
-    try { return await client.messages.create(params); }
+    try { const { _compat, ...send } = params; const res = await client.messages.create(send); if (compat) res._compat = true; return res; }
     catch (e) {
+      if (isBadRequest(e) && !compat) {
+        compat = true;
+        console.error(`[brain] request rejected (400) — retrying in compat mode. API said: ${e.message}`);
+        params = compatParams(params);
+        continue;
+      }
       if (attempt >= retries || !isRetryableApiError(e)) throw e;
       console.warn(`voice model retry ${attempt + 1}/${retries} after ${e.status || e.code || e.type || e.message}`);
       await _sleep(200 * (attempt + 1));
@@ -735,6 +757,7 @@ async function runTurn(ctx, call, userSpeech, { finalTurn = false } = {}) {
     for (let hop = 0; hop < 4; hop++) {
       const res = await createMessage(client, modelParams({ system, messages, tools }));
       usage = sumUsage(usage, usageOf(res));
+      if (res._compat) state.compat = true; // surfaced in the brain panel: fix the request shape
       // A safety-classifier decline (HTTP 200, stop_reason "refusal") has no
       // usable content — hand off gracefully rather than reading an empty reply.
       if (res.stop_reason === 'refusal') { recordTrace(ctx, call, { heard: speech, latencyMs: Date.now() - started, usage, error: 'refusal' }); return { say: "I'm sorry, I can't help with that one. The shop will call you right back. Goodbye!", end: true, error: true }; }
@@ -785,6 +808,7 @@ async function runTurn(ctx, call, userSpeech, { finalTurn = false } = {}) {
     heard: speech, normalized: heard && heard.norm.changed ? heard.norm.text : undefined,
     corrections: heard ? heard.norm.corrections : [], tags: heard ? heard.norm.tags : [],
     latencyMs: Date.now() - started, usage, tools: toolLog, guardHits, reply: sayText,
+    compat: state.compat ? 'request shape rejected by the API; served in compat mode (see server log)' : undefined,
   });
 
   // The engine speaks the reply; hand it over already converted for the voice.
@@ -832,7 +856,7 @@ module.exports = {
   // Exported so the ConversationRelay engine (receptionist/relay.js) reuses the
   // exact same client, system prompt, tools, and server-authoritative tool
   // execution — the transport differs, the brain does not.
-  getClient, runTool, FAREWELL, createMessage, isRetryableApiError, speechHints,
+  getClient, runTool, FAREWELL, createMessage, isRetryableApiError, isBadRequest, compatParams, speechHints,
   stampCallAttribution, proposeSlots, resolveCallbackPhone, businessHours,
   hearCaller, recordTrace, usageOf, sumUsage,
 };

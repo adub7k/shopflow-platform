@@ -429,7 +429,7 @@ const Leads = {
             const guard = (r.guardHits||[]).map(h=>`${esc(h.kind)} ${esc(String(h.value))}`).join(', ');
             return `<div style="padding:5px 0;border-top:1px solid var(--border);">
               <div><strong>#${r.n}</strong> · ${r.latencyMs!=null?r.latencyMs+' ms':'—'} · ${fmtTok(r.usage)}${r.effort?` · ${esc(r.model)} (${esc(r.effort)})`:r.model?` · ${esc(r.model)}`:''}${r.error?` · <span style="color:#dc2626;">error: ${esc(r.error)}</span>`:''}</div>
-              ${fixes?`<div>🔧 corrected: ${fixes}</div>`:''}${amb?`<div>❓ ambiguous: ${amb}</div>`:''}${tools?`<div>🛠 tools: ${tools}</div>`:''}${guard?`<div style="color:#dc2626;">🛡 guard: ${guard}</div>`:''}
+              ${fixes?`<div>🔧 corrected: ${fixes}</div>`:''}${amb?`<div>❓ ambiguous: ${amb}</div>`:''}${tools?`<div>🛠 tools: ${tools}</div>`:''}${guard?`<div style="color:#dc2626;">🛡 guard: ${guard}</div>`:''}${r.compat?`<div style="color:#d97706;">⚠ ${esc(r.compat)}</div>`:''}
             </div>`;
           }).join('');
           const total = va.trace.reduce((a,r)=>{ const u=r.usage||{}; a.in+=u.input_tokens||0; a.cached+=u.cache_read_input_tokens||0; a.out+=u.output_tokens||0; a.ms+=r.latencyMs||0; return a; },{in:0,cached:0,out:0,ms:0});
