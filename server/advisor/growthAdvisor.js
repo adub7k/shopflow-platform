@@ -575,18 +575,30 @@ ${JSON.stringify(leadRows.rows)}`;
   return prior.concat(messages);
 }
 
+// A response with no text block: say why, so the admin card shows something
+// actionable instead of "empty response".
+function describeEmpty(res) {
+  const types = (res.content || []).map(b => b.type).join(',') || 'none';
+  const u = res.usage || {};
+  if (res.stop_reason === 'max_tokens') return `The model ran out of output tokens before answering (output ${u.output_tokens || '?'} tokens, blocks: ${types}). Try a narrower question or period.`;
+  return `The model returned no text (stop_reason ${res.stop_reason || 'unknown'}, blocks: ${types}).`;
+}
+
 async function callModelText(messages, system) {
   const client = getClient();
   if (!client) throw new Error('ANTHROPIC_API_KEY is not set');
   const res = await client.messages.create({
     model: MODEL,
-    max_tokens: 1500,
+    // Opus 5 thinks before answering by default and those tokens count
+    // against max_tokens — a low cap can be spent entirely on thinking and
+    // return no text at all. Give it room (the answer itself stays short).
+    max_tokens: 16000,
     system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
     messages,
   });
   if (res.stop_reason === 'refusal') throw new Error('The model declined to answer');
   const text = (res.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
-  if (!text) throw new Error('Empty model response');
+  if (!text) throw new Error(describeEmpty(res));
   return { answer: text, usage: res.usage || null };
 }
 
@@ -662,7 +674,7 @@ async function callModel(userMessage) {
   if (!client) throw new Error('ANTHROPIC_API_KEY is not set');
   const res = await client.messages.create({
     model: MODEL,
-    max_tokens: 4000,
+    max_tokens: 16000,   // thinking counts against this; see callModelText
     // Static system prompt first + cached; the volatile playbook/metrics ride in
     // the user turn so runs across shops share the cached prefix.
     system: [{ type: 'text', text: SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
@@ -671,7 +683,7 @@ async function callModel(userMessage) {
   });
   if (res.stop_reason === 'refusal') throw new Error('The model declined to produce a review');
   const block = (res.content || []).find(b => b.type === 'text');
-  if (!block) throw new Error('Empty model response');
+  if (!block) throw new Error(describeEmpty(res));
   return { result: JSON.parse(block.text), usage: res.usage || null };
 }
 
