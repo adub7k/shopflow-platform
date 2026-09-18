@@ -16,6 +16,8 @@
 //    routes/twilio.js keeps today's plain-voicemail flow. Any mid-call error ends
 //    the turn with a graceful hand-off, never a crash.
 const { resolveProfile } = require('../industries');
+const objections = require('../objections');
+const { genId } = require('../db');
 const { getMenu, computeAvailability, createAppointment } = require('../booking');
 const { notifyNewLead } = require('../email');
 const { normalizeUtterance, buildShopVocab, hintPhrases, describeCorrections } = require('./normalize');
@@ -320,7 +322,8 @@ function buildSystemBlocks(ctx, cfg, { finalTurn = false } = {}) {
         '(c) Detailing — quote the base for their size, then name the one add-on that applies (pet hair, odor, heavy soil) if they mentioned it.',
         'Never bring up price unprompted, never say one flat number, and never give a single bundled total for multiple services — price each one.',
         'AFTER A PRICE, STOP and let them react. When they show interest — ask about timing, say it sounds good, ask what is next — offer the TWO specific open days below (never an open-ended "want to schedule?") and say the shop will follow up to confirm the exact time and final price, so do not promise it is locked.',
-        'Then CAPTURE right away — do not linger. If they pick a day, call capture_lead with callOutcome "booked" and that day in agreedTime; if they are not ready to commit, still call capture_lead with callOutcome "quoted" (you gave a price) or "captured" — you have their name, and the shop will follow up by text or call. NEVER end a call without capturing, because a caller can hang up the second they hear a price.',
+        'If they pushed back at any point, fill objection with their words and objectionType with the kind (price / think / timing / competitor / human / other) — the shop\'s follow-up texts are picked from it. '
+        + 'Then CAPTURE right away — do not linger. If they pick a day, call capture_lead with callOutcome "booked" and that day in agreedTime; if they are not ready to commit, still call capture_lead with callOutcome "quoted" (you gave a price) or "captured" — you have their name, and the shop will follow up by text or call. NEVER end a call without capturing, because a caller can hang up the second they hear a price.',
         'Do NOT re-ask anything they already told you, and infer the body style (sedan, SUV, or truck) from the vehicle model instead of asking whenever you can.',
         'Before you save, quickly read the key details back in one short sentence — name, service, and vehicle (we already have their number, so do not ask for or read back a phone number) — get a yes, then capture. capture_lead ends the call with your warm closingLine; do not also call end_call.',
         'When you call capture_lead or book_appointment, put EVERYTHING you want to say into closingLine and write no other text in that reply — the closingLine is the goodbye, and a sentence before it plus the closingLine sounds like two goodbyes.',
@@ -429,13 +432,14 @@ function toolsFor(quoteFirst, cfg, menu) {
         preferredTime: { type: ['string', 'null'], description: 'When they want to come in, as they said it (free text), or null.' },
         goal: { type: ['string', 'null'], description: 'Why they want it, in a few words (heat, privacy, looks, resale, rock chips, easier washing, swirls…), or null if not said.' },
         condition: { type: ['string', 'null'], description: 'Paint or interior condition as they described it (new car, swirls, scratches, pet hair, smoke smell…), or null.' },
-        objection: { type: ['string', 'null'], description: 'Any objection they raised (price, competitor quote, needs to think, spouse, payday…), or null.' },
+        objection: { type: ['string', 'null'], description: 'Any objection they raised, in their words (price, competitor quote, needs to think, spouse, payday…), or null.' },
+        objectionType: nullableEnum(objections.KEYS, 'The kind of objection, if any: price (too expensive / shopping around), think (needs to think or talk to a partner), timing (not right now / later), competitor (has a lower quote elsewhere), human (wants a person), other. Null if they raised none.'),
         quality: { type: 'string', enum: ['hot', 'warm', 'cold'], description: 'hot = ready to book; warm = interested; cold = vague/price-shopping/wrong number.' },
         summary: { type: 'string', description: 'One or two sentence summary of the call for the shop owner.' },
         followUp: { type: 'string', description: 'One concrete next step for the shop (e.g. a text to send).' },
         closingLine: { type: 'string', description: 'A short, warm closing line to say after saving — confirm the shop will text or call shortly to lock in the time and exact price. This ends the call.' },
       },
-      required: ['customerName', 'callbackNumber', 'serviceId', 'otherRequested', 'vehicle', 'vehicleSize', 'quotedPrice', 'callOutcome', 'agreedTime', 'servicesDiscussed', 'preferredTime', 'goal', 'condition', 'objection', 'quality', 'summary', 'followUp', 'closingLine'],
+      required: ['customerName', 'callbackNumber', 'serviceId', 'otherRequested', 'vehicle', 'vehicleSize', 'quotedPrice', 'callOutcome', 'agreedTime', 'servicesDiscussed', 'preferredTime', 'goal', 'condition', 'objection', 'objectionType', 'quality', 'summary', 'followUp', 'closingLine'],
     },
   };
   // The caller wants a human. In fallback mode the AI only answered BECAUSE the
@@ -643,6 +647,17 @@ function execCaptureLead(ctx, call, args) {
       servicesDiscussed: services,
       model: MODEL, generatedAt: now, source: 'voice',
     };
+    // Objection → the lead leaves the generic 30-day sequence for that
+    // objection's short follow-up in the Tasks queue (server/objections.js),
+    // unless the caller already agreed to a day. The model's objectionType
+    // wins; free text is classified as a fallback.
+    const objType = objections.KEYS.includes(args.objectionType) ? args.objectionType : objections.classifyObjection(args.objection);
+    if (objType) {
+      lead.objection = { type: objType, note: args.objection ? String(args.objection).slice(0, 200) : null, at: now, source: 'ai' };
+      if (!args.agreedTime && !['booked', 'worked', 'closed', 'lost'].includes(lead.status)) lead.followUp = objections.objectionFollowUp(objType, Date.parse(now), lead.followUp);
+      lead.noteLog = lead.noteLog || [];
+      lead.noteLog.unshift({ id: genId('note'), text: `Objection (AI call): ${objections.byKey(objType).label}${args.objection ? ' — ' + String(args.objection).slice(0, 200) : ''}`, at: now, by: 'AI receptionist' });
+    }
     if (args.agreedTime) lead.status = 'scheduled';
     ctx.h.upsert('leads', lead);
   }

@@ -301,6 +301,8 @@ console.log('\n— price-sensitive capture —');
   eq('price: quoted price stored', lead.ai.quotedPrice, 250);
   eq('price: service name resolved from menu id', lead.ai.serviceNeeded, 'Full Detail');
   eq('price: objection recorded', lead.ai.objection, 'price');
+  eq('price: lead stamped + moved onto the price objection follow-up', [lead.objection && lead.objection.type, lead.objection && lead.objection.source, lead.followUp && lead.followUp.seq, lead.followUp && lead.followUp.idx, lead.followUp && lead.followUp.status], ['price', 'ai', 'obj_price', 0, 'active']);
+  check('price: objection noted in the lead history', (lead.noteLog || []).some(n => /Objection \(AI call\): Price/.test(n.text)));
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -472,6 +474,30 @@ console.log('\n— 400 compat fallback is staged: strict → effort → cache, w
   check('schema: strict is OFF by default on every tool', tools.every(t => t.strict === false));
   const strictTools = voice.toolsFor(true, { canBook: false, strictTools: true }, { services: [{ id: 'svc_a' }] });
   check('schema: strict opts in per shop', strictTools.every(t => t.strict === true));
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n— objectionType from the model wins; a booked caller is not enrolled —');
+(() => {
+  const db = detailShop();
+  const ctx = ctxFor(db, 'shopdetail');
+  const base = { customerName: 'Kim', callbackNumber: null, serviceId: 's1', otherRequested: null, vehicle: '2022 Ford F-150', vehicleSize: 'truck', quotedPrice: 250, callOutcome: 'quoted', agreedTime: null, servicesDiscussed: ['s1'], preferredTime: null, goal: null, condition: null, quality: 'warm', summary: 's', followUp: 'f', closingLine: 'bye' };
+  let call = { id: 'callo1', from: '+15551234567', leadId: 'lead1', voiceAI: voice.initState('always') };
+  voice.runTool(ctx, call, 'capture_lead', { ...base, objection: 'that is more than I wanted to spend', objectionType: 'think' });
+  let lead = ctx.h.getById('leads', 'lead1');
+  eq('objectionType (think) beats the price-sounding text', [lead.objection.type, lead.followUp.seq], ['think', 'obj_think']);
+  eq('objection note kept in the caller\'s words', lead.objection.note, 'that is more than I wanted to spend');
+  call = { id: 'callo2', from: '+15551234567', leadId: 'lead1', voiceAI: voice.initState('always') };
+  voice.runTool(ctx, call, 'capture_lead', { ...base, objection: 'wife has to sign off', objectionType: null, agreedTime: 'Thursday at 2 PM', callOutcome: 'booked' });
+  lead = ctx.h.getById('leads', 'lead1');
+  eq('booked caller: objection stamped (classified from text) but no sequence switch', [lead.objection.type, lead.followUp.seq], ['think', 'obj_think']);
+  call = { id: 'callo3', from: '+15551234567', leadId: 'lead1', voiceAI: voice.initState('always') };
+  voice.runTool(ctx, call, 'capture_lead', { ...base, objection: null, objectionType: null });
+  lead = ctx.h.getById('leads', 'lead1');
+  eq('no objection: earlier objection untouched', lead.objection.type, 'think');
+  const tools = voice.toolsFor(true, { canBook: false }, { services: [{ id: 's1' }] });
+  const cap = tools.find(t => t.name === 'capture_lead');
+  eq('schema: objectionType is a nullable enum of the server types', cap.input_schema.properties.objectionType.anyOf[0].enum.join(), 'price,think,timing,competitor,human,other');
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
