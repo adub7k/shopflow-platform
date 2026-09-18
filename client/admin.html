@@ -2853,6 +2853,10 @@ function renderAdvisor(status) {
   const adTable = byAd.length ? `<table class="adv-table" style="margin-top:12px;"><thead><tr><th>Ad / source (period)</th><th>Leads</th><th>Contacted</th><th>Booked</th><th>Spend</th><th>$/lead</th><th>$/booking</th><th>Booked $</th></tr></thead><tbody>
     ${byAd.map(a => `<tr><td>${esc(a.ad)}</td><td>${a.leads}</td><td>${a.contacted}</td><td>${a.booked}</td><td>${advMoney(a.ad_spend)}</td><td>${advMoney(a.cost_per_lead)}</td><td>${advMoney(a.cost_per_booking)}</td><td>${advMoney(a.booked_value)}</td></tr>`).join('')}
   </tbody></table>` : '';
+  const byObj = (m.by_objection || []);
+  const objTable = byObj.length ? `<table class="adv-table" style="margin-top:12px;"><thead><tr><th>Objection (period)</th><th>Leads</th><th>Contacted</th><th>Booked</th><th>Lost</th><th>Book rate</th><th>In follow-up</th></tr></thead><tbody>
+    ${byObj.map(o => `<tr><td>${esc(o.label)}</td><td>${o.leads}</td><td>${o.contacted}</td><td>${o.booked}</td><td>${o.lost}</td><td>${advPct(o.booking_rate_pct)}</td><td>${o.in_objection_follow_up}</td></tr>`).join('')}
+  </tbody></table>` : '';
   const oldest = ((m.open_leads || {}).oldest_uncontacted || []);
   const worklist = oldest.length ? `<div class="adv-list" style="margin-top:12px;"><div class="adv-list-title">Oldest uncontacted leads</div><ul>${oldest.map(l => `<li>${l.hot ? '🔥 ' : ''}${esc(l.name || l.id)} · ${esc(l.service || 'service not stated')} · ${esc(l.ad)} · ${l.age_hours}h old</li>`).join('')}</ul></div>` : '';
   const spendRows = (d.spend || []);
@@ -2919,7 +2923,7 @@ function renderAdvisor(status) {
           ${(d.questions || []).length > 2 ? `<a href="#" class="adv-qa-more" onclick="advState.showAllQ=!advState.showAllQ;renderAdvisor();return false;">${advState.showAllQ ? 'Show fewer' : `Show ${Math.min(20, d.questions.length) - 2} earlier question${d.questions.length - 2 === 1 ? '' : 's'}`}</a>` : ''}
         </div>` : ''}
       </div>
-      <details class="adv-details"><summary>The numbers behind it</summary>${numbers}${adTable}${worklist}</details>
+      <details class="adv-details"><summary>The numbers behind it</summary>${numbers}${adTable}${objTable}${worklist}</details>
       <details class="adv-details"><summary>Ad spend (${spendRows.length})</summary>
         <div class="adv-spend-form">
           <input class="form-input" id="adv-sp-campaign" placeholder="Campaign or ad name (matches utm_content / utm_campaign)" style="flex:2;min-width:180px;"/>

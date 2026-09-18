@@ -25,6 +25,7 @@
 // Degrades gracefully: with no ANTHROPIC_API_KEY the metrics + flags still
 // render in the admin card; only the AI review is unavailable.
 const { normalizeSource } = require('../leads-core');
+const objections = require('../objections');
 const DEFAULT_PLAYBOOK = require('./playbook-default');
 
 // House rule (claude-api skill): default to claude-opus-5. One call per shop
@@ -238,10 +239,15 @@ function leadFacts(db) {
     const svc = Array.isArray(l.servicesInterested) && l.servicesInterested.length ? l.servicesInterested[0]
       : (l.ai && l.ai.serviceNeeded) || null;
 
+    // Objection raised (owner chip or AI capture), else classified from what
+    // the receptionist heard, else the lost reason if the lead died.
+    const objection = (l.objection && l.objection.type) || objections.classifyObjection(l.ai && l.ai.objection) || (lost ? objections.classifyObjection(l.lostReason) : null);
+
     return {
       id: l.id, name: l.name || '', createdAt, created, createdDate, respondedAt, responded: ms(respondedAt),
       booked, bookedAt, completed: doneAppts.length > 0, revenue: money(revenue), noShow, lost,
-      value: money(value), source, ad, tags, service: svc, hot: !!l.hot,
+      value: money(value), source, ad, tags, service: svc, hot: !!l.hot, objection,
+      followUpSeq: (l.followUp && l.followUp.seq) || (l.followUp ? 'meta30' : null),
       lastContactAt: l.lastContactAt || null,
     };
   }).filter(f => f.created != null);
@@ -346,6 +352,15 @@ function computeMetrics({ facts = [], spendRows = [], calls = [], now = Date.now
     booked_value: money(rs.filter(r => r.booked).reduce((s, r) => s + r.value, 0)),
   })).sort((a, b) => b.leads - a.leads);
 
+  // Objections raised by this period's leads and how those leads did — the
+  // signal for whether the one-attempt rule and the follow-up texts work.
+  const byObjection = Object.entries(groupBy(cur.filter(r => r.objection), r => r.objection)).map(([key, rs]) => ({
+    objection: key, label: (objections.byKey(key) || {}).label || key, leads: rs.length,
+    contacted: rs.filter(r => r.responded != null).length, booked: rs.filter(r => r.booked).length, lost: rs.filter(r => r.lost).length,
+    booking_rate_pct: pct(rs.filter(r => r.booked).length, rs.length),
+    in_objection_follow_up: rs.filter(r => /^obj_/.test(r.followUpSeq || '')).length,
+  })).sort((a, b) => b.leads - a.leads);
+
   const byService = Object.entries(groupBy(cur, r => r.service || 'unspecified')).map(([service, rs]) => ({
     service, leads: rs.length, booked: rs.filter(r => r.booked).length,
     booked_value: money(rs.filter(r => r.booked).reduce((s, r) => s + r.value, 0)),
@@ -375,7 +390,7 @@ function computeMetrics({ facts = [], spendRows = [], calls = [], now = Date.now
       period: { from: W.from, to: W.to, days: W.days, label: W.label, includes_partial_today: !!W.partial },
       prior_period: { from: W.prior.from, to: W.prior.to, days: W.prior.days, label: W.prior.label },
       trailing_30_days: { from: addDays(W.to, -29), to: W.to },
-      cohort_note: 'Each window counts leads created inside it and reports their outcomes to date. open_leads is as of now.',
+      cohort_note: 'Each window counts leads created inside it and reports their outcomes to date. open_leads is as of now. by_objection = objections those leads raised (price, think, timing, competitor, human, other) and how they converted; in_objection_follow_up = currently in an objection-specific text sequence.',
     },
     period: funnel(cur, spendIn(spendRows, W.fromMs, W.toMs, tz)),
     prior_period: funnel(prev, spendIn(spendRows, W.prior.fromMs, W.prior.toMs, tz)),
@@ -384,6 +399,7 @@ function computeMetrics({ facts = [], spendRows = [], calls = [], now = Date.now
     by_ad: byAd,
     by_source: bySource,
     by_service: byService,
+    by_objection: byObjection,
     open_leads: {
       as_of: new Date(now).toISOString(),
       uncontacted_over_15_min: uncontacted.length,
@@ -541,6 +557,7 @@ function leadRowsFor(facts, win, now, cap = 200) {
       name: r.name || '(no name)', id: r.id, created: r.createdDate, source: r.source, ad: r.ad, service: r.service,
       hours_to_first_response: hrs(r.responded, r.created),
       status: r.lost ? 'lost' : r.completed ? 'completed' : r.booked ? 'booked' : r.responded != null ? 'contacted' : 'uncontacted',
+      objection: r.objection || undefined, follow_up: r.followUpSeq || undefined,
       no_show: r.noShow || undefined, hot: r.hot || undefined, value: r.value || undefined, revenue: r.revenue || undefined,
     })),
   };

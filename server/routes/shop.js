@@ -5,6 +5,7 @@ const { sendTest, sendQuoteEmail, shopReplyTo } = require('../email');
 const { resolveProfile } = require('../industries');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, shopOwnNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, deleteUpload, computeTax, computeApptCost } = require('../db');
 const { ensureQuoteCustomer } = require('../quotes-core');
+const objections = require('../objections');
 
 // ── PROTECTED: Settings ───────────────────────────────────────────────────────
 // Readable by any signed-in staff (needed for vocabulary/statuses), but sensitive
@@ -1353,6 +1354,9 @@ function cleanFollowUp(v) {
   const statuses = ['active', 'paused', 'completed', 'stopped', 'done'];
   const iso = (x) => (x && !isNaN(Date.parse(x))) ? new Date(x).toISOString() : null;
   return {
+    // Which sequence idx indexes into: absent = the 30-day Meta sequence,
+    // 'obj_<type>' = an objection follow-up (server/objections.js).
+    seq: /^obj_[a-z]+$/.test(String(v.seq || '')) ? String(v.seq) : undefined,
     idx: Math.max(0, Math.min(200, parseInt(v.idx, 10) || 0)),
     status: statuses.includes(v.status) ? v.status : 'active',
     nextAt: iso(v.nextAt),
@@ -1509,6 +1513,15 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   // the lead modal. The Leads page 🔥 chip and the Dashboard's Hot leads
   // button filter to these. hotAt lets the list order by when it was flagged.
   if (req.body.hot !== undefined) { lead.hot = !!req.body.hot; lead.hotAt = lead.hot ? (lead.hotAt || new Date().toISOString()) : null; }
+  // Objection the lead raised (owner picks a chip on the modal; the AI
+  // receptionist stamps one at capture). null clears it. Switching the lead
+  // onto the objection follow-up sequence is the client's call (it sends the
+  // followUp state in the same PATCH) so the owner can decline the switch.
+  if (req.body.objection !== undefined) {
+    const o = objections.cleanObjection(req.body.objection, 'owner');
+    lead.objection = o;
+    if (o) { lead.noteLog = lead.noteLog || []; lead.noteLog.unshift({ id: genId('note'), text: `Objection: ${objections.byKey(o.type).label}${o.note ? ' — ' + o.note : ''}`, at: o.at, by: String(req.body.by || '').slice(0, 60) }); }
+  }
   if (req.body.followUp !== undefined) {
     const fu = cleanFollowUp(req.body.followUp);
     if (fu) {

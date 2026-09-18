@@ -181,7 +181,7 @@
       out.push(`<div class="metric-card" style="margin-bottom:14px;">
         <div class="metric-label">30-day sequence</div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">
-          ${cell(fs.due || 0, 'due today')}${cell(fs.sentToday || 0, 'sent today')}${cell(fs.active || 0, 'in sequence')}${cell(fs.paused || 0, 'paused')}${cell((fs.booked || 0) + (fs.entered ? ' (' + rate + '%)' : ''), 'booked', 'green')}
+          ${cell(fs.due || 0, 'due today')}${cell(fs.sentToday || 0, 'sent today')}${cell(fs.active || 0, 'in sequence')}${fs.objection ? cell(fs.objection, 'objection follow-ups') : ''}${cell(fs.paused || 0, 'paused')}${cell((fs.booked || 0) + (fs.entered ? ' (' + rate + '%)' : ''), 'booked', 'green')}
         </div>
         ${(this._fuUnenrolled || []).length ? `<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
           <div style="flex:1;font-size:12.5px;color:var(--muted);">${this._fuUnenrolled.length} Meta lead${this._fuUnenrolled.length === 1 ? '' : 's'} not in the sequence yet.</div>
@@ -220,7 +220,9 @@
         <div class="list-main">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;" onclick="${open}">
             <span class="list-name">${esc(t.name)}</span>
-            <span class="badge badge-yellow">${esc(t.step.label)}</span>
+            ${t.seq && t.seq.type
+              ? `<span class="badge" style="background:#fff1e6;color:#c2410c;">${esc(t.seq.short)} · ${esc(t.step.label)}</span>`
+              : `<span class="badge badge-yellow">${esc(t.step.label)}</span>`}
             <span style="font-size:11.5px;font-weight:700;color:${t.detail === 'Due today' ? 'var(--green-deep,var(--green))' : 'var(--red)'};">${esc(t.detail)}</span>
           </div>
           ${t.reason ? `<div class="list-sub">${esc(t.reason)}</div>` : ''}
