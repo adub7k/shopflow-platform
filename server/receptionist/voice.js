@@ -157,6 +157,7 @@ function voiceConfig(settings) {
     // Dead-air cover: if the model hasn't produced its first word within this
     // many ms, the relay speaks a short acknowledgement ("Okay." / "One moment.")
     // so the caller knows they were heard. 0 / relayFiller:false disables.
+    strictTools: v.strictTools === true,   // API-side strict tool schemas (off: see toolsFor)
     relayFiller: v.relayFiller !== false,
     relayFillerMs: Number.isFinite(Number(v.relayFillerMs)) ? Number(v.relayFillerMs) : (Number(process.env.VOICE_AI_FILLER_MS) || 1200),
     // Optional persona name the bot answers to (e.g. "Sarah"), and free-text shop
@@ -385,11 +386,15 @@ function buildSystemPrompt(ctx, cfg, opts) {
 }
 
 // ── Tools ─────────────────────────────────────────────────────────────────────
-// All tools are `strict` (schema-validated by the API) and every service field
-// is an ENUM of the shop's real menu serviceIds — the model physically cannot
-// write "PPF coating" or an invented service into the CRM. Off-menu asks go in
-// `otherRequested` as the caller's words, clearly labelled as unpriced.
+// Every service field is an ENUM of the shop's real menu serviceIds and the
+// server re-validates everything the model writes (execCaptureLead drops an
+// off-menu id to null + otherRequested, guardPrice rejects non-menu prices,
+// execBookAppointment looks the id up). API-side `strict` schema validation is
+// therefore OPT-IN (voiceAI.strictTools = true): with these schemas the API
+// answered "Schema is too complex." after ~10s of grammar compilation on
+// every call, which was most of the caller's wait before the first word.
 function toolsFor(quoteFirst, cfg, menu) {
+  const strict = !!(cfg && cfg.strictTools);
   const ids = (menu && menu.services || []).map(s => s.id).filter(Boolean);
   const idList = ids.length ? ` One of: ${ids.join(', ')}.` : '';
   // Nullable enums use the anyOf form the structured-outputs grammar documents
@@ -404,7 +409,7 @@ function toolsFor(quoteFirst, cfg, menu) {
     : { type: 'array', items: { type: 'string' }, description: 'Every service the caller asked about, in the shop\'s terms.' };
   const capture = {
     name: 'capture_lead',
-    strict: true,
+    strict,
     description: 'Save the caller as a qualified lead. FIRST read the key details back and get a "yes", THEN call this. It ends the call using your closingLine.',
     input_schema: {
       type: 'object',
@@ -439,7 +444,7 @@ function toolsFor(quoteFirst, cfg, menu) {
   // a separate, future addition.) Terminal, like capture_lead/book_appointment.
   const transfer = {
     name: 'transfer_to_human',
-    strict: true,
+    strict,
     description: "Use the moment the caller asks to speak to a person, seems frustrated or confused about talking to an assistant, or has a need you genuinely cannot handle. Confirm their name and best callback number first, then call this — it alerts the shop to call them back right away and ends the call using your closingLine. Prefer this over end_call whenever the caller wants a human.",
     input_schema: {
       type: 'object',
@@ -455,7 +460,7 @@ function toolsFor(quoteFirst, cfg, menu) {
   };
   const endCall = {
     name: 'end_call',
-    strict: true,
+    strict,
     description: 'End the phone call. Call this after you have booked, captured the lead, or determined you cannot help. If the caller wants a human, use transfer_to_human instead.',
     input_schema: {
       type: 'object',
@@ -472,7 +477,7 @@ function toolsFor(quoteFirst, cfg, menu) {
   // Calendar verticals also get live availability + booking.
   const checkAvail = {
     name: 'check_availability',
-    strict: true,
+    strict,
     description: 'Get the open appointment start times for a given date. Call before offering times.',
     input_schema: {
       type: 'object',
@@ -483,7 +488,7 @@ function toolsFor(quoteFirst, cfg, menu) {
   };
   const book = {
     name: 'book_appointment',
-    strict: true,
+    strict,
     description: 'Book a confirmed appointment after reading the details back and getting a "yes". Only use a time returned by check_availability. Ends the call using your closingLine.',
     input_schema: {
       type: 'object',
@@ -592,7 +597,11 @@ function execCaptureLead(ctx, call, args) {
   const services = Array.isArray(args.servicesDiscussed) && args.servicesDiscussed.length
     ? [...new Set(args.servicesDiscussed.map(s => nameOf(s) || String(s).trim()).filter(Boolean))]
     : (primaryName ? [primaryName] : []);
-  const otherRequested = args.otherRequested ? String(args.otherRequested).trim() : '';
+  // Without API-side strict schemas the model can hand us an id that isn't on
+  // the menu; keep the caller's ask visible to the shop instead of dropping it.
+  const offMenuId = args.serviceId && !nameOf(args.serviceId) ? String(args.serviceId).trim() : '';
+  const otherRequested = [args.otherRequested ? String(args.otherRequested).trim() : '', offMenuId && !String(args.otherRequested || '').includes(offMenuId) ? offMenuId : '']
+    .filter(Boolean).join('; ');
   // A quoted price the model reports must be a real menu number.
   const priceCheck = guardPrice(args.quotedPrice, allowedPrices(menu, ctx.settings));
   if (priceCheck.hit) { call.voiceAI.guardHits = [...(call.voiceAI.guardHits || []), { ...priceCheck.hit, at: now }]; }

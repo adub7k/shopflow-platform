@@ -467,4 +467,21 @@ console.log('\n— 400 compat fallback is staged: strict → effort → cache, w
   check('schema: vehicleSize nullable enum uses anyOf', Array.isArray(vs.anyOf) && vs.anyOf[0].enum.join() === 'sedan,suv,truck' && !vs.enum, JSON.stringify(vs));
   const noNullEnum = (o) => JSON.stringify(o).indexOf('null]') === -1;
   check('schema: no tool carries a null inside an enum', tools.every(t => noNullEnum(t.input_schema)));
+  // API-side strict is opt-in: with these schemas the API said "Schema is too
+  // complex." after ~10s of compile on every call. Server-side validation covers it.
+  check('schema: strict is OFF by default on every tool', tools.every(t => t.strict === false));
+  const strictTools = voice.toolsFor(true, { canBook: false, strictTools: true }, { services: [{ id: 'svc_a' }] });
+  check('schema: strict opts in per shop', strictTools.every(t => t.strict === true));
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n— off-menu serviceId (no strict schema) is kept as otherRequested, never dropped —');
+(() => {
+  const db = detailShop();
+  const ctx = ctxFor(db, 'shopdetail');
+  const call = { id: 'callom', from: '+15551234567', leadId: 'lead1', voiceAI: voice.initState('always') };
+  const out = voice.runTool(ctx, call, 'capture_lead', { customerName: 'Sam', callbackNumber: null, serviceId: 'svc_made_up', otherRequested: null, vehicle: '2020 Honda Civic', vehicleSize: 'sedan', quotedPrice: null, callOutcome: 'captured', agreedTime: null, servicesDiscussed: [], preferredTime: null, goal: null, condition: null, objection: null, quality: 'warm', summary: 'Asked about something.', followUp: 'Call back.', closingLine: 'Thanks!' });
+  const lead = ctx.h.getById('leads', 'lead1');
+  check('off-menu id: captured', out.captured === true, JSON.stringify(out));
+  check('off-menu id: serviceId nulled, ask preserved for the shop', lead.ai.serviceId === null && /svc_made_up/.test(lead.ai.otherRequested) && /svc_made_up/.test(lead.ai.followUp), JSON.stringify({ sid: lead.ai.serviceId, other: lead.ai.otherRequested, fu: lead.ai.followUp }));
 })();
