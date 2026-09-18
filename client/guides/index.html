@@ -13,11 +13,11 @@
 <meta property="og:description" content="Real campaign teardowns for auto tint, ceramic, PPF and detailing shops. Numbers left in.">
 <meta property="og:url" content="https://shopflowtech.com/guides/">
 <meta property="og:image" content="https://shopflowtech.com/img/og-home.png">
-<meta name="theme-color" content="#0c3b2b">
+<meta name="theme-color" content="#0F172A">
 <link rel="icon" href="/icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/site.css">
 <script type="application/ld+json">
 {
@@ -40,22 +40,20 @@
 <body>
 <a class="skip" href="#main">Skip to content</a>
 
-<header class="top">
-  <div class="wrap">
-    <a class="brand" href="/" aria-label="ShopFlow home">
-      <svg viewBox="0 0 26 26" aria-hidden="true"><rect width="26" height="26" rx="4" fill="#f4b81c"/><path d="M6 8h14M6 13h11M6 18h8" stroke="#0c3b2b" stroke-width="2.6" stroke-linecap="round"/></svg>
-      ShopFlow
-    </a>
-    <nav class="nav" aria-label="Main">
-      <a href="/#numbers">The numbers</a>
-      <a href="/#what">What we do</a>
-      <a href="/#pricing">Pricing</a>
-      <a href="/guides/">Guides</a>
-      <a href="/login">Client login</a>
-      <a class="btn" href="/demo">Book a 15-minute call</a>
-    </nav>
+<nav class="top" id="nav">
+  <div class="wrap nav-inner">
+    <a class="nav-logo" href="/"><img src="/icons/icon-192.png" alt=""/> ShopFlow</a>
+    <div class="nav-links">
+      <a class="lnk" href="/#proof">The numbers</a>
+      <a class="lnk" href="/#what">What we do</a>
+      <a class="lnk" href="/#pricing">Pricing</a>
+      <a class="lnk" href="/guides/" aria-current="page">Guides</a>
+      <span class="nav-sep"></span>
+      <a class="lnk" href="/login">Client login</a>
+      <a class="btn btn-green" href="/demo">Book a 15-minute call</a>
+    </div>
   </div>
-</header>
+</nav>
 
 <main id="main">
 <div class="post-head">
@@ -66,9 +64,10 @@
   </div>
 </div>
 
-<section class="band">
+<section class="section">
   <div class="wrap">
-    <ul class="guide-list">
+    <div class="kicker">Guides</div>
+    <ul class="guide-list" style="margin-top:16px;">
       <li>
         <a href="/guides/how-to-grow-a-window-tinting-business/">
           <div>
@@ -117,13 +116,15 @@
   </div>
 </section>
 
-<section class="band band-pine close">
+<section class="section" style="padding-top:0;">
   <div class="wrap">
-    <h2>Rather have us run it?</h2>
-    <p class="lede">Ads, phones and bookings for your shop. $3,000 a month, in Albuquerque, a few shops at a time.</p>
-    <div class="hero-cta">
-      <a class="btn" href="/demo">Book a 15-minute call</a>
-      <a class="btn btn-quiet" href="/#numbers">See the numbers</a>
+    <div class="final">
+      <h2>Rather have us run it?</h2>
+      <p>Ads, phones and bookings for your shop. $3,000 a month, in Albuquerque, a few shops at a time.</p>
+      <div class="btns">
+        <a class="btn btn-green btn-lg" href="/demo">Book a 15-minute call</a>
+        <a class="btn btn-ghost btn-lg" href="/#proof">See the numbers</a>
+      </div>
     </div>
   </div>
 </section>
@@ -131,30 +132,23 @@
 
 <footer>
   <div class="wrap">
-    <div>
-      <a class="brand" href="/">ShopFlow</a>
-      <p>Ads, phones and bookings for window tint, PPF, ceramic coating and detailing shops. Owner-run, in Albuquerque, a few shops at a time.</p>
+    <div class="foot">
+      <div class="foot-brand">
+        <div class="nav-logo"><img src="/icons/icon-192.png" alt=""/> ShopFlow</div>
+        <p>Ads, phones and bookings for window tint, PPF, ceramic coating and detailing shops. Owner-run, in Albuquerque, a few shops at a time.</p>
+      </div>
+      <div class="foot-cols">
+        <div class="foot-col"><h4>Site</h4>
+          <a href="/#proof">The numbers</a><a href="/#what">What we do</a><a href="/#pricing">Pricing</a><a href="/#faq">Questions</a></div>
+        <div class="foot-col"><h4>Guides</h4>
+          <a href="/guides/">All guides</a><a href="/guides/how-to-grow-a-window-tinting-business/">Grow a tint business</a></div>
+        <div class="foot-col"><h4>Company</h4>
+          <a href="/demo">Book a 15-minute call</a><a href="/login">Client login</a></div>
+        <div class="foot-col"><h4>Legal</h4>
+          <a href="/terms.html">Terms</a><a href="/privacy.html">Privacy</a></div>
+      </div>
     </div>
-    <div>
-      <h2>Site</h2>
-      <a href="/#numbers">The numbers</a>
-      <a href="/#what">What we do</a>
-      <a href="/#pricing">Pricing</a>
-      <a href="/#faq">Questions</a>
-    </div>
-    <div>
-      <h2>Guides</h2>
-      <a href="/guides/">All guides</a>
-      <a href="/guides/how-to-grow-a-window-tinting-business/">Grow a tint business</a>
-    </div>
-    <div>
-      <h2>Company</h2>
-      <a href="/demo">Book a 15-minute call</a>
-      <a href="/login">Client login</a>
-      <a href="/terms.html">Terms</a>
-      <a href="/privacy.html">Privacy</a>
-    </div>
-    <div class="legal">© 2026 ShopFlow Technologies LLC · Albuquerque, NM</div>
+    <div class="foot-base"><span>© 2026 ShopFlow Technologies LLC</span><span>Albuquerque, NM</span></div>
   </div>
 </footer>
 </body>
