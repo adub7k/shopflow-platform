@@ -76,6 +76,125 @@ const Leads = {
     }
     return this.DEFAULT_FOLLOWUP_SEQ;
   },
+  // ── Objection follow-ups ──────────────────────────────────────────────────
+  // When a lead pushes back (on the phone with the AI, or the owner marks it on
+  // the modal), the lead switches from the generic 30-day sequence to a SHORT
+  // objection-specific sequence. One clean attempt per objection, then the
+  // next step — never a discount, never a second argument. Owner-editable
+  // under Tasks → Cadences (settings.objectionSeqs); step 0's day must match
+  // server/objections.js firstDay (the AI capture schedules from there).
+  OBJECTION_TYPES: [
+    { key: 'price',      label: 'Price / shopping around', short: 'Price' },
+    { key: 'think',      label: 'Needs to think / partner', short: 'Thinking it over' },
+    { key: 'timing',     label: 'Not right now',            short: 'Timing' },
+    { key: 'competitor', label: 'Got a lower quote',        short: 'Lower quote' },
+    { key: 'human',      label: 'Wants a person',           short: 'Wants a person' },
+    { key: 'other',      label: 'Other',                    short: 'Objection' },
+  ],
+  DEFAULT_OBJECTION_SEQS: {
+    price: [
+      { id: 'op1', label: 'Price check',    day: 1,  sms: "Hey [NAME], it's [SALESPERSON] from [SHOP]. Totally get wanting to compare — one thing to watch: a lot of cheaper quotes are dyed film, which fades and blocks almost no heat. Want me to send exactly what's included in ours so you're comparing the same thing?" },
+      { id: 'op2', label: 'Middle option',  day: 3,  sms: "If budget is the main thing, carbon is the smart middle — same 99% UV block, real heat rejection, and it's less than ceramic. Want me to price carbon for your [VEHICLE]?" },
+      { id: 'op3', label: 'Honest compare', day: 7,  sms: "Still weighing it, [NAME]? If you got another quote, send it over — I'll tell you straight if it's a good deal, even if it's not us." },
+      { id: 'op4', label: 'Last check',     day: 14, sms: "Last check-in on this one [NAME] 👍 If you want to lock in [OFFER], I've got a couple openings this week — just say the word." },
+    ],
+    think: [
+      { id: 'ot1', label: 'Recap to share', day: 1,  sms: "Hey [NAME], no rush at all — here's the quick recap to share: [VEHICLE], ceramic blocks up to 95% of the heat and 99% of UV, starting at [PRICE]. Happy to answer anything you two are wondering about." },
+      { id: 'ot2', label: 'Common question', day: 3, sms: "Any questions come up? The one we get most is how long it takes — usually a few hours, same day, and the film is under warranty." },
+      { id: 'ot3', label: 'Hold a spot',    day: 7,  sms: "Checking in, [NAME] — still thinking it over, or want me to hold a spot for you? No pressure either way." },
+      { id: 'ot4', label: 'Last one',       day: 14, sms: "Last one from me 👍 If you decide to go for it, just reply TINT and I'll set everything up." },
+    ],
+    timing: [
+      { id: 'og1', label: 'When works',     day: 3,  sms: "Hey [NAME], sounded like the timing wasn't right yet — totally fine. When would be a good time for me to check back in?" },
+      { id: 'og2', label: 'Checking back',  day: 14, sms: "Checking back like I said I would 👍 Want me to grab you a spot for the [VEHICLE]?" },
+      { id: 'og3', label: 'Openings',       day: 30, sms: "Hey [NAME], got some openings this month if you're ready to get the [VEHICLE] done. Want one?" },
+    ],
+    competitor: [
+      { id: 'oc1', label: 'Compare honestly', day: 1, sms: "Hey [NAME], on that other quote — happy to compare it honestly. Two things to check: the film type (dyed vs carbon vs ceramic) and the warranty. Send it over and I'll tell you if it's apples to apples." },
+      { id: 'oc2', label: 'Which film',     day: 4,  sms: "If they're quoting ceramic at that price, ask which brand — the heat rejection difference between films is huge, and that's what you actually feel in the summer." },
+      { id: 'oc3', label: 'Right film',     day: 10, sms: "Still deciding? Either way I'd rather you get the right film once than pay twice. Here if you want a second opinion." },
+    ],
+    human: [
+      { id: 'oh1', label: 'Call today',     day: 0,  sms: "Hey [NAME], it's [SALESPERSON] from [SHOP] — saw you wanted to talk to a real person. I'll give you a call shortly; if there's a better time, just reply here." },
+      { id: 'oh2', label: 'Good time?',     day: 1,  sms: "Tried to reach you — what's a good time to call, [NAME]?" },
+    ],
+    other: [
+      { id: 'oo1', label: 'Check-in',       day: 1,  sms: "Hey [NAME], it's [SALESPERSON] from [SHOP]. Wanted to follow up on your [VEHICLE] — anything I can clear up for you?" },
+      { id: 'oo2', label: 'Openings',       day: 5,  sms: "Got a couple openings this week if you'd like to get it done — want me to hold one?" },
+      { id: 'oo3', label: 'Last',           day: 14, sms: "Last check-in from me 👍 Reply anytime if you want to move forward." },
+    ],
+  },
+  _cleanSeq(s) {
+    if (!Array.isArray(s) || !s.length) return null;
+    const seq = s.map(e => ({ id: String((e && e.id) || ''), label: String((e && e.label) || 'Step'), day: Math.max(0, Number(e && e.day) || 0), sms: String((e && e.sms) || '') })).filter(e => e.id && e.sms);
+    return seq.length ? seq : null;
+  },
+  objectionSeqs() {
+    const o = (Shop.settings && Shop.settings.objectionSeqs) || {};
+    const out = {};
+    this.OBJECTION_TYPES.forEach(t => { out[t.key] = this._cleanSeq(o[t.key]) || this.DEFAULT_OBJECTION_SEQS[t.key]; });
+    return out;
+  },
+  objectionType(key) { return this.OBJECTION_TYPES.find(t => t.key === key) || null; },
+  // Which steps a lead's followUp indexes into, and what to call that sequence.
+  seqFor(fu) {
+    const m = /^obj_([a-z]+)$/.exec((fu && fu.seq) || '');
+    if (m && this.objectionType(m[1])) return this.objectionSeqs()[m[1]];
+    return this.followUpSeq();
+  },
+  seqMeta(fu) {
+    const m = /^obj_([a-z]+)$/.exec((fu && fu.seq) || '');
+    const t = m && this.objectionType(m[1]);
+    return t ? { key: 'obj_' + t.key, type: t.key, label: t.label + ' follow-up', short: t.short } : { key: 'meta30', type: null, label: '30-day follow-up', short: '' };
+  },
+  // Owner recorded an objection on the modal: stamp it and (for a chaseable
+  // lead) switch it onto that objection's sequence. Tapping the active chip
+  // again clears the objection but leaves whatever sequence it is on.
+  async setObjection(id, type) {
+    if (typeof canWrite === 'function' && !canWrite()) { toast('Read-only access', 'warning'); return; }
+    const l = this._leads.find(x => x.id === id); if (!l) return;
+    if (this._openId === l.id) this._captureModalEdits(l);
+    const cur = l.objection && l.objection.type;
+    const patch = {};
+    if (cur === type) { l.objection = null; patch.objection = null; }
+    else {
+      const t = this.objectionType(type); if (!t) return;
+      const now = new Date();
+      l.objection = { type, at: now.toISOString(), source: 'owner' };
+      patch.objection = l.objection;
+      const stage = this.stageConfig().find(s => s.key === l.status);
+      const chaseable = !stage || (!stage.terminal && !stage.won);
+      if (chaseable) {
+        const seq = this.objectionSeqs()[type];
+        const prev = l.followUp;
+        l.followUp = {
+          seq: 'obj_' + type, idx: 0, status: 'active', pausedReason: null,
+          nextAt: new Date(now.getTime() + (seq[0] ? seq[0].day : 0) * 86400000).toISOString(), startedAt: now.toISOString(),
+          log: ((prev && prev.log) || []).concat({ step: '→ ' + t.label + ' follow-up', day: 0, at: now.toISOString(), by: (typeof Auth !== 'undefined' && Auth.getName && Auth.getName()) || '', skipped: true }),
+        };
+        patch.followUp = l.followUp;
+      }
+    }
+    try {
+      await db.leads.update(l.id, patch);
+      toast(patch.objection ? (patch.followUp ? 'Objection noted — switched to the ' + this.objectionType(type).short.toLowerCase() + ' follow-up' : 'Objection noted') : 'Objection cleared');
+      this._reopenIf(l.id);
+      if (typeof Tasks !== 'undefined' && Tasks._leads) Tasks.render && Tasks.render();
+    } catch (e) { toast(e.message || 'Could not save', 'error'); }
+  },
+  _objectionPicker(l) {
+    const stage = this.stageConfig().find(s => s.key === l.status);
+    if (stage && (stage.terminal || stage.won)) return '';
+    const cur = l.objection && l.objection.type;
+    const chips = this.OBJECTION_TYPES.map(t =>
+      `<button type="button" class="lead-status-opt${cur === t.key ? ' active' : ''}" style="${cur === t.key ? 'background:#fff1e6;border-color:#f59e0b;color:#c2410c;' : ''}" onclick="Leads.setObjection('${l.id}','${t.key}')">${esc(t.label)}</button>`).join('');
+    const note = l.objection && l.objection.note ? `<div style="font-size:11.5px;color:var(--muted);margin-top:4px;">${l.objection.source === 'ai' ? 'AI heard: ' : ''}“${esc(l.objection.note)}”</div>` : '';
+    return `<div class="form-group">
+        <label class="form-label">Objection <span style="font-weight:400;color:var(--faint);">— pick one and the lead moves to that follow-up</span></label>
+        <div class="lead-status-row">${chips}</div>${note}
+      </div>`;
+  },
+
   // [VAR] replacement with graceful fallbacks — a missing value never leaks
   // "[VEHICLE]" to a customer.
   fuFill(body, l) {
@@ -496,6 +615,8 @@ const Leads = {
         ${eff==='lost'?`<div style="margin-top:8px;"><input class="form-input" id="lead-lost-reason" placeholder="Why was it lost? — price, ghosted, went elsewhere…" value="${esc(l.lostReason||'')}"/><div style="font-size:11px;color:var(--faint);margin-top:4px;">Saved with the lead — feeds your loss-reason report.</div></div>`:''}
       </div>
 
+      ${this._objectionPicker(l)}
+
       <div class="form-group">
         <label class="form-label">Quoted amount ($)</label>
         <input class="form-input" id="lead-quoted" type="number" min="0" step="1" inputmode="decimal" placeholder="e.g. 450" value="${l.quotedAmount != null ? l.quotedAmount : ''}"/>
@@ -542,7 +663,8 @@ const Leads = {
   // ── 30-day follow-up card (sequence state + history + manual controls) ──────
   _fuCard(l) {
     const fu = l.followUp;
-    const seq = this.followUpSeq();
+    const seq = this.seqFor(fu);
+    const meta = this.seqMeta(fu);
     if (!fu) {
       const stage = this.stageConfig().find(s => s.key === l.status);
       if (stage && (stage.terminal || stage.won)) return '';
@@ -556,7 +678,7 @@ const Leads = {
       paused: `<span style="color:var(--orange);font-weight:700;">Paused${fu.pausedReason === 'replied' ? ' — customer replied' : ''}</span>`,
       completed: `<span style="color:var(--green);font-weight:700;">Completed — booked</span>`,
       stopped: `<span style="color:var(--faint);font-weight:700;">Stopped</span>`,
-      done: `<span style="color:var(--faint);font-weight:700;">Finished day 30 — in the reactivation pool</span>`,
+      done: `<span style="color:var(--faint);font-weight:700;">${meta.type ? 'Finished the ' + esc(meta.short.toLowerCase()) + ' follow-up' : 'Finished day 30 — in the reactivation pool'}</span>`,
     })[fu.status] || '';
     const hist = (fu.log || []).map(e => `<div style="display:flex;justify-content:space-between;gap:8px;font-size:12px;padding:3px 0;">
         <span>${esc(e.step)}${e.skipped ? ' <span style="color:var(--faint);">(skipped)</span>' : ''}</span>
@@ -577,7 +699,7 @@ const Leads = {
           <input class="form-input" id="fu-next-${l.id}" type="date" value="${String(fu.nextAt || '').split('T')[0]}" style="flex:1;">
           <button class="btn btn-sm" style="flex-shrink:0;" onclick="Leads.fuAction('${l.id}','reschedule')">Set date</button></div>` : '';
     return `<div class="card" style="margin-bottom:14px;">
-      <div style="font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.05em;margin-bottom:6px;">30-DAY FOLLOW-UP</div>
+      <div style="font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.05em;margin-bottom:6px;">${esc(meta.label.toUpperCase())}</div>
       <div style="font-size:13px;line-height:1.5;">${statusLine}</div>
       ${(hist || pend) ? `<div style="margin-top:8px;border-top:1px solid var(--border);padding-top:6px;max-height:180px;overflow-y:auto;">${hist}${pend}</div>` : ''}
       ${dateCtl}
@@ -592,7 +714,7 @@ const Leads = {
   async fuAction(id, act) {
     const l = this._leads.find(x => x.id === id); if (!l || !l.followUp) return;
     const fu = l.followUp;
-    const seq = this.followUpSeq();
+    const seq = this.seqFor(fu);
     const now = new Date().toISOString();
     if (act === 'pause') { fu.status = 'paused'; fu.pausedReason = 'manual'; }
     else if (act === 'replied') { fu.status = 'paused'; fu.pausedReason = 'replied'; }

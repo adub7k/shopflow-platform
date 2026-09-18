@@ -222,8 +222,30 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 .adv-period{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;padding:10px 12px;background:var(--off);border:1px solid var(--border);border-radius:10px;}
 .adv-period-label{font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;}
 .adv-period-custom{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;}
+.adv-period-custom[hidden]{display:none;}
 .adv-period-custom .form-input{margin:0;width:150px;padding:6px 8px;font-size:12px;}
 .adv-period-text{font-size:12px;color:var(--muted);}
+.adv-ask{margin-top:16px;border-top:1px solid var(--border);padding-top:14px;}
+.adv-ask-title{font-size:13px;font-weight:700;margin-bottom:8px;}
+.adv-ask-sub{font-weight:400;color:var(--muted);font-size:12px;}
+.adv-ask-row{display:flex;gap:8px;align-items:center;}
+.adv-ask-input{flex:1;min-width:0;font-family:var(--font);font-size:13px;padding:9px 12px;border:1px solid var(--border-md);border-radius:10px;background:var(--white);color:var(--text);outline:none;}
+.adv-ask-input:focus{border-color:var(--green);}
+.adv-ask-input:disabled{opacity:.6;}
+.adv-qa{margin-top:12px;display:flex;flex-direction:column;gap:10px;}
+.adv-qa-item{background:var(--off);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.5;}
+.adv-qa-q,.adv-qa-a{display:flex;gap:10px;align-items:flex-start;}
+.adv-qa-q{font-weight:600;}
+.adv-qa-q>span,.adv-qa-a>span{flex-shrink:0;width:18px;height:18px;border-radius:50%;font-size:10px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;margin-top:2px;}
+.adv-qa-q>span{background:var(--text);color:#fff;}
+.adv-qa-a>span{background:var(--green-deep);color:#fff;}
+.adv-qa-a{margin-top:6px;}
+.adv-qa-a>div{min-width:0;}
+.adv-qa-del{margin-left:auto;background:none;border:none;color:var(--faint);cursor:pointer;font-size:12px;padding:0 4px;}
+.adv-qa-del:hover{color:var(--red);}
+.adv-qa-meta{font-size:11px;color:var(--faint);margin-top:6px;padding-left:28px;}
+.adv-qa-more{font-size:12px;color:var(--muted);text-decoration:none;font-weight:600;}
+@media (max-width:520px){.adv-ask-row{flex-direction:column;align-items:stretch;}}
 .adv-spend-form{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
 .adv-spend-form .form-input{margin:0;}
 
@@ -2831,6 +2853,10 @@ function renderAdvisor(status) {
   const adTable = byAd.length ? `<table class="adv-table" style="margin-top:12px;"><thead><tr><th>Ad / source (period)</th><th>Leads</th><th>Contacted</th><th>Booked</th><th>Spend</th><th>$/lead</th><th>$/booking</th><th>Booked $</th></tr></thead><tbody>
     ${byAd.map(a => `<tr><td>${esc(a.ad)}</td><td>${a.leads}</td><td>${a.contacted}</td><td>${a.booked}</td><td>${advMoney(a.ad_spend)}</td><td>${advMoney(a.cost_per_lead)}</td><td>${advMoney(a.cost_per_booking)}</td><td>${advMoney(a.booked_value)}</td></tr>`).join('')}
   </tbody></table>` : '';
+  const byObj = (m.by_objection || []);
+  const objTable = byObj.length ? `<table class="adv-table" style="margin-top:12px;"><thead><tr><th>Objection (period)</th><th>Leads</th><th>Contacted</th><th>Booked</th><th>Lost</th><th>Book rate</th><th>In follow-up</th></tr></thead><tbody>
+    ${byObj.map(o => `<tr><td>${esc(o.label)}</td><td>${o.leads}</td><td>${o.contacted}</td><td>${o.booked}</td><td>${o.lost}</td><td>${advPct(o.booking_rate_pct)}</td><td>${o.in_objection_follow_up}</td></tr>`).join('')}
+  </tbody></table>` : '';
   const oldest = ((m.open_leads || {}).oldest_uncontacted || []);
   const worklist = oldest.length ? `<div class="adv-list" style="margin-top:12px;"><div class="adv-list-title">Oldest uncontacted leads</div><ul>${oldest.map(l => `<li>${l.hot ? '🔥 ' : ''}${esc(l.name || l.id)} · ${esc(l.service || 'service not stated')} · ${esc(l.ad)} · ${l.age_hours}h old</li>`).join('')}</ul></div>` : '';
   const spendRows = (d.spend || []);
@@ -2879,7 +2905,25 @@ function renderAdvisor(status) {
         ${(r.actions || []).length ? (r.actions || []).map(actionRow).join('') : '<div class="adv-notice">Nothing worth changing this week.</div>'}
         <div class="adv-lists">${list('Working', r.wins)}${list('Watch', r.watch)}${list('Data gaps', r.data_gaps)}</div>
       </div>` : (d.configured ? `<div class="adv-notice" style="margin-top:12px;">No review yet. Run one now, or wait for Monday’s auto-run.</div>` : '')}
-      <details class="adv-details"><summary>The numbers behind it</summary>${numbers}${adTable}${worklist}</details>
+      <div class="adv-ask">
+        <div class="adv-ask-title">Ask the advisor <span class="adv-ask-sub">about ${esc(win.label || 'this period')} — it answers from the numbers above and the period's lead list</span></div>
+        <div class="adv-ask-row">
+          <input class="adv-ask-input" id="adv-q" placeholder="e.g. Which Meta leads from this period haven't booked yet? What's our cost per booking on the offer ad?" ${(!d.configured || advState.asking) ? 'disabled' : ''} onkeydown="if(event.key==='Enter'){event.preventDefault();advisorAsk();}"/>
+          <button class="btn btn-green btn-sm" id="adv-ask-btn" ${(!d.configured || advState.asking) ? 'disabled' : ''} onclick="advisorAsk()">${advState.asking ? '<span class="spinner"></span> Thinking…' : 'Ask'}</button>
+        </div>
+        ${advState.askError ? `<div class="adv-notice" style="color:var(--red);margin-top:8px;">${esc(advState.askError)}</div>` : ''}
+        ${(d.questions || []).length ? `
+        <div class="adv-qa">
+          ${(d.questions || []).slice(0, advState.showAllQ ? 20 : 2).map(q => `
+          <div class="adv-qa-item">
+            <div class="adv-qa-q"><span>Q</span>${esc(q.question)}<button class="adv-qa-del" title="Remove" onclick="advisorDelQuestion('${esc(q.id)}')">✕</button></div>
+            <div class="adv-qa-a"><span>A</span><div>${esc(q.answer).replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>')}</div></div>
+            <div class="adv-qa-meta">${relTime(q.createdAt)} · ${esc(q.window && q.window.label ? q.window.label : '')}</div>
+          </div>`).join('')}
+          ${(d.questions || []).length > 2 ? `<a href="#" class="adv-qa-more" onclick="advState.showAllQ=!advState.showAllQ;renderAdvisor();return false;">${advState.showAllQ ? 'Show fewer' : `Show ${Math.min(20, d.questions.length) - 2} earlier question${d.questions.length - 2 === 1 ? '' : 's'}`}</a>` : ''}
+        </div>` : ''}
+      </div>
+      <details class="adv-details"><summary>The numbers behind it</summary>${numbers}${adTable}${objTable}${worklist}</details>
       <details class="adv-details"><summary>Ad spend (${spendRows.length})</summary>
         <div class="adv-spend-form">
           <input class="form-input" id="adv-sp-campaign" placeholder="Campaign or ad name (matches utm_content / utm_campaign)" style="flex:2;min-width:180px;"/>
@@ -2900,6 +2944,27 @@ function renderAdvisor(status) {
   </div>`;
   const s = document.getElementById('adv-sp-start');
   if (s && !s.value) s.value = new Date().toISOString().slice(0, 10);
+  const q = document.getElementById('adv-q');
+  if (q && advState.pendingQ) q.value = advState.pendingQ;
+}
+async function advisorAsk() {
+  const input = document.getElementById('adv-q'); if (!input) return;
+  const question = input.value.trim(); if (!question) return toast('Type a question first');
+  if (advState.asking) return;
+  advState.asking = true; advState.askError = null; advState.pendingQ = question; renderAdvisor();
+  try {
+    await advApi(advState.shopId, '/ask', { method: 'POST', body: JSON.stringify({ question, ...(advState.range || {}) }) });
+    advState.asking = false; advState.pendingQ = null; advState.showAllQ = false;
+    advState.data = await advApi(advState.shopId, advQuery());
+    renderAdvisor();
+  } catch(e) {
+    advState.asking = false; advState.askError = e.message; renderAdvisor();
+    const i = document.getElementById('adv-q'); if (i) i.value = question;
+  }
+}
+async function advisorDelQuestion(id) {
+  try { await advApi(advState.shopId, '/ask/' + encodeURIComponent(id), { method: 'DELETE' }); advState.data = await advApi(advState.shopId, advQuery()); renderAdvisor(); }
+  catch(e) { toast(e.message); }
 }
 async function advisorReload() {
   try { advState.data = await advApi(advState.shopId, advQuery()); renderAdvisor(); }

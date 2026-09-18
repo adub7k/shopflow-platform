@@ -181,7 +181,7 @@
       out.push(`<div class="metric-card" style="margin-bottom:14px;">
         <div class="metric-label">30-day sequence</div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;">
-          ${cell(fs.due || 0, 'due today')}${cell(fs.sentToday || 0, 'sent today')}${cell(fs.active || 0, 'in sequence')}${cell(fs.paused || 0, 'paused')}${cell((fs.booked || 0) + (fs.entered ? ' (' + rate + '%)' : ''), 'booked', 'green')}
+          ${cell(fs.due || 0, 'due today')}${cell(fs.sentToday || 0, 'sent today')}${cell(fs.active || 0, 'in sequence')}${fs.objection ? cell(fs.objection, 'objection follow-ups') : ''}${cell(fs.paused || 0, 'paused')}${cell((fs.booked || 0) + (fs.entered ? ' (' + rate + '%)' : ''), 'booked', 'green')}
         </div>
         ${(this._fuUnenrolled || []).length ? `<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
           <div style="flex:1;font-size:12.5px;color:var(--muted);">${this._fuUnenrolled.length} Meta lead${this._fuUnenrolled.length === 1 ? '' : 's'} not in the sequence yet.</div>
@@ -220,7 +220,9 @@
         <div class="list-main">
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;cursor:pointer;" onclick="${open}">
             <span class="list-name">${esc(t.name)}</span>
-            <span class="badge badge-yellow">${esc(t.step.label)}</span>
+            ${t.seq && t.seq.type
+              ? `<span class="badge" style="background:#fff1e6;color:#c2410c;">${esc(t.seq.short)} · ${esc(t.step.label)}</span>`
+              : `<span class="badge badge-yellow">${esc(t.step.label)}</span>`}
             <span style="font-size:11.5px;font-weight:700;color:${t.detail === 'Due today' ? 'var(--green-deep,var(--green))' : 'var(--red)'};">${esc(t.detail)}</span>
           </div>
           ${t.reason ? `<div class="list-sub">${esc(t.reason)}</div>` : ''}
@@ -524,9 +526,28 @@
           <div style="text-align:right;"><b class="num">${fmtMoney(data.monthTaxCollected)}</b><div style="font-size:11px;color:var(--faint);">${fmtMoney(data.totalTaxCollected)} all time</div></div></div></div>`);
       }
       if (data.monthDeposits || data.totalDeposits) {
+        // Booking deposits + estimate deposits (Approve & pay) both land here;
+        // the sub line names the estimate share when there is one.
+        const ds = data.depositSplit || {};
+        const depSub = ds.estimateTotal ? `Prepaid · ${fmtMoney(ds.estimateMonth || 0)} this month from ${ds.estimateCount} approved estimate${ds.estimateCount === 1 ? '' : 's'}` : 'Prepaid — applied to the balance at checkout.';
         html.push(`<div class="v2-card"><div class="list-row" style="cursor:default;"><div class="list-main"><div class="list-name">Deposits collected</div>
-          <div class="list-sub">Prepaid — applied to the balance at checkout.</div></div>
+          <div class="list-sub">${depSub}</div></div>
           <div style="text-align:right;"><b class="num" style="color:var(--green-deep);">${fmtMoney(data.monthDeposits)}</b><div style="font-size:11px;color:var(--faint);">${fmtMoney(data.totalDeposits)} all time</div></div></div></div>`);
+      }
+      // Quotes given: every dollar put in front of a customer — formal
+      // estimates plus phone quotes logged on leads — with how much of it won.
+      // Same compact row as deposits/tax; always shown so the number exists
+      // for a shop before its first quote.
+      {
+        const qg = data.quotesGiven || {}, qm = qg.month || {}, qt = qg.total || {};
+        const n = (c, one, many) => `${c || 0} ${c === 1 ? one : many}`;
+        const mix = [qt.estimates ? n(qt.estimates, 'estimate', 'estimates') : '', qt.phone ? n(qt.phone, 'phone quote', 'phone quotes') : ''].filter(Boolean).join(' + ');
+        const sub = qt.count
+          ? `${n(qm.count, 'quote', 'quotes')} this month · ${mix} · ${fmtMoney(qt.wonValue || 0)} won${qt.winRate != null ? ` (${qt.winRate}%)` : ''}`
+          : 'Estimates you send + “Quoted amount” logged on leads.';
+        html.push(`<div class="v2-card"><div class="list-row" style="cursor:default;"><div class="list-main" style="min-width:0;"><div class="list-name">Quotes given</div>
+          <div class="list-sub">${sub}</div></div>
+          <div style="text-align:right;flex-shrink:0;white-space:nowrap;"><b class="num">${fmtMoney(qm.value || 0)}</b><div style="font-size:11px;color:var(--faint);">${fmtMoney(qt.value || 0)} all time</div></div></div></div>`);
       }
       html.push('</div></div>');
       el.innerHTML = html.join('');
@@ -563,6 +584,7 @@
       ${stat('Revenue', fmtMoney(s.revenue), `${s.jobs} job${s.jobs === 1 ? '' : 's'} · ${mom(s.revenue, p.revenue)}`, 'var(--green-deep)')}
       ${stat('Net profit', money(s.net), `${s.netMarginPct}% margin · ${mom(s.net, p.net)}`, netColor)}
       ${stat('Avg ticket', fmtMoney(s.avgTicket), 'per completed job')}
+      ${s.quotes ? stat('Quotes given', fmtMoney(s.quotes.value || 0), `${s.quotes.count || 0} quote${s.quotes.count === 1 ? '' : 's'} · ${mom(s.quotes.value || 0, (p.quotes || {}).value)}${s.quotes.won ? ` · ${fmtMoney(s.quotes.wonValue)} won` : ''}`) : ''}
       ${s.deposits ? stat('Deposits', fmtMoney(s.deposits), 'collected this month') : ''}
       ${s.tax ? stat('Sales tax', fmtMoney(s.tax), 'collected — set aside') : ''}</div>`);
     html.push(`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:0 28px;">`);
@@ -593,7 +615,8 @@
     const L = [];
     L.push(row('Shop', Auth.getShopName() || ''), row('Month', s.month), '');
     L.push(row('SUMMARY'), row('Revenue', s.revenue), row('Completed jobs', s.jobs), row('Average ticket', s.avgTicket), row('Materials (COGS)', s.cost), row('Gross profit', s.gross), row('Gross margin %', s.grossMarginPct),
-           row('Operating expenses', s.opEx), row('Net profit', s.net), row('Net margin %', s.netMarginPct), row('Sales tax collected', s.tax), row('Deposits collected', s.deposits), '');
+           row('Operating expenses', s.opEx), row('Net profit', s.net), row('Net margin %', s.netMarginPct), row('Sales tax collected', s.tax), row('Deposits collected', s.deposits),
+           row('Quotes given', (s.quotes || {}).count || 0), row('Quoted value', (s.quotes || {}).value || 0), row('Quotes won', (s.quotes || {}).won || 0), row('Quotes won value', (s.quotes || {}).wonValue || 0), row('Quote win rate %', (s.quotes || {}).winRate == null ? '' : s.quotes.winRate), '');
     L.push(row('BY SERVICE'), row('Service', 'Jobs', 'Revenue', 'Cost', 'Margin'));
     r.byService.forEach(x => L.push(row(x.service, x.count, x.revenue, x.cost, x.margin))); L.push('');
     if ((r.bookedBySource || []).length) { L.push(row('BOOKINGS BY LEAD SOURCE'), row('Source', 'Booked', 'Completed', 'Booked value')); r.bookedBySource.forEach(x => L.push(row(x.label, x.count, x.completed, x.value))); L.push(''); }
@@ -601,6 +624,7 @@
     if (r.byCreator.length) { L.push(row('BOOKED BY'), row('Person', 'Booked $', 'Booked jobs', 'Closed $', 'Closed jobs')); r.byCreator.forEach(x => L.push(row(x.name, x.booked, x.bookedJobs, x.closed, x.closedJobs))); L.push(''); }
     L.push(row('OPERATING EXPENSES'), row('Date', 'Category', 'Description', 'Amount', 'Recurring'));
     r.expenses.forEach(x => L.push(row(x.date, x.category, x.description, x.amount, x.recurring ? 'monthly' : ''))); L.push('');
+    if ((r.quotes || []).length) { L.push(row('QUOTES GIVEN'), row('Date', 'Estimate #', 'Customer', 'Service', 'Value', 'Status', 'Type')); r.quotes.forEach(x => L.push(row(x.date, x.number, x.customerName, x.service, x.value, x.status, x.kind === 'phone' ? 'phone quote' : 'estimate'))); L.push(''); }
     L.push(row('COMPLETED JOBS'), row('Date', 'Time', 'Customer', 'Service', 'Staff', 'Price', 'Cost', 'Tax', 'Source', 'Booked by'));
     r.jobs.forEach(j => L.push(row(j.date, j.time, j.customerName, j.service, j.staff, j.price, j.cost, j.tax, j.source, j.bookedBy)));
     const a = document.createElement('a');

@@ -102,9 +102,8 @@ const Tasks = {
     //    only while its next step is due; sending (or skipping) pushes nextAt
     //    forward and the card disappears until the next step comes due. Config
     //    + per-lead state live in leads.js (Leads.followUpSeq / lead.followUp).
-    const fuSeq = Leads.followUpSeq();
     const nowIso = new Date().toISOString();
-    const fuStats = { entered: 0, active: 0, paused: 0, booked: 0, done: 0, due: 0, sentToday: 0 };
+    const fuStats = { entered: 0, active: 0, paused: 0, booked: 0, done: 0, due: 0, sentToday: 0, objection: 0 };
     const stageCfg = Leads.stageConfig();
     const chaseable = (l) => { const s = stageCfg.find(x => x.key === l.status); return !s || (!s.terminal && !s.won); };
     const META_SRC = ['facebook', 'instagram', 'meta', 'fb', 'ig'];
@@ -119,8 +118,10 @@ const Tasks = {
       (fu.log || []).forEach(e => { if (!e.skipped && String(e.at || '').slice(0, 10) === t0) fuStats.sentToday++; });
       if (fu.status !== 'active') return;
       fuStats.active++;
+      const meta = Leads.seqMeta(fu);
+      if (meta.type) fuStats.objection++;
       if (!chaseable(l)) return;
-      const step = fuSeq[fu.idx];
+      const step = Leads.seqFor(fu)[fu.idx];
       if (!step) return;
       const due = fu.nextAt || l.createdAt || nowIso;
       if (due > nowIso) return;                          // not due yet — resurfaces on its date
@@ -129,7 +130,7 @@ const Tasks = {
       const dueDate = String(due).split('T')[0];
       add({
         source: 'sequence', leadId: l.id, name: l.name || l.phone || 'Lead', phone: l.phone,
-        step, reason: [veh, l.phone].filter(Boolean).join(' · '),
+        step, seq: meta, reason: [veh, l.phone].filter(Boolean).join(' · '),
         detail: dueDate < t0 ? 'Overdue — was due ' + fmtDateShort(dueDate) : 'Due today',
         dueDate,
       }, dueDate < t0 ? 'overdue' : 'today');
@@ -251,6 +252,7 @@ const Tasks = {
         +   stat(fs.due || 0, 'due today', fs.due ? 'var(--red)' : 'var(--text)')
         +   stat(fs.sentToday || 0, 'sent today')
         +   stat(fs.active || 0, 'in sequence')
+        +   (fs.objection ? stat(fs.objection, 'objection follow-ups') : '')
         +   stat(fs.paused || 0, 'paused', fs.paused ? 'var(--orange)' : 'var(--text)')
         +   stat((fs.booked || 0) + (fs.entered ? ' (' + rate + '%)' : ''), 'booked', 'var(--green)')
         + '</div>'
@@ -300,7 +302,9 @@ const Tasks = {
         +   '<div style="flex:1;min-width:0;">'
         +     '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">'
         +       '<div style="font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(t.name) + '</div>'
-        +       '<span class="badge badge-yellow" style="flex:none;">' + esc(t.step.label) + '</span>'
+        +       (t.seq && t.seq.type
+                  ? '<span class="badge" style="flex:none;background:#fff1e6;color:#c2410c;">' + esc(t.seq.short) + ' · ' + esc(t.step.label) + '</span>'
+                  : '<span class="badge badge-yellow" style="flex:none;">' + esc(t.step.label) + '</span>')
         +     '</div>'
         +     (t.reason ? '<div style="font-size:13px;color:var(--muted);margin-top:2px;">' + esc(t.reason) + '</div>' : '')
         +     '<div style="font-size:12px;font-weight:600;color:' + (t.detail === 'Due today' ? 'var(--green)' : 'var(--red)') + ';margin-top:2px;">' + esc(t.detail) + '</div>'
@@ -399,12 +403,11 @@ const Tasks = {
       } else if (kind === 'skip') {
         const seqTasks = tasks.filter(t => t.source === 'sequence');
         if (!seqTasks.length) { toast('No sequence tasks selected', 'warning'); return; }
-        const seq = Leads.followUpSeq();
         const now = new Date().toISOString();
         await Promise.all(seqTasks.map(t => {
           const l = this._leads.find(x => x.id === t.leadId);
           if (!l || !l.followUp) return null;
-          const fu = l.followUp, st = seq[fu.idx];
+          const fu = l.followUp, seq = Leads.seqFor(fu), st = seq[fu.idx];
           if (!st) return null;
           fu.log = (fu.log || []).concat({ step: st.label, day: st.day, at: now, by: (Auth.getName && Auth.getName()) || '', skipped: true });
           fu.idx += 1;
@@ -447,7 +450,7 @@ const Tasks = {
   fuSend(taskId) {
     const l = this._fuLead(taskId); if (!l) return;
     if (!l.phone) { toast('No phone number on file', 'warning'); return; }
-    const step = Leads.followUpSeq()[(l.followUp || {}).idx];
+    const step = Leads.seqFor(l.followUp)[(l.followUp || {}).idx];
     if (!step) return;
     this._fuTask = taskId;
     Modal.show(
@@ -466,7 +469,7 @@ const Tasks = {
     if (!body.trim()) { toast('Message is empty', 'warning'); return; }
     Modal.close();
     _cpSms(l.phone, body.trim());
-    const seq = Leads.followUpSeq();
+    const seq = Leads.seqFor(l.followUp);
     const fu = l.followUp;
     const step = seq[fu.idx];
     if (!step) return;
@@ -475,7 +478,7 @@ const Tasks = {
     fu.idx += 1;
     fu.nextAt = Leads.fuNextAt(seq, fu.idx - 1, now);
     let msg;
-    if (fu.idx >= seq.length) { fu.status = 'done'; fu.nextAt = null; msg = '✓ Sent — sequence finished (day 30)'; }
+    if (fu.idx >= seq.length) { fu.status = 'done'; fu.nextAt = null; msg = '✓ Sent — ' + (Leads.seqMeta(fu).type ? 'objection follow-up finished' : 'sequence finished (day 30)'); }
     else msg = '✓ Follow-up sent · Next: ' + seq[fu.idx].label + ' — ' + fmtDateShort(fu.nextAt.split('T')[0]);
     try { await db.leads.update(l.id, { followUp: fu }); } catch (e) { toast(e.message || 'Could not save', 'error'); return; }
     toast(msg);
@@ -485,7 +488,7 @@ const Tasks = {
     const l = this._fuLead(taskId);
     if (!l || !l.followUp) return;
     const fu = l.followUp;
-    const seq = Leads.followUpSeq();
+    const seq = Leads.seqFor(fu);
     const now = new Date().toISOString();
     if (act === 'replied') { fu.status = 'paused'; fu.pausedReason = 'replied'; }
     else if (act === 'skip') {
@@ -649,6 +652,7 @@ const Tasks = {
     this._wbEdit = JSON.parse(JSON.stringify(this._wb || this._winbackFrom(Shop.settings)));
     this._fsEdit = Leads.followUpSeq().map(s => ({ ...s }));
     this._fsOffer = (Shop.settings && Shop.settings.followUpOffer) || '';
+    this._osEdit = JSON.parse(JSON.stringify(Leads.objectionSeqs()));
     this._renderCadence();
   },
 
@@ -679,6 +683,21 @@ const Tasks = {
       +   '<textarea class="form-input" id="fs-msg-' + i + '" rows="3">' + esc(s.sms) + '</textarea></div>'
       + '</div>').join('');
 
+    const osSection = Leads.OBJECTION_TYPES.map(t => {
+      const steps = (this._osEdit[t.key] || []).map((s, i) =>
+        '<div class="card" style="padding:10px;margin-bottom:8px;">'
+        + '<div class="form-row" style="align-items:flex-end;">'
+        +   '<div class="form-group" style="flex:0 0 80px;margin-bottom:8px;"><label class="form-label">Day</label><input class="form-input" id="os-' + t.key + '-day-' + i + '" type="number" min="0" value="' + esc(s.day) + '"></div>'
+        +   '<div class="form-group" style="flex:1;margin-bottom:8px;"><label class="form-label">Label</label><input class="form-input" id="os-' + t.key + '-label-' + i + '" value="' + esc(s.label) + '"></div>'
+        +   '<button class="btn btn-sm btn-danger" style="margin-bottom:8px;" onclick="Tasks._osDel(\'' + t.key + '\',' + i + ')">✕</button>'
+        + '</div>'
+        + '<div class="form-group" style="margin-bottom:0;"><label class="form-label">Message <span style="color:var(--faint);font-weight:400;">— [NAME] [VEHICLE] [SHOP] [OFFER] [PRICE] [SALESPERSON]</span></label>'
+        +   '<textarea class="form-input" id="os-' + t.key + '-msg-' + i + '" rows="3">' + esc(s.sms) + '</textarea></div>'
+        + '</div>').join('');
+      return '<details style="margin-bottom:8px;"><summary style="cursor:pointer;font-size:13px;font-weight:700;padding:6px 0;">' + esc(t.label) + ' <span style="color:var(--faint);font-weight:400;">· ' + (this._osEdit[t.key] || []).length + ' steps</span></summary>'
+        + '<div style="padding-top:6px;">' + steps + '<button class="btn btn-sm" style="margin-bottom:8px;" onclick="Tasks._osAdd(\'' + t.key + '\')">+ Add step</button></div></details>';
+    }).join('');
+
     Modal.show('<div class="modal-title">Cadences</div>'
       + secHd('WIN-BACK (PAST CLIENTS)', 'Reach out to at-risk clients on a schedule. Each step\'s day counts from when a client crosses the at-risk threshold.')
       + '<div class="form-group"><label class="form-label">At-risk after (days since last visit)</label>'
@@ -690,6 +709,8 @@ const Tasks = {
       +   '<input class="form-input" id="fs-offer" placeholder="e.g. $50 off ceramic tint this month" value="' + esc(this._fsOffer) + '"></div>'
       + fsSteps
       + '<button class="btn btn-sm" style="margin-bottom:12px;" onclick="Tasks._fsAdd()">+ Add sequence step</button>'
+      + secHd('OBJECTION FOLLOW-UPS', 'When a lead pushes back — on the phone with the AI or marked on the lead — it leaves the 30-day sequence for one of these short ones. Days count from the objection. One honest answer per step, then the next step; never a discount.')
+      + osSection
       + '<div class="modal-actions"><button class="btn" onclick="Modal.close()">Cancel</button>'
       +   '<button class="btn btn-green" onclick="Tasks.saveCadence(this)">Save all</button></div>');
   },
@@ -709,6 +730,23 @@ const Tasks = {
       const m = document.getElementById('fs-msg-' + i);   if (m) s.sms = m.value;
     });
     const off = document.getElementById('fs-offer'); if (off) this._fsOffer = off.value.trim().slice(0, 120);
+    Object.keys(this._osEdit || {}).forEach(k => (this._osEdit[k] || []).forEach((s, i) => {
+      const d = document.getElementById('os-' + k + '-day-' + i);   if (d) s.day = Math.max(0, Number(d.value) || 0);
+      const l = document.getElementById('os-' + k + '-label-' + i); if (l) s.label = l.value;
+      const m = document.getElementById('os-' + k + '-msg-' + i);   if (m) s.sms = m.value;
+    }));
+  },
+  _osAdd(k) {
+    this._syncCadence();
+    const seq = this._osEdit[k] = this._osEdit[k] || [];
+    const last = seq[seq.length - 1];
+    seq.push({ id: genId('os'), label: 'Follow-up', day: last ? Number(last.day) + 3 : 1, sms: '' });
+    this._renderCadence();
+  },
+  _osDel(k, i) {
+    this._syncCadence();
+    (this._osEdit[k] || []).splice(i, 1);
+    this._renderCadence();
   },
 
   _addStep() {
@@ -748,11 +786,20 @@ const Tasks = {
       .map(s => ({ id: s.id || genId('fs'), label: String(s.label || 'Step').slice(0, 40), day: Math.max(0, Number(s.day) || 0), sms: String(s.sms || '').trim().slice(0, 500) }))
       .filter(s => s.sms)
       .sort((a, b) => a.day - b.day);
+    // Objection sequences: same cleanup per type; an emptied type falls back
+    // to the built-in default rather than leaving leads with no steps.
+    const objectionSeqs = {};
+    Object.keys(this._osEdit || {}).forEach(k => {
+      const seq = (this._osEdit[k] || [])
+        .map(s => ({ id: s.id || genId('os'), label: String(s.label || 'Step').slice(0, 40), day: Math.max(0, Number(s.day) || 0), sms: String(s.sms || '').trim().slice(0, 500) }))
+        .filter(s => s.sms).sort((a, b) => a.day - b.day);
+      if (seq.length) objectionSeqs[k] = seq;
+    });
     disableBtn(btn);
     try {
       // POST /settings merges (assign) — other settings preserved.
-      await db.settings.save({ winback: wb, followUpSeq, followUpOffer: this._fsOffer || '' });
-      if (Shop.settings) { Shop.settings.winback = wb; Shop.settings.followUpSeq = followUpSeq; Shop.settings.followUpOffer = this._fsOffer || ''; }
+      await db.settings.save({ winback: wb, followUpSeq, followUpOffer: this._fsOffer || '', objectionSeqs });
+      if (Shop.settings) { Shop.settings.winback = wb; Shop.settings.followUpSeq = followUpSeq; Shop.settings.followUpOffer = this._fsOffer || ''; Shop.settings.objectionSeqs = objectionSeqs; }
       this._wb = wb;
       Modal.close(); toast('Cadences saved ✓'); this.render();
     } catch (e) { enableBtn(btn); toast(e.message || 'Could not save', 'error'); }

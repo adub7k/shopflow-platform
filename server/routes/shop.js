@@ -5,6 +5,7 @@ const { sendTest, sendQuoteEmail, shopReplyTo } = require('../email');
 const { resolveProfile } = require('../industries');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, shopOwnNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, deleteUpload, computeTax, computeApptCost } = require('../db');
 const { ensureQuoteCustomer } = require('../quotes-core');
+const objections = require('../objections');
 
 // ── PROTECTED: Settings ───────────────────────────────────────────────────────
 // Readable by any signed-in staff (needed for vocabulary/statuses), but sensitive
@@ -750,6 +751,67 @@ function apptLeadSourceResolver(h) {
 // behind them so the owner can read it on the page or export it as a CSV for
 // their bookkeeper. Same math as /api/shop/revenue (done jobs bucketed by
 // appointment date; recurring expenses count every month from their start).
+// ── Quotes given ──────────────────────────────────────────────────────────────
+// "Total quotes given" = every dollar the shop put in front of a customer. Two
+// sources, merged: formal Estimates (the quotes collection — a fleet contract
+// counts at full term, same as the Estimates page) plus phone quotes logged on
+// a lead ("Quoted amount" typed by the owner, or the price the AI receptionist
+// gave) that never became a formal estimate. A lead whose customer/phone
+// matches an estimate IS that estimate, so it's not counted twice.
+// `inRange(isoDate)` scopes the rollup (null = all time); an estimate is dated
+// by createdAt, a phone quote by quotedAt (stamped when the amount is entered)
+// falling back to the lead's createdAt for quotes logged before the stamp existed.
+// Deposits paid on estimates (Approve & pay on the public /quote page) live on
+// the quote record, not customer.deposits — normalise them into the same
+// {amount, paidAt} shape so every deposits figure counts both streams.
+function quoteDeposits(h) {
+  const quotes = Array.isArray(h.getAll('quotes')) ? h.getAll('quotes') : [];
+  return quotes.filter(q => q.depositPaid && Number(q.depositAmount) > 0)
+    .map(q => ({ amount: Number(q.depositAmount), paidAt: q.depositPaidAt || q.approvedAt || q.createdAt, quoteId: q.id, status: 'paid' }));
+}
+const QUOTE_WON  = ['approved', 'scheduled', 'completed'];
+const QUOTE_LOST = ['declined', 'lost'];
+const LEAD_WON   = ['booked', 'worked', 'closed'];
+function quotesGivenRollup(h, inRange) {
+  const last10 = p => { const d = String(p || '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : ''; };
+  const round2 = n => Math.round(n * 100) / 100;
+  const inR = d => !inRange || inRange(d);
+  const quotes = Array.isArray(h.getAll('quotes')) ? h.getAll('quotes') : [];
+  const custs = new Set(), phones = new Set();
+  quotes.forEach(q => { if (q.customerId) custs.add(q.customerId); const p = last10(q.customerPhone); if (p) phones.add(p); });
+  const rows = [];
+  quotes.forEach(q => {
+    if (!inR(q.createdAt)) return;
+    const value = Number(q.contractValue) || Number(q.total) || 0;
+    rows.push({ kind: 'estimate', id: q.id, number: q.number || '', date: String(q.createdAt || '').slice(0, 10), customerName: q.customerName || '',
+                service: q.contract ? (q.fleetName || 'Fleet contract') : ((q.lineItems || [])[0] || {}).name || (q.options ? q.options.map(o => o.name).join(' / ') : ''),
+                value: round2(value), status: q.status || 'sent',
+                won: QUOTE_WON.includes(q.status), lost: QUOTE_LOST.includes(q.status) });
+  });
+  const leads = Array.isArray(h.getAll('leads')) ? h.getAll('leads') : [];
+  leads.forEach(l => {
+    const amt = Number(l.quotedAmount != null ? l.quotedAmount : (l.ai && l.ai.quotedPrice));
+    if (!(amt > 0)) return;
+    if ((l.customerId && custs.has(l.customerId)) || phones.has(last10(l.phone))) return; // already a formal estimate
+    const when = l.quotedAt || l.createdAt;
+    if (!inR(when)) return;
+    rows.push({ kind: 'phone', id: l.id, number: '', date: String(when || '').slice(0, 10), customerName: l.name || '',
+                service: l.service || l.interest || (l.ai && l.ai.service) || '', value: round2(amt), status: l.status || 'new',
+                won: LEAD_WON.includes(l.status), lost: l.status === 'lost' });
+  });
+  const sum = arr => round2(arr.reduce((s, r) => s + r.value, 0));
+  const won = rows.filter(r => r.won), lost = rows.filter(r => r.lost);
+  const decided = won.length + lost.length;
+  return {
+    count: rows.length, value: sum(rows),
+    estimates: rows.filter(r => r.kind === 'estimate').length, phone: rows.filter(r => r.kind === 'phone').length,
+    won: won.length, wonValue: sum(won), lost: lost.length, lostValue: sum(lost),
+    open: rows.length - decided, openValue: round2(sum(rows) - sum(won) - sum(lost)),
+    winRate: decided ? Math.round(won.length / decided * 100) : null,
+    rows: rows.sort((a, b) => String(a.date).localeCompare(String(b.date))),
+  };
+}
+
 router.get('/api/shop/revenue/month/:ym', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   const ym = String(req.params.ym || '');
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(ym)) return res.status(400).json({ ok:false, error:'Month must look like 2026-08' });
@@ -774,7 +836,8 @@ router.get('/api/shop/revenue/month/:ym', requireAuth, requireRole('full'), shop
     const jobs = doneIn(m), ex = expensesIn(m);
     const revenue = sum(jobs, 'price'), cost = sum(jobs, 'cost'), opEx = sum(ex, 'amount');
     const gross = round2(revenue - cost), net = round2(gross - opEx);
-    const deposits = round2(customers.flatMap(c => (c.deposits || []).filter(d => d.status === 'paid' && monthOf(d.paidAt) === m)).reduce((s, d) => s + Number(d.amount || 0), 0));
+    const deposits = round2(customers.flatMap(c => (c.deposits || []).filter(d => d.status === 'paid' && monthOf(d.paidAt) === m))
+      .concat(quoteDeposits(h).filter(d => monthOf(d.paidAt) === m)).reduce((s, d) => s + Number(d.amount || 0), 0));
     return { month: m, jobs: jobs.length, revenue, cost, gross, opEx, net, tax: sum(jobs, 'taxAmount'), deposits,
              avgTicket: jobs.length ? Math.round(revenue / jobs.length) : 0,
              grossMarginPct: revenue ? Math.round(gross / revenue * 100) : 0, netMarginPct: revenue ? Math.round(net / revenue * 100) : 0 };
@@ -819,8 +882,16 @@ router.get('/api/shop/revenue/month/:ym', requireAuth, requireRole('full'), shop
   });
   const bookedBySource = Object.values(bookedSrc).map(r => ({ ...r, value: round2(r.value) })).sort((a, b) => b.count - a.count || b.value - a.value);
 
+  // Quotes given that month (estimates + phone quotes), with the prior month
+  // for the MoM read. The rows ride along for the CSV export.
+  const quotesIn = (m) => quotesGivenRollup(h, d => monthOf(d) === m);
+  const quotesMonth = quotesIn(ym), quotesPrev = quotesIn(prevOf(ym));
+  summary.quotes = { ...quotesMonth, rows: undefined };
+  prev.quotes = { ...quotesPrev, rows: undefined };
+
   res.json({
     ok: true, summary, prev,
+    quotes: quotesMonth.rows,
     byService, byBarber, byCreator, bookedBySource,
     expenses: expensesIn(ym).map(e => ({ id: e.id, date: e.date, category: e.category, description: e.description || '', amount: round2(Number(e.amount) || 0), recurring: e.recurring === 'monthly' })).sort((a, b) => b.amount - a.amount),
     jobs: jobs.map(a => ({ id: a.id, date: a.date, time: a.time || '', customerName: a.customerName, service: a.service, staff: a.barberName,
@@ -912,9 +983,20 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
 
   // Deposits collected (standalone, profile-requested). Tracked as their own
   // stream so the P&L stays service-based; bucketed by when they were paid.
-  const paidDeposits = customers.flatMap(c => (c.deposits || []).filter(d => d.status === 'paid'));
-  const totalDeposits = round2(paidDeposits.reduce((s, d) => s + Number(d.amount || 0), 0));
-  const monthDeposits = round2(paidDeposits.filter(d => monthOf(d.paidAt) === curMonth).reduce((s, d) => s + Number(d.amount || 0), 0));
+  // Two streams: booking deposits on the customer record + estimate deposits
+  // on the quote record (Approve & pay). Both count; the split is reported so
+  // the card can say where the money came from.
+  const bookingDeposits = customers.flatMap(c => (c.deposits || []).filter(d => d.status === 'paid'));
+  const estimateDeposits = quoteDeposits(h);
+  const paidDeposits = bookingDeposits.concat(estimateDeposits);
+  const sumDep = arr => round2(arr.reduce((s, d) => s + Number(d.amount || 0), 0));
+  const totalDeposits = sumDep(paidDeposits);
+  const monthDeposits = sumDep(paidDeposits.filter(d => monthOf(d.paidAt) === curMonth));
+  const depositSplit = {
+    bookingMonth: sumDep(bookingDeposits.filter(d => monthOf(d.paidAt) === curMonth)), bookingTotal: sumDep(bookingDeposits),
+    estimateMonth: sumDep(estimateDeposits.filter(d => monthOf(d.paidAt) === curMonth)), estimateTotal: sumDep(estimateDeposits),
+    estimateCount: estimateDeposits.length,
+  };
 
   // ── Booked by (who ENTERED the appointment) ────────────────────────────────
   // Per-account sales attribution: every staff-created appointment carries a
@@ -1036,8 +1118,16 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
     quotedTotal: round2(aiLeads.reduce((s, l) => s + (quoteOf(l) > 0 ? quoteOf(l) : 0), 0)),
   };
 
+  // Total quotes given — this month + all time. Live counterpart of the
+  // per-month figure in /revenue/month/:ym (same rollup).
+  const strip = r => ({ ...r, rows: undefined });
+  const quotesGiven = {
+    month: strip(quotesGivenRollup(h, d => monthOf(d) === curMonth)),
+    total: strip(quotesGivenRollup(h, null)),
+  };
+
   res.json({
-    aiReceptionist,
+    aiReceptionist, quotesGiven,
     mrr, activeMembers: activeMembers.length,
     aiRecoveredTotal: round2(aiDone.reduce((s, a) => s + Number(a.price || 0), 0)),
     aiRecoveredMonth: round2(aiDoneMonth.reduce((s, a) => s + Number(a.price || 0), 0)),
@@ -1060,7 +1150,7 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
     hasExpenses: expenses.length > 0,
     monthTaxCollected: round2(thisMonth.reduce((s,a)=>s+Number(a.taxAmount||0),0)),
     totalTaxCollected: round2(done.reduce((s,a)=>s+Number(a.taxAmount||0),0)),
-    monthDeposits, totalDeposits,
+    monthDeposits, totalDeposits, depositSplit,
     monthJobs: thisMonth.length,
     avgTicket: thisMonth.length?Math.round(thisMonth.reduce((s,a)=>s+Number(a.price||0),0)/thisMonth.length):0,
     byCreator, bookedBySource,
@@ -1264,6 +1354,9 @@ function cleanFollowUp(v) {
   const statuses = ['active', 'paused', 'completed', 'stopped', 'done'];
   const iso = (x) => (x && !isNaN(Date.parse(x))) ? new Date(x).toISOString() : null;
   return {
+    // Which sequence idx indexes into: absent = the 30-day Meta sequence,
+    // 'obj_<type>' = an objection follow-up (server/objections.js).
+    seq: /^obj_[a-z]+$/.test(String(v.seq || '')) ? String(v.seq) : undefined,
     idx: Math.max(0, Math.min(200, parseInt(v.idx, 10) || 0)),
     status: statuses.includes(v.status) ? v.status : 'active',
     nextAt: iso(v.nextAt),
@@ -1405,6 +1498,10 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   if (req.body.quotedAmount !== undefined) {
     const q = Number(req.body.quotedAmount);
     lead.quotedAmount = (Number.isFinite(q) && q > 0) ? Math.round(q * 100) / 100 : null;
+    // Date the phone quote so "quotes given" can bucket it by month; a later
+    // price edit keeps the original date, clearing the amount clears the stamp.
+    if (lead.quotedAmount == null) lead.quotedAt = null;
+    else if (!lead.quotedAt) lead.quotedAt = new Date().toISOString();
   }
   // 30-day sequence state (Tasks page queue). Sends are manual (sms: deep link
   // client-side); this just persists the bookkeeping. Deliberately does NOT
@@ -1416,6 +1513,15 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   // the lead modal. The Leads page 🔥 chip and the Dashboard's Hot leads
   // button filter to these. hotAt lets the list order by when it was flagged.
   if (req.body.hot !== undefined) { lead.hot = !!req.body.hot; lead.hotAt = lead.hot ? (lead.hotAt || new Date().toISOString()) : null; }
+  // Objection the lead raised (owner picks a chip on the modal; the AI
+  // receptionist stamps one at capture). null clears it. Switching the lead
+  // onto the objection follow-up sequence is the client's call (it sends the
+  // followUp state in the same PATCH) so the owner can decline the switch.
+  if (req.body.objection !== undefined) {
+    const o = objections.cleanObjection(req.body.objection, 'owner');
+    lead.objection = o;
+    if (o) { lead.noteLog = lead.noteLog || []; lead.noteLog.unshift({ id: genId('note'), text: `Objection: ${objections.byKey(o.type).label}${o.note ? ' — ' + o.note : ''}`, at: o.at, by: String(req.body.by || '').slice(0, 60) }); }
+  }
   if (req.body.followUp !== undefined) {
     const fu = cleanFollowUp(req.body.followUp);
     if (fu) {
