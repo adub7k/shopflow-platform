@@ -26,6 +26,7 @@ const RULES = [
   ['human',      /\b(real person|a person|human|someone|somebody|talk to (the )?(owner|manager|shop)|call me|speak (to|with))\b/i],
   ['competitor', /\b(other (shop|place|quote|guy|company)|somewhere else|another (shop|quote|place|company)|competitor|cheaper (quote|place|shop|guy|elsewhere|down the)|went with|quoted (me )?(less|lower|cheaper)|got a quote|lower quote|better (price|quote|deal) (at|from|somewhere))\b/i],
   ['think',      /\b(think about|think it over|talk it over|sleep on|(talk|check|discuss|run it|go over)( it)? (to|with|by) (my |his |her |the |our )?(wife|husband|partner|spouse|girlfriend|boyfriend|dad|mom|parents|family|boss)|(wife|husband|partner|spouse) (first|about)|run it by|get back to you|not sure yet|decide|undecided)\b/i],
+  ['think',      /\b(wife|husband|partner|spouse|girlfriend|boyfriend|significant other|my (dad|mom|parents|family))\b/i],
   ['timing',     /\b(not (right )?now|later|next (week|month|year|payday|paycheck)|after (the|my)|busy|bad time|down the road|when i get|out of town|in a few (weeks|months))\b/i],
   ['price',      /\b(price|pricey|expensive|too much|budget|afford|cost|cheaper|discount|deal|money|shopping around|compare)\b/i],
 ];
