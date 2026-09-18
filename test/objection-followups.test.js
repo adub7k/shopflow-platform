@@ -20,7 +20,7 @@ const DAY = 86400000;
 
 // ── classifier ───────────────────────────────────────────────────────────────
 eq('classify: price', obj.classifyObjection("that's a bit too expensive for me"), 'price');
-eq('classify: think / partner', [obj.classifyObjection('I need to talk to my wife about it'), obj.classifyObjection('has to talk to his wife first'), obj.classifyObjection('let me run it by my husband')], ['think', 'think', 'think']);
+eq('classify: think / partner', [obj.classifyObjection('I need to talk to my wife about it'), obj.classifyObjection('has to talk to his wife first'), obj.classifyObjection('let me run it by my husband'), obj.classifyObjection('wife has to sign off')], ['think', 'think', 'think', 'think']);
 eq('classify: timing', obj.classifyObjection('not right now, maybe next month'), 'timing');
 eq('classify: competitor beats price', [obj.classifyObjection('the other shop quoted me cheaper'), obj.classifyObjection('went with a cheaper shop'), obj.classifyObjection('got a lower quote down the street')], ['competitor', 'competitor', 'competitor']);
 eq('classify: wants a person beats everything', obj.classifyObjection('can I talk to a real person about the price'), 'human');
