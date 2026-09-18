@@ -159,7 +159,7 @@ function voiceConfig(settings) {
     // so the caller knows they were heard. 0 / relayFiller:false disables.
     strictTools: v.strictTools === true,   // API-side strict tool schemas (off: see toolsFor)
     relayFiller: v.relayFiller !== false,
-    relayFillerMs: Number.isFinite(Number(v.relayFillerMs)) ? Number(v.relayFillerMs) : (Number(process.env.VOICE_AI_FILLER_MS) || 1200),
+    relayFillerMs: Number.isFinite(Number(v.relayFillerMs)) ? Number(v.relayFillerMs) : (Number(process.env.VOICE_AI_FILLER_MS) || 1800),
     // Optional persona name the bot answers to (e.g. "Sarah"), and free-text shop
     // knowledge the receptionist can use to answer caller questions (hours details,
     // location, parking, policies, FAQs) — never a source of prices.
@@ -323,6 +323,7 @@ function buildSystemBlocks(ctx, cfg, { finalTurn = false } = {}) {
         'Then CAPTURE right away — do not linger. If they pick a day, call capture_lead with callOutcome "booked" and that day in agreedTime; if they are not ready to commit, still call capture_lead with callOutcome "quoted" (you gave a price) or "captured" — you have their name, and the shop will follow up by text or call. NEVER end a call without capturing, because a caller can hang up the second they hear a price.',
         'Do NOT re-ask anything they already told you, and infer the body style (sedan, SUV, or truck) from the vehicle model instead of asking whenever you can.',
         'Before you save, quickly read the key details back in one short sentence — name, service, and vehicle (we already have their number, so do not ask for or read back a phone number) — get a yes, then capture. capture_lead ends the call with your warm closingLine; do not also call end_call.',
+        'When you call capture_lead or book_appointment, put EVERYTHING you want to say into closingLine and write no other text in that reply — the closingLine is the goodbye, and a sentence before it plus the closingLine sounds like two goodbyes.',
       ].join(' ')
     : [
         'YOUR GOAL: book the caller an appointment. Find out which service they want and their preferred day,',

@@ -27,7 +27,7 @@ const TERMS = [
   { canonical: 'rear windshield', kind: 'coverage', aliases: ['back glass', 'rear glass', 'back window', 'rear window', 'back windshield'], garbles: ['back class', 'rear class'] },
   { canonical: 'sunroof', kind: 'coverage', aliases: ['moonroof', 'moon roof', 'sun roof'], garbles: ['sunruf', 'sun ruff'] },
   { canonical: 'panoramic roof', kind: 'coverage', aliases: ['pano roof', 'glass roof', 'panoramic sunroof', 'panoramic glass', 'the glass on top', 'panoramic'], garbles: ['pana roof', 'panorama roof', 'pan a roof', 'panoramic roof'] },
-  { canonical: 'full vehicle', kind: 'coverage', aliases: ['whole car', 'full car', 'all the windows', 'all windows', 'every window', 'all around', 'the whole thing', 'entire car', 'full tint', 'all sides'], garbles: ['old vehicle', 'full vehicle', 'full a vehicle', 'fool vehicle', 'whole car'] },
+  { canonical: 'full vehicle', kind: 'coverage', aliases: ['whole car', 'full car', 'all the windows', 'all windows', 'every window', 'all around', 'the whole thing', 'entire car', 'full tint', 'all sides'], garbles: ['old vehicle', 'full vehicle', 'full a vehicle', 'fool vehicle', 'tall vehicle', 'whole car'] },
   { canonical: 'uv protection', kind: 'feature', aliases: ['uv', 'uv rays', 'ultraviolet', 'uv blocking', 'sun protection'], garbles: ['you v protection', 'u v protection', 'you v rays'] },
   { canonical: 'heat rejection', kind: 'feature', aliases: ['heat blocking', 'blocks heat', 'keep it cool', 'keeps the car cool', 'heat', 'infrared rejection', 'ir rejection'], garbles: ['heat rejections', 'heat rejecting', 'heat reject'] },
   { canonical: 'glare', kind: 'feature', aliases: ['glare reduction', 'anti glare'], garbles: ['glair', 'glare reduction'] },
