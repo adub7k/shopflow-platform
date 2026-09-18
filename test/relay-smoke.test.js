@@ -49,6 +49,7 @@ function streamStub(script) {
     const s = {
       on(ev, cb) { listeners[ev] = cb; return s; },
       async finalMessage() {
+        if (step.delayMs) await new Promise(r => setTimeout(r, step.delayMs));   // slow first token
         for (const d of (step.text || [])) if (listeners.text) listeners.text(d);
         if (step.error) throw step.error;   // simulate an API failure (after any text it emitted)
         return { content: step.content };
@@ -201,10 +202,62 @@ console.log('\n— relay retry: blip AFTER audio streamed does NOT retry (no dou
 // worst case) — a shorter budget would let process.exit fire mid-retry and mask
 // those assertions. Also assert the expected number of checks actually ran, so a
 // swallowed async rejection can never masquerade as a green run.
-const EXPECTED_CHECKS = 32;
+const EXPECTED_CHECKS = 40;
 setTimeout(() => {
   const ran = passed + failures;
   if (ran !== EXPECTED_CHECKS) { console.log(`\n✗ expected ${EXPECTED_CHECKS} checks, ${ran} ran — a test block did not finish`); process.exit(1); }
   console.log(`\n${failures === 0 ? '✓ ALL PASSED' : `✗ ${failures} FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);
 }, 2000);
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+console.log('\n— dead-air filler: slow first token → short acknowledgement, fast → none —');
+(async () => {
+  const mk = (cfgExtra) => {
+    const db = detailShop();
+    const ctx = { shopId: 'shop1', db, h: shopHelpers(db), settings: db.get('settings').value(), shop: { id: 'shop1', slug: 'demo-detail', shopName: 'Demo Auto Studio' }, shopName: 'Demo Auto Studio', industry: 'detail', today: '2026-07-14' };
+    const ws = fakeWs();
+    const call = { id: 'CAf', from: '+15551234567', leadId: 'lead1', voiceAI: voice.initState('relay') };
+    call.voiceAI.turns.push({ role: 'assistant', text: voice.greeting(ctx), at: 't0' });
+    const session = { ws, ctx, call, cfg: { ...voice.voiceConfig(ctx.settings), ...cfgExtra }, messages: [], busy: false, ended: false, gen: 0, stream: null };
+    return { ws, call, session };
+  };
+  const reply = { text: ['Sure — what year is the car? '], content: [{ type: 'text', text: 'Sure — what year is the car? ' }] };
+
+  // Slow model (250ms to first token) with a 40ms filler threshold → filler spoken first.
+  let t = mk({ relayFillerMs: 40 });
+  voice.__setTestClient(streamStub([{ ...reply, delayMs: 250 }]));
+  await relay.__test.handlePrompt(t.session, 'How much for tint');
+  let toks = t.ws.sent.filter(m => m.type === 'text').map(m => m.token);
+  const fillerIdx = toks.findIndex(x => /^(Okay|Sure|One moment|Let me check)\.\s$/.test(x));
+  const modelIdx = toks.findIndex(x => /what year/.test(x));
+  check('filler: spoken before the model text', fillerIdx !== -1 && modelIdx !== -1 && fillerIdx < modelIdx, JSON.stringify(toks));
+  check('filler: spoken exactly once', toks.filter(x => /^(Okay|Sure|One moment|Let me check)\.\s$/.test(x)).length === 1);
+  let rec = t.call.voiceAI.trace[t.call.voiceAI.trace.length - 1];
+  check('filler: trace records first-word latency + the filler', rec.firstTokenMs >= 200 && typeof rec.filler === 'string' && rec.filler.length > 0, JSON.stringify({ ttft: rec.firstTokenMs, filler: rec.filler }));
+  check('filler: transcript starts with the filler', /^(Okay|Sure|One moment|Let me check)\. Sure/.test(rec.reply), rec.reply);
+
+  // Fast model (no delay) → no filler.
+  t = mk({ relayFillerMs: 40 });
+  voice.__setTestClient(streamStub([{ ...reply }]));
+  await relay.__test.handlePrompt(t.session, 'How much for tint');
+  toks = t.ws.sent.filter(m => m.type === 'text').map(m => m.token);
+  check('no filler when the first token is fast', !toks.some(x => /^(Okay|Sure|One moment|Let me check)\.\s$/.test(x)), JSON.stringify(toks));
+  rec = t.call.voiceAI.trace[t.call.voiceAI.trace.length - 1];
+  check('fast: trace has first-word latency and no filler', rec.firstTokenMs != null && rec.filler === undefined);
+
+  // Disabled per shop → never, however slow.
+  t = mk({ relayFiller: false, relayFillerMs: 10 });
+  voice.__setTestClient(streamStub([{ ...reply, delayMs: 120 }]));
+  await relay.__test.handlePrompt(t.session, 'How much for tint');
+  toks = t.ws.sent.filter(m => m.type === 'text').map(m => m.token);
+  check('filler off: none spoken', !toks.some(x => /^(Okay|Sure|One moment|Let me check)\.\s$/.test(x)));
+
+  // Slow first token, then a 400 compat retry: the filler must not block the retry.
+  t = mk({ relayFillerMs: 30 });
+  voice.__setTestClient(streamStub([{ delayMs: 100, error: Object.assign(new Error('400 bad'), { status: 400 }) }, { ...reply }]));
+  await relay.__test.handlePrompt(t.session, 'How much for tint');
+  toks = t.ws.sent.filter(m => m.type === 'text').map(m => m.token);
+  check('filler + 400: retry still happens and the model text is spoken', toks.some(x => /what year/.test(x)) && !t.ws.sent.some(m => m.type === 'end'), JSON.stringify(toks));
+})();

@@ -183,23 +183,51 @@ function sayGuarded(session, chunk) {
 // half-finished sentence) or after a barge-in (the caller is already talking) —
 // those fall through to handlePrompt's graceful "we'll call you right back" exit.
 // Returns { final, spokeText }; throws the last error only when it can't recover.
+// Short acknowledgements spoken while the model is still thinking, so a slow
+// first token never sounds like dead air. Rotated per turn; never a promise.
+const FILLERS = ['Okay.', 'Sure.', 'One moment.', 'Let me check.'];
 async function streamTurn(session, params, myGen, { retries = 2 } = {}) {
   const client = voice.getClient();
   let step = -1, reason = null;
+  const t0 = Date.now();
+  let firstTokenMs = null, filler = '';
+  // Dead-air cover: one filler per TURN (not per attempt), only if nothing has
+  // been spoken yet and the caller hasn't barged in. It is not model content,
+  // so it never blocks the compat/blip retry below and never counts as
+  // "already spoke" for the no-double-speech rule.
+  const fillerMs = session.cfg && session.cfg.relayFiller !== false ? Number(session.cfg.relayFillerMs) || 0 : 0;
+  let fillerTimer = null;
+  const armFiller = () => {
+    if (!fillerMs || session.fillerSaid || fillerTimer) return;
+    fillerTimer = setTimeout(() => {
+      fillerTimer = null;
+      if (session.gen !== myGen || session.ended || firstTokenMs != null || session.fillerSaid) return;
+      session.fillerSaid = true;
+      filler = FILLERS[(session.fillerIdx = ((session.fillerIdx || 0) + 1)) % FILLERS.length];
+      speak(session, filler + ' ', false);
+    }, fillerMs);
+  };
+  const disarmFiller = () => { if (fillerTimer) { clearTimeout(fillerTimer); fillerTimer = null; } };
   for (let attempt = 0; ; attempt++) {
     let spokeText = '';
     const buf = new SpeakBuffer({ raw: true });
     const { _compat, ...send } = params;
     const stream = client.messages.stream(send);
     session.stream = stream;
-    stream.on('text', delta => { if (session.gen === myGen) { const chunk = buf.push(delta); if (chunk) spokeText += sayGuarded(session, chunk); } });
+    armFiller();
+    stream.on('text', delta => {
+      if (firstTokenMs == null) { firstTokenMs = Date.now() - t0; disarmFiller(); }
+      if (session.gen === myGen) { const chunk = buf.push(delta); if (chunk) spokeText += sayGuarded(session, chunk); }
+    });
     try {
       const final = await stream.finalMessage();
+      disarmFiller();
       session.stream = null;
       if (session.gen === myGen) { const tail = buf.flush(); if (tail) spokeText += sayGuarded(session, tail); }
       if (_compat) session.call.voiceAI.compat = { ..._compat, reason };
-      return { final, spokeText };
+      return { final, spokeText, firstTokenMs, filler };
     } catch (e) {
+      disarmFiller();
       session.stream = null;
       if (session.gen !== myGen) throw e;                              // barge-in — not ours to retry
       // Request shape rejected (400): retry one conservative step at a time —
@@ -264,11 +292,15 @@ async function runRelayTurn(session, text) {
   const toolLog = [];
   session.guardHits = [];
   session.turnSpoken = '';
+  session.fillerSaid = false;
+  let firstTokenMs = null, fillerSaid = '';
 
   try {
     for (let hop = 0; hop < 4; hop++) {
-      const { final, spokeText } = await streamTurn(session, voice.modelParams({ system, messages: session.messages, tools }), myGen);
-      spoken += spokeText;
+      const { final, spokeText, firstTokenMs: ttft, filler } = await streamTurn(session, voice.modelParams({ system, messages: session.messages, tools }), myGen);
+      if (hop === 0) firstTokenMs = ttft;
+      if (filler) { fillerSaid = filler; spoken += (spoken ? ' ' : '') + filler; }
+      spoken += (spoken && spokeText ? ' ' : '') + spokeText;
       usage = voice.sumUsage(usage, voice.usageOf(final));
       if (session.gen !== myGen) { noteInterrupted(session); return; } // interrupted mid-turn
       if (final.stop_reason === 'refusal') {
@@ -319,7 +351,8 @@ async function runRelayTurn(session, text) {
   voice.recordTrace(ctx, call, {
     heard: text, normalized: heard.norm.changed ? heard.norm.text : undefined,
     corrections: heard.norm.corrections, tags: heard.norm.tags,
-    latencyMs: Date.now() - started, usage, tools: toolLog, guardHits: session.guardHits.slice(), reply: spoken.replace(/\s+/g, ' ').trim(),
+    latencyMs: Date.now() - started, firstTokenMs, filler: fillerSaid || undefined,
+    usage, tools: toolLog, guardHits: session.guardHits.slice(), reply: spoken.replace(/\s+/g, ' ').trim(),
     compat: voice.compatNote(call.voiceAI.compat),
   });
   syncTranscript(call);

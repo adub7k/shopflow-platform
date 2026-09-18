@@ -428,7 +428,7 @@ const Leads = {
             const tools = (r.tools||[]).map(x=>esc(x.name)+(x.ok===false?' ✗':'')).join(', ');
             const guard = (r.guardHits||[]).map(h=>`${esc(h.kind)} ${esc(String(h.value))}`).join(', ');
             return `<div style="padding:5px 0;border-top:1px solid var(--border);">
-              <div><strong>#${r.n}</strong> · ${r.latencyMs!=null?r.latencyMs+' ms':'—'} · ${fmtTok(r.usage)}${r.effort?` · ${esc(r.model)} (${esc(r.effort)})`:r.model?` · ${esc(r.model)}`:''}${r.error?` · <span style="color:#dc2626;">error: ${esc(r.error)}</span>`:''}</div>
+              <div><strong>#${r.n}</strong> · ${r.latencyMs!=null?r.latencyMs+' ms':'—'}${r.firstTokenMs!=null?` · first word ${r.firstTokenMs} ms`:''}${r.filler?` · said “${esc(r.filler)}” while waiting`:''} · ${fmtTok(r.usage)}${r.effort?` · ${esc(r.model)} (${esc(r.effort)})`:r.model?` · ${esc(r.model)}`:''}${r.error?` · <span style="color:#dc2626;">error: ${esc(r.error)}</span>`:''}</div>
               ${fixes?`<div>🔧 corrected: ${fixes}</div>`:''}${amb?`<div>❓ ambiguous: ${amb}</div>`:''}${tools?`<div>🛠 tools: ${tools}</div>`:''}${guard?`<div style="color:#dc2626;">🛡 guard: ${guard}</div>`:''}${r.compat?`<div style="color:#d97706;">⚠ ${esc(r.compat)}</div>`:''}
             </div>`;
           }).join('');

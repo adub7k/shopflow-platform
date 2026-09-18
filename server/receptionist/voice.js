@@ -29,8 +29,10 @@ const { allowedPrices, guardReply, guardPrice } = require('./guard');
 // claude-haiku-4-5 — which rejects output_config.effort, so modelParams omits it).
 const MODEL = process.env.VOICE_AI_MODEL || 'claude-opus-5';
 // Adaptive thinking tokens count toward max_tokens; replies are one sentence
-// but the cap must leave room for a brief think + a tool call.
-const MAX_TOKENS = Number(process.env.VOICE_AI_MAX_TOKENS) || 1024;
+// but the cap must leave room for the think + a full capture_lead tool call.
+// A staging call hit exactly 1024 on its capture turn (12s, truncated think),
+// so the cap is 4096: still a hard stop on a runaway, never a truncation.
+const MAX_TOKENS = Number(process.env.VOICE_AI_MAX_TOKENS) || 4096;
 const EFFORT = process.env.VOICE_AI_EFFORT || 'low';
 const DEFAULT_VOICE = 'Polly.Joanna-Neural';
 const DEFAULT_MAX_TURNS = 12;
@@ -150,6 +152,11 @@ function voiceConfig(settings) {
     // ConversationRelay STT model. Deepgram nova-3 is the most accurate on
     // telephony audio + domain words; overridable if a shop needs to fall back.
     relaySpeechModel: (v.relaySpeechModel || 'nova-3-general').trim(),
+    // Dead-air cover: if the model hasn't produced its first word within this
+    // many ms, the relay speaks a short acknowledgement ("Okay." / "One moment.")
+    // so the caller knows they were heard. 0 / relayFiller:false disables.
+    relayFiller: v.relayFiller !== false,
+    relayFillerMs: Number.isFinite(Number(v.relayFillerMs)) ? Number(v.relayFillerMs) : (Number(process.env.VOICE_AI_FILLER_MS) || 1200),
     // Optional persona name the bot answers to (e.g. "Sarah"), and free-text shop
     // knowledge the receptionist can use to answer caller questions (hours details,
     // location, parking, policies, FAQs) — never a source of prices.
@@ -732,7 +739,7 @@ function recordTrace(ctx, call, t) {
   const rec = { n, at: new Date().toISOString(), model: MODEL, effort: /haiku/i.test(MODEL) ? null : EFFORT, ...t };
   state.trace = [...(state.trace || []), rec];
   const u = rec.usage || {};
-  console.log(`[brain] shop=${ctx.shop && ctx.shop.slug || ctx.shopId} call=${call.id} turn=${n} ${rec.latencyMs != null ? rec.latencyMs + 'ms' : ''} in=${u.input_tokens || 0} cached=${u.cache_read_input_tokens || 0} out=${u.output_tokens || 0}${rec.corrections && rec.corrections.length ? ' fixed=' + describeCorrections(rec.corrections) : ''}${rec.tags && rec.tags.length ? ' ambiguous=' + rec.tags.map(x => x.term).join('|') : ''}${rec.tools && rec.tools.length ? ' tools=' + rec.tools.map(x => x.name + (x.ok === false ? '!' : '')).join(',') : ''}${rec.guardHits && rec.guardHits.length ? ' GUARD=' + rec.guardHits.map(h => h.kind + ':' + h.value).join(',') : ''}${rec.error ? ' error=' + rec.error : ''}`);
+  console.log(`[brain] shop=${ctx.shop && ctx.shop.slug || ctx.shopId} call=${call.id} turn=${n} ${rec.latencyMs != null ? rec.latencyMs + 'ms' : ''}${rec.firstTokenMs != null ? ' first-word=' + rec.firstTokenMs + 'ms' : ''}${rec.filler ? ' filler' : ''} in=${u.input_tokens || 0} cached=${u.cache_read_input_tokens || 0} out=${u.output_tokens || 0}${rec.corrections && rec.corrections.length ? ' fixed=' + describeCorrections(rec.corrections) : ''}${rec.tags && rec.tags.length ? ' ambiguous=' + rec.tags.map(x => x.term).join('|') : ''}${rec.tools && rec.tools.length ? ' tools=' + rec.tools.map(x => x.name + (x.ok === false ? '!' : '')).join(',') : ''}${rec.guardHits && rec.guardHits.length ? ' GUARD=' + rec.guardHits.map(h => h.kind + ':' + h.value).join(',') : ''}${rec.error ? ' error=' + rec.error : ''}`);
   return rec;
 }
 const usageOf = (res) => res && res.usage ? { input_tokens: res.usage.input_tokens, output_tokens: res.usage.output_tokens, cache_read_input_tokens: res.usage.cache_read_input_tokens || 0, cache_creation_input_tokens: res.usage.cache_creation_input_tokens || 0 } : null;
