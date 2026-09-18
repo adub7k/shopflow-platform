@@ -22,12 +22,14 @@ const { normalizeUtterance, buildShopVocab, hintPhrases, describeCorrections } =
 const { toSpokenForm } = require('./speak');
 const { allowedPrices, guardReply, guardPrice } = require('./guard');
 
-// The brain. claude-opus-5 for comprehension (automotive terms, garbled phone
-// audio, objections); adaptive thinking is on by default and effort "low" keeps
-// it snappy for a live call. Overridable without a code change via
-// VOICE_AI_MODEL (e.g. claude-sonnet-5 if first-token latency needs trimming, or
-// claude-haiku-4-5 — which rejects output_config.effort, so modelParams omits it).
-const MODEL = process.env.VOICE_AI_MODEL || 'claude-opus-5';
+// The brain. claude-sonnet-5: on a live call time-to-first-word matters more
+// than extra depth, and a staging call on claude-opus-5 waited 2–5s (12s on the
+// capture turn) before speaking. Sonnet 5 still runs adaptive thinking at
+// effort "low" and takes the same strict tools / effort / cache request shape.
+// Overridable without a code change via VOICE_AI_MODEL (claude-opus-5 for
+// maximum comprehension, or claude-haiku-4-5 — which rejects
+// output_config.effort, so modelParams omits it).
+const MODEL = process.env.VOICE_AI_MODEL || 'claude-sonnet-5';
 // Adaptive thinking tokens count toward max_tokens; replies are one sentence
 // but the cap must leave room for the think + a full capture_lead tool call.
 // A staging call hit exactly 1024 on its capture turn (12s, truncated think),
