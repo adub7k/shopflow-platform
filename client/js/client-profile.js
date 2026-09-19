@@ -283,8 +283,55 @@ const ClientProfile = {
     if (v.stockNumber && (c.vehicles || []).some(x => String(x.stockNumber || '').trim().toLowerCase() === v.stockNumber.toLowerCase())) { toast('Stock #' + v.stockNumber + ' is already on this account', 'warning'); return; }
     c.vehicles = [...(c.vehicles || []), v];
     const btn = document.getElementById('qv-btn'); disableBtn(btn);
-    try { await db.customers.save(c); toast('Added ' + _cpVehLabel(v) + ' ✓'); await this.open(custId); document.getElementById('qv-stock')?.focus(); }
+    try { await db.customers.save(c); toast('Added ' + _cpVehLabel(v) + ' ✓'); await this.open(custId); this.bookVehiclePrompt(custId, v.id, { afterQuickAdd: true }); }
     catch (e) { c.vehicles = c.vehicles.filter(x => x.id !== v.id); toast('Could not save', 'error'); enableBtn(btn); }
+  },
+  // ── Book a vehicle: the one-screen "when are you doing this unit?" popup ───
+  // Pops right after a fleet quick-add (Skip keeps the cursor on Stock # so a
+  // list of units keys in fast) and from the 📅 button on any vehicle card.
+  // Creates a confirmed appointment tied to the vehicle; service/time optional.
+  bookVehiclePrompt(custId, vehId, opts) {
+    const c = this._data.customer; const v = (c.vehicles || []).find(x => x.id === vehId); if (!v) return;
+    const after = !!(opts && opts.afterQuickAdd);
+    const svcs = (this._services || []).filter(s => s && s.active !== false);
+    const times = []; for (let hh = 7; hh <= 18; hh++) for (const mm of ['00', '30']) { const ap = hh >= 12 ? 'PM' : 'AM'; times.push(`${hh % 12 || 12}:${mm} ${ap}`); }
+    const minDate = today();
+    Modal.show(`
+      <div class="modal-title">📅 When are you detailing this one?</div>
+      <div style="display:flex;align-items:center;gap:10px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 12px;margin-bottom:12px;">
+        <div style="font-size:20px;line-height:1;">🚗</div><div style="font-size:14px;font-weight:700;">${esc(_cpVehLabel(v))}</div></div>
+      <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="bv-date" type="date" value="${minDate}" min="${minDate}" style="font-size:16px;"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="form-group"><label class="form-label">Time <span style="color:var(--faint);font-weight:500;">(optional)</span></label>
+          <select class="form-input" id="bv-time"><option value="">Any time</option>${times.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">Service <span style="color:var(--faint);font-weight:500;">(optional)</span></label>
+          <select class="form-input" id="bv-svc"><option value="">Decide later</option>${svcs.map(s => `<option value="${s.id}">${esc(s.name)}${s.price ? ' · ' + fmtMoney(s.price) : ''}</option>`).join('')}</select></div>
+      </div>
+      <div class="modal-actions">
+        <button id="bv-btn" class="btn btn-primary btn-full" onclick="ClientProfile.saveVehicleBooking('${custId}','${vehId}',${after})">Book it</button>
+        <button class="btn btn-full" onclick="Modal.close();${after ? "document.getElementById('qv-stock')?.focus()" : ''}">${after ? 'Skip for now' : 'Cancel'}</button>
+      </div>`);
+    setTimeout(() => document.getElementById('bv-date')?.focus(), 50);
+  },
+  async saveVehicleBooking(custId, vehId, afterQuickAdd) {
+    const c = this._data.customer; const v = (c.vehicles || []).find(x => x.id === vehId); if (!v) return;
+    const date = _cpVal('bv-date'); if (!date) { toast('Pick a date', 'warning'); return; }
+    const time = _cpVal('bv-time'); const svcId = _cpVal('bv-svc');
+    const svc = (this._services || []).find(s => s.id === svcId);
+    const btn = document.getElementById('bv-btn'); disableBtn(btn);
+    const appt = {
+      id: genId('a'), customerId: c.id, customerName: c.name, customerPhone: c.phone || '', customerEmail: c.email || '',
+      serviceId: svc ? svc.id : null, service: svc ? svc.name : 'Detail', price: svc ? Number(svc.price) || 0 : 0,
+      date, time, status: 'confirmed', source: 'crm', vehicleId: v.id,
+      notes: [v.stockNumber ? 'Stock #' + v.stockNumber : '', c.isFleet ? 'Fleet: ' + (c.companyName || c.name) : ''].filter(Boolean).join(' · '),
+      customFields: { vehicleYear: v.year || '', vehicleMake: v.make || '', vehicleModel: v.model || '', vehicleColor: v.color || '' },
+    };
+    try {
+      await db.appointments.save(appt); Modal.close();
+      toast(`Booked ${_cpVehLabel(v)} for ${fmtDateShort(date)}${time ? ' ' + time : ''} ✓`);
+      await this.open(custId);
+      if (afterQuickAdd) document.getElementById('qv-stock')?.focus();
+    } catch (e) { toast(e.message || 'Could not book', 'error'); enableBtn(btn); }
   },
   _filterVehicles(q) {
     const needle = String(q || '').trim().toLowerCase();
@@ -665,7 +712,7 @@ function _buildProfileHtml(data, services, messages) {
             <div style="font-size:11px;color:var(--muted);margin-top:5px;">${fmtMoney(vRev)} lifetime · ${va.length} service${va.length !== 1 ? 's' : ''}${vLast ? ' · last ' + fmtDateShort(vLast.date) : ''}</div>
             ${v.notes ? `<div style="font-size:12px;color:var(--muted);font-style:italic;margin-top:5px;">${esc(v.notes)}</div>` : ''}
           </div>
-          ${write ? `<button onclick="ClientProfile.vehiclePrompt('${c.id}','${v.id}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;flex-shrink:0;">Edit</button>` : ''}
+          ${write ? `<div style="display:flex;gap:6px;flex-shrink:0;"><button onclick="ClientProfile.bookVehiclePrompt('${c.id}','${v.id}')" title="Schedule this vehicle" style="background:var(--green);border:none;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:700;color:#fff;cursor:pointer;">📅 Book</button><button onclick="ClientProfile.vehiclePrompt('${c.id}','${v.id}')" style="background:none;border:1px solid var(--border);border-radius:7px;padding:4px 9px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;">Edit</button></div>` : ''}
         </div>
         ${vPhotos.length ? `<div style="display:flex;gap:6px;overflow-x:auto;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">${vPhotos.slice(0, 8).map(thumb).join('')}</div>` : ''}
       </div>`;
