@@ -53,7 +53,7 @@
       html.push(`<div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;align-items:center;">
         <input class="form-input" id="client-search" placeholder="Search name or phone…" value="${esc(this._search)}" oninput="Clients._filter(this.value)" style="width:250px;height:33px;padding:0 12px;" />
         <div class="v2-chips">
-          ${chip('all', 'All', counts.all)}${chip('active', 'Active', counts.active)}${chip('risk', 'At risk', counts.risk)}${chip('never', 'No visits', counts.never)}${counts.fleet ? chip('fleet', 'Fleet', counts.fleet) : ''}
+          ${chip('all', 'All', counts.all)}${chip('active', 'Active', counts.active)}${chip('risk', 'At risk', counts.risk)}${chip('never', 'No visits', counts.never)}${(counts.fleet || Shop.settings.supportsFleet !== false) ? chip('fleet', 'Fleet', counts.fleet) : ''}
           ${allTags.map(tagChip).join('')}
         </div>
         <div class="sp" style="flex:1;"></div>
@@ -62,7 +62,13 @@
             ${[30, 45, 60, 75, 90, 120].map(d => `<option value="${d}"${this._retentionDays === d ? ' selected' : ''}>${d} days</option>`).join('')}
           </select></label></div>`);
 
-      if (!rows.length) {
+      if (!rows.length && this._statusFilter2 === 'fleet' && !this._search && !this._tagFilter) {
+        html.push(`<div class="v2-card"><div class="empty-state"><div class="empty-icon">🚚</div>
+          <div class="empty-text">No fleet accounts yet</div>
+          <div class="list-sub" style="margin-top:2px;max-width:420px;margin-left:auto;margin-right:auto;">A fleet account is a dealership or business with several vehicles. Open any client and tap <b>Mark as fleet account</b>, or add a new one here — you'll get a stock-number quick-add and fleet tracking.</div>
+          <div style="margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;"><button class="btn btn-green" onclick="Clients.openForm(null,{fleet:true})">＋ Add fleet account</button><button class="btn btn-sm" onclick="Clients._statusFilter2='all';Clients.render()">Show all clients</button></div>
+        </div></div>`);
+      } else if (!rows.length) {
         html.push(`<div class="v2-card"><div class="empty-state"><div class="empty-icon">👤</div>
           <div class="empty-text">${this._search || this._tagFilter || this._statusFilter2 !== 'all' ? 'No clients match' : 'No clients yet'}</div>
           <div class="list-sub" style="margin-top:2px;">${this._search || this._tagFilter || this._statusFilter2 !== 'all' ? 'Try a different search or clear the filters.' : 'Add your first client to get started.'}</div>

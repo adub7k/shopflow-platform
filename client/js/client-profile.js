@@ -265,6 +265,14 @@ const ClientProfile = {
     try { await db.customers.save(c); Modal.close(); toast('Vehicle saved ✓'); this.open(custId); }
     catch (e) { toast('Could not save', 'error'); enableBtn(btn); }
   },
+  // One tap turns an ordinary customer into a fleet account (dealership,
+  // commercial) — the quick-add row and fleet badges key off this flag.
+  async markFleet(custId) {
+    const c = this._data.customer;
+    c.isFleet = true; if (!c.companyName) c.companyName = c.name || '';
+    try { await db.customers.save(c); toast('Marked as a fleet account ✓ — add units below'); await this.open(custId); document.getElementById('qv-stock')?.focus(); }
+    catch (e) { c.isFleet = false; toast('Could not save', 'error'); }
+  },
   // Fleet quick-add: dealerships hand over a list of units, so the profile has a
   // one-line Stock # / Year / Make / Model row. Enter (or Add) saves and puts
   // the cursor back on Stock # for the next one — no modal per vehicle.
@@ -618,6 +626,11 @@ function _buildProfileHtml(data, services, messages) {
   // Vehicles
   h += `<div class="cp-card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;"><div class="cp-sec" style="margin:0;">Vehicles</div>${write ? `<button onclick="ClientProfile.vehiclePrompt('${c.id}')" style="background:var(--green);color:#fff;border:none;border-radius:7px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;">+ Add</button>` : ''}</div>`;
+  if (!c.isFleet && write && (typeof Shop === 'undefined' || !Shop.settings || Shop.settings.supportsFleet !== false)) {
+    h += `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:9px 12px;margin-bottom:12px;font-size:12px;color:#1d4ed8;">
+      <span>🚚 Dealership or fleet? Get a stock-number quick-add and fleet tracking.</span>
+      <button onclick="ClientProfile.markFleet('${c.id}')" style="background:#1d4ed8;color:#fff;border:none;border-radius:7px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">Mark as fleet account</button></div>`;
+  }
   if (c.isFleet && write) {
     const qi = (id, ph, w) => `<input class="form-input" id="${id}" placeholder="${ph}" autocomplete="off" onkeydown="ClientProfile._quickAddKey(event,'${c.id}')" style="flex:${w};min-width:0;padding:8px 10px;font-size:13px;">`;
     h += `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px;margin-bottom:12px;">

@@ -29,6 +29,7 @@ router.get('/api/shop/settings', requireAuth, shopRoute(async (req, res, db) => 
   if (!Array.isArray(s.serviceCategories)) s.serviceCategories = _prof.serviceCategories || ['cut','beard','combo','color','design','other'];
   if (s.staffPicker === undefined) s.staffPicker = _prof.staffPicker !== false;
   if (s.supportsQuotes === undefined) s.supportsQuotes = !!_prof.supportsQuotes;
+  if (s.supportsFleet === undefined) s.supportsFleet = !!_prof.supportsFleet;
   // Call tracking: surface the shop's OWN tracking number (read-only). No global
   // fallback — a shop only ever shows a number explicitly assigned to it, so one
   // tenant never sees another tenant's (e.g. the platform default) number.

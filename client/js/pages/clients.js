@@ -180,20 +180,21 @@ const Clients = {
 
   _setTag(t) { this._tagFilter = (this._tagFilter === t) ? '' : t; this.render(); },
 
-  openForm(id) {
+  openForm(id, opts) {
     const c=id?this._data.find(x=>x.id===id):null;
+    const fleetOn=!!(c?.isFleet||(opts&&opts.fleet));
     Modal.show(`
       <div class="modal-title">${c?'Edit Client':'New Client'}</div>
       <div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="fc-name" value="${esc(c?.name||'')}" placeholder="Full name" /></div>
       <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="fc-phone" type="tel" value="${esc(c?.phone||'')}" placeholder="(505) 555-0100" /></div>
       <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="fc-email" type="email" value="${esc(c?.email||'')}" placeholder="optional" /></div>
       <div class="form-group"><label class="form-label">Notes</label><textarea class="form-input" id="fc-notes">${esc(c?.notes||'')}</textarea></div>
-      ${Shop.settings.supportsFleet?`
+      ${Shop.settings.supportsFleet!==false?`
       <div class="form-group" style="display:flex;align-items:center;gap:8px;">
-        <input type="checkbox" id="fc-fleet" ${c?.isFleet?'checked':''} onchange="document.getElementById('fc-company-wrap').style.display=this.checked?'block':'none'" style="width:auto;" />
+        <input type="checkbox" id="fc-fleet" ${fleetOn?'checked':''} onchange="document.getElementById('fc-company-wrap').style.display=this.checked?'block':'none'" style="width:auto;" />
         <label for="fc-fleet" style="margin:0;font-size:13px;cursor:pointer;">🚚 Fleet account (business with multiple vehicles)</label>
       </div>
-      <div class="form-group" id="fc-company-wrap" style="display:${c?.isFleet?'block':'none'};"><label class="form-label">Company Name</label><input class="form-input" id="fc-company" value="${esc(c?.companyName||'')}" placeholder="e.g. Sandia Auto Group" /></div>
+      <div class="form-group" id="fc-company-wrap" style="display:${fleetOn?'block':'none'};"><label class="form-label">Company Name</label><input class="form-input" id="fc-company" value="${esc(c?.companyName||'')}" placeholder="e.g. Sandia Auto Group" /></div>
       `:''}
       <div class="modal-actions">
         ${c?`<button class="btn btn-danger btn-full" onclick="Clients.delete('${c.id}')">Delete Client</button>`:''}
