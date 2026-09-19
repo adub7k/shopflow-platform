@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>ShopFlow Admin</title>
+<title>ShopFlow HQ · Admin</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 /* Tokens mirror the client CRM (css/app2.css) so admin feels like the same
@@ -105,6 +105,8 @@ body.admin-sidebar-open #sidebar-backdrop{display:block;}
 .goal-milestones{display:flex;justify-content:space-between;margin-top:8px;}
 .goal-milestone{font-size:10px;color:var(--green-md);opacity:.75;}
 .goal-milestone.reached{color:#fff;font-weight:700;opacity:1;}
+
+.section-label{font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin:4px 0 10px;}
 
 /* ── Metric cards ── */
 .metrics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
@@ -362,12 +364,12 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
   <div class="auth-card">
     <div class="auth-logo">
       <div class="auth-logo-mark"><img src="/icons/icon-192.png" style="width:24px;height:24px;border-radius:6px;display:block;" /></div>
-      <div class="auth-logo-text">ShopFlow<span class="auth-badge">ADMIN</span></div>
+      <div class="auth-logo-text">ShopFlow<span class="auth-badge">HQ</span></div>
     </div>
-    <div class="auth-h2">Owner access</div>
-    <div class="auth-sub">Enter your admin key to continue.</div>
+    <div class="auth-h2">ShopFlow HQ</div>
+    <div class="auth-sub">Client shops, results, billing and sales for the ShopFlow CRM. Enter the admin key to continue.</div>
     <input id="admin-key-input" class="auth-input" type="password" placeholder="Admin key" onkeydown="if(event.key==='Enter')doLogin()"/>
-    <button class="auth-btn" onclick="doLogin()">Access Dashboard</button>
+    <button class="auth-btn" onclick="doLogin()">Open HQ</button>
     <div id="auth-err" class="auth-err"></div>
   </div>
 </div>
@@ -379,7 +381,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       <line x1="3" y1="5" x2="17" y2="5"/><line x1="3" y1="10" x2="17" y2="10"/><line x1="3" y1="15" x2="17" y2="15"/>
     </svg>
   </button>
-  <div id="mobile-topbar-title">ShopFlow <span class="mobile-topbar-badge">ADMIN</span></div>
+  <div id="mobile-topbar-title">ShopFlow <span class="mobile-topbar-badge">HQ</span></div>
 </div>
 
 <!-- Sidebar backdrop -->
@@ -395,7 +397,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       <div class="sb-logo-mark"><img src="/icons/icon-192.png" style="width:20px;height:20px;border-radius:5px;display:block;" /></div>
       <div>
         <div class="sb-logo-text">ShopFlow</div>
-        <span class="sb-badge">ADMIN</span>
+        <span class="sb-badge">HQ</span>
       </div>
     </div>
 
@@ -410,28 +412,32 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       <div class="sb-goal-pct" id="sb-goal-pct">0% there</div>
     </div>
 
-    <div class="sb-section">Platform</div>
+    <div class="sb-section">Clients</div>
     <div class="sb-item active" data-page="overview" onclick="nav('overview');closeAdminSidebar()">
       <span class="sb-item-icon">⊞</span>Overview
     </div>
     <div class="sb-item" data-page="shops" onclick="nav('shops');closeAdminSidebar()">
-      <span class="sb-item-icon">🏪</span>Shops
+      <span class="sb-item-icon">🏪</span>Client shops
     </div>
     <div class="sb-item" data-page="addlead" onclick="nav('addlead');closeAdminSidebar()">
-      <span class="sb-item-icon">➕</span>Add Lead
+      <span class="sb-item-icon">➕</span>Add lead
+    </div>
+
+    <div class="sb-section">Sales</div>
+    <div class="sb-item" data-page="demos" onclick="nav('demos');closeAdminSidebar()">
+      <span class="sb-item-icon">📞</span>Demo calls
+    </div>
+    <div class="sb-item" data-page="sales" onclick="nav('sales');closeAdminSidebar()">
+      <span class="sb-item-icon">🎯</span>Sales rep
+    </div>
+    <div class="sb-item" data-page="billing" onclick="nav('billing');closeAdminSidebar()">
+      <span class="sb-item-icon">💰</span>Billing & MRR
     </div>
     <div class="sb-item" data-page="growth" onclick="nav('growth');closeAdminSidebar()">
       <span class="sb-item-icon">📈</span>Growth
     </div>
-    <div class="sb-item" data-page="demos" onclick="nav('demos');closeAdminSidebar()">
-      <span class="sb-item-icon">🚀</span>Demos
-    </div>
-    <div class="sb-item" data-page="sales" onclick="nav('sales');closeAdminSidebar()">
-      <span class="sb-item-icon">🎯</span>Sales Rep
-    </div>
-    <div class="sb-item" data-page="billing" onclick="nav('billing');closeAdminSidebar()">
-      <span class="sb-item-icon">💰</span>Billing
-    </div>
+
+    <div class="sb-section">Company</div>
     <div class="sb-item" data-page="checklist" onclick="nav('checklist');closeAdminSidebar()">
       <span class="sb-item-icon">✅</span>Checklist
       <span id="sb-checklist-badge" style="margin-left:auto;background:#dc2626;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:100px;display:none;"></span>
@@ -441,7 +447,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     </div>
 
     <div class="sb-footer">
-      <div class="sb-footer-text">ShopFlow Platform</div>
+      <div class="sb-footer-text">ShopFlow CRM · HQ</div>
       <div class="sb-signout" onclick="signOut()">Sign out →</div>
     </div>
   </div>
@@ -507,16 +513,42 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         </div>
       </div>
 
+      <!-- What ShopFlow is producing for its clients this month (summed over
+           every active shop) — the funnel the whole business is sold on. -->
+      <div class="section-label">This month, across every client shop</div>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-label">Leads</div>
+          <div class="metric-value" id="m-cl-leads">—</div>
+          <div class="metric-sub" id="m-cl-leads-sub">— last month</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Jobs booked</div>
+          <div class="metric-value" id="m-cl-booked">—</div>
+          <div class="metric-sub" id="m-cl-booked-sub">— of leads</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Client revenue</div>
+          <div class="metric-value green" id="m-cl-rev">—</div>
+          <div class="metric-sub" id="m-cl-rev-sub">completed work in their CRMs</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">AI receptionist recovered</div>
+          <div class="metric-value" id="m-cl-ai">—</div>
+          <div class="metric-sub" id="m-cl-ai-sub">— calls answered</div>
+        </div>
+      </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Plan Breakdown</div>
+            <div class="card-title">Revenue by plan</div>
           </div>
           <div class="plan-bars" id="plan-bars"><div class="empty-state">Loading...</div></div>
         </div>
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Recent Signups</div>
+            <div class="card-title">Recent client shops</div>
             <button class="btn btn-sm btn-green" onclick="openCreateModal()">+ Add</button>
           </div>
           <div id="recent-signups"><div class="empty-state">Loading...</div></div>
@@ -528,19 +560,16 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div id="page-shops" class="page">
       <div class="page-header">
         <div>
-          <div class="page-title">All Shops</div>
+          <div class="page-title">Client shops</div>
           <div class="page-sub" id="shops-count-label">—</div>
         </div>
-        <button class="btn btn-green" onclick="openCreateModal()">+ Add Shop</button>
+        <button class="btn btn-green" onclick="openCreateModal()">+ Add client shop</button>
       </div>
       <div class="card" style="margin-bottom:0;">
         <div class="toolbar">
           <input class="search-input" id="shop-search" placeholder="Search name, email, slug…" oninput="filterShops()"/>
           <select class="filter-select" id="shop-filter-plan" onchange="filterShops()">
             <option value="">All plans</option>
-            <option value="starter">Starter</option>
-            <option value="pro">Pro</option>
-            <option value="shop">Shop</option>
           </select>
           <select class="filter-select" id="shop-filter-status" onchange="filterShops()">
             <option value="">All status</option>
@@ -555,14 +584,15 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
                 <th>Shop</th>
                 <th>Plan</th>
                 <th>Rate</th>
-                <th>Clients</th>
-                <th>Appts</th>
+                <th>Leads (mo)</th>
+                <th>Booked (mo)</th>
+                <th>Their revenue (mo)</th>
                 <th>Status</th>
                 <th></th>
               </tr>
             </thead>
             <tbody id="shops-tbody">
-              <tr><td colspan="7"><div class="empty-state"><span class="spinner"></span>Loading…</div></td></tr>
+              <tr><td colspan="8"><div class="empty-state"><span class="spinner"></span>Loading…</div></td></tr>
             </tbody>
           </table>
         </div>
@@ -644,7 +674,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       <div class="page-header">
         <div>
           <div class="page-title">Growth</div>
-          <div class="page-sub" id="growth-sub">Track your path to your MRR goal</div>
+          <div class="page-sub" id="growth-sub">Path to the MRR goal, in client shops</div>
         </div>
       </div>
 
@@ -694,8 +724,8 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div id="page-billing" class="page">
       <div class="page-header">
         <div>
-          <div class="page-title">Billing</div>
-          <div class="page-sub">Subscription revenue breakdown</div>
+          <div class="page-title">Billing & MRR</div>
+          <div class="page-sub">What each client shop pays ShopFlow, by plan label</div>
         </div>
       </div>
       <div class="metrics-grid" style="grid-template-columns:repeat(3,1fr);">
@@ -731,41 +761,41 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div id="page-demos" class="page">
       <div class="page-header">
         <div>
-          <div class="page-title">Demo Pipeline</div>
-          <div class="page-sub">Booked demos and conversion tracking</div>
+          <div class="page-title">Demo calls</div>
+          <div class="page-sub">15-minute calls booked at shopflowtech.com/demo, and what each one turned into</div>
         </div>
-        <a href="/demo" target="_blank" class="btn btn-green btn-sm">↗ Share Demo Page</a>
+        <a href="/demo" target="_blank" class="btn btn-green btn-sm">↗ Open the /demo page</a>
       </div>
 
       <div class="metrics-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;">
         <div class="metric-card">
-          <div class="metric-label">Total Demos</div>
+          <div class="metric-label">Calls booked</div>
           <div class="metric-value" id="dm-total">—</div>
           <div class="metric-sub" id="dm-scheduled">— scheduled</div>
         </div>
         <div class="metric-card">
           <div class="metric-label">Converted</div>
           <div class="metric-value green" id="dm-converted">—</div>
-          <div class="metric-sub">became paying customers</div>
+          <div class="metric-sub">became client shops</div>
         </div>
         <div class="metric-card">
           <div class="metric-label">Conversion Rate</div>
           <div class="metric-value" id="dm-rate">—</div>
-          <div class="metric-sub">demos → customers</div>
+          <div class="metric-sub">calls → client shops</div>
         </div>
       </div>
 
       <div class="card">
         <div class="card-header">
-          <div class="card-title">All Demos</div>
+          <div class="card-title">All demo calls</div>
         </div>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Contact</th>
-                <th>Date & Time</th>
-                <th>Current Tool</th>
+                <th>Date & time</th>
+                <th>Using now</th>
                 <th>Status</th>
                 <th>Notes</th>
                 <th></th>
@@ -783,30 +813,30 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div id="page-sales" class="page">
       <div class="page-header">
         <div>
-          <div class="page-title">Sales Rep</div>
-          <div class="page-sub" id="sales-rep-sub">Manage your rep's pipeline, goals, to-dos, and dashboard</div>
+          <div class="page-title">Sales rep</div>
+          <div class="page-sub" id="sales-rep-sub">Your rep's pipeline, goals, to-dos and what they see on their dashboard</div>
         </div>
-        <a href="/sales" target="_blank" class="btn btn-green btn-sm">↗ Open Sales Hub</a>
+        <a href="/sales" target="_blank" class="btn btn-green btn-sm">↗ Open the sales hub</a>
       </div>
 
       <div class="metrics-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
         <div class="metric-card"><div class="metric-label">Total Leads</div><div class="metric-value" id="sa-leads">—</div></div>
-        <div class="metric-card"><div class="metric-label">Closed</div><div class="metric-value green" id="sa-closed">—</div><div class="metric-sub">paying shops</div></div>
+        <div class="metric-card"><div class="metric-label">Closed</div><div class="metric-value green" id="sa-closed">—</div><div class="metric-sub">client shops signed</div></div>
         <div class="metric-card"><div class="metric-label">In Pipeline</div><div class="metric-value" id="sa-pipeline">—</div><div class="metric-sub">active convos</div></div>
-        <div class="metric-card"><div class="metric-label">Closed MRR</div><div class="metric-value" id="sa-mrr">—</div><div class="metric-sub">from his clients</div></div>
+        <div class="metric-card"><div class="metric-label">Closed MRR</div><div class="metric-value" id="sa-mrr">—</div><div class="metric-sub">from shops they closed</div></div>
       </div>
 
-      <!-- Customize his dashboard -->
+      <!-- The rep's dashboard -->
       <div class="card">
-        <div class="card-header"><div><div class="card-title">Customize His Dashboard</div><div class="card-sub">Sets what he sees on his Home screen + his goal targets.</div></div></div>
+        <div class="card-header"><div><div class="card-title">Their dashboard</div><div class="card-sub">Sets what the rep sees on their Home screen and their targets.</div></div></div>
         <div style="padding:18px;">
           <div class="form-row">
             <label class="form-label">Rep name</label>
             <input class="form-input" id="sa-name" placeholder="Rep name"/>
           </div>
           <div class="form-row">
-            <label class="form-label">📌 Focus message (banner on his Home screen)</label>
-            <textarea class="form-input" id="sa-focus" rows="2" placeholder="e.g. Push the $99 Pro plan this week — call me at 3pm to review your demos."></textarea>
+            <label class="form-label">📌 Focus message (banner on their Home screen)</label>
+            <textarea class="form-input" id="sa-focus" rows="2" placeholder="e.g. Lead with the missed-call audit this week — call me at 3pm to review your demo calls."></textarea>
           </div>
           <div class="form-row-2">
             <div class="form-row"><label class="form-label">Daily targets — DMs / Walk-ins / Demos</label>
@@ -825,8 +855,8 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
-            <button class="btn btn-green btn-sm" onclick="saveSalesSettings()">Save Dashboard Settings</button>
-            <button class="btn btn-outline btn-sm" onclick="resetSalesPin()">Reset his PIN</button>
+            <button class="btn btn-green btn-sm" onclick="saveSalesSettings()">Save dashboard settings</button>
+            <button class="btn btn-outline btn-sm" onclick="resetSalesPin()">Reset their PIN</button>
             <span id="sa-settings-msg" style="font-size:12px;color:var(--muted);"></span>
           </div>
         </div>
@@ -834,10 +864,10 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 
       <!-- To-Dos -->
       <div class="card">
-        <div class="card-header"><div><div class="card-title">To-Dos for the Rep</div><div class="card-sub">These show up in his Goals tab. He checks them off.</div></div></div>
+        <div class="card-header"><div><div class="card-title">To-dos for the rep</div><div class="card-sub">These show up in their Goals tab. They check them off.</div></div></div>
         <div style="padding:18px;">
           <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
-            <input class="form-input" id="sa-todo-text" placeholder="e.g. Follow up with Fadez ABQ" style="flex:1;min-width:180px;"/>
+            <input class="form-input" id="sa-todo-text" placeholder="e.g. Follow up with the tint shop on Menaul" style="flex:1;min-width:180px;"/>
             <input class="form-input" id="sa-todo-due" type="date" style="max-width:160px;"/>
             <button class="btn btn-black btn-sm" onclick="addSalesTodo()">+ Add</button>
           </div>
@@ -847,14 +877,14 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 
       <!-- Goals -->
       <div class="card">
-        <div class="card-header"><div><div class="card-title">His Goals</div><div class="card-sub">Bigger targets shown on his Goals tab.</div></div></div>
+        <div class="card-header"><div><div class="card-title">Their goals</div><div class="card-sub">Bigger targets shown on their Goals tab.</div></div></div>
         <div style="padding:18px;">
           <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
-            <input class="form-input" id="sa-goal-name" placeholder="e.g. Close 10 shops by Aug 1" style="flex:1;min-width:160px;"/>
+            <input class="form-input" id="sa-goal-name" placeholder="e.g. Sign 5 client shops by Dec 1" style="flex:1;min-width:160px;"/>
             <input class="form-input" id="sa-goal-target" type="number" min="1" placeholder="Target" style="max-width:100px;"/>
             <select class="form-input" id="sa-goal-type" style="max-width:150px;">
-              <option value="clients">Clients closed</option>
-              <option value="demos">Demos run</option>
+              <option value="clients">Client shops signed</option>
+              <option value="demos">Demo calls run</option>
               <option value="custom">Custom</option>
             </select>
             <button class="btn btn-black btn-sm" onclick="addSalesGoal()">+ Add</button>
@@ -866,7 +896,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       <!-- Leads -->
       <div class="card">
         <div class="card-header">
-          <div><div class="card-title">His Pipeline</div><div class="card-sub">Edit a lead's stage, open to edit details, or remove it.</div></div>
+          <div><div class="card-title">Their pipeline</div><div class="card-sub">Shops the rep is working. Edit a stage, open to edit details, or remove it.</div></div>
           <button class="btn btn-outline btn-sm" onclick="openSalesLead(null)">+ Add Lead</button>
         </div>
         <div class="table-wrap">
@@ -882,8 +912,8 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div id="page-checklist" class="page">
       <div class="page-header">
         <div>
-          <div class="page-title">Go-Live Checklist</div>
-          <div class="page-sub">Everything you need to do to launch ShopFlow. Your business brain. 🧠</div>
+          <div class="page-title">Checklist</div>
+          <div class="page-sub">What's open across clients, sales, product and the platform. Add your own sections and tasks.</div>
         </div>
         <button class="btn btn-outline btn-sm" onclick="resetChecklist()">Reset All</button>
       </div>
@@ -906,14 +936,14 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div id="page-settings" class="page">
       <div class="page-header">
         <div>
-          <div class="page-title">Platform Settings</div>
-          <div class="page-sub">Controls that apply across the entire ShopFlow platform.</div>
+          <div class="page-title">Settings</div>
+          <div class="page-sub">Controls that apply to every client shop on ShopFlow.</div>
         </div>
       </div>
 
       <div class="card" style="max-width:560px;">
         <div class="card-header">
-          <div><div class="card-title">Signup &amp; Access</div><div class="card-sub">Control who can create new shop accounts.</div></div>
+          <div><div class="card-title">Signup &amp; access</div><div class="card-sub">Who can create a shop account on their own.</div></div>
         </div>
         <div style="padding:18px;">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border);">
@@ -934,7 +964,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 
       <div class="card" style="max-width:560px;">
         <div class="card-header">
-          <div><div class="card-title">SMS / Twilio</div><div class="card-sub">One shared Twilio account powers SMS for every shop.</div></div>
+          <div><div class="card-title">SMS / Twilio</div><div class="card-sub">One shared Twilio account powers the tracking numbers and texts for every client shop.</div></div>
         </div>
         <div style="padding:18px;">
           <div id="sms-status-rows" style="font-size:13px;color:var(--muted);">Checking connection…</div>
@@ -964,16 +994,16 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 
       <div class="card" style="max-width:560px;">
         <div class="card-header">
-          <div><div class="card-title">Demo Data</div><div class="card-sub">Seed a realistic demo shop for testing.</div></div>
+          <div><div class="card-title">Demo shop</div><div class="card-sub">The shop you show on demo calls.</div></div>
         </div>
         <div style="padding:18px;">
           <div style="font-size:13px;color:var(--muted);margin-bottom:14px;">
-            Creates the <strong style="color:var(--text);">King's Cuts</strong> demo account with 20 clients, 3 barbers, and ~200 appointments. Safe to re-run — replaces existing demo account.
+            Rebuilds the <strong style="color:var(--text);">Demo Auto Studio</strong> detail shop: vehicle-size pricing, add-ons, estimates with deposits, a membership, before/after photos. Safe to re-run — it resets the demo to clean.
           </div>
           <div style="background:var(--off);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--muted);margin-bottom:14px;font-family:monospace;">
-            📧 demo@shopflow.com &nbsp;·&nbsp; 🔑 demo1234
+            📧 demo@detail.com &nbsp;·&nbsp; 🔑 demo1234 &nbsp;·&nbsp; /shop/demo-detail
           </div>
-          <button class="btn btn-green" id="seed-btn" onclick="seedDemo()">⚡ Seed Demo Account</button>
+          <button class="btn btn-green" id="seed-btn" onclick="seedDemo()">⚡ Reset the demo shop</button>
           <div id="seed-result" style="margin-top:10px;font-size:12px;color:var(--muted);display:none;"></div>
         </div>
       </div>
@@ -996,12 +1026,12 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 <!-- Create shop modal -->
 <div id="modal-overlay">
   <div id="modal-box">
-    <div class="modal-title">Add New Shop</div>
-    <div class="modal-sub">Creates a new shop account on the platform.</div>
+    <div class="modal-title">Add a client shop</div>
+    <div class="modal-sub">Creates the shop's CRM login. Set the plan label and the rate you agreed on the call.</div>
     <div class="form-row-2">
       <div class="form-row">
         <label class="form-label">Shop Name *</label>
-        <input class="form-input" id="new-shopname" placeholder="e.g. Mad Detailing"/>
+        <input class="form-input" id="new-shopname" placeholder="e.g. Evo Solutions"/>
       </div>
       <div class="form-row">
         <label class="form-label">Plan label</label>
@@ -1010,7 +1040,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     </div>
     <div class="form-row">
       <label class="form-label">Monthly rate ($/mo)</label>
-      <input class="form-input" id="new-rate" type="number" min="0" step="1" placeholder="e.g. 349"/>
+      <input class="form-input" id="new-rate" type="number" min="0" step="1" placeholder="e.g. 3000"/>
     </div>
     <datalist id="plan-suggestions"></datalist>
     <div class="form-row">
@@ -1181,6 +1211,18 @@ function renderOverview(d) {
   document.getElementById('m-churn').className = 'metric-value ' + (d.churnRate > 5 ? 'red' : '');
   document.getElementById('m-churned').textContent = (d.churnedShops || 0) + ' shops lost';
 
+  // Client results (summed over active shops — see /api/admin/stats)
+  const c = d.clientResults || {};
+  const setT = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setT('m-cl-leads', c.leadsThisMonth != null ? c.leadsThisMonth : '—');
+  setT('m-cl-leads-sub', (c.leadsLastMonth || 0) + ' last month · ' + (c.callsThisMonth || 0) + ' calls');
+  setT('m-cl-booked', c.bookedThisMonth != null ? c.bookedThisMonth : '—');
+  setT('m-cl-booked-sub', c.bookRateThisMonth != null ? c.bookRateThisMonth + '% of this month\'s leads' : 'no leads yet this month');
+  setT('m-cl-rev', '$' + fmtK(c.revenueThisMonth || 0));
+  setT('m-cl-rev-sub', 'completed work · $' + fmtK(c.revenueLastMonth || 0) + ' last month');
+  setT('m-cl-ai', '$' + fmtK(c.aiRecoveredThisMonth || 0));
+  setT('m-cl-ai-sub', (c.aiCalls || 0) + ' calls answered by the AI · $' + fmtK(c.aiRecoveredTotal || 0) + ' all-time');
+
   // Plan bars — dynamic labels + revenue from real per-shop rates
   const total = d.activeShops || 1;
   const ps = d.planStats || {};
@@ -1209,7 +1251,7 @@ function renderOverview(d) {
           <td style="padding:10px 14px;">${planBadge(s.plan)}<div style="font-size:10px;color:var(--faint);margin-top:2px;">${fmtRate(s.rate)}/mo</div></td>
           <td style="padding:10px 14px;font-size:11px;color:var(--faint);white-space:nowrap;">${relTime(s.createdAt)}</td>
         </tr>`).join('')}
-    </table>` : '<div class="empty-state">No shops yet.</div>';
+    </table>` : '<div class="empty-state">No client shops yet.</div>';
 }
 
 // ── Growth page ───────────────────────────────────────────────────────────────
@@ -1262,7 +1304,8 @@ async function loadShops() {
   try {
     const res = await fetch('/api/admin/shops', { headers: { 'x-admin-key': adminKey } });
     allShops = await res.json();
-    document.getElementById('shops-count-label').textContent = allShops.length + ' total shops';
+    const activeN = allShops.filter(s => s.active).length;
+    document.getElementById('shops-count-label').textContent = activeN + ' active · ' + allShops.length + ' total';
     // Plan filter + datalist suggestions from the labels actually in use.
     const labels = planLabels();
     const filter = document.getElementById('shop-filter-plan');
@@ -1292,18 +1335,19 @@ function filterShops() {
 
 function renderShopsTable(shops) {
   const tbody = document.getElementById('shops-tbody');
-  if (!shops.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No shops found.</div></td></tr>'; return; }
+  if (!shops.length) { tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">No client shops found.</div></td></tr>'; return; }
   tbody.innerHTML = shops.map(s => `
     <tr class="clickable" onclick="openDrawer('${s.id}')">
       <td>
         <div style="font-weight:600;color:var(--text);">${esc(s.shopName)}</div>
         <div style="font-size:11px;color:var(--muted);">${esc(s.email||'')}</div>
-        <div style="font-size:11px;color:var(--faint);font-family:monospace;">/book/${esc(s.slug||'')}</div>
+        <div style="font-size:11px;color:var(--faint);font-family:monospace;">/shop/${esc(s.slug||'')}</div>
       </td>
       <td>${planBadge(s.plan)}</td>
       <td style="font-weight:700;color:var(--green);white-space:nowrap;">${fmtRate(effRate(s))}<span style="font-size:10px;color:var(--faint);font-weight:400;">/mo</span></td>
-      <td style="font-weight:600;">${s.customers}</td>
-      <td style="color:var(--muted);">${s.appointments}</td>
+      <td style="font-weight:600;">${(s.month||{}).leads||0}</td>
+      <td style="font-weight:600;">${(s.month||{}).booked||0}</td>
+      <td style="color:var(--muted);white-space:nowrap;">$${fmtK((s.month||{}).revenue||0)}${(s.month||{}).aiRecovered?` <span style="font-size:10px;color:var(--green-deep);" title="recovered by the AI receptionist">🤖 $${fmtK(s.month.aiRecovered)}</span>`:''}</td>
       <td><span class="badge badge-${s.active?'active':'inactive'}">${s.active?'Active':'Inactive'}</span></td>
       <td><button class="btn btn-sm btn-outline" onclick="event.stopPropagation();openDrawer('${s.id}')">View →</button></td>
     </tr>`).join('');
@@ -1364,13 +1408,13 @@ function renderDrawer(d) {
             ${planBadge(shop.plan)}
             <span class="badge badge-${shop.active?'active':'inactive'}">${shop.active?'Active':'Inactive'}</span>
           </div>
-          <div style="font-size:12.5px;color:var(--muted);margin-top:3px;">${esc(shop.email||'')}${shop.phone?' · '+esc(shop.phone):''} · <span style="font-family:monospace;font-size:11.5px;">/book/${esc(shop.slug)}</span> · joined ${fmtDate(shop.createdAt)} · last active ${shop.lastActivity?relTime(shop.lastActivity):'never'}</div>
+          <div style="font-size:12.5px;color:var(--muted);margin-top:3px;">${esc(shop.email||'')}${shop.phone?' · '+esc(shop.phone):''} · <span style="font-family:monospace;font-size:11.5px;">/shop/${esc(shop.slug)}</span> · joined ${fmtDate(shop.createdAt)} · last active ${shop.lastActivity?relTime(shop.lastActivity):'never'}</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-green btn-sm" onclick="openClientReport()">📄 Client report</button>
           <button class="btn btn-green btn-sm" onclick="openClientReport('biweekly')">📄 Bi-weekly report</button>
           <a href="/shop/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Open App</a>
-          <a href="/book/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Booking Page</a>
+          <a href="/book/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ ${s.bookingMode==='booking'?'Booking page':'Lead page'}</a>
           <button class="btn btn-outline btn-sm" onclick="resetPassword('${shop.id}','${esc(shop.email||'')}')">🔑 Reset</button>
           <button class="btn btn-red btn-sm" onclick="deleteShop('${shop.id}','${esc(shop.shopName)}')">Delete</button>
         </div>
@@ -1480,13 +1524,25 @@ function renderDrawer(d) {
           </div>
         </div>
 
-        <!-- Usage -->
+        <!-- AI receptionist -->
         <div class="card">
-          <div class="card-header"><div class="card-title">Usage</div></div>
+          <div class="card-header"><div class="card-title">AI receptionist</div><div class="card-sub">calls it answered and work traced back to them</div></div>
           <div style="padding:16px 18px;">
-            <div class="drawer-info-row"><span class="drawer-info-label">Clients</span><span class="drawer-info-val">${stats.totalCustomers}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Calls answered</span><span class="drawer-info-val">${(ins.ai||{}).calls||0}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Leads captured</span><span class="drawer-info-val">${(ins.ai||{}).leads||0}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Revenue recovered (this mo)</span><span class="drawer-info-val" style="color:var(--green-deep);">$${fmt((ins.ai||{}).recoveredThisMonth||0)}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Revenue recovered (all-time)</span><span class="drawer-info-val">$${fmt((ins.ai||{}).recovered||0)}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">SMS line</span><span class="badge badge-${s.twilioConfigured?'yes':'no'}">${s.twilioConfigured?'✓ Connected':'Not set'}</span></div>
+          </div>
+        </div>
+
+        <!-- Account usage -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Account usage</div></div>
+          <div style="padding:16px 18px;">
+            <div class="drawer-info-row"><span class="drawer-info-label">Customers in their CRM</span><span class="drawer-info-val">${stats.totalCustomers}</span></div>
             <div class="drawer-info-row"><span class="drawer-info-label">Appointments</span><span class="drawer-info-val">${stats.totalAppointments} <span style="color:var(--faint);font-weight:400;">(${stats.apptThisMonth} this mo)</span></span></div>
-            <div class="drawer-info-row"><span class="drawer-info-label">Staff</span><span class="drawer-info-val">${stats.activeBarbers}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Staff</span><span class="drawer-info-val">${stats.activeStaff}</span></div>
             <div class="drawer-info-row"><span class="drawer-info-label">Services</span><span class="drawer-info-val">${d.services.length}</span></div>
           </div>
         </div>
@@ -1556,7 +1612,7 @@ function renderDrawer(d) {
         <div class="drawer-info-row">
           <div>
             <div style="font-size:13px;font-weight:600;color:var(--text);">Manual Messaging</div>
-            <div style="font-size:11px;color:var(--muted);">SMS inbox & send from the CRM</div>
+            <div style="font-size:11px;color:var(--muted);">SMS inbox & send from their CRM</div>
           </div>
           <label class="toggle">
             <input type="checkbox" ${(shop.features?.manualSms !== false)?'checked':''} onchange="toggleFeature('${shop.id}','manualSms',this.checked)"/>
@@ -1566,11 +1622,11 @@ function renderDrawer(d) {
       </div>
     </div>
 
-    <!-- Team & services -->
+    <!-- Staff & services -->
     <div class="card">
-      <div class="card-header"><div class="card-title">Team & services</div><div class="card-sub">${d.barbers.length} staff · ${d.services.length} services</div></div>
+      <div class="card-header"><div class="card-title">Staff & services</div><div class="card-sub">${(d.staff||[]).length} staff · ${d.services.length} services</div></div>
       <div style="padding:12px 18px 16px;">
-        ${d.barbers.map(b => `
+        ${(d.staff||[]).map(b => `
           <div style="display:flex;align-items:center;gap:10px;padding:6px 0;">
             <div style="width:26px;height:26px;border-radius:50%;background:${b.color||'#93A29A'};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;flex-shrink:0;">${(b.name||'?').slice(0,2).toUpperCase()}</div>
             <div style="flex:1;font-size:13px;font-weight:600;">${esc(b.name)}</div>
@@ -1659,7 +1715,7 @@ function applySalesData(d) {
 function renderSalesTodos() {
   const el = document.getElementById('sa-todos-list');
   const todos = salesData.todos||[];
-  if (!todos.length) { el.innerHTML = '<div style="font-size:13px;color:var(--muted);">No to-dos yet. Add one above — it appears on his Goals tab.</div>'; return; }
+  if (!todos.length) { el.innerHTML = '<div style="font-size:13px;color:var(--muted);">No to-dos yet. Add one above — it appears on their Goals tab.</div>'; return; }
   el.innerHTML = todos.map(t => `
     <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">
       <span style="font-size:15px;">${t.done?'✅':'⬜'}</span>
@@ -1743,9 +1799,9 @@ function openSalesLead(id) {
       <div class="form-row"><label class="form-label">Name &amp; Shop *</label><input class="form-input" id="sl-name" value="${v('name')}"/></div>
       <div class="form-row"><label class="form-label">Phone / Instagram</label><input class="form-input" id="sl-contact" value="${v('contact')}"/></div>
       <div class="form-row"><label class="form-label">City</label><input class="form-input" id="sl-city" value="${v('city')}"/></div>
-      <div class="form-row"><label class="form-label">Currently using</label><select class="form-input" id="sl-tool">${opt(['Nothing / texts','Booksy','Square','Vagaro','StyleSeat','Hey Goldie','The Cut','Other'], l&&l.tool)}</select></div>
+      <div class="form-row"><label class="form-label">Currently using</label><select class="form-input" id="sl-tool">${opt(['Nothing / texts','Urable','Jobber','Square','Housecall Pro','Google Sheets','Another agency','Other'], l&&l.tool)}</select></div>
       <div class="form-row"><label class="form-label">Stage</label><select class="form-input" id="sl-status">${SA_STAGES.map(([vv,lbl])=>`<option value="${vv}"${l&&l.status===vv?' selected':''}>${lbl}</option>`).join('')}</select></div>
-      <div class="form-row"><label class="form-label">Plan interest</label><select class="form-input" id="sl-plan">${opt(['Starter — $19.99','Pro — $99','Shop — $200','Unknown'], l&&l.plan)}</select></div>
+      <div class="form-row"><label class="form-label">Plan interest</label><select class="form-input" id="sl-plan">${opt(['Receptionist — $349','Receptionist + Ads — $1,599','Growth Engine — $3,000','Custom quote','Unknown'], l&&l.plan)}</select></div>
       <div class="form-row"><label class="form-label">Follow up date</label><input class="form-input" id="sl-followup" type="date" value="${v('followup')}"/></div>
       <div class="form-row"><label class="form-label">Notes</label><textarea class="form-input" id="sl-notes" rows="4">${v('notes')}</textarea></div>
       <button class="btn btn-green" style="width:100%;margin-top:6px;" onclick="saveSalesLead()">Save Lead</button>
@@ -1785,7 +1841,7 @@ async function saveSalesSettings() {
   };
   applySalesData(await salesApi('/settings', { method:'PATCH', body }));
   const msg = document.getElementById('sa-settings-msg');
-  msg.textContent = 'Saved ✓ — live on his screen';
+  msg.textContent = 'Saved ✓ — live on their screen';
   setTimeout(()=>msg.textContent='', 2500);
 }
 
@@ -2203,7 +2259,7 @@ function renderDemos(demos) {
 
   const tbody = document.getElementById('demos-tbody');
   if (!demos.length) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No demos booked yet.<br><a href="/demo" target="_blank" style="color:var(--green);">Share your demo page →</a></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No demo calls booked yet.<br><a href="/demo" target="_blank" style="color:var(--green);">Open the /demo page →</a></div></td></tr>';
     return;
   }
 
@@ -2258,51 +2314,31 @@ async function deleteDemo(id) {
 // ── Checklist ─────────────────────────────────────────────────────────────────
 const CHECKLIST = [
   {
-    id: 'legal',
-    icon: '⚖️',
-    title: 'Legal & Business',
+    id: 'clients',
+    icon: '🏪',
+    title: 'Client shops',
     items: [
-      { id: 'llc-approved',   label: 'LLC approved (New Mexico)',             note: 'Pending with the state. Check your email for approval notice.',                                         tag: 'waiting' },
-      { id: 'bank-account',   label: 'Open a business bank account',          note: 'Use the LLC to open a dedicated business checking account. Keep finances separate from day 1.',        tag: 'waiting' },
-      { id: 'ein',            label: 'Get your EIN (Employer ID Number)',      note: 'Free from IRS.gov in 5 minutes. Needed for bank account and Stripe.',                                  tag: 'waiting' },
-      { id: 'stripe-account', label: 'Create Stripe account under the LLC',   note: 'Use the business name, EIN, and business bank account. This is your payment processor.',              tag: 'waiting' },
+      { id: 'cl-evo-report',      label: 'Send the tint shop their monthly one-pager',          note: 'Shop profile → 📄 Client report. Spend, leads, booked, collected. Same page every month.',                        tag: 'soon' },
+      { id: 'cl-ss-tenant',       label: 'Create the Street Soundz tenant + load their prices', note: 'Client shops → + Add client shop (slug street-soundz-nm). Then set up the lead page and tracking number at the shop.', tag: 'urgent' },
+      { id: 'cl-ss-facts',        label: 'Get Street Soundz launch facts (LAUNCH.md)',          note: 'Hours, address, phone, services, reviews for their site. Stock photos swap out once they upload work photos.',       tag: 'waiting' },
+      { id: 'cl-ead-tenant',      label: 'Create the Enchantment Auto Details tenant',           note: 'Detailing-only, prices hidden. Slug enchantment-auto-details. Three lead-form options on their site.',              tag: 'urgent' },
+      { id: 'cl-ead-facts',       label: 'Get Enchantment Auto Details launch facts',            note: 'Same LAUNCH.md list as Street Soundz. Site is live on Railway waiting on real details.',                           tag: 'waiting' },
+      { id: 'cl-in-person',       label: 'In-person setup at each new shop',                     note: 'See the bays, learn the price list, hear how they talk to customers. That is how the phone sounds like them.',    tag: 'soon' },
+      { id: 'cl-weekly-advisor',  label: 'Read every Monday Growth Advisor review',              note: 'Shop profile → Growth Advisor. Act on it or add the lesson to the playbook in Settings.',                          tag: 'soon' },
     ],
   },
   {
-    id: 'stripe',
-    icon: '💳',
-    title: 'Stripe Setup',
-    items: [
-      { id: 'stripe-key',        label: 'STRIPE_SECRET_KEY added to Railway',           note: 'Already done ✓ — live key is in Railway environment variables.',                                                             tag: 'done' },
-      { id: 'stripe-onetime-pro',  label: 'Recreate Pro setup fee ($150) as One-time',  note: 'In Stripe dashboard → Products → archive the old recurring price → create new One-time price for $150. Copy the price ID.', tag: 'urgent' },
-      { id: 'stripe-onetime-shop', label: 'Recreate Shop setup fee ($500) as One-time', note: 'Same as above but $500. One-time type so it only charges once at signup, not monthly.',                                      tag: 'urgent' },
-      { id: 'stripe-update-ids',   label: 'Update price IDs in create-checkout.js',     note: 'File: shopflow-site/netlify/functions/create-checkout.js — replace setupFee price IDs with the new One-time ones.',          tag: 'urgent' },
-      { id: 'stripe-anchor',       label: 'Verify billing anchors to the 5th',          note: 'Monthly subscriptions should start billing on the 5th. The trial_end logic is already in create-checkout.js.',               tag: 'soon' },
-      { id: 'stripe-test',         label: 'Run end-to-end payment test',                note: 'Pricing page → Stripe checkout → success page → signup → CRM login. Use a Stripe test card first.',                          tag: 'urgent' },
-    ],
-  },
-  {
-    id: 'infrastructure',
-    icon: '🚀',
-    title: 'Infrastructure & Deploy',
-    items: [
-      { id: 'railway-deploy',   label: 'shopflow-multitenant live on Railway',     note: 'Already deployed ✓ — your CRM platform is running.',                                                                              tag: 'done' },
-      { id: 'railway-twilio',   label: 'Add Twilio env vars to Railway',           note: 'Railway dashboard → Variables → add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER. This activates SMS for all shops.', tag: 'urgent' },
-      { id: 'netlify-deploy',   label: 'Deploy shopflow-site to Netlify',          note: 'Drag and drop the full shopflow-site folder into Netlify. Includes fixed create-checkout.js, get-session.js, and success.html.',   tag: 'urgent' },
-      { id: 'custom-domain',    label: 'Point domain to Railway + Netlify',        note: 'app.shopflow.com → Railway. shopflow.com → Netlify. Set up in your domain registrar DNS settings.',                               tag: 'soon' },
-      { id: 'backup-plan',      label: 'Set up data backup for Railway volume',    note: 'Railway persistent volumes don\'t auto-backup. Consider a cron job to copy /data to S3 or GitHub daily.',                         tag: 'soon' },
-    ],
-  },
-  {
-    id: 'marketing',
+    id: 'sales',
     icon: '📣',
-    title: 'Marketing & Sales',
+    title: 'Sales & marketing',
     items: [
-      { id: 'site-live',        label: 'shopflow-site fully live with pricing',    note: 'Marketing site needs to be on Netlify with working Stripe checkout before you can sell.',                                          tag: 'urgent' },
-      { id: 'google-review',    label: 'Set up Google Business Profile',           note: 'Create a Google Business listing for ShopFlow LLC. Helps with credibility and SEO.',                                              tag: 'soon' },
-      { id: 'first-customer',   label: 'Sign first paying customer',               note: 'Pitch a local barber or shop owner. Offer a 30-day free trial. Get real feedback.',                                               tag: 'soon' },
-      { id: 'case-study',       label: 'Get a testimonial / case study',           note: 'After first customer is using it, ask for a short quote and results. Put it on the site.',                                         tag: 'soon' },
-      { id: 'instagram',        label: 'Post demo videos on Instagram / TikTok',   note: 'Short screen recordings of the app in action — booking flow, client profile, dashboard. Show the barber audience.',               tag: 'soon' },
+      { id: 'sa-search-console',  label: 'Google Search Console: add shopflowtech.com, submit sitemap', note: 'Domain property via DNS TXT at Name.com. Then URL-inspect / request indexing on /, /guides/ and the tint guide.', tag: 'urgent' },
+      { id: 'sa-analytics',       label: 'Add GA4 or Plausible, tag /demo clicks as a conversion', note: 'One snippet on landing.html + guides. Check monthly which guide the booked calls read.',                          tag: 'soon' },
+      { id: 'sa-gbp',             label: 'Google Business Profile for ShopFlow Technologies LLC', note: 'Category "Marketing agency", Albuquerque. Shop owners search "marketing agency albuquerque"; the map pack is free.', tag: 'soon' },
+      { id: 'sa-client-links',    label: '"Marketing by ShopFlow" footer links on client sites',  note: 'evosolution.org + the Street Soundz and Enchantment sites → shopflowtech.com. Real local links in the exact niche.', tag: 'soon' },
+      { id: 'sa-guide-2',         label: 'Publish guide #2: Facebook ads for tint shops (offer vs heat hook)', note: 'docs/seo-plan.md has the outline and the data. Add it to sitemap.xml with the publish date as lastmod.', tag: 'soon' },
+      { id: 'sa-audit-outreach',  label: 'Missed-call audit outreach: 10 shops this week',          note: 'Call the shop mid-day, note whether a human answers, send the audit. Book the 15-minute call from there.',        tag: 'soon' },
+      { id: 'sa-www',             label: 'Add www.shopflowtech.com as a Railway custom domain',    note: 'www currently fails TLS. The server already 301s www → apex once Railway has the cert.',                           tag: 'soon' },
     ],
   },
   {
@@ -2310,19 +2346,29 @@ const CHECKLIST = [
     icon: '🛠️',
     title: 'Product',
     items: [
-      { id: 'sms-live',         label: 'SMS confirmations & reminders live',       note: 'Blocked on Twilio Railway env vars. Once those are added, SMS fires automatically on every booking.',                             tag: 'urgent' },
-      { id: 'rebook-nudge',     label: 'Rebook nudge scheduler live',              note: 'Code is done. Fires when Twilio is live. Customizable interval per shop in Settings.',                                            tag: 'soon' },
-      { id: 'booking-page',     label: 'Test public booking page per shop',        note: 'Visit /book/kings-cuts and book a test appointment end-to-end.',                                                                   tag: 'soon' },
-      { id: 'pwa-test',         label: 'Test PWA install on iPhone + Android',     note: 'Have a barber add it to their home screen. Should feel like a native app.',                                                        tag: 'soon' },
-      { id: 'stripe-connect',   label: 'Test Stripe Connect deposit flow',         note: 'Shop connects their Stripe account → client pays deposit at booking → barber gets paid.',                                         tag: 'soon' },
+      { id: 'pr-receptionist-ff', label: 'Receptionist accuracy branch: staging test call, then fast-forward main', note: 'Terminology layer, sonnet-5 voice brain, relay fixes, objection capture are on staging. One real call, then ship.', tag: 'urgent' },
+      { id: 'pr-password-reset',  label: 'Self-serve password reset for shop owners',              note: 'Admin set-password exists; owners still cannot reset on their own. Email a reset link via Resend.',               tag: 'soon' },
+      { id: 'pr-portal-button',   label: 'Admin button to mint client-portal logins',               note: '/portal works (role=client) but there is no UI to create the login. Add it to the shop profile.',                 tag: 'soon' },
+      { id: 'pr-4b-upsell',       label: 'Phase 4b: conversational AI upsell to the two test shops', note: 'Once 4a is stable for both, pitch the conversational tier at +$100–200/mo.',                                    tag: 'waiting' },
+    ],
+  },
+  {
+    id: 'platform',
+    icon: '🚀',
+    title: 'Platform & infrastructure',
+    items: [
+      { id: 'pl-square-env',      label: 'SQUARE_* env vars in Railway + connect each shop',        note: 'Square is live on main; every shop needs the OAuth connect from its Settings before deposits work.',              tag: 'soon' },
+      { id: 'pl-a2p',             label: 'A2P 10DLC campaign approved',                             note: 'Answers are drafted (speed-to-lead notes). Until approved, texts stay manual sms: links, no automated SMS.',     tag: 'waiting' },
+      { id: 'pl-backups',         label: 'Nightly backup of the Railway volume',                    note: 'Tenant JSON + uploads live on the volume and are not backed up. Cron a copy to S3 or a private repo.',           tag: 'soon' },
+      { id: 'pl-staging-parity',  label: 'Keep staging env vars in step with prod',                 note: 'Staging is the isolated Railway env on the staging branch. Twilio test numbers only.',                            tag: 'soon' },
     ],
   },
 ];
 
-const CL_STORAGE_KEY    = 'sf_admin_checklist_v2';
+const CL_STORAGE_KEY    = 'sf_admin_checklist_v3';
 const CL_CUSTOM_KEY     = 'sf_admin_checklist_custom';
 const tagMap   = { urgent:'cl-tag-urgent', waiting:'cl-tag-waiting', done:'cl-tag-done', soon:'cl-tag-soon' };
-const tagLabel = { urgent:'🔴 Urgent', waiting:'⏳ Waiting on LLC', done:'✓ Done', soon:'🔵 Up Next' };
+const tagLabel = { urgent:'🔴 Urgent', waiting:'⏳ Waiting', done:'✓ Done', soon:'🔵 Up next' };
 
 function clLoadState()   { try { return JSON.parse(localStorage.getItem(CL_STORAGE_KEY)  || '{}'); } catch(e) { return {}; } }
 function clLoadCustom()  { try { return JSON.parse(localStorage.getItem(CL_CUSTOM_KEY)   || '[]'); } catch(e) { return []; } }
@@ -2607,13 +2653,13 @@ async function seedDemo() {
     const d = await res.json();
     if (!d.ok) throw new Error(d.error);
     result.style.display = 'block';
-    result.innerHTML = `✅ <strong style="color:var(--green);">Done!</strong> ${d.clients} clients · ${d.appointments} appointments · $${Number(d.revenue).toLocaleString()} revenue<br><span style="color:var(--muted);">demo@shopflow.com / demo1234</span>`;
+    result.innerHTML = `✅ <strong style="color:var(--green);">Done!</strong> ${esc(d.shopName||'Demo shop')} · ${d.clients} customers · ${d.appointments} appointments · $${Number(d.revenue).toLocaleString()} completed<br><span style="color:var(--muted);">${esc(d.email||'')} / ${esc(d.password||'')} · <a href="/shop/${esc(d.slug||'')}" target="_blank" style="color:var(--green-deep);">open the CRM ↗</a></span>`;
     toast('Demo seeded ✓');
     await Promise.all([loadShops(), loadStats()]);
   } catch(e) {
     result.style.display = 'block';
     result.innerHTML = `❌ <span style="color:var(--red);">Seed failed: ${e.message}</span>`;
-  } finally { btn.textContent = '⚡ Seed Demo Account'; btn.disabled = false; }
+  } finally { btn.textContent = '⚡ Reset the demo shop'; btn.disabled = false; }
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
