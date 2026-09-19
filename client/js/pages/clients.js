@@ -284,7 +284,8 @@ const Clients = {
         html += `<div style="font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.05em;margin-bottom:8px;">VEHICLES</div>`;
         html += `<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:20px;">`;
         c.vehicles.forEach((v,i)=>{
-          const title=[v.year,v.make,v.model].filter(Boolean).map(esc).join(' ')||'Vehicle';
+          const ymm=[v.year,v.make,v.model].filter(Boolean).map(esc).join(' ');
+          const title=(v.stockNumber?`<span style="color:#1d4ed8;font-family:monospace;">#${esc(v.stockNumber)}</span>${ymm?' · ':''}`:'')+(ymm||(v.stockNumber?'':'Vehicle'));
           html += `<div style="${i>0?'border-top:1px solid var(--border);':''}display:flex;align-items:center;gap:10px;padding:10px 14px;"><div style="font-size:18px;">🚗</div><div style="flex:1;"><div style="font-size:13px;font-weight:600;">${title}</div>${v.color?`<div style="font-size:11px;color:var(--muted);">${esc(v.color)}</div>`:''}</div></div>`;
         });
         html += `</div>`;

@@ -73,7 +73,8 @@
           <thead><tr><th>Client</th><th>Status</th><th>Vehicle</th><th>Phone</th><th>Tags</th><th class="r">Visits</th><th class="r">Loyalty</th><th class="r">Last visit</th><th class="r"></th></tr></thead><tbody>`);
         rows.forEach(({ c, st }) => {
           const v = (c.vehicles || [])[0];
-          const veh = v ? [v.year, v.make, v.model].filter(Boolean).map(esc).join(' ') : '—';
+          const nVeh = (c.vehicles || []).length;
+          const veh = c.isFleet ? `${nVeh} vehicle${nVeh !== 1 ? 's' : ''}${c.companyName ? ' · ' + esc(c.companyName) : ''}` : (v ? [v.year, v.make, v.model].filter(Boolean).map(esc).join(' ') : '—');
           const rewardReady = (c.loyaltyPoints || 0) >= (loyalty.visitsForReward || 10);
           const days = c.lastVisit ? Math.floor((new Date() - new Date(c.lastVisit + 'T12:00:00')) / 864e5) : null;
           html.push(`<tr onclick="ClientProfile.open('${c.id}')">

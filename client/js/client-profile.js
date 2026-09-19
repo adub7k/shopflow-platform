@@ -15,6 +15,9 @@ const _cpVal = (id) => (document.getElementById(id)?.value || '').trim();
 const _cpVn  = (s) => String(s || '').trim().toLowerCase();
 const _cpVehKey  = (v) => [_cpVn(v.year), _cpVn(v.make), _cpVn(v.model)].join('|');
 const _cpApptKey = (a) => { const cf = a.customFields || {}; return [_cpVn(cf.vehicleYear), _cpVn(cf.vehicleMake), _cpVn(cf.vehicleModel)].join('|'); };
+// Vehicle display label. Dealership fleet units are known by stock number, so it
+// leads when present: "#4821 · 2023 Ford F-150".
+const _cpVehLabel = (v) => { const ymm = [v.year, v.make, v.model].filter(Boolean).join(' '); return (v.stockNumber ? '#' + String(v.stockNumber).trim() + (ymm ? ' · ' : '') : '') + (ymm || (v.stockNumber ? '' : 'Vehicle')); };
 const _cpMatch   = (a, v) => (a.vehicleId && a.vehicleId === v.id) || (_cpVehKey(v) !== '||' && _cpApptKey(a) === _cpVehKey(v));
 function _cpNowTime() { const d = new Date(); let h = d.getHours(); const m = d.getMinutes(); const ap = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return `${h}:${String(m).padStart(2, '0')} ${ap}`; }
 function _cpDaysAgo(date) { return Math.floor((Date.now() - new Date(date + 'T12:00:00')) / 86400000); }
@@ -228,6 +231,7 @@ const ClientProfile = {
     Modal.show(`
       <div class="modal-title">${v ? '🚗 Edit Vehicle' : '🚗 Add Vehicle'}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+        <div class="form-group" style="grid-column:1 / -1;"><label class="form-label">Stock #${c.isFleet ? '' : ' (dealer units)'}</label><input class="form-input" id="v-stock" value="${v ? esc(v.stockNumber || '') : ''}" placeholder="e.g. 4821"></div>
         <div class="form-group"><label class="form-label">Year</label><input class="form-input" id="v-year" value="${v ? esc(v.year || '') : ''}" placeholder="2022"></div>
         <div class="form-group"><label class="form-label">Make</label><input class="form-input" id="v-make" value="${v ? esc(v.make || '') : ''}" placeholder="Mercedes"></div>
         <div class="form-group"><label class="form-label">Model</label><input class="form-input" id="v-model" value="${v ? esc(v.model || '') : ''}" placeholder="GLC300"></div>
@@ -248,11 +252,12 @@ const ClientProfile = {
     const c = this._data.customer;
     const v = {
       id: vehId || genId('veh'),
+      stockNumber: _cpVal('v-stock'),
       year: _cpVal('v-year'), make: _cpVal('v-make'), model: _cpVal('v-model'), color: _cpVal('v-color'),
       vin: _cpVal('v-vin'), plate: _cpVal('v-plate'), mileage: _cpVal('v-mileage'),
       ceramicCoated: !!document.getElementById('v-ceramic')?.checked, notes: _cpVal('v-notes'),
     };
-    if (!v.make && !v.model && !v.year) { toast('Enter at least a make or model', 'warning'); return; }
+    if (!v.make && !v.model && !v.year && !v.stockNumber) { toast('Enter at least a stock #, make or model', 'warning'); return; }
     c.vehicles = c.vehicles || [];
     const idx = c.vehicles.findIndex(x => x.id === vehId);
     if (idx >= 0) c.vehicles[idx] = { ...c.vehicles[idx], ...v }; else c.vehicles.push(v);
@@ -260,6 +265,24 @@ const ClientProfile = {
     try { await db.customers.save(c); Modal.close(); toast('Vehicle saved ✓'); this.open(custId); }
     catch (e) { toast('Could not save', 'error'); enableBtn(btn); }
   },
+  // Fleet quick-add: dealerships hand over a list of units, so the profile has a
+  // one-line Stock # / Year / Make / Model row. Enter (or Add) saves and puts
+  // the cursor back on Stock # for the next one — no modal per vehicle.
+  async quickAddVehicle(custId) {
+    const c = this._data.customer;
+    const v = { id: genId('veh'), stockNumber: _cpVal('qv-stock'), year: _cpVal('qv-year'), make: _cpVal('qv-make'), model: _cpVal('qv-model') };
+    if (!v.stockNumber && !v.year && !v.make && !v.model) { toast('Enter a stock # or year / make / model', 'warning'); document.getElementById('qv-stock')?.focus(); return; }
+    if (v.stockNumber && (c.vehicles || []).some(x => String(x.stockNumber || '').trim().toLowerCase() === v.stockNumber.toLowerCase())) { toast('Stock #' + v.stockNumber + ' is already on this account', 'warning'); return; }
+    c.vehicles = [...(c.vehicles || []), v];
+    const btn = document.getElementById('qv-btn'); disableBtn(btn);
+    try { await db.customers.save(c); toast('Added ' + _cpVehLabel(v) + ' ✓'); await this.open(custId); document.getElementById('qv-stock')?.focus(); }
+    catch (e) { c.vehicles = c.vehicles.filter(x => x.id !== v.id); toast('Could not save', 'error'); enableBtn(btn); }
+  },
+  _filterVehicles(q) {
+    const needle = String(q || '').trim().toLowerCase();
+    document.querySelectorAll('.cp-veh').forEach(el => { el.style.display = !needle || (el.getAttribute('data-veh-search') || '').includes(needle) ? '' : 'none'; });
+  },
+  _quickAddKey(e, custId) { if (e.key === 'Enter') { e.preventDefault(); this.quickAddVehicle(custId); } },
   async deleteVehicle(custId, vehId) {
     if (!confirm('Remove this vehicle?')) return;
     const c = this._data.customer; c.vehicles = (c.vehicles || []).filter(x => x.id !== vehId);
@@ -279,7 +302,7 @@ const ClientProfile = {
   // ── Timestamped notes ───────────────────────────────────────────────────────
   notePrompt(custId) {
     const c = this._data.customer;
-    const vehOpts = (c.vehicles || []).map(v => `<option value="${v.id}">${esc([v.year, v.make, v.model].filter(Boolean).join(' ') || 'Vehicle')}</option>`).join('');
+    const vehOpts = (c.vehicles || []).map(v => `<option value="${v.id}">${esc(_cpVehLabel(v))}</option>`).join('');
     Modal.show(`
       <div class="modal-title">📝 Add Note</div>
       <div class="form-group"><label class="form-label">Type</label>
@@ -308,7 +331,7 @@ const ClientProfile = {
   invoicePrompt(custId) {
     const c = this._data.customer;
     const svcOpts = (this._services || []).map(s => `<option value="${s.id}" data-price="${Number(s.price) || 0}">${esc(s.name)} · ${fmtMoney(s.price)}</option>`).join('');
-    const vehOpts = (c.vehicles || []).map(v => `<option value="${v.id}">${esc([v.year, v.make, v.model].filter(Boolean).join(' ') || 'Vehicle')}</option>`).join('');
+    const vehOpts = (c.vehicles || []).map(v => `<option value="${v.id}">${esc(_cpVehLabel(v))}</option>`).join('');
     Modal.show(`
       <div class="modal-title">🧾 Create Invoice</div>
       <div class="form-group"><label class="form-label">Service</label>
@@ -527,7 +550,8 @@ function _buildProfileHtml(data, services, messages) {
   h += `<div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
     ${avatarEl(c.name, 52)}
     <div style="flex:1;min-width:0;">
-      <div style="font-size:20px;font-weight:800;letter-spacing:-.02em;">${esc(c.name)}${c.isFleet ? ' <span style="font-size:11px;font-weight:700;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:2px 7px;vertical-align:middle;">🚚 Fleet</span>' : ''}</div>
+      <div style="font-size:20px;font-weight:800;letter-spacing:-.02em;">${esc(c.name)}${c.isFleet ? ' <span style="font-size:11px;font-weight:700;color:#1d4ed8;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:2px 7px;vertical-align:middle;white-space:nowrap;">🚚 Fleet</span>' : ''}</div>
+      ${c.isFleet ? `<div style="font-size:12px;font-weight:600;color:#1d4ed8;margin-top:2px;">${c.companyName ? esc(c.companyName) + ' · ' : ''}${vehicles.length} vehicle${vehicles.length !== 1 ? 's' : ''} on this account</div>` : ''}
       <div style="font-size:12px;color:var(--muted);margin-top:2px;">
         ${c.phone ? `<a href="javascript:void 0" onclick="_cpCall('${jsAttr(c.phone)}','${c.id}')" style="color:var(--muted);text-decoration:none;">${esc(c.phone)}</a>` : 'No phone'}
         ${c.email ? ' · ' + esc(c.email) : ''}
@@ -594,18 +618,31 @@ function _buildProfileHtml(data, services, messages) {
   // Vehicles
   h += `<div class="cp-card">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;"><div class="cp-sec" style="margin:0;">Vehicles</div>${write ? `<button onclick="ClientProfile.vehiclePrompt('${c.id}')" style="background:var(--green);color:#fff;border:none;border-radius:7px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;">+ Add</button>` : ''}</div>`;
+  if (c.isFleet && write) {
+    const qi = (id, ph, w) => `<input class="form-input" id="${id}" placeholder="${ph}" autocomplete="off" onkeydown="ClientProfile._quickAddKey(event,'${c.id}')" style="flex:${w};min-width:0;padding:8px 10px;font-size:13px;">`;
+    h += `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px;margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;color:#1d4ed8;letter-spacing:.04em;margin-bottom:6px;">QUICK ADD · press Enter to add the next unit</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        ${qi('qv-stock', 'Stock #', '1 1 80px')}${qi('qv-year', 'Year', '1 1 64px')}${qi('qv-make', 'Make', '2 1 90px')}${qi('qv-model', 'Model', '2 1 100px')}
+        <button id="qv-btn" onclick="ClientProfile.quickAddVehicle('${c.id}')" style="background:#1d4ed8;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;flex:0 0 auto;">+ Add</button>
+      </div></div>`;
+  }
+  if (vehicles.length > 6) {
+    h += `<input class="form-input" placeholder="Find by stock #, year, make, model, plate…" autocomplete="off" oninput="ClientProfile._filterVehicles(this.value)" style="margin-bottom:10px;padding:8px 10px;font-size:13px;">`;
+  }
   if (!vehicles.length) {
-    h += `<div style="font-size:13px;color:var(--faint);padding:8px 0;">No vehicles yet${write ? ' — add one to track service history, photos, and revenue per vehicle.' : '.'}</div>`;
+    h += `<div style="font-size:13px;color:var(--faint);padding:8px 0;">No vehicles yet${write ? (c.isFleet ? ' — type a stock number above to add the first unit.' : ' — add one to track service history, photos, and revenue per vehicle.') : '.'}</div>`;
   } else {
     vehicles.forEach(v => {
       const va = apptsForVeh(v); const vRev = va.reduce((s, a) => s + Number(a.price || 0), 0);
       const vLast = va[0]; const vPhotos = photosForVeh(v);
-      const title = [v.year, v.make, v.model].filter(Boolean).map(esc).join(' ') || 'Vehicle';
+      const ymm = [v.year, v.make, v.model].filter(Boolean).map(esc).join(' ');
+      const title = (v.stockNumber ? `<span style="color:#1d4ed8;font-family:monospace;">#${esc(v.stockNumber)}</span>${ymm ? ' · ' : ''}` : '') + (ymm || (v.stockNumber ? '' : 'Vehicle'));
       const tags = [];
       if (v.color) tags.push(esc(v.color));
       if (v.mileage) tags.push(esc(v.mileage) + ' mi');
       if (v.plate) tags.push('🔖 ' + esc(v.plate));
-      h += `<div style="border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;">
+      h += `<div class="cp-veh" data-veh-search="${esc([v.stockNumber, v.year, v.make, v.model, v.color, v.plate, v.vin].filter(Boolean).join(' ').toLowerCase())}" style="border:1px solid var(--border);border-radius:12px;padding:12px;margin-bottom:10px;">
         <div style="display:flex;align-items:flex-start;gap:10px;">
           <div style="font-size:22px;line-height:1;">🚗</div>
           <div style="flex:1;min-width:0;">
@@ -631,7 +668,7 @@ function _buildProfileHtml(data, services, messages) {
     h += `<div style="position:relative;">`;
     doneAppts.slice(0, 20).forEach((a, i) => {
       const veh = vehicles.find(v => _cpMatch(a, v));
-      const vehName = veh ? [veh.year, veh.make, veh.model].filter(Boolean).join(' ') : ([a.customFields?.vehicleYear, a.customFields?.vehicleMake, a.customFields?.vehicleModel].filter(Boolean).join(' '));
+      const vehName = veh ? _cpVehLabel(veh) : ([a.customFields?.vehicleYear, a.customFields?.vehicleMake, a.customFields?.vehicleModel].filter(Boolean).join(' '));
       const lines = [a.service || 'Service', ...((a.addons || []).map(x => x.name))].filter(Boolean);
       h += `<div style="display:flex;gap:12px;${i ? 'border-top:1px solid var(--border);' : ''}padding:11px 0;">
         <div style="flex-shrink:0;width:74px;text-align:right;"><div style="font-size:12px;font-weight:700;">${fmtDateShort(a.date)}</div><div style="font-size:10px;color:var(--faint);">${(a.date || '').slice(0, 4)}</div></div>
@@ -708,7 +745,7 @@ function _buildProfileHtml(data, services, messages) {
       <div style="flex:1;text-align:center;"><div style="font-size:10px;color:var(--faint);">AVG TICKET</div><div style="font-size:18px;font-weight:800;">${fmtMoney(avgTicket)}</div></div>
     </div>`;
   // Revenue by vehicle (bars)
-  const byVeh = vehicles.map(v => ({ name: [v.year, v.make, v.model].filter(Boolean).join(' ') || 'Vehicle', rev: apptsForVeh(v).reduce((s, a) => s + Number(a.price || 0), 0) }));
+  const byVeh = vehicles.map(v => ({ name: _cpVehLabel(v), rev: apptsForVeh(v).reduce((s, a) => s + Number(a.price || 0), 0) }));
   const matchedRev = vehicles.reduce((s, v) => s + apptsForVeh(v).reduce((t, a) => t + Number(a.price || 0), 0), 0);
   const otherRev = Math.max(0, totalRevenue - matchedRev);
   if (otherRev > 0) byVeh.push({ name: 'Other / unassigned', rev: otherRev });
@@ -741,7 +778,7 @@ function _buildProfileHtml(data, services, messages) {
     noteLog.forEach(n => {
       const sm = scopeMeta[n.scope] || scopeMeta.customer;
       let vehName = '';
-      if (n.scope === 'vehicle' && n.vehicleId) { const v = vehicles.find(x => x.id === n.vehicleId); if (v) vehName = ' · ' + [v.year, v.make, v.model].filter(Boolean).join(' '); }
+      if (n.scope === 'vehicle' && n.vehicleId) { const v = vehicles.find(x => x.id === n.vehicleId); if (v) vehName = ' · ' + _cpVehLabel(v); }
       h += `<div style="border-bottom:1px solid var(--border);padding:9px 0;">
         <div style="font-size:13px;color:var(--text);">${esc(n.text)}</div>
         <div style="font-size:10px;color:var(--faint);margin-top:3px;">${sm.ic} ${sm.label}${esc(vehName)} · ${n.at ? new Date(n.at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : ''}${n.by ? ' · ' + esc(n.by) : ''}</div>
