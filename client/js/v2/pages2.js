@@ -338,6 +338,10 @@
         <div class="metric-card"><div class="metric-label">Avg ticket</div><div class="metric-value">${fmtMoney(data.avgTicket)}</div><div class="metric-sub">this month</div></div>
         <div class="metric-card"><div class="metric-label">All time</div><div class="metric-value">${fmtMoney(data.totalRevenue)}</div><div class="metric-sub">${fmtMoney(data.totalNetProfit)} net profit</div></div></div>`);
 
+      // Weekly tracker: this week against goal + last week, day by day, and the
+      // 12-week run. Data comes from /revenue (weekly) — see weeklyRevenue().
+      if (data.weekly) html.push(this.weeklyCard(data.weekly));
+
       // Lead conversion by channel (phone vs Meta) — moved here from the Leads
       // page: it's the ad-spend ROI read, so it belongs with the money numbers.
       // The builder still lives in leads2.js next to the source definitions.
@@ -553,6 +557,103 @@
       el.innerHTML = html.join('');
       this.loadMonth();
     } catch (e) { el.innerHTML = '<div class="card"><p style="color:var(--muted)">Could not load revenue</p></div>'; }
+  };
+
+  // ── Weekly tracker ─────────────────────────────────────────────────────────
+  Revenue._weekly = null;
+  Revenue.weeklyCard = function (w) {
+    this._weekly = w;
+    const tw = w.thisWeek, lw = w.lastWeek;
+    const d = (s, opts) => new Date(s + 'T00:00:00').toLocaleDateString('en-US', opts || { month: 'short', day: 'numeric' });
+    const range = `${d(tw.start)} – ${d(tw.end)}`;
+    const money = v => fmtMoney(Math.round(Number(v) || 0));
+    const goal = tw.goal || 0;
+    const donePct = goal ? Math.min(100, tw.revenue / goal * 100) : 0;
+    const bookedPct = goal ? Math.min(100 - donePct, tw.booked / goal * 100) : 0;
+    const toGo = Math.max(0, goal - tw.revenue);
+    const vs = tw.vsLastWeekPct == null ? (lw ? 'no revenue last week' : 'first week on record')
+      : `<span style="color:${tw.vsLastWeekPct >= 0 ? 'var(--green-deep)' : 'var(--red)'};font-weight:650;">${tw.vsLastWeekPct >= 0 ? '▲' : '▼'} ${Math.abs(tw.vsLastWeekPct)}%</span> vs last week (${money(lw.revenue)})`;
+    const stat = (label, value, sub, color) => `<div style="min-width:120px;"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:600;">${label}</div>
+      <div class="num" style="font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;${color ? 'color:' + color + ';' : ''}">${value}</div><div style="font-size:11px;color:var(--faint);">${sub}</div></div>`;
+    const h = [];
+    h.push(`<div class="v2-card" id="rev-weekly"><div class="v2-chd"><div class="t">Weekly tracker</div><span class="sub">${range} · Mon–Sun</span>
+      <div class="sp"></div>
+      <button class="act" onclick="Revenue.setWeeklyGoal()" title="Set a weekly revenue goal">🎯 ${goal ? 'Goal ' + money(goal) : 'Set goal'}</button>
+      <button class="act" style="margin-left:14px;" onclick="Revenue.exportWeeks()" title="Download the last ${w.weeks.length} weeks as a CSV">⬇ Export CSV</button></div>
+      <div style="padding:14px 16px;">`);
+    h.push(`<div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:12px;">
+      ${stat('This week', money(tw.revenue), `${tw.jobs} job${tw.jobs === 1 ? '' : 's'} · ${vs}`, 'var(--green-deep)')}
+      ${stat('On the books', money(tw.booked), `${tw.bookedJobs} job${tw.bookedJobs === 1 ? '' : 's'} still scheduled · ${tw.daysLeft} day${tw.daysLeft === 1 ? '' : 's'} left`)}
+      ${stat('Projected', money(tw.projected), 'done + still on the books')}
+      ${stat('Avg week', money(w.avgWeek), w.bestWeek ? `best ${money(w.bestWeek.revenue)} (wk of ${d(w.bestWeek.start)})` : `last ${w.weeks.length} weeks`)}</div>`);
+    if (goal) {
+      h.push(`<div style="margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;"><span style="color:var(--muted);">Goal progress</span>
+          <span class="num" style="font-weight:650;">${tw.goalPct}% of ${money(goal)}${toGo ? ` <span style="color:var(--faint);font-weight:500;">· ${money(toGo)} to go</span>` : ' <span style="color:var(--green-deep);">· hit 🎉</span>'}</span></div>
+        <div class="bar-bg" style="height:10px;display:flex;"><div style="width:${donePct}%;background:var(--green);height:100%;"></div><div style="width:${bookedPct}%;background:var(--green);opacity:.35;height:100%;" title="On the books"></div></div>
+        <div style="font-size:10.5px;color:var(--faint);margin-top:4px;">Solid = completed · faded = booked but not done yet${w.goalSource === 'monthly' ? ' · goal is your monthly goal ÷ 52 weeks × 12' : ''}</div></div>`);
+    } else {
+      h.push(`<div style="font-size:12px;color:var(--muted);margin-bottom:14px;">No weekly goal yet — <a href="javascript:void 0" onclick="Revenue.setWeeklyGoal()" style="color:var(--green-deep);font-weight:600;">set one</a> to see how far along the week is.</div>`);
+    }
+    // Day-by-day for this week: completed (solid) stacked with booked (faded).
+    const maxD = Math.max(...tw.byDay.map(x => x.revenue + x.booked), goal ? goal / 5 : 0, 1);
+    h.push(`<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;align-items:end;height:96px;margin-bottom:4px;">`);
+    tw.byDay.forEach((x, i) => {
+      const isToday = x.date === w.today, past = x.date < w.today;
+      const hd = Math.round(x.revenue / maxD * 84), hb = Math.round(x.booked / maxD * 84);
+      h.push(`<div title="${d(x.date, { weekday: 'short', month: 'short', day: 'numeric' })}: ${money(x.revenue)} done${x.booked ? ' · ' + money(x.booked) + ' booked' : ''}" style="display:flex;flex-direction:column;justify-content:flex-end;height:100%;${isToday ? 'background:var(--green-lt);border-radius:6px;' : ''}">
+        <div style="height:${hb}px;background:var(--green);opacity:.3;border-radius:4px 4px 0 0;"></div>
+        <div style="height:${hd}px;background:var(--green);border-radius:${hb ? '0' : '4px 4px 0 0'};min-height:${x.revenue ? 2 : 0}px;"></div></div>`);
+    });
+    h.push(`</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:14px;">`);
+    tw.byDay.forEach(x => {
+      const isToday = x.date === w.today;
+      h.push(`<div style="text-align:center;"><div style="font-size:11px;font-weight:${isToday ? 700 : 500};color:${isToday ? 'var(--green-deep)' : 'var(--muted)'};">${d(x.date, { weekday: 'short' })}</div>
+        <div class="num" style="font-size:11px;font-variant-numeric:tabular-nums;color:${x.revenue ? 'var(--text)' : 'var(--faint)'};">${x.revenue ? money(x.revenue) : (x.booked ? `<span style="color:var(--faint);">${money(x.booked)}</span>` : '—')}</div></div>`);
+    });
+    h.push('</div>');
+    // 12-week run, oldest first, goal tick when set.
+    const maxW = Math.max(...w.weeks.map(x => x.revenue), goal, 1);
+    h.push(`<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:600;margin:4px 0 6px;">Last ${w.weeks.length} weeks</div>`);
+    w.weeks.forEach(x => {
+      const pct = Math.round(x.revenue / maxW * 100), isCur = x.start === tw.start, isBest = w.bestWeek && x.start === w.bestWeek.start && x.revenue > 0;
+      h.push(`<div style="display:flex;align-items:center;gap:10px;padding:3px 0;">
+        <span style="font-size:12px;color:${isCur ? 'var(--text)' : 'var(--muted)'};font-weight:${isCur ? 700 : 400};width:52px;white-space:nowrap;">${d(x.start)}</span>
+        <div class="bar-bg" style="flex:1;position:relative;"><div class="bar-fill" style="width:${pct}%;background:var(--green);${isCur ? '' : 'opacity:.75;'}"></div>${goal ? `<div style="position:absolute;top:-2px;bottom:-2px;left:${Math.min(100, goal / maxW * 100)}%;width:2px;background:var(--text);opacity:.35;"></div>` : ''}</div>
+        <span class="num" style="font-size:12px;font-weight:${isCur ? 700 : 600};width:118px;text-align:right;font-variant-numeric:tabular-nums;">${money(x.revenue)} <span style="color:var(--faint);font-weight:500;">×${x.jobs}${isBest ? ' ★' : ''}${isCur ? ' now' : ''}</span></span></div>`);
+    });
+    if (goal) h.push(`<div style="font-size:10.5px;color:var(--faint);margin-top:6px;">Tick mark = weekly goal. ★ = best week.</div>`);
+    h.push('</div></div>');
+    return h.join('');
+  };
+  Revenue.setWeeklyGoal = function () {
+    const cur = (this._weekly && this._weekly.goalSource === 'weekly') ? this._weekly.thisWeek.goal : '';
+    Modal.show(`<div class="modal-title">🎯 Weekly revenue goal</div>
+      <div class="form-group"><label class="form-label">Goal for a Mon–Sun week ($)</label><input class="form-input" id="wg-amt" type="number" min="0" step="100" inputmode="numeric" value="${cur}" placeholder="e.g. 3500" onkeydown="if(event.key==='Enter')Revenue.saveWeeklyGoal()"></div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Leave blank to fall back to your monthly goal spread across the year${this._weekly && this._weekly.goalSource === 'monthly' ? ` (currently ${fmtMoney(this._weekly.thisWeek.goal)}/week)` : ''}.</div>
+      <div class="modal-actions"><button id="wg-btn" class="btn btn-primary btn-full" onclick="Revenue.saveWeeklyGoal()">Save goal</button><button class="btn btn-full" onclick="Modal.close()">Cancel</button></div>`);
+    setTimeout(() => document.getElementById('wg-amt')?.focus(), 50);
+  };
+  Revenue.saveWeeklyGoal = async function () {
+    const n = parseFloat(document.getElementById('wg-amt')?.value);
+    const btn = document.getElementById('wg-btn'); disableBtn(btn);
+    try { await db.settings.save({ weeklyRevenueGoal: (!isNaN(n) && n > 0) ? Math.round(n) : 0 }); Modal.close(); toast(n > 0 ? 'Weekly goal set ✓' : 'Weekly goal cleared'); this.render(); }
+    catch (e) { toast('Could not save goal', 'error'); enableBtn(btn); }
+  };
+  Revenue.exportWeeks = function () {
+    const w = this._weekly; if (!w) return;
+    const q = v => { const t = String(v == null ? '' : v); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    const row = (...c) => c.map(q).join(',');
+    const L = [row('Shop', Auth.getShopName() || ''), row('Weeks (Mon–Sun)', w.weeks.length), row('Weekly goal', w.thisWeek.goal || ''), ''];
+    L.push(row('WEEKS'), row('Week starting', 'Week ending', 'Revenue', 'Jobs', 'Avg ticket', 'Materials', 'Gross profit'));
+    w.weeks.forEach(x => L.push(row(x.start, x.end, x.revenue, x.jobs, x.avgTicket, x.cost, x.gross)));
+    L.push('', row('THIS WEEK BY DAY'), row('Date', 'Completed revenue', 'Completed jobs', 'Booked revenue', 'Booked jobs'));
+    w.thisWeek.byDay.forEach(x => L.push(row(x.date, x.revenue, x.jobs, x.booked, x.bookedJobs)));
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob(['\ufeff' + L.join('\n')], { type: 'text/csv' }));
+    a.download = 'revenue-weekly-' + w.thisWeek.start + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    toast('Exported ' + w.weeks.length + ' weeks ✓');
   };
 
   // ── Monthly history (past-month breakdown + CSV export) ──────────────────

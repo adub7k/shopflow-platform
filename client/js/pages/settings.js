@@ -23,7 +23,8 @@ const Settings = {
       html.push(`<div class="form-group"><label class="form-label">Email</label><input class="form-input" id="s-email" type="email" value="${esc(s.email||'')}" /></div>`);
       // Monthly revenue goal drives the dashboard pace line — a redesign (/app2)
       // feature, so only surface the field there (the v1 dashboard has no chart).
-      if (window.SF_V2) html.push(`<div class="form-group"><label class="form-label">Monthly revenue goal ($)</label><input class="form-input" id="s-revgoal" type="number" min="0" step="100" inputmode="numeric" value="${s.revenueGoal||''}" placeholder="e.g. 15000" /><div style="font-size:11px;color:var(--muted);margin-top:5px;">Shown as a pace line on your dashboard revenue chart. Leave blank to hide it.</div></div>`);
+      if (window.SF_V2) html.push(`<div class="form-group"><label class="form-label">Monthly revenue goal ($)</label><input class="form-input" id="s-revgoal" type="number" min="0" step="100" inputmode="numeric" value="${s.revenueGoal||''}" placeholder="e.g. 15000" /><div style="font-size:11px;color:var(--muted);margin-top:5px;">Shown as a pace line on your dashboard revenue chart. Leave blank to hide it.</div></div>
+        <div class="form-group"><label class="form-label">Weekly revenue goal ($)</label><input class="form-input" id="s-weekgoal" type="number" min="0" step="100" inputmode="numeric" value="${s.weeklyRevenueGoal||''}" placeholder="e.g. 3500" /><div style="font-size:11px;color:var(--muted);margin-top:5px;">Drives the weekly tracker on the Revenue page. Leave blank to use your monthly goal spread across the year.</div></div>`);
       html.push('</div>');
 
       // Public page settings — the calendar booking page for scheduling verticals,
@@ -997,6 +998,8 @@ const Settings = {
     // Monthly revenue goal → dashboard pace line. Blank clears it (stored 0).
     const rgEl=document.getElementById('s-revgoal');
     if(rgEl){ const rg=parseFloat(rgEl.value); data.revenueGoal=(!isNaN(rg)&&rg>0)?Math.round(rg):0; }
+    const wgEl=document.getElementById('s-weekgoal');
+    if(wgEl){ const wg=parseFloat(wgEl.value); data.weeklyRevenueGoal=(!isNaN(wg)&&wg>0)?Math.round(wg):0; }
     const gr=document.getElementById('s-grev')?.value.trim(); if(gr)data.googleReviewLink=gr;
     const ne=document.getElementById('s-notifemail'); if(ne)data.notificationEmail=ne.value.trim();
     const nlr=document.getElementById('s-nlreply'); if(nlr)data.newsletterReplyTo=nlr.value.trim();

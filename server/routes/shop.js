@@ -899,6 +899,64 @@ router.get('/api/shop/revenue/month/:ym', requireAuth, requireRole('full'), shop
   });
 }));
 
+// ── Weekly revenue tracker ────────────────────────────────────────────────────
+// Weeks run Monday–Sunday and are keyed by their Monday (YYYY-MM-DD), computed
+// purely on the appointment date strings so it lines up with the month math
+// above. "Revenue" = completed jobs by appointment date; "on the books" = live
+// (not done, not dead) appointments still dated inside the week — what the
+// week can still become. Goal = settings.weeklyRevenueGoal, else the monthly
+// goal spread over 52 weeks, else 0 (card hides the goal bar).
+function weeklyRevenue(h, settings, weeksBack) {
+  const DEAD = ['cancelled', 'canceled', 'declined', 'no-show'];
+  const round2 = n => Math.round(n * 100) / 100;
+  const toDate = d => new Date(String(d) + 'T00:00:00Z');
+  const ymd = d => d.toISOString().slice(0, 10);
+  const mondayOf = (dStr) => { const d = toDate(dStr); const dow = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - dow); return ymd(d); };
+  const addDays = (dStr, n) => { const d = toDate(dStr); d.setUTCDate(d.getUTCDate() + n); return ymd(d); };
+  const td = today();
+  const thisMon = mondayOf(td);
+  const all = h.getAll('appointments').filter(a => a.date);
+  const done = all.filter(a => a.status === 'done');
+  const live = all.filter(a => a.status !== 'done' && !DEAD.includes(a.status));
+  const sumP = arr => round2(arr.reduce((s, a) => s + (Number(a.price) || 0), 0));
+  const sumC = arr => round2(arr.reduce((s, a) => s + (Number(a.cost) || 0), 0));
+  const inWeek = (mon) => { const end = addDays(mon, 6); return a => a.date >= mon && a.date <= end; };
+  const weeks = [];
+  for (let i = weeksBack - 1; i >= 0; i--) {
+    const start = addDays(thisMon, -7 * i), end = addDays(start, 6);
+    const jobs = done.filter(inWeek(start));
+    const revenue = sumP(jobs), cost = sumC(jobs);
+    weeks.push({ start, end, revenue, cost, gross: round2(revenue - cost), jobs: jobs.length, avgTicket: jobs.length ? Math.round(revenue / jobs.length) : 0 });
+  }
+  const cur = weeks[weeks.length - 1], prev = weeks[weeks.length - 2] || null;
+  const byDay = [];
+  for (let i = 0; i < 7; i++) {
+    const date = addDays(thisMon, i);
+    const jobs = done.filter(a => a.date === date);
+    const booked = live.filter(a => a.date === date);
+    byDay.push({ date, revenue: sumP(jobs), jobs: jobs.length, booked: sumP(booked), bookedJobs: booked.length });
+  }
+  const bookedLeft = live.filter(a => a.date >= td && a.date <= addDays(thisMon, 6));
+  const dayIdx = (toDate(td).getUTCDay() + 6) % 7; // 0 = Monday
+  const monthlyGoal = Math.max(0, Number(settings.revenueGoal) || 0);
+  const goal = Math.max(0, Number(settings.weeklyRevenueGoal) || 0) || (monthlyGoal ? Math.round(monthlyGoal * 12 / 52) : 0);
+  const past = weeks.slice(0, -1).filter(w => w.jobs > 0);
+  const best = weeks.reduce((b, w) => (!b || w.revenue > b.revenue) ? w : b, null);
+  return {
+    weekStartsOn: 'monday', today: td,
+    thisWeek: { ...cur, byDay, dayIndex: dayIdx, daysLeft: 6 - dayIdx,
+                booked: sumP(bookedLeft), bookedJobs: bookedLeft.length,
+                projected: round2(cur.revenue + sumP(bookedLeft)),
+                goal, goalPct: goal ? Math.min(999, Math.round(cur.revenue / goal * 100)) : null,
+                vsLastWeekPct: prev && prev.revenue ? Math.round((cur.revenue - prev.revenue) / prev.revenue * 100) : null },
+    lastWeek: prev,
+    weeks,
+    avgWeek: past.length ? round2(past.reduce((s, w) => s + w.revenue, 0) / past.length) : 0,
+    bestWeek: best && best.revenue > 0 ? { start: best.start, revenue: best.revenue } : null,
+    goalSource: Number(settings.weeklyRevenueGoal) > 0 ? 'weekly' : (monthlyGoal ? 'monthly' : 'none'),
+  };
+}
+
 router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   const barbers   = h.getAll('barbers');
   const customers = h.getAll('customers');
@@ -1128,6 +1186,7 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
 
   res.json({
     aiReceptionist, quotesGiven,
+    weekly: weeklyRevenue(h, db.get('settings').value() || {}, 12),
     mrr, activeMembers: activeMembers.length,
     aiRecoveredTotal: round2(aiDone.reduce((s, a) => s + Number(a.price || 0), 0)),
     aiRecoveredMonth: round2(aiDoneMonth.reduce((s, a) => s + Number(a.price || 0), 0)),
