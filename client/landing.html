@@ -326,6 +326,14 @@ footer{padding:56px 0 40px;border-top:1px solid var(--line);}
 
 @media(max-width:760px){.section{padding:68px 0;}}
 </style>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-TWWMW3DBEK"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-TWWMW3DBEK');
+</script>
 </head>
 <body>
 
@@ -690,6 +698,13 @@ try{
   const token=localStorage.getItem('sf_token'),slug=localStorage.getItem('sf_shopSlug');
   if(token&&slug){const b=document.getElementById('nav-cta');if(b){b.textContent='Go to my shop →';b.href='/shop/'+slug;}}
 }catch(e){}
+</script>
+<script>
+  // GA4: count every click through to the 15-minute call as a demo_click event
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href="/demo"], a[href^="/demo?"]');
+    if (a && typeof gtag === 'function') gtag('event', 'demo_click', { link_text: (a.textContent || '').trim().slice(0, 60), page_path: location.pathname });
+  });
 </script>
 </body>
 </html>

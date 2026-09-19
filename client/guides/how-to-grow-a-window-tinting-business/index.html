@@ -59,6 +59,14 @@
   ]
 }
 </script>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-TWWMW3DBEK"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-TWWMW3DBEK');
+</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -322,5 +330,12 @@
     <div class="foot-base"><span>© 2026 ShopFlow Technologies LLC</span><span>Albuquerque, NM</span></div>
   </div>
 </footer>
+<script>
+  // GA4: count every click through to the 15-minute call as a demo_click event
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[href="/demo"], a[href^="/demo?"]');
+    if (a && typeof gtag === 'function') gtag('event', 'demo_click', { link_text: (a.textContent || '').trim().slice(0, 60), page_path: location.pathname });
+  });
+</script>
 </body>
 </html>

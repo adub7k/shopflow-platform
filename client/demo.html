@@ -101,6 +101,14 @@ select.form-input option{background:#1a1a1a;color:#fff;}
   .form-card{padding:24px;}
 }
 </style>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-TWWMW3DBEK"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-TWWMW3DBEK');
+</script>
 </head>
 <body>
 
@@ -262,6 +270,7 @@ async function submitDemo() {
     const res  = await fetch('/api/public/demo/book', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name,shopName:shop,phone,currentTool:tool,date:selectedDate,time:selectedTime}) });
     const data = await res.json();
     if (!data.ok) { errEl.textContent=data.error||'Booking failed. Try again.'; errEl.style.display='block'; btn.textContent='Book my call →'; btn.disabled=false; return; }
+    try { if (typeof gtag === 'function') gtag('event', 'demo_booked', { date: selectedDate, time: selectedTime }); } catch(e) {}
     document.getElementById('form-wrap').innerHTML = `
       <div class="success-wrap">
         <div class="success-icon">🎉</div>
