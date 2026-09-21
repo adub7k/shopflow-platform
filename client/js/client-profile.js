@@ -286,6 +286,75 @@ const ClientProfile = {
     try { await db.customers.save(c); toast('Added ' + _cpVehLabel(v) + ' ✓'); await this.open(custId); this.bookVehiclePrompt(custId, v.id, { afterQuickAdd: true }); }
     catch (e) { c.vehicles = c.vehicles.filter(x => x.id !== v.id); toast('Could not save', 'error'); enableBtn(btn); }
   },
+  // ── Fleet pricing: negotiated per-account rates ────────────────────────────
+  // customer.fleetPricing = { overrides: { [serviceId]: price }, custom: [{ id, name, price }] }
+  // Overrides replace the shop's list price for that service on this account;
+  // custom rows are fleet-only services (e.g. "Lot wash"). Blank override =
+  // list price. Used by the book-this-unit popup and the Invoice prompt.
+  _fleetPricing(c) { const fp = (c && c.fleetPricing) || {}; return { overrides: fp.overrides || {}, custom: Array.isArray(fp.custom) ? fp.custom : [] }; },
+  _servicesFor(c) {
+    const fp = c && c.isFleet ? this._fleetPricing(c) : { overrides: {}, custom: [] };
+    const list = (this._services || []).filter(s => s && s.active !== false).map(s => {
+      const ov = fp.overrides[s.id]; const hasOv = ov !== undefined && ov !== null && ov !== '' && !isNaN(Number(ov));
+      return { id: s.id, name: s.name, price: hasOv ? Number(ov) : (Number(s.price) || 0), listPrice: Number(s.price) || 0, fleetRate: hasOv, custom: false };
+    });
+    fp.custom.forEach(x => list.push({ id: x.id, name: x.name, price: Number(x.price) || 0, listPrice: null, fleetRate: true, custom: true }));
+    return list;
+  },
+  addFleetCustomRow() {
+    const wrap = document.getElementById('fp-custom-rows'); if (!wrap) return;
+    const row = document.createElement('div'); row.className = 'fp-custom-row'; row.style.cssText = 'display:flex;gap:6px;align-items:center;margin-top:6px;';
+    row.innerHTML = `<input class="form-input fp-cn" placeholder="Fleet-only service, e.g. Lot wash" style="flex:1;min-width:0;padding:7px 9px;font-size:13px;">
+      <input class="form-input fp-cp" type="number" min="0" step="1" inputmode="decimal" placeholder="$" style="width:90px;padding:7px 9px;font-size:13px;">
+      <button onclick="this.closest('.fp-custom-row').remove()" title="Remove" style="background:none;border:1px solid var(--border);border-radius:7px;padding:5px 8px;font-size:12px;color:var(--muted);cursor:pointer;">✕</button>`;
+    wrap.appendChild(row); row.querySelector('.fp-cn').focus();
+  },
+  async saveFleetPricing(custId) {
+    const c = this._data.customer;
+    const overrides = {};
+    document.querySelectorAll('input[data-fp-svc]').forEach(el => { const v = parseFloat(el.value); if (!isNaN(v) && v >= 0 && el.value.trim() !== '') overrides[el.getAttribute('data-fp-svc')] = v; });
+    const custom = [];
+    document.querySelectorAll('.fp-custom-row').forEach(row => {
+      const name = (row.querySelector('.fp-cn')?.value || '').trim(); const price = parseFloat(row.querySelector('.fp-cp')?.value);
+      if (name) custom.push({ id: row.getAttribute('data-id') || genId('fps'), name, price: isNaN(price) ? 0 : price });
+    });
+    c.fleetPricing = { overrides, custom };
+    const btn = document.getElementById('fp-btn'); disableBtn(btn);
+    try { await db.customers.save(c); toast('Fleet rates saved ✓'); await this.open(custId); }
+    catch (e) { toast('Could not save rates', 'error'); enableBtn(btn); }
+  },
+  _fleetPricingCard(c, write) {
+    const fp = this._fleetPricing(c); const svcs = (this._services || []).filter(s => s && s.active !== false);
+    const nOv = Object.keys(fp.overrides).length + fp.custom.length;
+    let h = `<div class="cp-card" id="fp-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;"><div class="cp-sec" style="margin:0;">Fleet pricing</div>${write ? `<button id="fp-btn" onclick="ClientProfile.saveFleetPricing('${c.id}')" style="background:#1d4ed8;color:#fff;border:none;border-radius:7px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer;">Save rates</button>` : ''}</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Negotiated rates for this account${nOv ? ` · ${nOv} set` : ''}. Blank = your regular price. Used when you book or invoice a unit here.</div>`;
+    if (!svcs.length) h += `<div style="font-size:12.5px;color:var(--faint);">Add services in Settings first, or add fleet-only services below.</div>`;
+    else {
+      h += `<div style="display:grid;grid-template-columns:1fr auto 96px;gap:6px 10px;align-items:center;font-size:13px;">
+        <div style="font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:600;">Service</div><div style="font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:600;text-align:right;">List</div><div style="font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:600;">Fleet rate</div>`;
+      svcs.forEach(sv => {
+        const ov = fp.overrides[sv.id]; const has = ov !== undefined && ov !== null && ov !== '';
+        h += `<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(sv.name)}</div>
+          <div style="text-align:right;color:var(--muted);font-variant-numeric:tabular-nums;">${fmtMoney(sv.price)}</div>
+          ${write ? `<input class="form-input" type="number" min="0" step="1" inputmode="decimal" data-fp-svc="${sv.id}" value="${has ? esc(String(ov)) : ''}" placeholder="${Math.round(Number(sv.price) || 0)}" style="padding:6px 8px;font-size:13px;${has ? 'border-color:#1d4ed8;color:#1d4ed8;font-weight:700;' : ''}">` : `<div style="font-weight:700;color:#1d4ed8;font-variant-numeric:tabular-nums;">${has ? fmtMoney(ov) : '—'}</div>`}`;
+      });
+      h += `</div>`;
+    }
+    h += `<div id="fp-custom-rows" style="margin-top:8px;">`;
+    fp.custom.forEach(x => {
+      h += write ? `<div class="fp-custom-row" data-id="${x.id}" style="display:flex;gap:6px;align-items:center;margin-top:6px;">
+        <input class="form-input fp-cn" value="${esc(x.name)}" style="flex:1;min-width:0;padding:7px 9px;font-size:13px;">
+        <input class="form-input fp-cp" type="number" min="0" step="1" inputmode="decimal" value="${esc(String(x.price))}" style="width:90px;padding:7px 9px;font-size:13px;">
+        <button onclick="this.closest('.fp-custom-row').remove()" title="Remove" style="background:none;border:1px solid var(--border);border-radius:7px;padding:5px 8px;font-size:12px;color:var(--muted);cursor:pointer;">✕</button></div>`
+        : `<div style="display:flex;justify-content:space-between;font-size:13px;margin-top:6px;"><span>${esc(x.name)} <span style="font-size:10px;color:#1d4ed8;font-weight:700;">FLEET ONLY</span></span><b style="color:#1d4ed8;">${fmtMoney(x.price)}</b></div>`;
+    });
+    h += `</div>`;
+    if (write) h += `<button onclick="ClientProfile.addFleetCustomRow()" style="margin-top:8px;background:none;border:1px dashed var(--border);border-radius:7px;padding:6px 10px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;width:100%;">+ Add a fleet-only service</button>`;
+    h += `</div>`;
+    return h;
+  },
+
   // ── Book a vehicle: the one-screen "when are you doing this unit?" popup ───
   // Pops right after a fleet quick-add (Skip keeps the cursor on Stock # so a
   // list of units keys in fast) and from the 📅 button on any vehicle card.
@@ -293,7 +362,7 @@ const ClientProfile = {
   bookVehiclePrompt(custId, vehId, opts) {
     const c = this._data.customer; const v = (c.vehicles || []).find(x => x.id === vehId); if (!v) return;
     const after = !!(opts && opts.afterQuickAdd);
-    const svcs = (this._services || []).filter(s => s && s.active !== false);
+    const svcs = this._servicesFor(c);
     const times = []; for (let hh = 7; hh <= 18; hh++) for (const mm of ['00', '30']) { const ap = hh >= 12 ? 'PM' : 'AM'; times.push(`${hh % 12 || 12}:${mm} ${ap}`); }
     const minDate = today();
     Modal.show(`
@@ -305,8 +374,11 @@ const ClientProfile = {
         <div class="form-group"><label class="form-label">Time <span style="color:var(--faint);font-weight:500;">(optional)</span></label>
           <select class="form-input" id="bv-time"><option value="">Any time</option>${times.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
         <div class="form-group"><label class="form-label">Service <span style="color:var(--faint);font-weight:500;">(optional)</span></label>
-          <select class="form-input" id="bv-svc"><option value="">Decide later</option>${svcs.map(s => `<option value="${s.id}">${esc(s.name)}${s.price ? ' · ' + fmtMoney(s.price) : ''}</option>`).join('')}</select></div>
+          <select class="form-input" id="bv-svc" onchange="var o=this.options[this.selectedIndex];document.getElementById('bv-price').value=o&&o.value?o.getAttribute('data-price'):''"><option value="">Decide later</option>${svcs.map(s => `<option value="${s.id}" data-price="${s.price}">${esc(s.name)} · ${fmtMoney(s.price)}${s.fleetRate ? ' (fleet rate)' : ''}</option>`).join('')}</select></div>
       </div>
+      <div class="form-group"><label class="form-label">Price <span style="color:var(--faint);font-weight:500;">(edit if this one's different)</span></label>
+        <input class="form-input" id="bv-price" type="number" min="0" step="1" inputmode="decimal" placeholder="0" style="font-size:16px;"></div>
+      ${c.isFleet ? `<div style="font-size:11.5px;color:var(--muted);margin:-4px 0 10px;">${svcs.some(x => x.fleetRate) ? 'Prices shown are this account\'s fleet rates.' : 'No fleet rates set for this account yet — set them in <b>Fleet pricing</b> on the profile.'}</div>` : ''}
       <div class="modal-actions">
         <button id="bv-btn" class="btn btn-primary btn-full" onclick="ClientProfile.saveVehicleBooking('${custId}','${vehId}',${after})">Book it</button>
         <button class="btn btn-full" onclick="Modal.close();${after ? "document.getElementById('qv-stock')?.focus()" : ''}">${after ? 'Skip for now' : 'Cancel'}</button>
@@ -317,11 +389,13 @@ const ClientProfile = {
     const c = this._data.customer; const v = (c.vehicles || []).find(x => x.id === vehId); if (!v) return;
     const date = _cpVal('bv-date'); if (!date) { toast('Pick a date', 'warning'); return; }
     const time = _cpVal('bv-time'); const svcId = _cpVal('bv-svc');
-    const svc = (this._services || []).find(s => s.id === svcId);
+    const svc = this._servicesFor(c).find(s => s.id === svcId);
+    const typed = parseFloat(_cpVal('bv-price'));
+    const price = !isNaN(typed) && typed >= 0 ? typed : (svc ? svc.price : 0);
     const btn = document.getElementById('bv-btn'); disableBtn(btn);
     const appt = {
       id: genId('a'), customerId: c.id, customerName: c.name, customerPhone: c.phone || '', customerEmail: c.email || '',
-      serviceId: svc ? svc.id : null, service: svc ? svc.name : 'Detail', price: svc ? Number(svc.price) || 0 : 0,
+      serviceId: svc && !svc.custom ? svc.id : null, service: svc ? svc.name : 'Detail', price,
       date, time, status: 'confirmed', source: 'crm', vehicleId: v.id,
       notes: [v.stockNumber ? 'Stock #' + v.stockNumber : '', c.isFleet ? 'Fleet: ' + (c.companyName || c.name) : ''].filter(Boolean).join(' · '),
       customFields: { vehicleYear: v.year || '', vehicleMake: v.make || '', vehicleModel: v.model || '', vehicleColor: v.color || '' },
@@ -385,7 +459,7 @@ const ClientProfile = {
   // ── Create invoice (records a completed paid job via the checkout path) ──────
   invoicePrompt(custId) {
     const c = this._data.customer;
-    const svcOpts = (this._services || []).map(s => `<option value="${s.id}" data-price="${Number(s.price) || 0}">${esc(s.name)} · ${fmtMoney(s.price)}</option>`).join('');
+    const svcOpts = this._servicesFor(c).map(s => `<option value="${s.id}" data-price="${s.price}">${esc(s.name)} · ${fmtMoney(s.price)}${s.fleetRate ? ' (fleet rate)' : ''}</option>`).join('');
     const vehOpts = (c.vehicles || []).map(v => `<option value="${v.id}">${esc(_cpVehLabel(v))}</option>`).join('');
     Modal.show(`
       <div class="modal-title">🧾 Create Invoice</div>
@@ -404,7 +478,7 @@ const ClientProfile = {
   async saveInvoice(custId) {
     const c = this._data.customer;
     const serviceId = document.getElementById('inv-service').value;
-    const svc = (this._services || []).find(s => s.id === serviceId);
+    const svc = this._servicesFor(c).find(s => s.id === serviceId);
     const price = parseFloat(document.getElementById('inv-price').value) || 0;
     const tip   = parseFloat(document.getElementById('inv-tip').value) || 0;
     const vehId = document.getElementById('inv-veh').value;
@@ -413,7 +487,7 @@ const ClientProfile = {
     const btn = document.getElementById('inv-btn'); disableBtn(btn);
     const appt = {
       id: genId('a'), customerId: c.id, customerName: c.name, customerPhone: c.phone || '', customerEmail: c.email || '',
-      serviceId: svc ? svc.id : null, service: svc ? svc.name : (_cpVal('inv-desc') || 'Service'),
+      serviceId: svc && !svc.custom ? svc.id : null, service: svc ? svc.name : (_cpVal('inv-desc') || 'Service'),
       price, tip, date: today(), time: _cpNowTime(), status: 'confirmed', source: 'crm',
       vehicleId: veh ? veh.id : null,
       customFields: veh ? { vehicleYear: veh.year || '', vehicleMake: veh.make || '', vehicleModel: veh.model || '', vehicleColor: veh.color || '' } : {},
@@ -719,6 +793,9 @@ function _buildProfileHtml(data, services, messages) {
     });
   }
   h += `</div>`;
+
+  // Fleet pricing (fleet accounts only)
+  if (c.isFleet) h += ClientProfile._fleetPricingCard(c, write);
 
   // Service history (timeline)
   h += `<div class="cp-card"><div class="cp-sec">Service History</div>`;
