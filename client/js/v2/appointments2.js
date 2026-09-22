@@ -32,7 +32,7 @@
       const barber = (Appointments._barbers || []).find(b => b.id === a.barberId);
       return `<div class="list-row" onclick="Appointments.openDetail('${a.id}')">
         <div style="width:3px;min-height:40px;background:${barber?.color || 'var(--border-md)'};border-radius:2px;flex-shrink:0;"></div>
-        <span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--muted);width:58px;flex-shrink:0;font-variant-numeric:tabular-nums;">${esc(a.time || '')}</span>
+        <span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--muted);width:58px;flex-shrink:0;font-variant-numeric:tabular-nums;">${a.time ? esc(a.time) : '<span style="color:var(--faint);">no time</span>'}</span>
         ${avatarEl(a.customerName, 32)}
         <div class="list-main"><div class="list-name">${esc(a.customerName)}</div>
           <div class="list-sub">${esc(a.service || '')}${barber ? ' · ' + esc(barber.name) : ''}</div></div>
@@ -103,6 +103,7 @@
     // Hour range hugs the day's real bookings (min 8am–6pm span)
     let h0 = 8, h1 = 18;
     wk.forEach(a => {
+      if (!a.time) return; // untimed (legacy fleet bookings) sit at the top of the grid, they don't stretch it to midnight
       const m = parseMins(a.time); h0 = Math.min(h0, Math.floor(m / 60));
       h1 = Math.max(h1, Math.ceil((m + durationOf(a)) / 60));
     });
@@ -118,12 +119,12 @@
     }
     setTimeout(() => {
       wk.forEach(a => {
-        const mins = parseMins(a.time), h = Math.floor(mins / 60);
+        const mins = a.time ? parseMins(a.time) : h0 * 60, h = Math.floor(mins / 60);
         const cell = document.querySelector(`.v2-calcell[data-h="${h}"][data-d="${a.date}"]`); if (!cell) return;
         const dur = durationOf(a);
         const top = (mins % 60) / 60 * ROW, hgt = Math.max(dur / 60 * ROW - 4, 20);
         const barber = (this._barbers || []).find(b => b.id === a.barberId);
-        cell.insertAdjacentHTML('beforeend', `<div class="v2-appt ${stClass(a.status)}" style="top:${top}px;height:${hgt}px;${barber?.color ? `border-left:3px solid ${barber.color};` : ''}" onclick="Appointments.openDetail('${a.id}')" title="${esc(a.customerName)} — ${esc(a.service || '')}">
+        cell.insertAdjacentHTML('beforeend', `<div class="v2-appt ${stClass(a.status)}" style="top:${top}px;height:${hgt}px;${barber?.color ? `border-left:3px solid ${barber.color};` : ''}" onclick="Appointments.openDetail('${a.id}')" title="${esc(a.customerName)} — ${esc(a.service || '')}${a.time ? '' : ' (no time set)'}">
           <div class="an">${esc(a.customerName)}</div>
           ${dur >= 75 ? `<div>${esc((a.service || '').split(' · ')[0])}</div><div style="font-weight:650;">${fmtMoney(a.price)}</div>` : ''}</div>`);
       });

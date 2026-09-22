@@ -371,8 +371,8 @@ const ClientProfile = {
         <div style="font-size:20px;line-height:1;">🚗</div><div style="font-size:14px;font-weight:700;">${esc(_cpVehLabel(v))}</div></div>
       <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="bv-date" type="date" value="${minDate}" min="${minDate}" style="font-size:16px;"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-        <div class="form-group"><label class="form-label">Time <span style="color:var(--faint);font-weight:500;">(optional)</span></label>
-          <select class="form-input" id="bv-time"><option value="">Any time</option>${times.map(t => `<option value="${t}">${t}</option>`).join('')}</select></div>
+        <div class="form-group"><label class="form-label">Time</label>
+          <select class="form-input" id="bv-time">${times.map(t => `<option value="${t}"${t === '9:00 AM' ? ' selected' : ''}>${t}</option>`).join('')}</select></div>
         <div class="form-group"><label class="form-label">Service <span style="color:var(--faint);font-weight:500;">(optional)</span></label>
           <select class="form-input" id="bv-svc" onchange="var o=this.options[this.selectedIndex];document.getElementById('bv-price').value=o&&o.value?o.getAttribute('data-price'):''"><option value="">Decide later</option>${svcs.map(s => `<option value="${s.id}" data-price="${s.price}">${esc(s.name)} · ${fmtMoney(s.price)}${s.fleetRate ? ' (fleet rate)' : ''}</option>`).join('')}</select></div>
       </div>
@@ -388,7 +388,8 @@ const ClientProfile = {
   async saveVehicleBooking(custId, vehId, afterQuickAdd) {
     const c = this._data.customer; const v = (c.vehicles || []).find(x => x.id === vehId); if (!v) return;
     const date = _cpVal('bv-date'); if (!date) { toast('Pick a date', 'warning'); return; }
-    const time = _cpVal('bv-time'); const svcId = _cpVal('bv-svc');
+    // Always a real slot: an empty time parses as midnight and drags the calendar grid up to 0:00.
+    const time = _cpVal('bv-time') || '9:00 AM'; const svcId = _cpVal('bv-svc');
     const svc = this._servicesFor(c).find(s => s.id === svcId);
     const typed = parseFloat(_cpVal('bv-price'));
     const price = !isNaN(typed) && typed >= 0 ? typed : (svc ? svc.price : 0);
