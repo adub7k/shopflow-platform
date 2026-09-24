@@ -147,6 +147,9 @@ function buildLead(b) {
   const existing = b.id ? leads.find({ id: b.id }).value() : null;
 
   const lead = {
+    // Keep fields this form doesn't know about (Google import: website,
+    // rating, placeId…) — the whitelisted fields below still win.
+    ...(existing || {}),
     id:       existing ? existing.id : genId('lead'),
     name,
     contact:  String(b.contact || '').trim(),
@@ -312,7 +315,8 @@ function adminSalesPayload() {
   return {
     repName: s.rep.name,
     totals: {
-      leads:    s.leads.length,
+      leads:    s.leads.filter(l => l.status !== 'not-contacted').length,
+      prospects: s.leads.filter(l => l.status === 'not-contacted').length,
       closed:   closed.length,
       pipeline: s.leads.filter(l => ['contacted', 'responded', 'demo'].includes(l.status)).length,
       mrrClosed: closed.reduce((sum, l) => sum + (Number(l.value) || 0), 0),
@@ -417,6 +421,201 @@ router.get('/api/admin/sales/geocode', requireAdmin, async (req, res) => {
     res.status(502).json({ ok: false, error: 'Geocoder timed out' });
   }
 });
+
+// ── Admin: import shops from Google Maps (via Apify) ─────────────────────────
+// Runs Apify's Google Maps Scraper (compass/crawler-google-places) over the
+// metro for detailing / tint / wrap / PPF shops, then adds the ones we don't
+// already have as "Not contacted". Needs APIFY_TOKEN.
+//
+// Apify bills per place scraped (duplicates across search terms count too), so:
+//   • every run has a hard cap (maxItems + maxTotalChargeUsd) the admin picks;
+//   • no Apify-side filters — those are billed extra per place; we filter here;
+//   • the run is remembered in master.sales.importRun, so the preview and the
+//     "Add" click both read the finished dataset (free) instead of re-scraping.
+// Flow: POST …/start → poll GET …/status until done (shows the preview) → POST …/apply.
+const APIFY_ACTOR = 'compass~crawler-google-places';
+const APIFY_PRICE_PER_PLACE = 0.004;   // free-tier price; only used to size the charge cap
+const IMPORT_KINDS = {
+  detailing: { label: 'Detailing',   terms: ['auto detailing', 'ceramic coating'] },
+  tint:      { label: 'Tint & wrap', terms: ['car window tinting', 'car wrap', 'paint protection film'] },
+};
+// Rio Rancho down to Los Lunas / Belen — the search area and the keep-filter.
+const METRO = { south: 34.62, west: -106.98, north: 35.36, east: -106.45 };
+const SKIP_CATEGORIES = /dealer|gas station|car rental|parking|storage|insurance|towing|tire shop|junkyard|salvage|auto parts/i;
+const KEEP_NAMES = /detail|tint|wrap|ppf|ceramic|coating|film|shine|polish|protect/i;
+
+function normName(n) { return String(n || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, ''); }
+function termKind(term) {
+  return Object.keys(IMPORT_KINDS).find(k => IMPORT_KINDS[k].terms.includes(String(term || '').toLowerCase())) || null;
+}
+
+async function apify(pathAndQuery, opts = {}) {
+  const r = await fetch('https://api.apify.com/v2' + pathAndQuery, {
+    method: opts.method || 'GET',
+    headers: { Authorization: 'Bearer ' + process.env.APIFY_TOKEN, 'Content-Type': 'application/json' },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+    signal: AbortSignal.timeout(30000),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((data.error && data.error.message) || ('Apify HTTP ' + r.status));
+  return data;
+}
+
+// Dataset rows → clean shop records (in-lane, open, inside the metro, one per place).
+function shopsFromItems(items) {
+  const skipped = { closed: 0, offTopic: 0, outside: 0 };
+  const byId = new Map();
+  (items || []).forEach(it => {
+    const loc = it.location || {};
+    if (!it.title || loc.lat == null || loc.lng == null) return;
+    const id = it.placeId || normName(it.title) + ':' + loc.lat.toFixed(4);
+    const kind = termKind(it.searchString);
+    const prev = byId.get(id);
+    if (prev) { if (kind) prev.kinds.add(kind); return; }
+    if (it.permanentlyClosed) { skipped.closed++; return; }
+    if (loc.lat < METRO.south || loc.lat > METRO.north || loc.lng < METRO.west || loc.lng > METRO.east) { skipped.outside++; return; }
+    const cats = [it.categoryName, ...(it.categories || [])].filter(Boolean).join(' | ');
+    if (SKIP_CATEGORIES.test(cats) && !KEEP_NAMES.test(it.title)) { skipped.offTopic++; return; }
+    byId.set(id, {
+      kinds: new Set(kind ? [kind] : []),
+      shop: {
+        placeId: it.placeId || '', name: it.title,
+        address: String(it.address || '').replace(/, (USA|United States)$/, ''),
+        city: it.city || '', lat: loc.lat, lng: loc.lng,
+        contact: it.phone || '', website: it.website || '',
+        rating: it.totalScore || null, reviews: it.reviewsCount || 0,
+        googleCategory: it.categoryName || '',
+      },
+    });
+  });
+  const shops = [...byId.values()].map(({ kinds, shop }) => ({
+    ...shop, category: [...kinds].map(k => IMPORT_KINDS[k].label).join(' + ') || shop.googleCategory,
+  }));
+  return { shops, skipped, rows: (items || []).length };
+}
+
+// Split scraped shops into new vs already-in-the-pipeline.
+function matchShops(shops) {
+  const existing = sales().get('leads').value() || [];
+  const byPlace = new Map(existing.filter(l => l.placeId).map(l => [l.placeId, l]));
+  const byName = new Map(existing.map(l => [normName(l.name), l]));
+  const toAdd = [], matched = [];
+  shops.forEach(sh => {
+    const hit = (sh.placeId && byPlace.get(sh.placeId)) || byName.get(normName(sh.name));
+    if (hit) matched.push({ lead: hit, shop: sh }); else toAdd.push(sh);
+  });
+  return { existing, toAdd, matched };
+}
+
+async function datasetItems(datasetId) {
+  const fields = 'title,placeId,address,city,location,phone,website,totalScore,reviewsCount,permanentlyClosed,categoryName,categories,searchString';
+  const items = [];
+  for (let offset = 0; ; offset += 1000) {
+    const page = await apify(`/datasets/${datasetId}/items?clean=true&format=json&fields=${fields}&limit=1000&offset=${offset}`);
+    items.push(...page);
+    if (page.length < 1000) return items;
+  }
+}
+
+// What the admin panel shows for the remembered run.
+async function importStatus() {
+  const run = sales().get('importRun').value();
+  if (!run) return { ok: true, run: null };
+  if (['READY', 'RUNNING'].includes(run.status)) {
+    const r = (await apify('/actor-runs/' + run.runId)).data || {};
+    sales().get('importRun').assign({ status: r.status || run.status, finishedAt: r.finishedAt || null }).write();
+  }
+  const cur = sales().get('importRun').value();
+  const out = { ok: true, run: { status: cur.status, kinds: cur.kinds, maxPlaces: cur.maxPlaces, startedAt: cur.startedAt, finishedAt: cur.finishedAt || null, appliedAt: cur.appliedAt || null } };
+  if (['READY', 'RUNNING'].includes(cur.status)) {
+    const ds = (await apify('/datasets/' + cur.datasetId).catch(() => ({}))).data || {};
+    out.run.scraped = ds.itemCount || 0;
+    return out;
+  }
+  // Finished (or stopped at the cap / timed out) — preview whatever it got.
+  const { shops, skipped, rows } = shopsFromItems(await datasetItems(cur.datasetId));
+  const { toAdd, matched } = matchShops(shops);
+  Object.assign(out.run, {
+    scraped: rows, found: shops.length, wouldAdd: toAdd.length, alreadyHave: matched.length, skipped,
+    sample: toAdd.slice(0, 12).map(s => ({ name: s.name, city: s.city, category: s.category, rating: s.rating, reviews: s.reviews })),
+  });
+  return out;
+}
+
+router.post('/api/admin/sales/import-places/start', requireAdmin, salesRoute(async (req, res) => {
+  if (!process.env.APIFY_TOKEN) return res.status(400).json({ ok: false, error: 'APIFY_TOKEN is not set on the server.' });
+  const kinds = (Array.isArray(req.body.kinds) ? req.body.kinds : Object.keys(IMPORT_KINDS)).filter(k => IMPORT_KINDS[k]);
+  if (!kinds.length) return res.status(400).json({ ok: false, error: 'Pick at least one kind of shop.' });
+  const prev = sales().get('importRun').value();
+  if (prev && ['READY', 'RUNNING'].includes(prev.status)) return res.status(409).json({ ok: false, error: 'A scrape is already running.' });
+
+  const maxPlaces = Math.min(5000, Math.max(20, parseInt(req.body.maxPlaces, 10) || 900));
+  const terms = kinds.flatMap(k => IMPORT_KINDS[k].terms);
+  const perTerm = Math.max(10, Math.floor(maxPlaces / terms.length));
+  const { south, west, north, east } = METRO;
+  const input = {
+    searchStringsArray: terms,
+    customGeolocation: { type: 'Polygon', coordinates: [[[west, north], [east, north], [east, south], [west, south], [west, north]]] },
+    maxCrawledPlacesPerSearch: perTerm,
+    language: 'en',
+    // Everything below stays at the cheapest setting — extras are billed per place.
+    skipClosedPlaces: false, scrapePlaceDetailPage: false, scrapeContacts: false, includeWebResults: false,
+    maxReviews: 0, maxImages: 0, maxQuestions: 0, scrapeDirectories: false,
+  };
+  // Hard caps: never bill past maxPlaces, whatever the actor does.
+  const chargeCap = Math.max(0.5, +(maxPlaces * APIFY_PRICE_PER_PLACE + 0.05).toFixed(2));
+  try {
+    const run = (await apify(`/acts/${APIFY_ACTOR}/runs?maxItems=${maxPlaces}&maxTotalChargeUsd=${chargeCap}`, { method: 'POST', body: input })).data;
+    sales().set('importRun', {
+      runId: run.id, datasetId: run.defaultDatasetId, status: run.status,
+      kinds, maxPlaces, startedAt: new Date().toISOString(), finishedAt: null, appliedAt: null,
+    }).write();
+    res.json(await importStatus());
+  } catch (e) {
+    res.status(502).json({ ok: false, error: 'Apify: ' + e.message });
+  }
+}));
+
+router.get('/api/admin/sales/import-places/status', requireAdmin, salesRoute(async (req, res) => {
+  try { res.json(await importStatus()); }
+  catch (e) { res.status(502).json({ ok: false, error: 'Apify: ' + e.message }); }
+}));
+
+router.post('/api/admin/sales/import-places/apply', requireAdmin, salesRoute(async (req, res) => {
+  const run = sales().get('importRun').value();
+  if (!run) return res.status(400).json({ ok: false, error: 'Run a scrape first.' });
+  if (['READY', 'RUNNING'].includes(run.status)) return res.status(409).json({ ok: false, error: 'The scrape is still running.' });
+  let shops;
+  try { ({ shops } = shopsFromItems(await datasetItems(run.datasetId))); }
+  catch (e) { return res.status(502).json({ ok: false, error: 'Apify: ' + e.message }); }
+
+  const { existing, toAdd, matched } = matchShops(shops);
+  const leads = sales().get('leads');
+  const now = new Date().toISOString();
+  let enriched = 0;
+  // Fill in blanks on shops we already have — never touch their stage or notes.
+  matched.forEach(({ lead, shop }) => {
+    const fill = {};
+    if (!lead.placeId && shop.placeId) fill.placeId = shop.placeId;
+    if (lead.lat == null && lead.lng == null) { fill.lat = shop.lat; fill.lng = shop.lng; }
+    if (!lead.address) fill.address = shop.address;
+    if (!lead.contact && shop.contact) fill.contact = shop.contact;
+    if (!lead.city && shop.city) fill.city = shop.city;
+    if (!lead.website && shop.website) fill.website = shop.website;
+    if (lead.rating == null && shop.rating != null) { fill.rating = shop.rating; fill.reviews = shop.reviews; }
+    if (Object.keys(fill).length) { leads.find({ id: lead.id }).assign(fill).write(); enriched++; }
+  });
+  const fresh = toAdd.map(sh => ({
+    id: genId('lead'), ...sh,
+    method: 'Cold call', tool: 'Unknown', status: 'not-contacted',
+    plan: 'Unknown', value: 0, followup: '', notes: '', territory: '',
+    source: 'google-maps', log: [],
+    createdAt: now, updatedAt: now, lastContact: null, closedAt: null,
+  }));
+  if (fresh.length) sales().set('leads', [...existing, ...fresh]).write();
+  sales().get('importRun').assign({ appliedAt: now }).write();
+  res.json({ ok: true, added: fresh.length, enriched, ...adminSalesPayload() });
+}));
 
 // ── Admin: reset the rep's PIN (no current PIN needed) ────────────────────────
 router.post('/api/admin/sales/pin/reset', requireAdmin, salesRoute(async (req, res) => {

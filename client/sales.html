@@ -406,6 +406,7 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
     <button class="btn btn-sm btn-outline" id="filter-demo" onclick="setFilter('demo')">Demo</button>
     <button class="btn btn-sm btn-outline" id="filter-closed" onclick="setFilter('closed')">Closed</button>
     <button class="btn btn-sm btn-outline" id="filter-not-interested" onclick="setFilter('not-interested')">Lost</button>
+    <button class="btn btn-sm btn-outline" id="filter-not-contacted" onclick="setFilter('not-contacted')">Not contacted</button>
   </div>
 
   <div class="lead-list" id="lead-list"></div>
@@ -773,6 +774,7 @@ body{font-family:var(--font);background:var(--off);color:var(--black);-webkit-fo
     <div class="form-row">
       <div class="form-group"><label class="form-label">Status</label>
         <select class="form-select" id="l-status">
+          <option value="not-contacted">Not contacted yet</option>
           <option value="contacted">Contacted</option>
           <option value="responded">Responded</option>
           <option value="demo">Demo Scheduled</option>
@@ -838,7 +840,11 @@ let activeFilter  = 'all';
 let pipeView = 'list';
 let goalView = 'daily';
 
-const leads        = () => STATE.leads || [];
+// Worked leads only. Shops imported as "Not contacted" are a cold call list,
+// kept out of every stat/funnel until the rep actually reaches out.
+const allLeads     = () => STATE.leads || [];
+const leads        = () => allLeads().filter(l => l.status !== 'not-contacted');
+const prospects    = () => allLeads().filter(l => l.status === 'not-contacted');
 const targets      = () => (STATE.settings && STATE.settings.weeklyTargets) || {dms:50,walkins:5,demos:5};
 const dailyTargets = () => (STATE.settings && STATE.settings.dailyTargets) || {dms:10,walkins:1,demos:1};
 const activity     = () => STATE.activity || {dms:0,walkins:0,demos:0};
@@ -948,13 +954,14 @@ function openAddGoal() {
 
 // ── Leads ─────────────────────────────────────────────────────────────────────
 const BADGE = {
+  'not-contacted': ['Not contacted', 'badge-gray'],
   contacted:    ['Contacted',    'badge-gray'],
   responded:    ['Responded',    'badge-yellow'],
   demo:         ['Demo',         'badge-blue'],
   closed:       ['Closed ✓',     'badge-green'],
   'not-interested': ['Lost',     'badge-red'],
 };
-const STAGE_PROB = { contacted:0.1, responded:0.3, demo:0.6, closed:1, 'not-interested':0 };
+const STAGE_PROB = { 'not-contacted':0, contacted:0.1, responded:0.3, demo:0.6, closed:1, 'not-interested':0 };
 const badgeHtml = s => { const [l,c] = BADGE[s]||['?','badge-gray']; return `<span class="badge ${c}">${l}</span>`; };
 const inits = name => name.split(' ').map(w=>w[0]||'').join('').slice(0,2).toUpperCase();
 const avatarColors = ['#16a34a','#2563eb','#d97706','#7c3aed','#dc2626','#0891b2'];
@@ -1002,7 +1009,7 @@ async function saveLead() {
 function renderLeads() {
   if (pipeView === 'board') return renderBoard();
   const q = (document.getElementById('lead-search')?.value || '').toLowerCase();
-  let filtered = leads().filter(l => {
+  let filtered = (activeFilter === 'not-contacted' ? prospects() : leads()).filter(l => {
     const matchQ = !q || l.name.toLowerCase().includes(q) || (l.notes||'').toLowerCase().includes(q) || (l.contact||'').toLowerCase().includes(q) || (l.city||'').toLowerCase().includes(q);
     const matchF = activeFilter === 'all' || l.status === activeFilter;
     return matchQ && matchF;
@@ -1044,7 +1051,7 @@ function renderBoard() {
 }
 
 function openLeadDetail(id) {
-  const l = leads().find(x => x.id===id); if (!l) return;
+  const l = allLeads().find(x => x.id===id); if (!l) return;
   const log = (l.log || []);
   document.getElementById('lead-detail-content').innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;">
@@ -1090,13 +1097,13 @@ async function logTouch(id, type) {
 }
 
 async function quickStatus(id, status) {
-  const lead = leads().find(l => l.id===id); if (!lead) return;
+  const lead = allLeads().find(l => l.id===id); if (!lead) return;
   await api('/leads', { method:'POST', body: { ...lead, status } });
   openLeadDetail(id); renderLeads(); updateStats(); renderVision();
 }
 
 function editLead(id) {
-  const l = leads().find(x => x.id===id); if (!l) return;
+  const l = allLeads().find(x => x.id===id); if (!l) return;
   editingLeadId = id;
   document.getElementById('add-lead-title').textContent = 'Edit Lead';
   document.getElementById('l-name').value    = l.name;

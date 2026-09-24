@@ -354,6 +354,8 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 .map-row-meta{font-size:11px;color:var(--muted);margin-top:2px;}
 .map-row-nopin{font-size:11px;font-weight:700;color:var(--yellow);}
 .map-pin{width:18px;height:18px;border-radius:50%;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);}
+.map-pin.cold{width:12px;height:12px;background:#fff;border:2.5px solid #475467;box-shadow:0 1px 2px rgba(0,0,0,.25);}
+.map-chip .dot.cold{background:#fff !important;border:2px solid #475467;}
 .map-pin.closed{width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:800;}
 .map-banner{background:var(--yellow-lt);color:var(--yellow);border:1px solid #FEDF89;border-radius:var(--radius);padding:9px 12px;font-size:13px;font-weight:600;margin-bottom:10px;display:none;justify-content:space-between;align-items:center;gap:10px;}
 .map-pop{font-family:var(--font);min-width:220px;}
@@ -866,6 +868,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
           <div class="page-sub" id="map-sub">Every shop we're talking to — Albuquerque, Rio Rancho &amp; Los Lunas</div>
         </div>
         <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline btn-sm" onclick="openPlacesImport()">⬇ Import shops</button>
           <button class="btn btn-outline btn-sm" id="map-drop-btn" onclick="startPlacing(null)">📍 Drop a pin</button>
           <button class="btn btn-green btn-sm" onclick="openSalesLead(null)">+ Add shop</button>
         </div>
@@ -886,7 +889,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         <div class="card-header"><div><div class="card-title">Territories</div><div class="card-sub">Where the conversations are. Tap a territory to zoom to it and filter the list.</div></div></div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Territory</th><th>Active</th><th>In demo</th><th>Signed</th><th>Lost</th><th>Last touch</th></tr></thead>
+            <thead><tr><th>Territory</th><th>Not contacted</th><th>Active</th><th>In demo</th><th>Signed</th><th>Lost</th><th>Last touch</th></tr></thead>
             <tbody id="terr-tbody"></tbody>
           </table>
         </div>
@@ -1758,6 +1761,7 @@ function renderDrawer(d) {
 }
 
 function closeDrawer() {
+  clearTimeout(impPoll);   // stop polling an Apify scrape once the panel is closed
   document.getElementById('drawer').classList.remove('open');
   document.getElementById('drawer-overlay').style.display = 'none';
   currentShopId = null;
@@ -1767,7 +1771,7 @@ function closeDrawer() {
 // Plots the sales pipeline (master.sales.leads — the same list the rep works in
 // /sales) on a map of the ABQ metro. Pins live on the lead as lat/lng.
 const MAP_STAGES = [
-  ['contacted','Contacted','#155EEF'], ['responded','Responded','#D97706'],
+  ['not-contacted','Not contacted','#475467'], ['contacted','Contacted','#155EEF'], ['responded','Responded','#D97706'],
   ['demo','Demo','#7A5AF8'], ['closed','Signed','#0E9F6E'], ['not-interested','Lost','#98A2B3'],
 ];
 const METRO_BOUNDS = [[35.36,-106.98],[34.62,-106.45]];
@@ -1833,10 +1837,10 @@ function territoryOf(l) {
 }
 
 let terrMap = null, terrLayer = null, terrPolys = {}, terrMarkers = {}, terrPlacing = false, terrPlacingId = null;
-let terrShow = new Set(['contacted','responded','demo','closed']);
+let terrShow = new Set(['not-contacted','contacted','responded','demo','closed']);
 let terrSel = '';   // '' = all territories
 
-function stageOf(l) { return MAP_STAGES.find(s => s[0] === l.status) || MAP_STAGES[0]; }
+function stageOf(l) { return MAP_STAGES.find(s => s[0] === l.status) || MAP_STAGES[1]; }
 
 function loadLeaflet() {
   if (window.L) return Promise.resolve();
@@ -1890,13 +1894,14 @@ function renderTerritory() {
   const q = (document.getElementById('map-search').value || '').toLowerCase().trim();
   const counts = {}; leads.forEach(l => { const k = stageOf(l)[0]; counts[k] = (counts[k]||0) + 1; });
   document.getElementById('map-stages').innerHTML = MAP_STAGES.map(([k,lbl,c]) =>
-    `<button class="map-chip${terrShow.has(k)?' on':''}" onclick="toggleStage('${k}')"><span class="dot" style="background:${c}"></span>${lbl} <span class="n">${counts[k]||0}</span></button>`).join('');
+    `<button class="map-chip${terrShow.has(k)?' on':''}" onclick="toggleStage('${k}')"><span class="dot${k==='not-contacted'?' cold':''}" style="background:${c}"></span>${lbl} <span class="n">${counts[k]||0}</span></button>`).join('');
 
   // Territory picker + breakdown (counts ignore the stage chips so the totals stay honest).
   const byTerr = {};
   leads.forEach(l => {
     const t = territoryOf(l); const k = t ? t.id || 'outside' : 'nopin';
-    const r = byTerr[k] || (byTerr[k] = { active:0, demo:0, signed:0, lost:0, last:'' });
+    const r = byTerr[k] || (byTerr[k] = { cold:0, active:0, demo:0, signed:0, lost:0, last:'' });
+    if (l.status === 'not-contacted') r.cold++;
     if (['contacted','responded','demo'].includes(l.status)) r.active++;
     if (l.status === 'demo') r.demo++;
     if (l.status === 'closed') r.signed++;
@@ -1915,10 +1920,10 @@ function renderTerritory() {
   document.getElementById('terr-tbody').innerHTML = rows.map(([t, r]) => { r = r || {};
     return `<tr class="terr-row${terrSel===t.id && t.id?' on':''}" ${t.id?`onclick="selectTerritory(terrSel==='${t.id}'?'':'${t.id}')"`:''}>
       <td><span class="terr-swatch" style="background:${t.color}"></span>${esc(t.name)}</td>
-      <td style="font-weight:700;">${r.active||0}</td><td>${r.demo||0}</td>
+      <td style="color:var(--muted);">${r.cold||0}</td><td style="font-weight:700;">${r.active||0}</td><td>${r.demo||0}</td>
       <td style="color:var(--green-deep);font-weight:600;">${r.signed||0}</td><td style="color:var(--faint);">${r.lost||0}</td>
       <td style="color:var(--muted);">${r.last ? relTime(r.last) : '—'}</td></tr>`; }).join('')
-    + (byTerr.nopin ? `<tr><td colspan="6" style="font-size:12px;color:var(--yellow);font-weight:600;">${byTerr.nopin.active + byTerr.nopin.signed + byTerr.nopin.lost} shop(s) have no pin yet, so they aren't in a territory — place them from the list.</td></tr>` : '');
+    + (byTerr.nopin ? `<tr><td colspan="7" style="font-size:12px;color:var(--yellow);font-weight:600;">${byTerr.nopin.cold + byTerr.nopin.active + byTerr.nopin.signed + byTerr.nopin.lost} shop(s) have no pin yet, so they aren't in a territory — place them from the list.</td></tr>` : '');
 
   const visible = leads.filter(l => terrShow.has(stageOf(l)[0]) &&
     (!terrSel || (territoryOf(l) || {}).id === terrSel) &&
@@ -1927,16 +1932,20 @@ function renderTerritory() {
   const active = leads.filter(l => ['contacted','responded','demo'].includes(l.status)).length;
   const unpinnedAll = leads.filter(l => l.lat == null).length;
   document.getElementById('map-sub').textContent =
-    `${active} active conversation${active===1?'':'s'} · ${counts.closed||0} signed` + (unpinnedAll ? ` · ${unpinnedAll} still need a pin` : '');
+    `${active} active conversation${active===1?'':'s'} · ${counts.closed||0} signed`
+    + (counts['not-contacted'] ? ` · ${counts['not-contacted']} not contacted yet` : '') + (unpinnedAll ? ` · ${unpinnedAll} still need a pin` : '');
 
   terrLayer.clearLayers(); terrMarkers = {};
   pinned.forEach(l => {
     const [k,,c] = stageOf(l);
+    const cold = k === 'not-contacted';
+    const size = k==='closed' ? 22 : cold ? 12 : 18;
     const icon = L.divIcon({
-      className: '', iconSize: k==='closed'?[22,22]:[18,18], iconAnchor: k==='closed'?[11,11]:[9,9], popupAnchor: [0,-10],
-      html: `<div class="map-pin${k==='closed'?' closed':''}" style="background:${c}">${k==='closed'?'✓':''}</div>`,
+      className: '', iconSize: [size,size], iconAnchor: [size/2,size/2], popupAnchor: [0,-8],
+      html: cold ? `<div class="map-pin cold"></div>`
+        : `<div class="map-pin${k==='closed'?' closed':''}" style="background:${c}">${k==='closed'?'✓':''}</div>`,
     });
-    const m = L.marker([l.lat, l.lng], { icon, title: l.name, zIndexOffset: k==='closed'?500:0 })
+    const m = L.marker([l.lat, l.lng], { icon, title: l.name, zIndexOffset: k==='closed'?500:cold?-500:0 })
       .bindPopup(() => mapPopup(l.id), { maxWidth: 300 }).addTo(terrLayer);
     terrMarkers[l.id] = m;
   });
@@ -1960,7 +1969,8 @@ function mapPopup(id) {
   const l = (salesData.leads||[]).find(x => x.id === id); if (!l) return '';
   const dir = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(l.address || (l.lat+','+l.lng));
   const terr = territoryOf(l);
-  const meta = [terr && '🧭 ' + terr.name, l.address || l.city, l.contact, l.tool && 'Using ' + l.tool, l.plan && l.plan !== 'Unknown' && 'Interested in ' + l.plan,
+  const tel = String(l.contact||'').replace(/[^\d+]/g, '');
+  const meta = [terr && '🧭 ' + terr.name, l.category, l.rating && `★ ${l.rating} (${l.reviews||0} Google reviews)`, l.address || l.city, l.contact, l.tool && l.tool !== 'Unknown' && 'Using ' + l.tool, l.plan && l.plan !== 'Unknown' && 'Interested in ' + l.plan,
     l.followup && '⏰ Follow up ' + fmtDate(l.followup), l.lastContact && 'Last touch ' + relTime(l.lastContact)].filter(Boolean);
   return `<div class="map-pop">
     <div class="map-pop-name">${esc(l.name)}</div>
@@ -1972,6 +1982,8 @@ function mapPopup(id) {
     <div class="map-pop-actions">
       <button class="btn btn-green btn-sm" onclick="openSalesLead('${l.id}')">Edit</button>
       <button class="btn btn-outline btn-sm" onclick="startPlacing('${l.id}')">Move pin</button>
+      ${tel.length >= 10 ? `<a class="btn btn-outline btn-sm" href="tel:${tel}">📞 Call</a>` : ''}
+      ${/^https?:\/\//i.test(l.website||'') ? `<a class="btn btn-outline btn-sm" href="${esc(l.website)}" target="_blank" rel="noopener">Website</a>` : ''}
       <a class="btn btn-outline btn-sm" href="${dir}" target="_blank" rel="noopener">Directions</a>
     </div></div>`;
 }
@@ -2007,6 +2019,91 @@ async function onMapClick(e) {
   const lead = (salesData.leads||[]).find(l => l.id === id); if (!lead) return;
   applySalesData(await salesApi('/leads', { method:'POST', body:{ ...lead, lat, lng } }));
   toast('Pin saved ✓');
+}
+
+// ── Import every detailer / tinter in the metro (Google Maps via Apify) ──────
+// A scrape runs on Apify for a few minutes; the panel polls its status, then
+// previews what's new. The last run is remembered server-side, so reopening
+// the panel shows it again instead of paying for another scrape.
+let impPoll = null;
+function openPlacesImport() {
+  document.getElementById('drawer-overlay').style.display = 'block';
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawer-shop-name').textContent = 'Import shops from Google Maps';
+  document.getElementById('drawer-body').innerHTML = `
+    <div class="drawer-section">
+      <div style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:14px;">
+        Scrapes Google Maps (through Apify) across Rio Rancho, Albuquerque and Valencia County and adds every shop we don't
+        already have as <b>Not contacted</b>, pinned and sorted into territories. Shops already in the pipeline keep their stage
+        and notes — only blanks (address, phone, pin) get filled in.</div>
+      <div id="imp-body"><div style="font-size:13px;color:var(--muted);"><span class="spinner"></span>Checking the last scrape…</div></div>
+    </div>`;
+  impRefresh();
+}
+function impForm(note) {
+  return `${note || ''}
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;margin-bottom:8px;"><input type="checkbox" id="imp-detailing" checked/> Auto detailing <span style="color:var(--faint);font-size:12px;">(incl. ceramic coating)</span></label>
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;margin-bottom:14px;"><input type="checkbox" id="imp-tint" checked/> Tint, wraps &amp; PPF</label>
+    <div class="form-row"><label class="form-label">Max places to scrape (Apify credits)</label>
+      <input class="form-input" id="imp-max" type="number" min="20" max="5000" step="10" value="900"/>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;">Every place Apify returns counts — including the same shop found by two searches. It stops hard at this number.</div></div>
+    <button class="btn btn-green" style="width:100%;" onclick="impStart()">Start scrape (takes a few minutes)</button>
+    <div id="imp-err" style="margin-top:10px;"></div>`;
+}
+function impRender(d) {
+  const body = document.getElementById('imp-body'); if (!body) return;
+  if (!d || !d.ok) { body.innerHTML = impForm(`<div style="font-size:13px;color:var(--red);font-weight:600;margin-bottom:12px;">${esc((d && d.error) || 'Could not reach Apify')}</div>`); return; }
+  const r = d.run;
+  if (!r) { body.innerHTML = impForm(); return; }
+  if (['READY','RUNNING'].includes(r.status)) {
+    body.innerHTML = `<div class="card" style="margin:0;padding:14px;">
+      <div style="font-size:15px;font-weight:700;"><span class="spinner"></span>Scraping Google Maps…</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:6px;">${r.scraped||0} of up to ${r.maxPlaces} places so far · started ${relTime(r.startedAt)}.
+      You can close this — it keeps going and will be here when you come back.</div></div>`;
+    clearTimeout(impPoll); impPoll = setTimeout(impRefresh, 6000);
+    return;
+  }
+  const failed = !['SUCCEEDED','ABORTED','TIMED-OUT'].includes(r.status);
+  const sk = r.skipped || {};
+  const skippedTxt = [sk.closed && `${sk.closed} closed`, sk.offTopic && `${sk.offTopic} off-topic`, sk.outside && `${sk.outside} outside the metro`].filter(Boolean).join(', ');
+  const stars = x => x.rating ? ` · ★ ${x.rating} (${x.reviews})` : '';
+  body.innerHTML = `
+    <div class="card" style="margin:0 0 12px;padding:14px;">
+      <div style="font-size:11px;font-weight:700;color:var(--faint);letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px;">
+        Last scrape · ${fmtDate(r.startedAt)}${r.appliedAt ? ' · imported' : ''}${failed ? ' · ' + esc(r.status) : ''}</div>
+      <div style="font-size:22px;font-weight:800;">${r.wouldAdd||0} new shop${r.wouldAdd===1?'':'s'}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px;">${r.scraped||0} places scraped → ${r.found||0} unique shops · ${r.alreadyHave||0} already in the pipeline${skippedTxt ? ' · skipped ' + skippedTxt : ''}</div>
+    </div>
+    ${(r.sample||[]).length ? `<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;">A few of them</div>
+    <div style="font-size:13px;line-height:1.7;margin-bottom:14px;">${r.sample.map(x => `<div><b>${esc(x.name)}</b> <span style="color:var(--muted);">${esc(x.city||'')} · ${esc(x.category||'')}${stars(x)}</span></div>`).join('')}</div>` : ''}
+    ${r.wouldAdd ? `<button class="btn btn-green" style="width:100%;margin-bottom:8px;" id="imp-apply" onclick="impApply()">Add ${r.wouldAdd} shop${r.wouldAdd===1?'':'s'} as Not contacted</button>` : ''}
+    <details style="margin-top:10px;"><summary style="font-size:13px;color:var(--muted);cursor:pointer;">Run a new scrape (uses Apify credits)</summary>
+      <div style="margin-top:12px;">${impForm()}</div></details>`;
+}
+async function impRefresh() {
+  if (!document.getElementById('imp-body')) return;   // drawer closed or reused
+  impRender(await salesApi('/import-places/status'));
+}
+async function impStart() {
+  const kinds = [['detailing','imp-detailing'],['tint','imp-tint']].filter(([,id]) => document.getElementById(id).checked).map(([k]) => k);
+  if (!kinds.length) { toast('Pick at least one kind of shop'); return; }
+  const maxPlaces = parseInt(document.getElementById('imp-max').value, 10) || 900;
+  if (!confirm(`Start a Google Maps scrape of up to ${maxPlaces} places on Apify?`)) return;
+  document.querySelectorAll('#imp-body button').forEach(b => b.disabled = true);
+  const d = await salesApi('/import-places/start', { method: 'POST', body: { kinds, maxPlaces } });
+  if (!d || !d.ok) {
+    document.querySelectorAll('#imp-body button').forEach(b => b.disabled = false);
+    document.getElementById('imp-err').innerHTML = `<div style="font-size:13px;color:var(--red);font-weight:600;">${esc((d && d.error) || 'Could not start the scrape')}</div>`;
+    return;
+  }
+  impRender(d);
+}
+async function impApply() {
+  const btn = document.getElementById('imp-apply'); btn.disabled = true; btn.textContent = 'Adding shops…';
+  const d = await salesApi('/import-places/apply', { method: 'POST' });
+  if (!d || !d.ok) { btn.disabled = false; toast((d && d.error) || 'Import failed'); return; }
+  closeDrawer(); applySalesData(d);
+  toast(`Added ${d.added} shop${d.added===1?'':'s'} as Not contacted ✓`);
 }
 
 // Address lookup in the lead drawer (server proxies OpenStreetMap).
@@ -2134,12 +2231,14 @@ async function addSalesGoal() {
 }
 async function delSalesGoal(id) { applySalesData(await salesApi('/goals/'+id, { method:'DELETE' })); }
 
-const SA_STAGES = [['contacted','Contacted'],['responded','Responded'],['demo','Demo'],['closed','Closed'],['not-interested','Lost']];
+const SA_STAGES = [['not-contacted','Not contacted'],['contacted','Contacted'],['responded','Responded'],['demo','Demo'],['closed','Closed'],['not-interested','Lost']];
 function renderSalesLeads() {
   const tb = document.getElementById('sa-leads-tbody');
-  const leads = salesData.leads||[];
-  if (!leads.length) { tb.innerHTML = '<tr><td colspan="6"><div class="empty-state">No leads yet.</div></td></tr>'; return; }
-  tb.innerHTML = leads.map(l => `
+  const leads = (salesData.leads||[]).filter(l => l.status !== 'not-contacted');
+  const cold = (salesData.leads||[]).length - leads.length;
+  const coldRow = cold ? `<tr><td colspan="6" style="font-size:12px;color:var(--muted);">+ ${cold} not-contacted shop${cold===1?'':'s'} — work them from the <a href="#" onclick="nav('map');return false;" style="color:var(--green-deep);font-weight:600;">Territory map</a>.</td></tr>` : '';
+  if (!leads.length) { tb.innerHTML = '<tr><td colspan="6"><div class="empty-state">No leads yet.</div></td></tr>' + coldRow; return; }
+  tb.innerHTML = coldRow + leads.map(l => `
     <tr>
       <td><div style="font-weight:600;">${esc(l.name)}</div><div style="font-size:11px;color:var(--muted);">${esc(l.contact||'')}</div></td>
       <td>${esc((territoryOf(l)||{}).name || l.city || '—')}</td>
