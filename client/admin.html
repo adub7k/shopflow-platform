@@ -332,6 +332,45 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 .spinner{display:inline-block;width:16px;height:16px;border:2px solid #e5e7eb;border-top-color:var(--green);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px;}
 @keyframes spin{to{transform:rotate(360deg)}}
 
+/* ── Territory map ── */
+.map-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.map-seg{display:flex;flex-wrap:wrap;gap:6px;}
+.map-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:100px;border:1px solid var(--border-md);background:var(--white);font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;font-family:var(--font);}
+.map-chip.on{color:var(--text);border-color:var(--text);}
+.map-chip .dot{width:9px;height:9px;border-radius:50%;flex:none;}
+.map-chip:not(.on) .dot{opacity:.35;}
+.map-chip .n{color:var(--faint);font-weight:700;}
+.map-layout{display:grid;grid-template-columns:1fr 300px;gap:14px;height:calc(100vh - 190px);min-height:460px;}
+#territory-map{position:relative;z-index:0;border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;background:#eef1ef;}
+#territory-map.placing{cursor:crosshair;}
+#territory-map.placing .leaflet-grab{cursor:crosshair;}
+.map-side{display:flex;flex-direction:column;min-height:0;margin:0;}
+.map-side-head{padding:12px;border-bottom:1px solid var(--border);}
+.map-list{overflow-y:auto;flex:1;}
+.map-row{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;}
+.map-row:hover{background:var(--off);}
+.map-row .dot{width:10px;height:10px;border-radius:50%;margin-top:4px;flex:none;}
+.map-row-name{font-size:13px;font-weight:600;}
+.map-row-meta{font-size:11px;color:var(--muted);margin-top:2px;}
+.map-row-nopin{font-size:11px;font-weight:700;color:var(--yellow);}
+.map-pin{width:18px;height:18px;border-radius:50%;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);}
+.map-pin.closed{width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:800;}
+.map-banner{background:var(--yellow-lt);color:var(--yellow);border:1px solid #FEDF89;border-radius:var(--radius);padding:9px 12px;font-size:13px;font-weight:600;margin-bottom:10px;display:none;justify-content:space-between;align-items:center;gap:10px;}
+.map-pop{font-family:var(--font);min-width:220px;}
+.map-pop-name{font-size:14px;font-weight:700;margin-bottom:2px;}
+.map-pop-meta{font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.45;}
+.map-pop-notes{font-size:12px;background:var(--off);border-radius:8px;padding:7px 9px;margin-bottom:8px;white-space:pre-wrap;max-height:90px;overflow:auto;}
+.map-pop-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+.geo-results{margin-top:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.geo-results div{padding:8px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border);}
+.geo-results div:last-child{border-bottom:none;}
+.geo-results div:hover{background:var(--green-lt);}
+@media(max-width:900px){
+  .map-layout{grid-template-columns:1fr;height:auto;}
+  #territory-map{height:62vh;}
+  .map-side{max-height:420px;}
+}
+
 /* ── Responsive ── */
 @media(max-width:900px){
   #mobile-topbar{display:flex;}
@@ -426,6 +465,9 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div class="sb-section">Sales</div>
     <div class="sb-item" data-page="demos" onclick="nav('demos');closeAdminSidebar()">
       <span class="sb-item-icon">📞</span>Demo calls
+    </div>
+    <div class="sb-item" data-page="map" onclick="nav('map');closeAdminSidebar()">
+      <span class="sb-item-icon">🗺️</span>Territory map
     </div>
     <div class="sb-item" data-page="sales" onclick="nav('sales');closeAdminSidebar()">
       <span class="sb-item-icon">🎯</span>Sales rep
@@ -810,6 +852,31 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     </div>
 
     <!-- Sales Rep page -->
+    <div id="page-map" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Territory map</div>
+          <div class="page-sub" id="map-sub">Every shop we're talking to — Albuquerque, Rio Rancho &amp; Los Lunas</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline btn-sm" id="map-drop-btn" onclick="startPlacing(null)">📍 Drop a pin</button>
+          <button class="btn btn-green btn-sm" onclick="openSalesLead(null)">+ Add shop</button>
+        </div>
+      </div>
+      <div class="map-banner" id="map-banner"><span id="map-banner-text"></span><button class="btn btn-outline btn-sm" onclick="stopPlacing()">Cancel</button></div>
+      <div class="map-toolbar">
+        <div class="map-seg" id="map-areas"></div>
+        <div class="map-seg" id="map-stages"></div>
+      </div>
+      <div class="map-layout">
+        <div id="territory-map"></div>
+        <div class="card map-side">
+          <div class="map-side-head"><input class="form-input" id="map-search" placeholder="Search shops…" oninput="renderTerritory()"/></div>
+          <div class="map-list" id="map-list"></div>
+        </div>
+      </div>
+    </div>
+
     <div id="page-sales" class="page">
       <div class="page-header">
         <div>
@@ -1118,6 +1185,8 @@ function nav(page) {
   if (page === 'checklist') renderChecklist();
   if (page === 'demos')     loadDemos();
   if (page === 'sales')     loadSalesAdmin();
+  if (page === 'map')       loadTerritory();
+  if (page !== 'map')       stopPlacing();
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -1678,6 +1747,194 @@ function closeDrawer() {
   currentShopId = null;
 }
 
+// ── Territory map ─────────────────────────────────────────────────────────────
+// Plots the sales pipeline (master.sales.leads — the same list the rep works in
+// /sales) on a map of the ABQ metro. Pins live on the lead as lat/lng.
+const MAP_STAGES = [
+  ['contacted','Contacted','#155EEF'], ['responded','Responded','#D97706'],
+  ['demo','Demo','#7A5AF8'], ['closed','Signed','#0E9F6E'], ['not-interested','Lost','#98A2B3'],
+];
+const MAP_AREAS = [
+  ['Whole metro', [[35.36,-106.98],[34.74,-106.45]]],
+  ['Albuquerque', [[35.22,-106.78],[35.00,-106.47]]],
+  ['Rio Rancho',  [[35.36,-106.82],[35.20,-106.58]]],
+  ['Los Lunas',   [[34.87,-106.80],[34.74,-106.65]]],
+];
+let terrMap = null, terrLayer = null, terrMarkers = {}, terrPlacing = false, terrPlacingId = null;
+let terrShow = new Set(['contacted','responded','demo','closed']);
+
+function stageOf(l) { return MAP_STAGES.find(s => s[0] === l.status) || MAP_STAGES[0]; }
+
+function loadLeaflet() {
+  if (window.L) return Promise.resolve();
+  return new Promise((ok, fail) => {
+    const css = document.createElement('link');
+    css.rel = 'stylesheet'; css.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+    document.head.appendChild(css);
+    const js = document.createElement('script');
+    js.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+    js.onload = ok; js.onerror = fail;
+    document.head.appendChild(js);
+  });
+}
+
+async function loadTerritory() {
+  try { await loadLeaflet(); } catch(e) { toast('Map failed to load — check your connection'); return; }
+  if (!terrMap) {
+    terrMap = L.map('territory-map', { zoomControl: true }).fitBounds(MAP_AREAS[0][1]);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(terrMap);
+    terrLayer = L.layerGroup().addTo(terrMap);
+    terrMap.on('click', onMapClick);
+    document.getElementById('map-areas').innerHTML = MAP_AREAS.map((a,i) =>
+      `<button class="map-chip${i===0?' on':''}" onclick="flyArea(${i},this)">${a[0]}</button>`).join('');
+  }
+  setTimeout(() => terrMap.invalidateSize(), 50);
+  applySalesData(await salesApi(''));
+}
+
+function flyArea(i, btn) {
+  document.querySelectorAll('#map-areas .map-chip').forEach(b => b.classList.toggle('on', b === btn));
+  terrMap.flyToBounds(MAP_AREAS[i][1], { duration: .6 });
+}
+function toggleStage(k) { terrShow.has(k) ? terrShow.delete(k) : terrShow.add(k); renderTerritory(); }
+
+function renderTerritory() {
+  if (!terrMap) return;
+  const leads = salesData.leads || [];
+  const q = (document.getElementById('map-search').value || '').toLowerCase().trim();
+  const counts = {}; leads.forEach(l => { const k = stageOf(l)[0]; counts[k] = (counts[k]||0) + 1; });
+  document.getElementById('map-stages').innerHTML = MAP_STAGES.map(([k,lbl,c]) =>
+    `<button class="map-chip${terrShow.has(k)?' on':''}" onclick="toggleStage('${k}')"><span class="dot" style="background:${c}"></span>${lbl} <span class="n">${counts[k]||0}</span></button>`).join('');
+
+  const visible = leads.filter(l => terrShow.has(stageOf(l)[0]) &&
+    (!q || [l.name,l.city,l.address,l.notes,l.contact].some(x => String(x||'').toLowerCase().includes(q))));
+  const pinned = visible.filter(l => l.lat != null && l.lng != null);
+  const active = leads.filter(l => ['contacted','responded','demo'].includes(l.status)).length;
+  const unpinnedAll = leads.filter(l => l.lat == null).length;
+  document.getElementById('map-sub').textContent =
+    `${active} active conversation${active===1?'':'s'} · ${counts.closed||0} signed` + (unpinnedAll ? ` · ${unpinnedAll} still need a pin` : '');
+
+  terrLayer.clearLayers(); terrMarkers = {};
+  pinned.forEach(l => {
+    const [k,,c] = stageOf(l);
+    const icon = L.divIcon({
+      className: '', iconSize: k==='closed'?[22,22]:[18,18], iconAnchor: k==='closed'?[11,11]:[9,9], popupAnchor: [0,-10],
+      html: `<div class="map-pin${k==='closed'?' closed':''}" style="background:${c}">${k==='closed'?'✓':''}</div>`,
+    });
+    const m = L.marker([l.lat, l.lng], { icon, title: l.name, zIndexOffset: k==='closed'?500:0 })
+      .bindPopup(() => mapPopup(l.id), { maxWidth: 300 }).addTo(terrLayer);
+    terrMarkers[l.id] = m;
+  });
+
+  // Side list: unpinned first (they need attention), then most recently touched.
+  const sorted = [...visible].sort((a,b) => ((a.lat==null)-(b.lat==null)) * -1 ||
+    String(b.lastContact||b.updatedAt||'').localeCompare(String(a.lastContact||a.updatedAt||'')));
+  document.getElementById('map-list').innerHTML = sorted.length ? sorted.map(l => {
+    const [,lbl,c] = stageOf(l);
+    return `<div class="map-row" onclick="focusLead('${l.id}')">
+      <span class="dot" style="background:${c}"></span>
+      <div style="flex:1;min-width:0;">
+        <div class="map-row-name">${esc(l.name)}</div>
+        <div class="map-row-meta">${esc(lbl)}${l.city?' · '+esc(l.city):''}${l.lastContact?' · '+relTime(l.lastContact):''}</div>
+        ${l.lat==null?`<div class="map-row-nopin">No pin yet — tap to place</div>`:''}
+      </div></div>`;
+  }).join('') : `<div class="empty-state">${leads.length ? 'Nothing matches these filters.' : 'No shops yet. Hit “📍 Drop a pin” and click where the shop is.'}</div>`;
+}
+
+function mapPopup(id) {
+  const l = (salesData.leads||[]).find(x => x.id === id); if (!l) return '';
+  const dir = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(l.address || (l.lat+','+l.lng));
+  const meta = [l.address || l.city, l.contact, l.tool && 'Using ' + l.tool, l.plan && l.plan !== 'Unknown' && 'Interested in ' + l.plan,
+    l.followup && '⏰ Follow up ' + fmtDate(l.followup), l.lastContact && 'Last touch ' + relTime(l.lastContact)].filter(Boolean);
+  return `<div class="map-pop">
+    <div class="map-pop-name">${esc(l.name)}</div>
+    <div class="map-pop-meta">${meta.map(esc).join('<br>')}</div>
+    ${l.notes?`<div class="map-pop-notes">${esc(l.notes)}</div>`:''}
+    <select class="form-input" style="padding:5px 8px;font-size:12px;" onchange="setSalesLeadStage('${l.id}',this.value)">
+      ${MAP_STAGES.map(([v,lbl])=>`<option value="${v}"${l.status===v?' selected':''}>${lbl}</option>`).join('')}
+    </select>
+    <div class="map-pop-actions">
+      <button class="btn btn-green btn-sm" onclick="openSalesLead('${l.id}')">Edit</button>
+      <button class="btn btn-outline btn-sm" onclick="startPlacing('${l.id}')">Move pin</button>
+      <a class="btn btn-outline btn-sm" href="${dir}" target="_blank" rel="noopener">Directions</a>
+    </div></div>`;
+}
+
+function focusLead(id) {
+  const l = (salesData.leads||[]).find(x => x.id === id); if (!l) return;
+  if (l.lat == null) { startPlacing(id); return; }
+  terrMap.flyTo([l.lat, l.lng], Math.max(terrMap.getZoom(), 15), { duration: .5 });
+  setTimeout(() => terrMarkers[id] && terrMarkers[id].openPopup(), 550);
+  if (window.innerWidth <= 900) document.getElementById('territory-map').scrollIntoView({ behavior: 'smooth' });
+}
+
+function startPlacing(id) {
+  if (!terrMap) return;
+  terrPlacing = true; terrPlacingId = id;
+  const l = id && (salesData.leads||[]).find(x => x.id === id);
+  document.getElementById('territory-map').classList.add('placing');
+  document.getElementById('map-banner-text').textContent = l ? `Click the map where ${l.name} is.` : 'Click the map where the shop is — then fill in its details.';
+  document.getElementById('map-banner').style.display = 'flex';
+  terrMap.closePopup();
+  if (window.innerWidth <= 900) document.getElementById('map-banner').scrollIntoView({ behavior: 'smooth' });
+}
+function stopPlacing() {
+  terrPlacing = false; terrPlacingId = null;
+  const el = document.getElementById('territory-map'); if (el) el.classList.remove('placing');
+  const b = document.getElementById('map-banner'); if (b) b.style.display = 'none';
+}
+async function onMapClick(e) {
+  if (!terrPlacing) return;
+  const id = terrPlacingId, lat = +e.latlng.lat.toFixed(6), lng = +e.latlng.lng.toFixed(6);
+  stopPlacing();
+  if (!id) { openSalesLead(null, { lat, lng }); return; }
+  const lead = (salesData.leads||[]).find(l => l.id === id); if (!lead) return;
+  applySalesData(await salesApi('/leads', { method:'POST', body:{ ...lead, lat, lng } }));
+  toast('Pin saved ✓');
+}
+
+// Address lookup in the lead drawer (server proxies OpenStreetMap).
+async function geocode(q) {
+  q = String(q||'').trim(); if (q.length < 3) return [];
+  const d = await salesApi('/geocode?q=' + encodeURIComponent(q));
+  return (d && d.results) || [];
+}
+let slGeoHits = [];
+async function slFindAddress() {
+  const box = document.getElementById('sl-geo');
+  box.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-top:6px;"><span class="spinner"></span>Looking up…</div>';
+  slGeoHits = await geocode(document.getElementById('sl-address').value);
+  box.innerHTML = slGeoHits.length
+    ? `<div class="geo-results">${slGeoHits.map((h,i)=>`<div onclick="slPickGeo(slGeoHits[${i}])">${esc(h.label)}</div>`).join('')}</div>`
+    : '<div style="font-size:12px;color:var(--red);margin-top:6px;">No match. Try adding the street type or city — or drop the pin by hand on the map.</div>';
+}
+function slPickGeo(h) {
+  document.getElementById('sl-lat').value = h.lat;
+  document.getElementById('sl-lng').value = h.lng;
+  const city = document.getElementById('sl-city');
+  if (!city.value.trim() && h.city) city.value = h.city;
+  document.getElementById('sl-geo').innerHTML = '';
+  slPinFromGeo = true;
+  slPinStatus();
+}
+let slPinFromGeo = false;
+function slPinDirty() {
+  // A pin looked up from the old address is now wrong — drop it so save re-finds
+  // it. A hand-placed pin stays; the user just gets a nudge to re-check it.
+  if (slPinFromGeo) { document.getElementById('sl-lat').value = ''; document.getElementById('sl-lng').value = ''; slPinFromGeo = false; }
+  slPinStatus(true);
+}
+function slPinStatus(edited) {
+  const el = document.getElementById('sl-pin-status'); if (!el) return;
+  const pinned = document.getElementById('sl-lat').value !== '';
+  el.innerHTML = pinned ? '<span style="color:var(--green-deep);font-weight:600;">📍 On the map</span>'
+      + (edited ? ' <span style="color:var(--muted);">— address changed? hit Find to move the pin</span>' : '')
+    : '<span style="color:var(--faint);">Not on the map yet</span>';
+}
+
 // ── Sales Rep admin ───────────────────────────────────────────────────────────
 let salesData = { leads:[], goals:[], todos:[], settings:{}, totals:{} };
 
@@ -1710,6 +1967,7 @@ function applySalesData(d) {
   document.getElementById('sa-wt-walkins').value = wt.walkins||5;
   document.getElementById('sa-wt-demos').value   = wt.demos||5;
   renderSalesTodos(); renderSalesGoals(); renderSalesLeads();
+  if (terrMap) renderTerritory();
 }
 
 function renderSalesTodos() {
@@ -1786,18 +2044,26 @@ async function delSalesLead(id) {
   applySalesData(await salesApi('/leads/'+id, { method:'DELETE' })); toast('Lead deleted');
 }
 
-function openSalesLead(id) {
+function openSalesLead(id, pre) {
   const l = id ? (salesData.leads||[]).find(x=>x.id===id) : null;
   const v = (k) => esc(l && l[k]!=null ? l[k] : '');
   const opt = (arr, cur) => arr.map(o=>`<option${o===cur?' selected':''}>${o}</option>`).join('');
   document.getElementById('drawer-overlay').style.display = 'block';
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawer-shop-name').textContent = id ? 'Edit Lead' : 'New Lead';
+  slPinFromGeo = false;
   document.getElementById('drawer-body').innerHTML = `
     <div class="drawer-section">
       <input type="hidden" id="sl-id" value="${id||''}"/>
       <div class="form-row"><label class="form-label">Name &amp; Shop *</label><input class="form-input" id="sl-name" value="${v('name')}"/></div>
       <div class="form-row"><label class="form-label">Phone / Instagram</label><input class="form-input" id="sl-contact" value="${v('contact')}"/></div>
+      <div class="form-row"><label class="form-label">Address <span style="font-weight:400;color:var(--faint);">— puts them on the territory map</span></label>
+        <div style="display:flex;gap:6px;"><input class="form-input" id="sl-address" value="${v('address')}" placeholder="e.g. 4801 Menaul Blvd NE, Albuquerque" oninput="slPinDirty()" onkeydown="if(event.key==='Enter'){event.preventDefault();slFindAddress();}"/>
+        <button class="btn btn-outline btn-sm" type="button" onclick="slFindAddress()">Find</button></div>
+        <input type="hidden" id="sl-lat" value="${pre && pre.lat!=null ? pre.lat : v('lat')}"/><input type="hidden" id="sl-lng" value="${pre && pre.lng!=null ? pre.lng : v('lng')}"/>
+        <div id="sl-geo"></div>
+        <div id="sl-pin-status" style="font-size:11px;margin-top:5px;"></div>
+      </div>
       <div class="form-row"><label class="form-label">City</label><input class="form-input" id="sl-city" value="${v('city')}"/></div>
       <div class="form-row"><label class="form-label">Currently using</label><select class="form-input" id="sl-tool">${opt(['Nothing / texts','Urable','Jobber','Square','Housecall Pro','Google Sheets','Another agency','Other'], l&&l.tool)}</select></div>
       <div class="form-row"><label class="form-label">Stage</label><select class="form-input" id="sl-status">${SA_STAGES.map(([vv,lbl])=>`<option value="${vv}"${l&&l.status===vv?' selected':''}>${lbl}</option>`).join('')}</select></div>
@@ -1806,14 +2072,23 @@ function openSalesLead(id) {
       <div class="form-row"><label class="form-label">Notes</label><textarea class="form-input" id="sl-notes" rows="4">${v('notes')}</textarea></div>
       <button class="btn btn-green" style="width:100%;margin-top:6px;" onclick="saveSalesLead()">Save Lead</button>
     </div>`;
+  slPinStatus();
 }
 async function saveSalesLead() {
   const name = document.getElementById('sl-name').value.trim();
   if (!name) { toast('Enter a name'); return; }
+  // Typed an address but never picked a match — pin the best match on save.
+  if (document.getElementById('sl-address').value.trim() && !document.getElementById('sl-lat').value) {
+    const hit = (await geocode(document.getElementById('sl-address').value))[0];
+    if (hit) slPickGeo(hit);
+  }
   const body = {
     id: document.getElementById('sl-id').value || undefined, name,
     contact:  document.getElementById('sl-contact').value.trim(),
     city:     document.getElementById('sl-city').value.trim(),
+    address:  document.getElementById('sl-address').value.trim(),
+    lat:      document.getElementById('sl-lat').value || null,
+    lng:      document.getElementById('sl-lng').value || null,
     tool:     document.getElementById('sl-tool').value,
     status:   document.getElementById('sl-status').value,
     plan:     document.getElementById('sl-plan').value,

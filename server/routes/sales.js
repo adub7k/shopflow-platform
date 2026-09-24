@@ -151,6 +151,11 @@ function buildLead(b) {
     name,
     contact:  String(b.contact || '').trim(),
     city:     String(b.city || '').trim(),
+    // Territory-map pin. The rep's hub never sends these, so a missing key
+    // keeps what's stored instead of wiping the pin on every rep edit.
+    address:  b.address !== undefined ? String(b.address || '').trim() : (existing?.address || ''),
+    lat:      b.lat !== undefined ? coord(b.lat, 90)  : (existing?.lat ?? null),
+    lng:      b.lng !== undefined ? coord(b.lng, 180) : (existing?.lng ?? null),
     method:   b.method || 'Instagram DM',
     tool:     b.tool   || 'Nothing / texts',
     status:   b.status || 'contacted',
@@ -372,6 +377,46 @@ router.patch('/api/admin/sales/settings', requireAdmin, salesRoute(async (req, r
   res.json({ ok: true, ...adminSalesPayload() });
 }));
 
+// ── Admin: geocode an address for the territory map ──────────────────────────
+// Proxies OpenStreetMap Nominatim (free, no key) so the request carries a real
+// User-Agent per their usage policy. Results are biased to the ABQ / Rio Rancho
+// / Los Lunas box but not locked to it. Cached in memory — addresses rarely move.
+const GEO_VIEWBOX = '-107.05,35.42,-106.35,34.70'; // W,N,E,S — Rio Rancho down to Los Lunas
+const geoCache = new Map();
+let geoLast = 0;
+router.get('/api/admin/sales/geocode', requireAdmin, async (req, res) => {
+  const q = String(req.query.q || '').trim().slice(0, 200);
+  if (q.length < 3) return res.status(400).json({ ok: false, error: 'Type an address' });
+  const key = q.toLowerCase();
+  if (geoCache.has(key)) return res.json({ ok: true, results: geoCache.get(key) });
+  // Nominatim allows 1 req/s — space ours out rather than get blocked.
+  const wait = geoLast + 1100 - Date.now();
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  geoLast = Date.now();
+  try {
+    const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&countrycodes=us'
+      + '&viewbox=' + GEO_VIEWBOX + '&q=' + encodeURIComponent(q);
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'ShopFlowHQ/1.0 (support@shopflowtech.com)', 'Accept-Language': 'en' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return res.status(502).json({ ok: false, error: 'Geocoder unavailable' });
+    const rows = await r.json();
+    const results = (rows || []).map(x => {
+      const a = x.address || {};
+      return {
+        label: x.display_name,
+        lat: Number(x.lat), lng: Number(x.lon),
+        city: a.city || a.town || a.village || a.hamlet || a.county || '',
+      };
+    });
+    geoCache.set(key, results);
+    res.json({ ok: true, results });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: 'Geocoder timed out' });
+  }
+});
+
 // ── Admin: reset the rep's PIN (no current PIN needed) ────────────────────────
 router.post('/api/admin/sales/pin/reset', requireAdmin, salesRoute(async (req, res) => {
   const next = String(req.body.newPin || '').trim();
@@ -387,6 +432,10 @@ function planValue(plan) {
   if (plan.includes('99'))  return 99;
   if (plan.includes('200')) return 200;
   return 19.99;
+}
+function coord(v, max) {
+  const n = Number(v);
+  return v === null || v === '' || !Number.isFinite(n) || Math.abs(n) > max ? null : n;
 }
 function cleanTargets(t, fallback) {
   return {
