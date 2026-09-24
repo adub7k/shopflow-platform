@@ -361,6 +361,13 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 .map-pop-meta{font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.45;}
 .map-pop-notes{font-size:12px;background:var(--off);border-radius:8px;padding:7px 9px;margin-bottom:8px;white-space:pre-wrap;max-height:90px;overflow:auto;}
 .map-pop-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+.terr-label{background:rgba(255,255,255,.85);border:none;box-shadow:none;font-size:11px;font-weight:700;color:var(--text);padding:2px 6px;border-radius:6px;white-space:nowrap;}
+.terr-label::before{display:none;}
+.terr-labels-off .terr-label{display:none;}
+.terr-row{cursor:pointer;}
+.terr-row:hover td{background:var(--off);}
+.terr-row.on td{background:var(--green-lt);}
+.terr-swatch{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px;vertical-align:-1px;}
 .geo-results{margin-top:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
 .geo-results div{padding:8px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border);}
 .geo-results div:last-child{border-bottom:none;}
@@ -865,7 +872,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       </div>
       <div class="map-banner" id="map-banner"><span id="map-banner-text"></span><button class="btn btn-outline btn-sm" onclick="stopPlacing()">Cancel</button></div>
       <div class="map-toolbar">
-        <div class="map-seg" id="map-areas"></div>
+        <select class="form-input" id="map-terr-select" style="max-width:280px;padding:7px 10px;font-size:13px;font-weight:600;" onchange="selectTerritory(this.value)"></select>
         <div class="map-seg" id="map-stages"></div>
       </div>
       <div class="map-layout">
@@ -873,6 +880,15 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         <div class="card map-side">
           <div class="map-side-head"><input class="form-input" id="map-search" placeholder="Search shops…" oninput="renderTerritory()"/></div>
           <div class="map-list" id="map-list"></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:14px;">
+        <div class="card-header"><div><div class="card-title">Territories</div><div class="card-sub">Where the conversations are. Tap a territory to zoom to it and filter the list.</div></div></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Territory</th><th>Active</th><th>In demo</th><th>Signed</th><th>Lost</th><th>Last touch</th></tr></thead>
+            <tbody id="terr-tbody"></tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -968,7 +984,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Name / Shop</th><th>City</th><th>Using</th><th>Stage</th><th>Plan</th><th></th></tr></thead>
+            <thead><tr><th>Name / Shop</th><th>Territory</th><th>Using</th><th>Stage</th><th>Plan</th><th></th></tr></thead>
             <tbody id="sa-leads-tbody"><tr><td colspan="6"><div class="empty-state">Loading…</div></td></tr></tbody>
           </table>
         </div>
@@ -1754,14 +1770,71 @@ const MAP_STAGES = [
   ['contacted','Contacted','#155EEF'], ['responded','Responded','#D97706'],
   ['demo','Demo','#7A5AF8'], ['closed','Signed','#0E9F6E'], ['not-interested','Lost','#98A2B3'],
 ];
-const MAP_AREAS = [
-  ['Whole metro', [[35.36,-106.98],[34.74,-106.45]]],
-  ['Albuquerque', [[35.22,-106.78],[35.00,-106.47]]],
-  ['Rio Rancho',  [[35.36,-106.82],[35.20,-106.58]]],
-  ['Los Lunas',   [[34.87,-106.80],[34.74,-106.65]]],
+const METRO_BOUNDS = [[35.36,-106.98],[34.62,-106.45]];
+
+// Sales territories. Boundaries follow the lines people actually use to talk
+// about town — the Rio Grande, I-25, I-40 (≈35.103), Central (≈35.085) and
+// Montgomery (≈35.14) — traced approximately, so a shop right on a line can
+// land on the wrong side. A lead's `territory` field overrides the pin.
+const RIVER = [[35.36,-106.54],[35.30,-106.56],[35.25,-106.60],[35.21,-106.63],[35.195,-106.64],[35.17,-106.655],
+  [35.14,-106.675],[35.10,-106.68],[35.085,-106.68],[35.07,-106.675],[35.035,-106.68],[35.00,-106.685],[34.95,-106.69]];
+const I25 = [[35.21,-106.575],[35.17,-106.589],[35.14,-106.603],[35.13,-106.607],[35.105,-106.628],[35.103,-106.629],
+  [35.08,-106.636],[35.06,-106.628],[35.03,-106.63]];
+// Longitude of a north→south line at `lat`, interpolated.
+function lineLng(line, lat) {
+  for (let i = 0; i < line.length - 1; i++) {
+    const [a, b] = [line[i], line[i+1]];
+    if (lat <= a[0] && lat >= b[0]) return a[1] + (b[1]-a[1]) * (a[0]-lat) / (a[0]-b[0]);
+  }
+  return lat > line[0][0] ? line[0][1] : line[line.length-1][1];
+}
+// The stretch of a line between two latitudes, north→south.
+function lineSeg(line, n, s) {
+  return [[n, lineLng(line,n)], ...line.filter(p => p[0] < n && p[0] > s), [s, lineLng(line,s)]];
+}
+const rev = a => [...a].reverse();
+const TERRITORIES = [
+  { id:'rio-rancho', name:'Rio Rancho & Corrales', color:'#0891B2', label:[35.28,-106.72],
+    poly:[[35.36,-106.80], ...lineSeg(RIVER,35.36,35.195), [35.195,-106.80]] },
+  { id:'westside', name:'Westside', color:'#4F46E5', label:[35.14,-106.73],
+    poly:[[35.195,-106.80], ...lineSeg(RIVER,35.195,35.085), [35.085,-106.80]] },
+  { id:'south-valley', name:'South Valley & SW Mesa', color:'#CA8A04', label:[35.02,-106.72],
+    poly:[[35.085,-106.80], ...lineSeg(RIVER,35.085,35.03), [35.03, lineLng(I25,35.03)], [34.95,-106.60], [34.95,-106.80]] },
+  { id:'north-valley', name:'North Valley', color:'#059669', label:[35.16,-106.63],
+    poly:[...lineSeg(RIVER,35.21,35.103), ...rev(lineSeg(I25,35.21,35.103))] },
+  { id:'downtown', name:'Downtown & Old Town', color:'#E11D48', label:[35.075,-106.655],
+    poly:[...lineSeg(RIVER,35.103,35.03), ...rev(lineSeg(I25,35.103,35.03))] },
+  { id:'uptown', name:'Uptown & Midtown', color:'#EA580C', label:[35.12,-106.57],
+    poly:[...rev(lineSeg(I25,35.14,35.103)), [35.14,-106.53], [35.103,-106.53]] },
+  { id:'ne-heights', name:'NE Heights', color:'#9333EA', label:[35.17,-106.52],
+    poly:[...rev(lineSeg(I25,35.21,35.14)), [35.21,-106.46], [35.103,-106.46], [35.103,-106.53], [35.14,-106.53]] },
+  { id:'se-heights', name:'SE Heights & Nob Hill', color:'#DB2777', label:[35.07,-106.56],
+    poly:[...lineSeg(I25,35.103,35.03), [35.03,-106.46], [35.103,-106.46]] },
+  { id:'valencia', name:'Los Lunas & Valencia Co.', color:'#0284C7', label:[34.78,-106.73],
+    poly:[[34.95,-106.90], [34.95,-106.55], [34.62,-106.55], [34.62,-106.90]] },
 ];
-let terrMap = null, terrLayer = null, terrMarkers = {}, terrPlacing = false, terrPlacingId = null;
+const OUTSIDE = { id:'', name:'Outside territories', color:'#98A2B3' };
+
+function inPoly(lat, lng, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [yi, xi] = poly[i], [yj, xj] = poly[j];
+    if ((yi > lat) !== (yj > lat) && lng < (xj - xi) * (lat - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function autoTerritory(l) {
+  if (l.lat == null || l.lng == null) return null;
+  return TERRITORIES.find(t => inPoly(+l.lat, +l.lng, t.poly)) || OUTSIDE;
+}
+// The territory a lead counts toward: manual pick first, then its pin. null = no pin, no pick.
+function territoryOf(l) {
+  return (l.territory && TERRITORIES.find(t => t.id === l.territory)) || autoTerritory(l);
+}
+
+let terrMap = null, terrLayer = null, terrPolys = {}, terrMarkers = {}, terrPlacing = false, terrPlacingId = null;
 let terrShow = new Set(['contacted','responded','demo','closed']);
+let terrSel = '';   // '' = all territories
 
 function stageOf(l) { return MAP_STAGES.find(s => s[0] === l.status) || MAP_STAGES[0]; }
 
@@ -1781,23 +1854,33 @@ function loadLeaflet() {
 async function loadTerritory() {
   try { await loadLeaflet(); } catch(e) { toast('Map failed to load — check your connection'); return; }
   if (!terrMap) {
-    terrMap = L.map('territory-map', { zoomControl: true }).fitBounds(MAP_AREAS[0][1]);
+    terrMap = L.map('territory-map', { zoomControl: true }).fitBounds(METRO_BOUNDS);
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(terrMap);
+    TERRITORIES.forEach(t => {
+      const poly = L.polygon(t.poly, { color: t.color, weight: 1.5, opacity: .7, fillOpacity: .08, dashArray: '5 4' }).addTo(terrMap);
+      poly.on('click', () => { if (!terrPlacing) selectTerritory(t.id); });
+      L.tooltip({ permanent: true, direction: 'center', className: 'terr-label', interactive: false })
+        .setLatLng(t.label).setContent(t.name).addTo(terrMap);
+      terrPolys[t.id] = poly;
+    });
     terrLayer = L.layerGroup().addTo(terrMap);
     terrMap.on('click', onMapClick);
-    document.getElementById('map-areas').innerHTML = MAP_AREAS.map((a,i) =>
-      `<button class="map-chip${i===0?' on':''}" onclick="flyArea(${i},this)">${a[0]}</button>`).join('');
+    // Labels only once zoomed in far enough to read them without clutter.
+    const syncLabels = () => document.getElementById('territory-map').classList.toggle('terr-labels-off', terrMap.getZoom() < 11);
+    terrMap.on('zoomend', syncLabels); syncLabels();
   }
   setTimeout(() => terrMap.invalidateSize(), 50);
   applySalesData(await salesApi(''));
 }
 
-function flyArea(i, btn) {
-  document.querySelectorAll('#map-areas .map-chip').forEach(b => b.classList.toggle('on', b === btn));
-  terrMap.flyToBounds(MAP_AREAS[i][1], { duration: .6 });
+function selectTerritory(id) {
+  terrSel = id || '';
+  terrMap.closePopup();
+  terrMap.flyToBounds(terrSel ? terrPolys[terrSel].getBounds() : METRO_BOUNDS, { duration: .6, padding: [20,20] });
+  renderTerritory();
 }
 function toggleStage(k) { terrShow.has(k) ? terrShow.delete(k) : terrShow.add(k); renderTerritory(); }
 
@@ -1809,7 +1892,36 @@ function renderTerritory() {
   document.getElementById('map-stages').innerHTML = MAP_STAGES.map(([k,lbl,c]) =>
     `<button class="map-chip${terrShow.has(k)?' on':''}" onclick="toggleStage('${k}')"><span class="dot" style="background:${c}"></span>${lbl} <span class="n">${counts[k]||0}</span></button>`).join('');
 
+  // Territory picker + breakdown (counts ignore the stage chips so the totals stay honest).
+  const byTerr = {};
+  leads.forEach(l => {
+    const t = territoryOf(l); const k = t ? t.id || 'outside' : 'nopin';
+    const r = byTerr[k] || (byTerr[k] = { active:0, demo:0, signed:0, lost:0, last:'' });
+    if (['contacted','responded','demo'].includes(l.status)) r.active++;
+    if (l.status === 'demo') r.demo++;
+    if (l.status === 'closed') r.signed++;
+    if (l.status === 'not-interested') r.lost++;
+    const touch = l.lastContact || l.updatedAt || '';
+    if (touch > r.last) r.last = touch;
+  });
+  const sel = document.getElementById('map-terr-select');
+  sel.innerHTML = `<option value="">All territories</option>` + TERRITORIES.map(t =>
+    `<option value="${t.id}"${terrSel===t.id?' selected':''}>${esc(t.name)} (${(byTerr[t.id]||{}).active||0} active)</option>`).join('');
+  Object.entries(terrPolys).forEach(([id, p]) => p.setStyle(
+    !terrSel ? { weight: 1.5, opacity: .7, fillOpacity: .08 }
+    : id === terrSel ? { weight: 3, opacity: 1, fillOpacity: .16 } : { weight: 1, opacity: .35, fillOpacity: .03 }));
+  const rows = [...TERRITORIES.map(t => [t, byTerr[t.id]]), [OUTSIDE, byTerr.outside]]
+    .filter(([t, r]) => t !== OUTSIDE || r);
+  document.getElementById('terr-tbody').innerHTML = rows.map(([t, r]) => { r = r || {};
+    return `<tr class="terr-row${terrSel===t.id && t.id?' on':''}" ${t.id?`onclick="selectTerritory(terrSel==='${t.id}'?'':'${t.id}')"`:''}>
+      <td><span class="terr-swatch" style="background:${t.color}"></span>${esc(t.name)}</td>
+      <td style="font-weight:700;">${r.active||0}</td><td>${r.demo||0}</td>
+      <td style="color:var(--green-deep);font-weight:600;">${r.signed||0}</td><td style="color:var(--faint);">${r.lost||0}</td>
+      <td style="color:var(--muted);">${r.last ? relTime(r.last) : '—'}</td></tr>`; }).join('')
+    + (byTerr.nopin ? `<tr><td colspan="6" style="font-size:12px;color:var(--yellow);font-weight:600;">${byTerr.nopin.active + byTerr.nopin.signed + byTerr.nopin.lost} shop(s) have no pin yet, so they aren't in a territory — place them from the list.</td></tr>` : '');
+
   const visible = leads.filter(l => terrShow.has(stageOf(l)[0]) &&
+    (!terrSel || (territoryOf(l) || {}).id === terrSel) &&
     (!q || [l.name,l.city,l.address,l.notes,l.contact].some(x => String(x||'').toLowerCase().includes(q))));
   const pinned = visible.filter(l => l.lat != null && l.lng != null);
   const active = leads.filter(l => ['contacted','responded','demo'].includes(l.status)).length;
@@ -1838,16 +1950,17 @@ function renderTerritory() {
       <span class="dot" style="background:${c}"></span>
       <div style="flex:1;min-width:0;">
         <div class="map-row-name">${esc(l.name)}</div>
-        <div class="map-row-meta">${esc(lbl)}${l.city?' · '+esc(l.city):''}${l.lastContact?' · '+relTime(l.lastContact):''}</div>
+        <div class="map-row-meta">${esc(lbl)}${territoryOf(l)?' · '+esc(territoryOf(l).name):l.city?' · '+esc(l.city):''}${l.lastContact?' · '+relTime(l.lastContact):''}</div>
         ${l.lat==null?`<div class="map-row-nopin">No pin yet — tap to place</div>`:''}
       </div></div>`;
-  }).join('') : `<div class="empty-state">${leads.length ? 'Nothing matches these filters.' : 'No shops yet. Hit “📍 Drop a pin” and click where the shop is.'}</div>`;
+  }).join('') : `<div class="empty-state">${leads.length ? (terrSel ? 'No shops in this territory with these filters.' : 'Nothing matches these filters.') : 'No shops yet. Hit “📍 Drop a pin” and click where the shop is.'}</div>`;
 }
 
 function mapPopup(id) {
   const l = (salesData.leads||[]).find(x => x.id === id); if (!l) return '';
   const dir = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(l.address || (l.lat+','+l.lng));
-  const meta = [l.address || l.city, l.contact, l.tool && 'Using ' + l.tool, l.plan && l.plan !== 'Unknown' && 'Interested in ' + l.plan,
+  const terr = territoryOf(l);
+  const meta = [terr && '🧭 ' + terr.name, l.address || l.city, l.contact, l.tool && 'Using ' + l.tool, l.plan && l.plan !== 'Unknown' && 'Interested in ' + l.plan,
     l.followup && '⏰ Follow up ' + fmtDate(l.followup), l.lastContact && 'Last touch ' + relTime(l.lastContact)].filter(Boolean);
   return `<div class="map-pop">
     <div class="map-pop-name">${esc(l.name)}</div>
@@ -1926,6 +2039,13 @@ function slPinDirty() {
   // it. A hand-placed pin stays; the user just gets a nudge to re-check it.
   if (slPinFromGeo) { document.getElementById('sl-lat').value = ''; document.getElementById('sl-lng').value = ''; slPinFromGeo = false; }
   slPinStatus(true);
+}
+function slTerritoryOptions(l, pre) {
+  const pin = pre && pre.lat != null ? pre : l;
+  const auto = pin ? autoTerritory(pin) : null;
+  const cur = (l && l.territory) || '';
+  return `<option value="">Auto — ${auto ? esc(auto.name) : 'from the pin once it has one'}</option>`
+    + TERRITORIES.map(t => `<option value="${t.id}"${cur===t.id?' selected':''}>${esc(t.name)}</option>`).join('');
 }
 function slPinStatus(edited) {
   const el = document.getElementById('sl-pin-status'); if (!el) return;
@@ -2022,7 +2142,7 @@ function renderSalesLeads() {
   tb.innerHTML = leads.map(l => `
     <tr>
       <td><div style="font-weight:600;">${esc(l.name)}</div><div style="font-size:11px;color:var(--muted);">${esc(l.contact||'')}</div></td>
-      <td>${esc(l.city||'—')}</td>
+      <td>${esc((territoryOf(l)||{}).name || l.city || '—')}</td>
       <td>${esc(l.tool||'—')}</td>
       <td><select class="form-input" style="padding:5px 8px;font-size:12px;min-width:120px;" onchange="setSalesLeadStage('${l.id}',this.value)">
         ${SA_STAGES.map(([v,lbl])=>`<option value="${v}"${l.status===v?' selected':''}>${lbl}</option>`).join('')}
@@ -2065,6 +2185,7 @@ function openSalesLead(id, pre) {
         <div id="sl-pin-status" style="font-size:11px;margin-top:5px;"></div>
       </div>
       <div class="form-row"><label class="form-label">City</label><input class="form-input" id="sl-city" value="${v('city')}"/></div>
+      <div class="form-row"><label class="form-label">Territory</label><select class="form-input" id="sl-territory">${slTerritoryOptions(l, pre)}</select></div>
       <div class="form-row"><label class="form-label">Currently using</label><select class="form-input" id="sl-tool">${opt(['Nothing / texts','Urable','Jobber','Square','Housecall Pro','Google Sheets','Another agency','Other'], l&&l.tool)}</select></div>
       <div class="form-row"><label class="form-label">Stage</label><select class="form-input" id="sl-status">${SA_STAGES.map(([vv,lbl])=>`<option value="${vv}"${l&&l.status===vv?' selected':''}>${lbl}</option>`).join('')}</select></div>
       <div class="form-row"><label class="form-label">Plan interest</label><select class="form-input" id="sl-plan">${opt(['Receptionist — $349','Receptionist + Ads — $1,599','Growth Engine — $3,000','Custom quote','Unknown'], l&&l.plan)}</select></div>
@@ -2087,6 +2208,7 @@ async function saveSalesLead() {
     contact:  document.getElementById('sl-contact').value.trim(),
     city:     document.getElementById('sl-city').value.trim(),
     address:  document.getElementById('sl-address').value.trim(),
+    territory: document.getElementById('sl-territory').value,
     lat:      document.getElementById('sl-lat').value || null,
     lng:      document.getElementById('sl-lng').value || null,
     tool:     document.getElementById('sl-tool').value,

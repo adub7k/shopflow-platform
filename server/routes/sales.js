@@ -156,6 +156,7 @@ function buildLead(b) {
     address:  b.address !== undefined ? String(b.address || '').trim() : (existing?.address || ''),
     lat:      b.lat !== undefined ? coord(b.lat, 90)  : (existing?.lat ?? null),
     lng:      b.lng !== undefined ? coord(b.lng, 180) : (existing?.lng ?? null),
+    territory: b.territory !== undefined ? String(b.territory || '').trim().slice(0, 40) : (existing?.territory || ''),
     method:   b.method || 'Instagram DM',
     tool:     b.tool   || 'Nothing / texts',
     status:   b.status || 'contacted',
