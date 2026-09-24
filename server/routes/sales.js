@@ -322,6 +322,8 @@ function adminSalesPayload() {
       mrrClosed: closed.reduce((sum, l) => sum + (Number(l.value) || 0), 0),
     },
     leads:    s.leads,
+    plan:     sales().get('plan').value() || null,
+    aiReady:  !!process.env.ANTHROPIC_API_KEY,
     goals:    s.goals,
     todos:    s.todos,
     activity: s.activity,
@@ -615,6 +617,74 @@ router.post('/api/admin/sales/import-places/apply', requireAdmin, salesRoute(asy
   if (fresh.length) sales().set('leads', [...existing, ...fresh]).write();
   sales().get('importRun').assign({ appliedAt: now }).write();
   res.json({ ok: true, added: fresh.length, enriched, ...adminSalesPayload() });
+}));
+
+// ── Admin: prospect profiles — touch log + AI sales intel ───────────────────
+router.post('/api/admin/sales/leads/:id/log', requireAdmin, salesRoute(async (req, res) => {
+  const lead = sales().get('leads').find({ id: req.params.id });
+  if (!lead.value()) return res.status(404).json({ ok: false, error: 'Lead not found' });
+  const text = String(req.body.text || '').trim().slice(0, 2000);
+  if (!text) return res.status(400).json({ ok: false, error: 'Write what happened' });
+  const now = new Date().toISOString();
+  const entry = { id: genId('log'), at: now, type: String(req.body.type || 'note').slice(0, 20), text, by: 'admin' };
+  const patch = { log: [entry, ...(lead.value().log || [])], updatedAt: now };
+  if (entry.type !== 'note') patch.lastContact = now;   // a call/DM/visit is a real touch
+  // First real touch moves a cold prospect into the pipeline.
+  if (entry.type !== 'note' && lead.value().status === 'not-contacted') patch.status = 'contacted';
+  lead.assign(patch).write();
+  res.json({ ok: true, ...adminSalesPayload() });
+}));
+
+// AI work runs in the background (a minute or more); the page polls the sales
+// payload. A job still "running" after this long died with a restart.
+const AI_STALE_MS = 10 * 60 * 1000;
+const running = v => v && v.status === 'running' && Date.now() - Date.parse(v.startedAt) < AI_STALE_MS;
+
+router.post('/api/admin/sales/leads/:id/analyze', requireAdmin, salesRoute(async (req, res) => {
+  const intel = require('../prospect-intel');
+  if (!intel.configured()) return res.status(400).json({ ok: false, error: 'ANTHROPIC_API_KEY is not set on the server.' });
+  const ref = sales().get('leads').find({ id: req.params.id });
+  const lead = ref.value();
+  if (!lead) return res.status(404).json({ ok: false, error: 'Lead not found' });
+  if (running(lead.intel)) return res.status(409).json({ ok: false, error: 'Already analyzing this shop.' });
+  const territory = String(req.body.territory || '').slice(0, 60);
+  const prev = lead.intel && lead.intel.brief ? { brief: lead.intel.brief, sources: lead.intel.sources, finishedAt: lead.intel.finishedAt } : {};
+  ref.assign({ intel: { ...prev, status: 'running', startedAt: new Date().toISOString(), error: null } }).write();
+  res.json({ ok: true, ...adminSalesPayload() });
+
+  intel.analyzeProspect(lead, { territory })
+    .then(r => sales().get('leads').find({ id: lead.id }).assign({ intel: {
+      status: 'done', startedAt: lead.intel?.startedAt, finishedAt: new Date().toISOString(),
+      brief: r.brief, research: r.research, sources: r.sources, model: r.model, error: null,
+    } }).write())
+    .catch(e => {
+      console.error('Prospect analysis error:', e.message);
+      const cur = sales().get('leads').find({ id: lead.id });
+      if (cur.value()) cur.assign({ intel: { ...(cur.value().intel || {}), status: 'error', error: e.message } }).write();
+    });
+}));
+
+router.post('/api/admin/sales/plan', requireAdmin, salesRoute(async (req, res) => {
+  const intel = require('../prospect-intel');
+  if (!intel.configured()) return res.status(400).json({ ok: false, error: 'ANTHROPIC_API_KEY is not set on the server.' });
+  if (running(sales().get('plan').value())) return res.status(409).json({ ok: false, error: 'Already building a game plan.' });
+  // Territories are drawn in the browser, so the page sends each lead's territory.
+  const terr = req.body.territories || {};
+  const rows = (sales().get('leads').value() || [])
+    .filter(l => l.status !== 'closed' && l.status !== 'not-interested')
+    .map(l => ({ lead: l, territory: String(terr[l.id] || '').slice(0, 60) }));
+  if (!rows.length) return res.status(400).json({ ok: false, error: 'No open shops to plan around yet.' });
+  const prev = sales().get('plan').value() || {};
+  const startedAt = new Date().toISOString();
+  sales().set('plan', { ...prev, status: 'running', startedAt, error: null }).write();
+  res.json({ ok: true, ...adminSalesPayload() });
+
+  intel.buildGamePlan(rows)
+    .then(r => sales().set('plan', { status: 'done', startedAt, finishedAt: new Date().toISOString(), ...r, error: null }).write())
+    .catch(e => {
+      console.error('Game plan error:', e.message);
+      sales().set('plan', { ...(sales().get('plan').value() || {}), status: 'error', error: e.message }).write();
+    });
 }));
 
 // ── Admin: reset the rep's PIN (no current PIN needed) ────────────────────────

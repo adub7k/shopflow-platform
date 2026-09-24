@@ -352,11 +352,16 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 .map-row .dot{width:10px;height:10px;border-radius:50%;margin-top:4px;flex:none;}
 .map-row-name{font-size:13px;font-weight:600;}
 .map-row-meta{font-size:11px;color:var(--muted);margin-top:2px;}
+.map-row-loc{border:none;background:none;font-size:15px;cursor:pointer;padding:2px 4px;border-radius:6px;opacity:.7;}
+.map-row-loc:hover{background:var(--border);opacity:1;}
+.pr-fit-mini{font-size:10px;font-weight:800;padding:1px 6px;border-radius:100px;vertical-align:1px;background:var(--off);color:var(--muted);}
+.pr-fit-mini.hot{background:#FEE4E2;color:#B42318;} .pr-fit-mini.warm{background:#FEF0C7;color:#B54708;}
 .map-row-nopin{font-size:11px;font-weight:700;color:var(--yellow);}
-.map-pin{width:18px;height:18px;border-radius:50%;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35);}
-.map-pin.cold{width:12px;height:12px;background:#fff;border:2.5px solid #475467;box-shadow:0 1px 2px rgba(0,0,0,.25);}
-.map-chip .dot.cold{background:#fff !important;border:2px solid #475467;}
-.map-pin.closed{width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:800;}
+.map-pin{width:24px;height:24px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.45),0 0 0 1px rgba(0,0,0,.25);transition:transform .12s;}
+.map-pin:hover{transform:scale(1.25);}
+.map-pin.cold{width:18px;height:18px;border-width:2.5px;}
+.map-pin.closed{width:28px;height:28px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:800;}
+.map-pin.hot{box-shadow:0 0 0 3px #F04438,0 2px 8px rgba(240,68,56,.6);}
 .map-banner{background:var(--yellow-lt);color:var(--yellow);border:1px solid #FEDF89;border-radius:var(--radius);padding:9px 12px;font-size:13px;font-weight:600;margin-bottom:10px;display:none;justify-content:space-between;align-items:center;gap:10px;}
 .map-pop{font-family:var(--font);min-width:220px;}
 .map-pop-name{font-size:14px;font-weight:700;margin-bottom:2px;}
@@ -379,6 +384,48 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
   #territory-map{height:62vh;}
   .map-side{max-height:420px;}
 }
+
+/* ── Prospect profile ── */
+.pr-back{font-size:13px;color:var(--muted);cursor:pointer;display:inline-block;margin-bottom:12px;}
+.pr-back:hover{color:var(--text);}
+.pr-head{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:18px;}
+.pr-avatar{width:56px;height:56px;border-radius:14px;color:#fff;font-size:20px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;}
+.pr-name{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.15;}
+.pr-meta{font-size:13px;color:var(--muted);margin-top:4px;}
+.pr-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+.pr-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start;}
+.pr-grid .card{margin:0 0 16px;}
+.pr-sec{padding:16px 18px;border-top:1px solid var(--border);}
+.pr-sec:first-child{border-top:none;}
+.pr-h{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:8px;}
+.pr-kv{display:grid;grid-template-columns:96px 1fr;gap:6px 10px;font-size:13px;}
+.pr-kv div:nth-child(odd){color:var(--muted);}
+.pr-kv a{color:var(--green-deep);word-break:break-all;}
+.pr-score{display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
+.pr-score-num{font-size:40px;font-weight:800;letter-spacing:-.03em;line-height:1;}
+.pr-score-num small{font-size:16px;color:var(--faint);font-weight:700;}
+.pr-pill{display:inline-block;font-size:12px;font-weight:700;padding:4px 10px;border-radius:100px;background:var(--off);color:var(--text);margin:2px 4px 2px 0;}
+.pr-pill.hot{background:#FEE4E2;color:#B42318;} .pr-pill.warm{background:#FEF0C7;color:#B54708;} .pr-pill.cold{background:var(--blue-lt);color:var(--blue);}
+.pr-pill.offer{background:var(--green-lt);color:var(--green-deep);}
+.pr-opener{background:var(--green-lt);border-left:3px solid var(--green);border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.55;position:relative;}
+.pr-list{margin:0;padding-left:18px;font-size:13px;line-height:1.6;}
+.pr-sig{display:flex;gap:8px;font-size:13px;line-height:1.45;padding:6px 0;}
+.pr-sig-k{font-size:10px;font-weight:800;text-transform:uppercase;padding:2px 6px;border-radius:5px;height:fit-content;flex:none;margin-top:1px;}
+.pr-sig-k.strength{background:var(--green-lt);color:var(--green-deep);} .pr-sig-k.gap{background:#FEF0C7;color:#B54708;} .pr-sig-k.risk{background:#FEE4E2;color:#B42318;}
+.pr-obj{border:1px solid var(--border);border-radius:8px;margin-bottom:6px;}
+.pr-obj summary{padding:9px 12px;font-size:13px;font-weight:600;cursor:pointer;}
+.pr-obj div{padding:0 12px 10px;font-size:13px;color:var(--muted);line-height:1.5;}
+.pr-next{background:var(--black);color:#fff;border-radius:10px;padding:12px 14px;font-size:14px;font-weight:600;}
+.pr-log-item{padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.pr-log-item:last-child{border-bottom:none;}
+.pr-dim{opacity:.45;pointer-events:none;}
+.gp-target{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+.gp-rank{width:26px;height:26px;border-radius:50%;background:var(--black);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;}
+.gp-days{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;}
+.gp-day{background:var(--off);border-radius:10px;padding:12px;}
+.gp-chip{display:inline-block;font-size:12px;padding:2px 8px;border-radius:100px;background:var(--off);border:1px solid var(--border);margin:2px 3px 2px 0;cursor:pointer;color:var(--text);}
+.gp-chip:hover{border-color:var(--text);}
+@media(max-width:900px){ .pr-grid{grid-template-columns:1fr;} }
 
 /* ── Responsive ── */
 @media(max-width:900px){
@@ -885,6 +932,13 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
           <div class="map-list" id="map-list"></div>
         </div>
       </div>
+      <div class="card" style="margin-top:14px;" id="gp-card">
+        <div class="card-header">
+          <div><div class="card-title">🧠 Sales game plan</div><div class="card-sub">Claude reads every open shop on the map — size, reviews, website, territory, where each conversation stands — and tells you who to hit first and how.</div></div>
+          <button class="btn btn-green btn-sm" id="gp-btn" onclick="buildGamePlan()">Build game plan</button>
+        </div>
+        <div id="gp-body" style="padding:0 18px 18px;"></div>
+      </div>
       <div class="card" style="margin-top:14px;">
         <div class="card-header"><div><div class="card-title">Territories</div><div class="card-sub">Where the conversations are. Tap a territory to zoom to it and filter the list.</div></div></div>
         <div class="table-wrap">
@@ -895,6 +949,8 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         </div>
       </div>
     </div>
+
+    <div id="page-prospect" class="page"><div id="pr-body"></div></div>
 
     <div id="page-sales" class="page">
       <div class="page-header">
@@ -1771,7 +1827,7 @@ function closeDrawer() {
 // Plots the sales pipeline (master.sales.leads — the same list the rep works in
 // /sales) on a map of the ABQ metro. Pins live on the lead as lat/lng.
 const MAP_STAGES = [
-  ['not-contacted','Not contacted','#475467'], ['contacted','Contacted','#155EEF'], ['responded','Responded','#D97706'],
+  ['not-contacted','Not contacted','#1D2939'], ['contacted','Contacted','#155EEF'], ['responded','Responded','#D97706'],
   ['demo','Demo','#7A5AF8'], ['closed','Signed','#0E9F6E'], ['not-interested','Lost','#98A2B3'],
 ];
 const METRO_BOUNDS = [[35.36,-106.98],[34.62,-106.45]];
@@ -1894,7 +1950,7 @@ function renderTerritory() {
   const q = (document.getElementById('map-search').value || '').toLowerCase().trim();
   const counts = {}; leads.forEach(l => { const k = stageOf(l)[0]; counts[k] = (counts[k]||0) + 1; });
   document.getElementById('map-stages').innerHTML = MAP_STAGES.map(([k,lbl,c]) =>
-    `<button class="map-chip${terrShow.has(k)?' on':''}" onclick="toggleStage('${k}')"><span class="dot${k==='not-contacted'?' cold':''}" style="background:${c}"></span>${lbl} <span class="n">${counts[k]||0}</span></button>`).join('');
+    `<button class="map-chip${terrShow.has(k)?' on':''}" onclick="toggleStage('${k}')"><span class="dot" style="background:${c}"></span>${lbl} <span class="n">${counts[k]||0}</span></button>`).join('');
 
   // Territory picker + breakdown (counts ignore the stage chips so the totals stay honest).
   const byTerr = {};
@@ -1939,11 +1995,11 @@ function renderTerritory() {
   pinned.forEach(l => {
     const [k,,c] = stageOf(l);
     const cold = k === 'not-contacted';
-    const size = k==='closed' ? 22 : cold ? 12 : 18;
+    const size = k==='closed' ? 28 : cold ? 18 : 24;
+    const hot = l.intel && l.intel.brief && l.intel.brief.priority === 'hot' && !['closed','not-interested'].includes(k);
     const icon = L.divIcon({
-      className: '', iconSize: [size,size], iconAnchor: [size/2,size/2], popupAnchor: [0,-8],
-      html: cold ? `<div class="map-pin cold"></div>`
-        : `<div class="map-pin${k==='closed'?' closed':''}" style="background:${c}">${k==='closed'?'✓':''}</div>`,
+      className: '', iconSize: [size,size], iconAnchor: [size/2,size/2], popupAnchor: [0,-10],
+      html: `<div class="map-pin${cold?' cold':''}${k==='closed'?' closed':''}${hot?' hot':''}" style="background:${c}">${k==='closed'?'✓':''}</div>`,
     });
     const m = L.marker([l.lat, l.lng], { icon, title: l.name, zIndexOffset: k==='closed'?500:cold?-500:0 })
       .bindPopup(() => mapPopup(l.id), { maxWidth: 300 }).addTo(terrLayer);
@@ -1955,13 +2011,15 @@ function renderTerritory() {
     String(b.lastContact||b.updatedAt||'').localeCompare(String(a.lastContact||a.updatedAt||'')));
   document.getElementById('map-list').innerHTML = sorted.length ? sorted.map(l => {
     const [,lbl,c] = stageOf(l);
-    return `<div class="map-row" onclick="focusLead('${l.id}')">
+    const b = l.intel && l.intel.brief;
+    return `<div class="map-row" onclick="openProspect('${l.id}')">
       <span class="dot" style="background:${c}"></span>
       <div style="flex:1;min-width:0;">
-        <div class="map-row-name">${esc(l.name)}</div>
+        <div class="map-row-name">${esc(l.name)}${b ? ` <span class="pr-fit-mini ${esc(b.priority)}">${b.priority==='hot'?'🔥 ':''}${b.fitScore}/10</span>` : ''}</div>
         <div class="map-row-meta">${esc(lbl)}${territoryOf(l)?' · '+esc(territoryOf(l).name):l.city?' · '+esc(l.city):''}${l.lastContact?' · '+relTime(l.lastContact):''}</div>
-        ${l.lat==null?`<div class="map-row-nopin">No pin yet — tap to place</div>`:''}
-      </div></div>`;
+        ${l.lat==null?`<div class="map-row-nopin">No pin yet — tap 📍 to place</div>`:''}
+      </div>
+      <button class="map-row-loc" title="${l.lat==null?'Place on map':'Show on map'}" onclick="event.stopPropagation();focusLead('${l.id}')">📍</button></div>`;
   }).join('') : `<div class="empty-state">${leads.length ? (terrSel ? 'No shops in this territory with these filters.' : 'Nothing matches these filters.') : 'No shops yet. Hit “📍 Drop a pin” and click where the shop is.'}</div>`;
 }
 
@@ -1980,7 +2038,8 @@ function mapPopup(id) {
       ${MAP_STAGES.map(([v,lbl])=>`<option value="${v}"${l.status===v?' selected':''}>${lbl}</option>`).join('')}
     </select>
     <div class="map-pop-actions">
-      <button class="btn btn-green btn-sm" onclick="openSalesLead('${l.id}')">Edit</button>
+      <button class="btn btn-green btn-sm" onclick="openProspect('${l.id}')">Open profile</button>
+      <button class="btn btn-outline btn-sm" onclick="openSalesLead('${l.id}')">Edit</button>
       <button class="btn btn-outline btn-sm" onclick="startPlacing('${l.id}')">Move pin</button>
       ${tel.length >= 10 ? `<a class="btn btn-outline btn-sm" href="tel:${tel}">📞 Call</a>` : ''}
       ${/^https?:\/\//i.test(l.website||'') ? `<a class="btn btn-outline btn-sm" href="${esc(l.website)}" target="_blank" rel="noopener">Website</a>` : ''}
@@ -2106,6 +2165,237 @@ async function impApply() {
   toast(`Added ${d.added} shop${d.added===1?'':'s'} as Not contacted ✓`);
 }
 
+// ── Prospect profile ─────────────────────────────────────────────────────────
+// A full page per shop we're selling: details, the AI sales brief, notes and
+// the touch log. Opened from the map list, a pin popup or the Sales rep table.
+let prId = null;
+function prLead() { return (salesData.leads||[]).find(l => l.id === prId); }
+
+async function openProspect(id) {
+  prId = id;
+  if (terrMap) terrMap.closePopup();
+  stopPlacing();
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
+  document.getElementById('page-prospect').classList.add('active');
+  const sb = document.querySelector('.sb-item[data-page="map"]'); if (sb) sb.classList.add('active');
+  window.scrollTo(0, 0);
+  if (!prLead()) applySalesData(await salesApi(''));
+  renderProspect();
+}
+
+function renderProspect() {
+  const l = prLead(), el = document.getElementById('pr-body');
+  if (!l) { el.innerHTML = '<div class="empty-state">This shop is no longer in the pipeline.</div>'; return; }
+  const [, stageLbl, c] = stageOf(l);
+  const terr = territoryOf(l);
+  const tel = String(l.contact||'').replace(/[^\d+]/g, '');
+  const site = /^https?:\/\//i.test(l.website||'') ? l.website : '';
+  const dir = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(l.address || (l.lat != null ? l.lat+','+l.lng : l.name));
+  const initials = l.name.split(/\s+/).map(w => w[0]||'').join('').slice(0,2).toUpperCase();
+  const kv = [
+    ['Stage', esc(stageLbl)],
+    ['Territory', terr ? esc(terr.name) + (l.territory ? ' <span style="color:var(--faint);">(set by hand)</span>' : '') : '—'],
+    ['Category', esc(l.category || '—')],
+    ['Google', l.rating != null ? `★ ${l.rating} · ${l.reviews||0} reviews` : '—'],
+    ['Phone', tel.length >= 10 ? `<a href="tel:${tel}">${esc(l.contact)}</a>` : esc(l.contact || '—')],
+    ['Website', site ? `<a href="${esc(site)}" target="_blank" rel="noopener">${esc(site.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''))}</a>` : '—'],
+    ['Address', esc(l.address || l.city || '—')],
+    ['Using', esc(l.tool && l.tool !== 'Unknown' ? l.tool : '—')],
+    ['Follow up', l.followup ? fmtDate(l.followup) : '—'],
+    ['Last touch', l.lastContact ? relTime(l.lastContact) : 'Never'],
+    ['Added', fmtDate(l.createdAt) + (l.source === 'google-maps' ? ' · Google Maps import' : '')],
+  ];
+  const log = l.log || [];
+  const icon = { call: '📞', dm: '💬', 'walk-in': '🚶', demo: '🖥️', email: '✉️', note: '📝' };
+  document.getElementById('pr-body').innerHTML = `
+    <span class="pr-back" onclick="nav('map')">← Territory map</span>
+    <div class="pr-head">
+      <div class="pr-avatar" style="background:${c}">${esc(initials)}</div>
+      <div style="flex:1;min-width:220px;">
+        <div class="pr-name">${esc(l.name)}</div>
+        <div class="pr-meta">${[l.category, terr && terr.name, l.rating != null && `★ ${l.rating} (${l.reviews||0})`].filter(Boolean).map(esc).join(' · ') || '&nbsp;'}</div>
+        <div class="pr-actions">
+          <select class="form-input" style="width:auto;padding:6px 10px;font-size:13px;font-weight:600;" onchange="prSetStage(this.value)">
+            ${MAP_STAGES.map(([v,lbl])=>`<option value="${v}"${l.status===v?' selected':''}>${lbl}</option>`).join('')}
+          </select>
+          ${tel.length >= 10 ? `<a class="btn btn-green btn-sm" href="tel:${tel}">📞 Call</a>` : ''}
+          ${site ? `<a class="btn btn-outline btn-sm" href="${esc(site)}" target="_blank" rel="noopener">Website</a>` : ''}
+          <a class="btn btn-outline btn-sm" href="${dir}" target="_blank" rel="noopener">Directions</a>
+          <button class="btn btn-outline btn-sm" onclick="nav('map');setTimeout(()=>focusLead('${l.id}'),300)">📍 Map</button>
+          <button class="btn btn-outline btn-sm" onclick="openSalesLead('${l.id}')">Edit details</button>
+        </div>
+      </div>
+    </div>
+    <div class="pr-grid">
+      <div><div class="card" id="pr-ai"></div></div>
+      <div>
+        <div class="card"><div class="pr-sec"><div class="pr-h">Details</div><div class="pr-kv">${kv.map(([k,v]) => `<div>${k}</div><div>${v}</div>`).join('')}</div></div></div>
+        <div class="card"><div class="pr-sec">
+          <div class="pr-h">Log a touch</div>
+          <div style="display:flex;gap:6px;margin-bottom:6px;">
+            <select class="form-input" id="pr-log-type" style="width:auto;padding:6px 8px;font-size:13px;">
+              <option value="call">📞 Call</option><option value="dm">💬 DM / text</option><option value="walk-in">🚶 Walk-in</option>
+              <option value="demo">🖥️ Demo</option><option value="email">✉️ Email</option><option value="note">📝 Note</option>
+            </select>
+          </div>
+          <textarea class="form-input" id="pr-log-text" rows="2" placeholder="What happened? e.g. Talked to owner, busy till 5 — call back Thursday"></textarea>
+          <button class="btn btn-black btn-sm" style="margin-top:6px;" onclick="prLog()">Save</button>
+          <div style="font-size:11px;color:var(--faint);margin-top:6px;">A call, DM, walk-in or demo counts as contact — it moves a Not contacted shop to Contacted.</div>
+        </div>
+        <div class="pr-sec"><div class="pr-h">History</div>
+          ${log.length ? log.map(e => `<div class="pr-log-item"><div>${icon[e.type]||'•'} ${esc(e.text)}</div><div style="font-size:11px;color:var(--faint);margin-top:2px;">${relTime(e.at)}${e.by==='admin'?' · you':''}</div></div>`).join('') : '<div style="font-size:13px;color:var(--faint);">No touches yet.</div>'}
+        </div></div>
+        <div class="card"><div class="pr-sec"><div class="pr-h">Notes</div>
+          <textarea class="form-input" id="pr-notes" rows="5" placeholder="Owner's name, what they care about, who else works there…">${esc(l.notes||'')}</textarea>
+          <button class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="prSaveNotes()">Save notes</button>
+        </div></div>
+      </div>
+    </div>`;
+  renderProspectAI();
+}
+
+function renderProspectAI() {
+  const el = document.getElementById('pr-ai'); const l = prLead();
+  if (!el || !l) return;
+  const it = l.intel || {}, b = it.brief;
+  const runningNow = it.status === 'running' && Date.now() - Date.parse(it.startedAt) < 10*60*1000;
+  const head = `<div class="card-header"><div><div class="card-title">🧠 How to sell them</div>
+      <div class="card-sub">${b && it.finishedAt ? 'Analyzed ' + relTime(it.finishedAt) : 'Claude researches their website, Google reviews and socials, then writes the play.'}</div></div>
+      ${salesData.aiReady === false ? '' : `<button class="btn ${b ? 'btn-outline' : 'btn-green'} btn-sm" ${runningNow ? 'disabled' : ''} onclick="prAnalyze()">${runningNow ? 'Analyzing…' : b ? 'Re-analyze' : 'Analyze this shop'}</button>`}</div>`;
+  let body = '';
+  if (salesData.aiReady === false) body = `<div class="pr-sec" style="font-size:13px;color:var(--muted);">Set <b>ANTHROPIC_API_KEY</b> on the server to turn on AI analysis.</div>`;
+  else if (runningNow) body = `<div class="pr-sec" style="font-size:13px;color:var(--muted);"><span class="spinner"></span>Researching ${esc(l.name)} — reading their site, reviews and socials. Takes a minute or two; you can leave this page.</div>`;
+  else if (it.status === 'error') body = `<div class="pr-sec" style="font-size:13px;color:var(--red);font-weight:600;">Analysis failed: ${esc(it.error||'unknown error')}</div>`;
+  if (b) body += briefHtml(b, it, runningNow);
+  else if (!body) body = `<div class="pr-sec" style="font-size:13px;color:var(--muted);line-height:1.6;">You'll get: how good a fit they are, which offer to lead with, the best way and time to reach them, the exact opener to use, the objections they'll raise and how to answer them.</div>`;
+  el.innerHTML = head + body;
+}
+
+function briefHtml(b, it, dim) {
+  const list = arr => (arr||[]).length ? `<ul class="pr-list">${arr.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<div style="font-size:13px;color:var(--faint);">—</div>';
+  const a = b.approach || {};
+  return `<div class="${dim ? 'pr-dim' : ''}">
+    <div class="pr-sec"><div class="pr-score">
+      <div><div class="pr-score-num">${b.fitScore}<small>/10</small></div><div style="font-size:11px;color:var(--faint);font-weight:700;">FIT</div></div>
+      <div style="flex:1;min-width:200px;">
+        <span class="pr-pill ${esc(b.priority)}">${b.priority==='hot'?'🔥 ':''}${esc(b.priority)}</span><span class="pr-pill offer">${esc(b.recommendedOffer)}</span>
+        <div style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5;">${esc(b.fitReason)}</div>
+      </div></div>
+      <div style="font-size:14px;line-height:1.6;margin-top:12px;">${esc(b.summary)}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.5;"><b style="color:var(--text);">Why this offer:</b> ${esc(b.offerReason)}</div>
+    </div>
+    <div class="pr-sec"><div class="pr-h">How to reach them</div>
+      <div style="font-size:14px;font-weight:700;">${esc(a.channel||'')}${a.bestTime ? ' · ' + esc(a.bestTime) : ''}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:4px;line-height:1.5;">${esc(a.why||'')}</div>
+      <div class="pr-h" style="margin-top:14px;">Opener <button class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:11px;margin-left:6px;" onclick="navigator.clipboard.writeText(prLead().intel.brief.opener).then(()=>toast('Copied ✓'))">Copy</button></div>
+      <div class="pr-opener">${esc(b.opener)}</div>
+    </div>
+    <div class="pr-sec"><div class="pr-h">What we found</div>
+      ${(b.signals||[]).map(sg => `<div class="pr-sig"><span class="pr-sig-k ${esc(sg.kind)}">${esc(sg.kind)}</span><div><b>${esc(sg.label)}</b> — ${esc(sg.detail)}</div></div>`).join('') || '<div style="font-size:13px;color:var(--faint);">—</div>'}
+    </div>
+    <div class="pr-sec" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
+      <div><div class="pr-h">Their likely pain</div>${list(b.painPoints)}</div>
+      <div><div class="pr-h">Talking points</div>${list(b.talkingPoints)}</div>
+    </div>
+    <div class="pr-sec"><div class="pr-h">Objections they'll raise</div>
+      ${(b.objections||[]).map(o => `<details class="pr-obj"><summary>“${esc(o.objection)}”</summary><div>${esc(o.response)}</div></details>`).join('') || '<div style="font-size:13px;color:var(--faint);">—</div>'}
+    </div>
+    <div class="pr-sec"><div class="pr-h">Questions to ask</div>${list(b.questionsToAsk)}</div>
+    <div class="pr-sec"><div class="pr-h">Next step</div><div class="pr-next">${esc(b.nextStep)}</div></div>
+    ${(it.sources||[]).length || it.research ? `<div class="pr-sec">
+      ${it.research ? `<details><summary style="font-size:13px;color:var(--muted);cursor:pointer;">Research notes</summary><div style="font-size:12px;white-space:pre-wrap;line-height:1.55;margin-top:8px;color:var(--muted);">${esc(it.research)}</div></details>` : ''}
+      ${(it.sources||[]).length ? `<details style="margin-top:6px;"><summary style="font-size:13px;color:var(--muted);cursor:pointer;">Sources (${it.sources.length})</summary><div style="font-size:12px;line-height:1.7;margin-top:6px;">${it.sources.map(u => /^https?:\/\//i.test(u) ? `<div><a href="${esc(u)}" target="_blank" rel="noopener" style="color:var(--green-deep);word-break:break-all;">${esc(u)}</a></div>` : '').join('')}</div></details>` : ''}
+    </div>` : ''}
+  </div>`;
+}
+
+async function prAnalyze() {
+  const l = prLead(); if (!l) return;
+  const t = territoryOf(l);
+  const d = await salesApi('/leads/' + l.id + '/analyze', { method: 'POST', body: { territory: t ? t.name : '' } });
+  if (!d || !d.ok) { toast((d && d.error) || 'Could not start the analysis'); return; }
+  applySalesData(d);
+}
+async function prSetStage(status) {
+  const l = prLead(); if (!l) return;
+  applySalesData(await salesApi('/leads', { method: 'POST', body: { ...l, status } }));
+  renderProspect(); toast('Stage updated ✓');
+}
+async function prSaveNotes() {
+  const l = prLead(); if (!l) return;
+  applySalesData(await salesApi('/leads', { method: 'POST', body: { ...l, notes: document.getElementById('pr-notes').value } }));
+  toast('Notes saved ✓');
+}
+async function prLog() {
+  const l = prLead(); if (!l) return;
+  const text = document.getElementById('pr-log-text').value.trim();
+  if (!text) { toast('Write what happened'); return; }
+  const d = await salesApi('/leads/' + l.id + '/log', { method: 'POST', body: { type: document.getElementById('pr-log-type').value, text } });
+  if (!d || !d.ok) { toast((d && d.error) || 'Could not save'); return; }
+  applySalesData(d); renderProspect(); toast('Logged ✓');
+}
+
+// ── Sales game plan (whole book) ────────────────────────────────────────────
+async function buildGamePlan() {
+  const territories = {};
+  (salesData.leads||[]).forEach(l => { const t = territoryOf(l); if (t && t.id) territories[l.id] = t.name; });
+  const d = await salesApi('/plan', { method: 'POST', body: { territories } });
+  if (!d || !d.ok) { toast((d && d.error) || 'Could not start the game plan'); return; }
+  applySalesData(d);
+}
+function renderGamePlan() {
+  const body = document.getElementById('gp-body'), btn = document.getElementById('gp-btn');
+  if (!body) return;
+  const gp = salesData.plan || {};
+  const runningNow = gp.status === 'running' && Date.now() - Date.parse(gp.startedAt) < 10*60*1000;
+  btn.style.display = salesData.aiReady === false ? 'none' : '';
+  btn.disabled = runningNow;
+  btn.textContent = runningNow ? 'Building…' : gp.plan ? 'Rebuild' : 'Build game plan';
+  const byId = id => (salesData.leads||[]).find(l => l.id === id);
+  const chip = id => { const l = byId(id); return l ? `<span class="gp-chip" onclick="openProspect('${l.id}')">${esc(l.name)}</span>` : ''; };
+  let html = '';
+  if (salesData.aiReady === false) html = `<div style="font-size:13px;color:var(--muted);">Set <b>ANTHROPIC_API_KEY</b> on the server to turn this on.</div>`;
+  else if (runningNow) html = `<div style="font-size:13px;color:var(--muted);margin-bottom:10px;"><span class="spinner"></span>Reading every shop and building the plan — a minute or two.</div>`;
+  else if (gp.status === 'error') html = `<div style="font-size:13px;color:var(--red);font-weight:600;margin-bottom:10px;">Game plan failed: ${esc(gp.error||'unknown error')}</div>`;
+  const p = gp.plan;
+  if (p) html += `<div class="${runningNow ? 'pr-dim' : ''}">
+    <div style="font-size:11px;color:var(--faint);font-weight:700;margin-bottom:6px;">BUILT ${gp.finishedAt ? relTime(gp.finishedAt).toUpperCase() : ''} · ${gp.shopCount||0} OPEN SHOPS</div>
+    <div style="font-size:17px;font-weight:800;line-height:1.35;">${esc(p.headline)}</div>
+    <div style="font-size:14px;line-height:1.6;color:var(--muted);margin-top:8px;">${esc(p.marketRead)}</div>
+    <div class="pr-h" style="margin-top:20px;">Hit these first</div>
+    ${p.topTargets.map((t,i) => { const l = byId(t.leadId); return l ? `<div class="gp-target"><div class="gp-rank">${i+1}</div><div style="flex:1;min-width:0;">
+      <a href="#" onclick="openProspect('${l.id}');return false;" style="font-weight:700;color:var(--text);">${esc(l.name)}</a>
+      <span class="pr-pill offer" style="font-size:11px;">${esc(t.offer)}</span>
+      <div style="font-size:13px;color:var(--muted);margin-top:3px;line-height:1.5;">${esc(t.why)}</div>
+      <div style="font-size:13px;margin-top:6px;font-style:italic;line-height:1.5;">“${esc(t.opener)}”</div></div></div>` : ''; }).join('')}
+    <div class="pr-h" style="margin-top:20px;">Segments</div>
+    ${p.segments.map(sg => `<div style="padding:10px 0;border-bottom:1px solid var(--border);">
+      <div style="font-weight:700;">${esc(sg.name)} <span style="color:var(--faint);font-weight:600;font-size:12px;">· ${sg.leadIds.length} shops</span></div>
+      <div style="font-size:13px;color:var(--muted);margin-top:3px;line-height:1.5;">${esc(sg.who)}</div>
+      <div style="font-size:13px;margin-top:4px;line-height:1.5;"><b>Offer:</b> ${esc(sg.offer)} · <b>Approach:</b> ${esc(sg.approach)}</div>
+      <div style="margin-top:6px;">${sg.leadIds.slice(0,24).map(chip).join('')}${sg.leadIds.length > 24 ? `<span style="font-size:12px;color:var(--faint);"> +${sg.leadIds.length-24} more</span>` : ''}</div></div>`).join('')}
+    <div class="pr-h" style="margin-top:20px;">By territory</div>
+    ${p.territoryPlan.map(t => `<div style="font-size:13px;line-height:1.55;padding:6px 0;"><b>${esc(t.territory)}</b> — ${esc(t.plan)}</div>`).join('')}
+    <div class="pr-h" style="margin-top:20px;">This week</div>
+    <div class="gp-days">${p.weekPlan.map(d => `<div class="gp-day"><div style="font-weight:800;">${esc(d.day)}</div><div style="font-size:12px;color:var(--muted);margin:2px 0 6px;">${esc(d.focus)}</div><ul class="pr-list" style="font-size:12px;">${d.tasks.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`).join('')}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:20px;">
+      <div><div class="pr-h">Pitch angles that land</div><ul class="pr-list">${p.pitchAngles.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
+      <div><div class="pr-h">Watch out for</div><ul class="pr-list">${p.watchOuts.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
+    </div></div>`;
+  else if (!html) html = `<div style="font-size:13px;color:var(--muted);line-height:1.6;">You'll get: which shops to go after first and the opener for each, the shops grouped by how to sell them, a plan per territory, and a day-by-day week for the rep.</div>`;
+  body.innerHTML = html;
+}
+
+// While any AI job runs, refresh every few seconds so results appear on their own.
+let aiPollTimer = null;
+function scheduleAiPoll() {
+  clearTimeout(aiPollTimer);
+  const live = v => v && v.status === 'running' && Date.now() - Date.parse(v.startedAt) < 10*60*1000;
+  if (!live(salesData.plan) && !(salesData.leads||[]).some(l => live(l.intel))) return;
+  aiPollTimer = setTimeout(async () => applySalesData(await salesApi('')), 6000);
+}
+
 // Address lookup in the lead drawer (server proxies OpenStreetMap).
 async function geocode(q) {
   q = String(q||'').trim(); if (q.length < 3) return [];
@@ -2185,6 +2475,13 @@ function applySalesData(d) {
   document.getElementById('sa-wt-demos').value   = wt.demos||5;
   renderSalesTodos(); renderSalesGoals(); renderSalesLeads();
   if (terrMap) renderTerritory();
+  renderGamePlan();
+  // Refresh an open profile — whole page unless the user is mid-typing in it.
+  if (document.getElementById('page-prospect').classList.contains('active')) {
+    const typing = document.activeElement && document.getElementById('pr-body').contains(document.activeElement) && /TEXTAREA|INPUT|SELECT/.test(document.activeElement.tagName);
+    typing ? renderProspectAI() : renderProspect();
+  }
+  scheduleAiPoll();
 }
 
 function renderSalesTodos() {
@@ -2240,7 +2537,7 @@ function renderSalesLeads() {
   if (!leads.length) { tb.innerHTML = '<tr><td colspan="6"><div class="empty-state">No leads yet.</div></td></tr>' + coldRow; return; }
   tb.innerHTML = coldRow + leads.map(l => `
     <tr>
-      <td><div style="font-weight:600;">${esc(l.name)}</div><div style="font-size:11px;color:var(--muted);">${esc(l.contact||'')}</div></td>
+      <td><a href="#" onclick="openProspect('${l.id}');return false;" style="font-weight:600;color:var(--text);">${esc(l.name)}</a><div style="font-size:11px;color:var(--muted);">${esc(l.contact||'')}</div></td>
       <td>${esc((territoryOf(l)||{}).name || l.city || '—')}</td>
       <td>${esc(l.tool||'—')}</td>
       <td><select class="form-input" style="padding:5px 8px;font-size:12px;min-width:120px;" onchange="setSalesLeadStage('${l.id}',this.value)">
