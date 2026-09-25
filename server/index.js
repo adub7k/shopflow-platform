@@ -234,6 +234,7 @@ app.get('/book/*',  (req, res) => {
 app.get('/review/*',(req, res) => res.sendFile(path.join(CLIENT_DIR, 'review.html')));
 app.get('/quote/*', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'quote.html')));
 app.get('/demo',    (req, res) => res.sendFile(path.join(CLIENT_DIR, 'demo.html')));
+app.get('/about',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'about.html')));
 app.get('/sales',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'sales.html')));
 app.get(['/portal', '/portal/*'], (req, res) => res.sendFile(path.join(CLIENT_DIR, 'portal.html')));
 app.get('/signup',  (req, res) => res.sendFile(path.join(CLIENT_DIR, 'signup.html')));
