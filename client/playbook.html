@@ -52,8 +52,7 @@
 .pb-hero{padding:56px 0 72px}
 .pb-grid{display:grid;grid-template-columns:minmax(0,1fr) 440px;column-gap:64px;align-items:start}
 .pb-intro{grid-column:1;grid-row:1}
-.pb-inside{grid-column:1;grid-row:2}
-.pb-card{grid-column:2;grid-row:1 / span 2}
+.pb-card{grid-column:2;grid-row:1}
 .pb-hero h1{font-size:clamp(36px,5.2vw,58px);font-weight:800;letter-spacing:-.045em;line-height:1.02;max-width:14ch;margin-top:18px}
 .pb-hero .lede{font-size:clamp(17px,2vw,19px);color:var(--muted);line-height:1.65;max-width:54ch;margin-top:20px}
 .pb-hero .lede b{color:var(--text);font-weight:600}
@@ -61,11 +60,6 @@
 .pb-stats div{background:#fff;padding:16px 16px 14px}
 .pb-stats b{display:block;font-size:24px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
 .pb-stats span{display:block;font-size:12.5px;color:var(--muted);line-height:1.4;margin-top:2px}
-.pb-inside{margin-top:40px}
-.pb-inside h2{font-family:var(--mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:14px}
-.pb-inside ol{list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:0 28px;counter-reset:ch}
-.pb-inside li{counter-increment:ch;display:flex;gap:12px;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--line-soft);font-size:15.5px;font-weight:500}
-.pb-inside li::before{content:counter(ch,decimal-leading-zero);font-family:var(--mono);font-size:12px;font-weight:600;color:var(--green-d);min-width:20px}
 .pb-card{position:sticky;top:92px;background:#fff;border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow-lg);overflow:hidden}
 .pb-cover{background:linear-gradient(180deg,#F1F5F9,#fff);padding:28px 0 0;display:flex;justify-content:center;border-bottom:1px solid var(--line-soft);height:196px;overflow:hidden}
 .pb-cover img{width:230px;border-radius:8px 8px 0 0;box-shadow:0 18px 40px rgba(15,23,42,.28)}
@@ -96,8 +90,8 @@
 .pb-who .av{width:56px;height:56px;border-radius:14px;background:var(--green-tint);border:1px solid var(--green-line);color:var(--green-deep);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;flex-shrink:0}
 .pb-who h2{font-size:22px;font-weight:800;letter-spacing:-.025em;margin-bottom:8px}
 .pb-who p{font-size:16px;color:var(--body);line-height:1.7}
-@media(max-width:980px){.pb-grid{grid-template-columns:minmax(0,1fr);gap:36px}.pb-intro,.pb-inside,.pb-card{grid-column:1;grid-row:auto}.pb-inside{margin-top:4px}.pb-card{position:static;max-width:520px}.pb-hero{padding:40px 0 56px}}
-@media(max-width:640px){.pb-stats{grid-template-columns:1fr 1fr}.pb-inside ol{grid-template-columns:1fr}.row2{grid-template-columns:1fr}.pb-form{padding:22px 20px}.pb-who .inner{flex-direction:column;gap:14px;padding:44px 0}}
+@media(max-width:980px){.pb-grid{grid-template-columns:minmax(0,1fr);gap:36px}.pb-intro,.pb-card{grid-column:1;grid-row:auto}.pb-card{position:static;max-width:520px}.pb-hero{padding:40px 0 56px}}
+@media(max-width:640px){.pb-stats{grid-template-columns:1fr 1fr}.row2{grid-template-columns:1fr}.pb-form{padding:22px 20px}.pb-who .inner{flex-direction:column;gap:14px;padding:44px 0}}
 </style>
 </head>
 <body>
@@ -168,22 +162,6 @@
       </div>
     </aside>
 
-    <div class="pb-inside">
-      <h2>What's inside</h2>
-      <ol>
-        <li>Know your numbers</li>
-        <li>Ads that book, not ads that click</li>
-        <li>Your phone beats a film crew</li>
-        <li>A landing page that converts</li>
-        <li>Google vs. Meta</li>
-        <li>Win the Google map</li>
-        <li>Speed to lead &amp; missed calls</li>
-        <li>Lock it in with a deposit</li>
-        <li>Raise your ticket</li>
-        <li>Beat the slow season</li>
-        <li>Your 30-day plan</li>
-      </ol>
-    </div>
 
   </div>
 </div>
