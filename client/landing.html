@@ -268,6 +268,13 @@ nav.scrolled{background:rgba(255,255,255,.85);backdrop-filter:saturate(180%) blu
 .local .sig{margin-top:22px;font-size:14.5px;color:var(--faint);}
 .local .sig b{display:block;color:var(--text);font-size:15.5px;}
 .local-facts{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:48px;}
+/* Free playbook band (lead magnet → /playbook) */
+.pbk{display:grid;grid-template-columns:200px minmax(0,1fr);gap:44px;align-items:center;background:#fff;border:1px solid var(--line);border-radius:24px;padding:36px 44px;box-shadow:var(--shadow-md);text-align:left;}
+.pbk img{width:200px;border-radius:8px;box-shadow:0 16px 36px rgba(15,23,42,.24);transform:rotate(-2deg);}
+.pbk .h2{font-size:clamp(26px,3.4vw,36px);margin-top:10px;}
+.pbk .lead{margin-top:12px;}
+.pbk .btn{margin-top:22px;}
+@media(max-width:720px){.pbk{grid-template-columns:1fr;gap:26px;padding:28px 22px;}.pbk img{width:150px;}.pbk .btn{width:100%;}}
 .fact{background:#fff;border:1px solid var(--line);border-radius:14px;padding:20px 20px;}
 .fact .fic{width:38px;height:38px;border-radius:10px;background:var(--green-tint);color:var(--green-deep);display:flex;align-items:center;justify-content:center;margin-bottom:12px;}
 .fact .fic .ic{width:18px;height:18px;}
@@ -616,6 +623,21 @@ footer{padding:56px 0 40px;border-top:1px solid var(--line);}
   </div>
 </section>
 
+<!-- ═══ 6b. FREE PLAYBOOK ═══ -->
+<section class="section" style="padding-top:0;" id="playbook">
+  <div class="wrap">
+    <div class="pbk rv">
+      <a href="/playbook" aria-hidden="true" tabindex="-1"><img src="/img/marketing/playbook-cover.jpg" width="200" height="258" alt="" loading="lazy"/></a>
+      <div>
+        <div class="kicker">Free playbook</div>
+        <h2 class="h2">Rather run it yourself? Take the playbook.</h2>
+        <p class="lead">15 pages on how tint, PPF and detail shops turn ad dollars into deposit-backed jobs: the offers, the follow-up cadence, the deposit script, the 30-day plan. <b>Every number is from a campaign we ran.</b></p>
+        <a class="btn btn-green btn-lg" href="/playbook">Get the free playbook <svg class="ic" style="width:17px;height:17px;"><use href="#i-arrow"/></svg></a>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ═══ 7. FAQ ═══ -->
 <section class="section soft" id="faq">
   <div class="wrap">
@@ -661,7 +683,7 @@ footer{padding:56px 0 40px;border-top:1px solid var(--line);}
         <div class="foot-col"><h4>Site</h4>
           <a href="#proof">The numbers</a><a href="#what">What we do</a><a href="#local">Local</a><a href="#pricing">Pricing</a><a href="#faq">Questions</a></div>
         <div class="foot-col"><h4>Guides</h4>
-          <a href="/guides/">All guides</a><a href="/guides/how-to-grow-a-window-tinting-business/">Grow a tint business</a></div>
+          <a href="/guides/">All guides</a><a href="/guides/how-to-grow-a-window-tinting-business/">Grow a tint business</a><a href="/playbook">Free sales playbook</a></div>
         <div class="foot-col"><h4>Company</h4>
           <a href="/about">About ShopFlow Technologies</a><a href="/demo">Book a 15-minute call</a><a href="/login">Client login</a></div>
         <div class="foot-col"><h4>Legal</h4>

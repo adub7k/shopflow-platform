@@ -122,9 +122,12 @@ app.use('/api/accounts/signup', authLimiter);
 app.use(limitWhen(authLimiter, req => req.method === 'POST' && req.path === '/api/shop/auth/verify-pin'));
 app.use(limitWhen(authLimiter, req => req.method === 'POST' && req.path === '/api/sales/login'));
 app.use(limitWhen(publicWriteLimiter, req => req.method === 'POST' && /^\/api\/public\/[^/]+\/(lead|book)$/.test(req.path)));
+// Playbook opt-in: 5 per 15 min per IP is plenty for a real person.
+app.use(limitWhen(strictLimiter(5), req => req.method === 'POST' && req.path === '/api/public/playbook'));
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 app.use(require('./routes/auth'));
+app.use(require('./routes/playbook'));
 app.use(require('./routes/public'));
 app.use(require('./routes/twilio'));
 app.use(require('./routes/shop'));
@@ -235,6 +238,7 @@ app.get('/review/*',(req, res) => res.sendFile(path.join(CLIENT_DIR, 'review.htm
 app.get('/quote/*', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'quote.html')));
 app.get('/demo',    (req, res) => res.sendFile(path.join(CLIENT_DIR, 'demo.html')));
 app.get('/about',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'about.html')));
+app.get('/playbook', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'playbook.html')));
 app.get('/sales',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'sales.html')));
 app.get(['/portal', '/portal/*'], (req, res) => res.sendFile(path.join(CLIENT_DIR, 'portal.html')));
 app.get('/signup',  (req, res) => res.sendFile(path.join(CLIENT_DIR, 'signup.html')));

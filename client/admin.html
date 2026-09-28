@@ -522,6 +522,10 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div class="sb-item" data-page="demos" onclick="nav('demos');closeAdminSidebar()">
       <span class="sb-item-icon">📞</span>Demo calls
     </div>
+    <div class="sb-item" data-page="playbook" onclick="nav('playbook');closeAdminSidebar()">
+      <span class="sb-item-icon">📘</span>Playbook leads
+      <span id="sb-playbook-badge" style="margin-left:auto;background:#16a34a;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:100px;display:none;"></span>
+    </div>
     <div class="sb-item" data-page="map" onclick="nav('map');closeAdminSidebar()">
       <span class="sb-item-icon">🗺️</span>Territory map
     </div>
@@ -907,6 +911,36 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       </div>
     </div>
 
+    <!-- Playbook leads page -->
+    <div id="page-playbook" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Playbook leads</div>
+          <div class="page-sub">Shop owners who downloaded the free Sales Playbook at shopflowtech.com/playbook. You get an email for every one.</div>
+        </div>
+        <a href="/playbook" target="_blank" class="btn btn-green btn-sm">↗ Open the /playbook page</a>
+      </div>
+
+      <div class="metrics-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
+        <div class="metric-card"><div class="metric-label">Downloads requested</div><div class="metric-value" id="pbl-total">—</div><div class="metric-sub" id="pbl-week">— this week</div></div>
+        <div class="metric-card"><div class="metric-label">Still new</div><div class="metric-value" id="pbl-new">—</div><div class="metric-sub">not contacted yet</div></div>
+        <div class="metric-card"><div class="metric-label">Opened the PDF</div><div class="metric-value" id="pbl-opened">—</div><div class="metric-sub">clicked the download link</div></div>
+        <div class="metric-card"><div class="metric-label">Became clients</div><div class="metric-value green" id="pbl-clients">—</div><div class="metric-sub" id="pbl-calls">— calls booked</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><div class="card-title">All playbook leads</div></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Contact</th><th>Service</th><th>Requested</th><th>Opened</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+            <tbody id="playbook-tbody">
+              <tr><td colspan="7"><div class="empty-state"><span class="spinner"></span>Loading…</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- Sales Rep page -->
     <div id="page-map" class="page">
       <div class="page-header">
@@ -1259,6 +1293,7 @@ function nav(page) {
   if (page === 'settings')  loadPlatformSettings();
   if (page === 'checklist') renderChecklist();
   if (page === 'demos')     loadDemos();
+  if (page === 'playbook')  loadPlaybookLeads();
   if (page === 'sales')     loadSalesAdmin();
   if (page === 'map')       loadTerritory();
   if (page !== 'map')       stopPlacing();
@@ -1269,6 +1304,7 @@ async function initApp() {
   document.getElementById('overview-date').textContent = new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   await Promise.all([loadStats(), loadShops()]);
   renderChecklist(); // init badge count
+  loadPlaybookLeads(); // init "new" badge
 }
 async function refreshAll() { await Promise.all([loadStats(), loadShops()]); toast('Refreshed ✓'); }
 
@@ -3101,6 +3137,89 @@ async function deleteDemo(id) {
   try {
     await fetch('/api/admin/demos/' + id, { method: 'DELETE', headers: { 'x-admin-key': adminKey } });
     toast('Removed ✓'); loadDemos();
+  } catch(e) { toast('Failed'); }
+}
+
+// ── Playbook leads (free Sales Playbook opt-ins from /playbook) ───────────────
+let pbStatuses = ['new','contacted','call booked','client','not a fit'];
+const PB_STATUS_COLORS = { new:'badge-blue', contacted:'badge-gray', 'call booked':'badge-shop', client:'badge-shop', 'not a fit':'badge-inactive' };
+
+async function loadPlaybookLeads() {
+  try {
+    const res = await fetch('/api/admin/playbook-leads', { headers: { 'x-admin-key': adminKey } });
+    const d = await res.json();
+    if (d.statuses) pbStatuses = d.statuses;
+    renderPlaybookLeads(d.leads || []);
+  } catch(e) {
+    const tb = document.getElementById('playbook-tbody');
+    if (tb) tb.innerHTML = '<tr><td colspan="7"><div class="empty-state">Failed to load playbook leads.</div></td></tr>';
+  }
+}
+
+function renderPlaybookLeads(list) {
+  const weekAgo = Date.now() - 7*24*60*60*1000;
+  const fresh = list.filter(l => l.status === 'new').length;
+  document.getElementById('pbl-total').textContent   = list.length;
+  document.getElementById('pbl-week').textContent    = list.filter(l => Date.parse(l.createdAt) > weekAgo).length + ' this week';
+  document.getElementById('pbl-new').textContent     = fresh;
+  document.getElementById('pbl-opened').textContent  = list.filter(l => l.downloads > 0).length;
+  document.getElementById('pbl-clients').textContent = list.filter(l => l.status === 'client').length;
+  document.getElementById('pbl-calls').textContent   = list.filter(l => l.status === 'call booked').length + ' calls booked';
+  const badge = document.getElementById('sb-playbook-badge');
+  if (badge) { badge.textContent = fresh; badge.style.display = fresh ? '' : 'none'; }
+
+  const tbody = document.getElementById('playbook-tbody');
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No playbook downloads yet.<br><a href="/playbook" target="_blank" style="color:var(--green);">Open the /playbook page →</a></div></td></tr>';
+    return;
+  }
+  const digits = p => String(p||'').replace(/\D/g,'').slice(-10);
+  tbody.innerHTML = list.map(l => `
+    <tr>
+      <td>
+        <div style="font-weight:600;">${esc(l.name)}</div>
+        <div style="font-size:11px;color:var(--muted);">${esc(l.shopName||'—')}</div>
+        <div style="font-size:11px;"><a href="tel:+1${digits(l.phone)}" style="color:var(--green);font-weight:600;">${esc(l.phone||'')}</a></div>
+        <div style="font-size:11px;"><a href="mailto:${esc(l.email)}" style="color:var(--muted);">${esc(l.email)}</a></div>
+        ${l.source ? `<div style="font-size:11px;color:var(--faint);">via ${esc(l.source)}</div>` : ''}
+      </td>
+      <td style="font-size:12px;color:var(--muted);">${esc(l.service||'—')}</td>
+      <td style="white-space:nowrap;font-size:12px;">
+        <div style="font-weight:600;">${fmtDate(l.createdAt)}</div>
+        ${(l.requests||1) > 1 ? `<div style="font-size:11px;color:var(--muted);">asked ${l.requests}×</div>` : ''}
+      </td>
+      <td style="font-size:12px;white-space:nowrap;">${l.downloads ? `<span class="badge badge-shop">✓ ${l.downloads}×</span>` : '<span style="color:var(--faint);">not yet</span>'}</td>
+      <td>
+        <select class="filter-select" style="font-size:11px;padding:4px 6px;" onchange="updatePlaybookLead('${l.id}','status',this.value)">
+          ${pbStatuses.map(s => `<option value="${s}" ${l.status===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <input type="text" value="${esc(l.notes||'')}" placeholder="Add notes…"
+          style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;width:160px;font-family:inherit;"
+          onblur="updatePlaybookLead('${l.id}','notes',this.value)"
+          onkeydown="if(event.key==='Enter')this.blur()" />
+      </td>
+      <td><button class="btn btn-sm btn-red" onclick="deletePlaybookLead('${l.id}')">✕</button></td>
+    </tr>`).join('');
+}
+
+async function updatePlaybookLead(id, field, value) {
+  try {
+    await fetch('/api/admin/playbook-leads/' + id, {
+      method: 'PATCH',
+      headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: value }),
+    });
+    if (field === 'status') { toast('Status updated ✓'); loadPlaybookLeads(); }
+  } catch(e) { toast('Update failed'); }
+}
+
+async function deletePlaybookLead(id) {
+  if (!confirm('Remove this playbook lead?')) return;
+  try {
+    await fetch('/api/admin/playbook-leads/' + id, { method: 'DELETE', headers: { 'x-admin-key': adminKey } });
+    toast('Removed ✓'); loadPlaybookLeads();
   } catch(e) { toast('Failed'); }
 }
 
