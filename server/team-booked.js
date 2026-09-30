@@ -15,6 +15,8 @@ const TEAM = [
   { key: 'aidan', label: 'Aidan', match: /\baidan\b|aidan[._-]|adub7k/i },
 ];
 
+const { bucketLeadSource } = require('./lead-source');
+
 const DEAD = ['cancelled', 'canceled', 'declined', 'no-show'];
 
 const dayBefore = (ymd) => { const d = new Date(ymd + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
@@ -33,8 +35,32 @@ function vehicleOf(a) {
   return [v.year, v.make, v.model].filter(Boolean).join(' ');
 }
 
-function teamBooked({ appointments = [], accounts = [], rate = 0, now = new Date() } = {}) {
+// How cold the lead was: match the job to the EARLIEST lead from the same
+// customer (by customerId, else last-10 phone) that came in on or before the
+// booking, and measure lead-in → booked. Same earliest-lead rule the Revenue
+// tab uses for "bookings by lead source".
+function leadMatcher(leads, customers) {
+  const last10 = p => { const d = String(p || '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : ''; };
+  const leadAt = l => l.createdAt || l.created_at || l.firstContactAt || '';
+  const byCust = new Map(), byPhone = new Map();
+  [...leads].filter(l => leadAt(l)).sort((a, b) => String(leadAt(a)).localeCompare(String(leadAt(b)))).forEach(l => {
+    if (l.customerId && !byCust.has(l.customerId)) byCust.set(l.customerId, l);
+    const p = last10(l.phone); if (p && !byPhone.has(p)) byPhone.set(p, l);
+  });
+  const custById = new Map(customers.map(c => [c.id, c]));
+  return (a) => {
+    const cust = a.customerId ? custById.get(a.customerId) : null;
+    const lead = (a.customerId && byCust.get(a.customerId)) || byPhone.get(last10(a.customerPhone || (cust && cust.phone))) || null;
+    const booked = String(a.createdAt || '');
+    if (!lead || !booked || String(leadAt(lead)) > booked) return null;
+    const days = Math.max(0, Math.floor((Date.parse(booked) - Date.parse(leadAt(lead))) / 86400000));
+    return { leadAt: String(leadAt(lead)).slice(0, 10), daysCold: isFinite(days) ? days : null, source: bucketLeadSource(lead.source || lead.channel || 'call').label };
+  };
+}
+
+function teamBooked({ appointments = [], accounts = [], leads = [], customers = [], rate = 0, now = new Date() } = {}) {
   const accountsById = new Map(accounts.map(a => [a.id, a]));
+  const leadFor = leadMatcher(leads, customers);
   const today = now.toISOString().slice(0, 10);
   const thisMonth = today.slice(0, 7);
   const money = a => Number(a.price) || 0;
@@ -61,6 +87,8 @@ function teamBooked({ appointments = [], accounts = [], rate = 0, now = new Date
       // month; booked = entered this month (any live status).
       completedThisMonth: done && String(a.date || '').startsWith(thisMonth),
       bookedThisMonth: String(a.createdAt || '').slice(0, 7) === thisMonth,
+      // Lead it came from (null when the customer never came in as a lead).
+      ...(leadFor(a) || { leadAt: null, daysCold: null, source: null }),
     });
   });
   jobs.sort((x, y) => (y.date + y.time).localeCompare(x.date + x.time));

@@ -53,4 +53,26 @@ assert.strictEqual(empty.jobs.length, 0);
 assert.strictEqual(empty.monthMultiple, null);
 assert.strictEqual(empty.monthCompletedMultiple, null);
 
+// How cold the lead was: earliest matching lead (customerId, else phone) that
+// came in before the booking; days = lead-in → booked.
+const cold = teamBooked({
+  now, accounts,
+  customers: [{ id: 'c1', phone: '(505) 555-0101' }],
+  leads: [
+    { id: 'L1', customerId: 'c1', source: 'meta', createdAt: '2026-09-02T09:00:00Z' },
+    { id: 'L1b', customerId: 'c1', source: 'website', createdAt: '2026-09-08T09:00:00Z' }, // later lead — earliest wins
+    { id: 'L2', phone: '505-555-0202', source: 'Google Ads', createdAt: '2026-09-09T18:00:00Z' },
+    { id: 'L3', phone: '5055550303', source: 'meta', createdAt: '2026-09-20T09:00:00Z' },   // came in AFTER booking — not a match
+  ],
+  appointments: [
+    appt({ id: 'j1', createdBy: 'acc-bryce', customerId: 'c1', price: 600, date: '2026-09-25', createdAt: '2026-09-14T10:00:00Z' }),
+    appt({ id: 'j2', createdBy: 'acc-aidan', customerPhone: '+1 505 555 0202', price: 300, date: '2026-09-12', createdAt: '2026-09-10T08:00:00Z' }),
+    appt({ id: 'j3', createdBy: 'acc-aidan', customerPhone: '5055550303', price: 200, date: '2026-09-12', createdAt: '2026-09-10T08:00:00Z' }),
+  ],
+});
+const byId = Object.fromEntries(cold.jobs.map(j => [j.id, j]));
+assert.deepStrictEqual([byId.j1.daysCold, byId.j1.source, byId.j1.leadAt], [12, 'Meta ads', '2026-09-02']);
+assert.deepStrictEqual([byId.j2.daysCold, byId.j2.source], [0, 'Google']);
+assert.deepStrictEqual([byId.j3.daysCold, byId.j3.source], [null, null]);
+
 console.log('team-booked: all assertions passed');

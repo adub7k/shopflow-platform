@@ -2969,6 +2969,23 @@ function openTeamReport() {
   const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
   const upcoming = jobs.filter(j => j.bookedThisMonth && j.state !== 'completed');
 
+  // How cold each lead was when we booked it (lead came in → we booked it).
+  const withLead = jobs.filter(j => j.daysCold != null);
+  const coldAge = n => n === 0 ? 'Same day' : n === 1 ? '1 day' : n + ' days';
+  const avgCold = withLead.length ? Math.round(withLead.reduce((s2, j) => s2 + j.daysCold, 0) / withLead.length) : null;
+  const cold3 = withLead.filter(j => j.daysCold >= 3);
+  const coldBuckets = [['Same day', 0, 0], ['1–2 days', 1, 2], ['3–7 days', 3, 7], ['8–30 days', 8, 30], ['Over 30 days', 31, 1e9]]
+    .map(([label, lo, hi]) => { const l = withLead.filter(j => j.daysCold >= lo && j.daysCold <= hi); return { label, n: l.length, v: l.reduce((s2, j) => s2 + j.price, 0) }; })
+    .filter(b => b.n);
+  const coldMax = Math.max(...coldBuckets.map(b => b.v), 1);
+  const srcCounts = withLead.reduce((m, j) => { m[j.source] = (m[j.source] || 0) + 1; return m; }, {});
+  const srcLine = Object.entries(srcCounts).sort((a, b) => b[1] - a[1]).map(([k, n]) => `<b>${esc(k)}</b> ${n}`).join(' · ');
+  const coldBlock = withLead.length ? `
+    <h2>How cold these leads were when we booked them</h2>
+    <div class="call" style="margin:0 0 12px;">${avgCold != null ? `The average lead was <b>${coldAge(avgCold)} old</b> when we booked it.` : ''}${cold3.length ? ` <b>${$(cold3.reduce((s2, j) => s2 + j.price, 0))}</b> came from ${plural(cold3.length, 'lead')} that sat <b>3+ days</b> — leads that had already gone cold.` : ''}</div>
+    ${coldBuckets.map(b => `<div class="vs"><div class="vl">${b.label} <span class="mut">(${b.n})</span></div><div class="vb"><div style="width:${Math.max(2, b.v / coldMax * 100)}%;background:${accent};opacity:${b.label === 'Same day' ? .45 : b.label === '1–2 days' ? .65 : 1};"></div></div><div class="vv">${$(b.v)}</div></div>`).join('')}
+    <div class="mut" style="margin-top:6px;">Days from when the lead first came in to when we booked the job${srcLine ? ` · Where they came from: ${srcLine}` : ''}</div>` : '';
+
   // Fee vs completed (vs booked) — the comparison that has to be obvious.
   const barMax = Math.max(rate, done, booked, 1);
   const bar = (label, v, color, strong) => `<div class="vs"><div class="vl">${strong ? '<b>' + label + '</b>' : label}</div><div class="vb"><div style="width:${Math.max(v ? 2 : 0, v / barMax * 100)}%;background:${color};"></div></div><div class="vv"${strong ? ` style="color:${accent};"` : ''}>${$(v)}</div></div>`;
@@ -2989,15 +3006,16 @@ function openTeamReport() {
 
   const row = j => `<tr>
       <td>${fmtD(j.date)}</td>
-      <td><b>${esc(j.customer || 'Customer')}</b><div class="mut">${esc([j.vehicle, j.service].filter(Boolean).join(' · '))}</div></td>
+      <td><b>${esc(j.customer || 'Customer')}</b><div class="mut">${esc([j.vehicle, j.service].filter(Boolean).join(' · '))}</div>${j.source ? `<div class="mut">${esc(j.source)} lead · came in ${fmtD(j.leadAt)}</div>` : ''}</td>
+      <td>${j.daysCold == null ? '<span class="mut">—</span>' : `<span class="age${j.daysCold >= 3 ? ' hot' : ''}">${j.daysCold === 0 ? 'Same day' : coldAge(j.daysCold) + ' cold'}</span>`}</td>
       <td>${esc(j.whoLabel)}</td>
       <td class="r">${$(j.price)}</td>
     </tr>`;
   const table = (title, list, totalLabel) => list.length ? `
     <h2>${title}</h2>
-    <table><thead><tr><th>Job date</th><th>Customer / job</th><th>Booked by</th><th class="r">Value</th></tr></thead>
+    <table><thead><tr><th>Job date</th><th>Customer / job</th><th>Lead age when booked</th><th>Booked by</th><th class="r">Value</th></tr></thead>
       <tbody>${list.map(row).join('')}</tbody>
-      <tfoot><tr><td colspan="3">${totalLabel}</td><td class="r">${$(list.reduce((s2, j) => s2 + j.price, 0))}</td></tr></tfoot>
+      <tfoot><tr><td colspan="4">${totalLabel}</td><td class="r">${$(list.reduce((s2, j) => s2 + j.price, 0))}</td></tr></tfoot>
     </table>` : '';
 
   const w = window.open('', '_blank');
@@ -3032,6 +3050,8 @@ function openTeamReport() {
     td{padding:8px 6px;border-bottom:1px solid #EEF2F0;vertical-align:top;}
     .r{text-align:right;font-weight:700;}
     tfoot td{font-weight:800;border-top:2px solid #141F1A;border-bottom:none;font-size:14px;}
+    .age{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:100px;background:#EEF2F0;color:#5C6B63;white-space:nowrap;}
+    .age.hot{background:#FDEBD8;color:#9A4A06;}
     .note{font-size:12px;color:#5C6B63;margin-top:18px;line-height:1.55;background:#FAFBFA;border:1px solid #EEF2F0;border-radius:8px;padding:10px 12px;}
     .foot{margin-top:28px;padding-top:14px;border-top:1px solid #E5EAE7;font-size:11.5px;color:#93A29A;text-align:center;}
     @media (max-width:560px){.hero .v{font-size:42px;}.vs{grid-template-columns:110px 1fr 70px;font-size:12.5px;}}
@@ -3052,12 +3072,14 @@ function openTeamReport() {
 
     ${feeBlock}
 
+    ${coldBlock}
+
     ${people.length ? `<h2>Who brought it in</h2><div class="kpis">${personCards}</div>` : ''}
 
     ${table('Completed this month', jobs.filter(j => j.completedThisMonth).sort((a, b) => a.date.localeCompare(b.date)), 'Completed work from ShopFlow')}
     ${table('Booked this month, still coming up', upcoming.sort((a, b) => a.date.localeCompare(b.date)), 'Still on your calendar')}
 
-    <div class="note">This report covers <b>${esc(monthName)} only</b> and counts <b>only</b> appointments entered under ${esc(names)}'s own logins. Jobs you or your staff booked, online bookings, walk-ins and the AI receptionist are <b>not</b> included. <b>Completed</b> = jobs marked done with a date this month. <b>Booked</b> = every job we put on your calendar this month, done or not. Only jobs booked <b>ahead of time</b> count — past jobs logged after they happened are left out, as are cancelled and no-show jobs. Values are the booked price of each job.</div>
+    <div class="note">This report covers <b>${esc(monthName)} only</b> and counts <b>only</b> appointments entered under ${esc(names)}'s own logins. Jobs you or your staff booked, online bookings, walk-ins and the AI receptionist are <b>not</b> included. <b>Completed</b> = jobs marked done with a date this month. <b>Booked</b> = every job we put on your calendar this month, done or not. Only jobs booked <b>ahead of time</b> count — past jobs logged after they happened are left out, as are cancelled and no-show jobs. <b>Lead age</b> = days from when the customer first came in as a lead to when we booked the job. Values are the booked price of each job.</div>
     <div class="foot">Prepared ${esc(now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))} · ShopFlow — your growth engine</div>
     <script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
   </body></html>`);

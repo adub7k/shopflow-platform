@@ -152,7 +152,7 @@ function shopInsights(shop, db = getShopDb(shop.id)) {
     quota: { monthly: quota, pct: quota > 0 ? Math.round(revenueThisMonth / quota * 100) : null },
     billing: { rate: shopRate(shop) },
     // Only what Bryce + Aidan booked on this shop's calendar (team-booked.js).
-    team: teamBooked({ appointments, accounts: master.get('accounts').value() || [], rate: shopRate(shop), now }),
+    team: teamBooked({ appointments, leads, customers, accounts: master.get('accounts').value() || [], rate: shopRate(shop), now }),
   };
 
   return {

@@ -4,6 +4,7 @@ const { requireAuth, requireRole } = require('../middleware');
 const { sendTest, sendQuoteEmail, shopReplyTo } = require('../email');
 const { resolveProfile } = require('../industries');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, shopOwnNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, deleteUpload, computeTax, computeApptCost } = require('../db');
+const { bucketLeadSource } = require('../lead-source');
 const { ensureQuoteCustomer } = require('../quotes-core');
 const objections = require('../objections');
 
@@ -717,18 +718,6 @@ router.delete('/api/shop/expenses/:id', requireAuth, requireRole('full'), shopRo
 // appointment's source. Raw values are bucketed into a short list of channels
 // so the Revenue tab reads as "Phone call / Meta ads / Website…" instead of
 // a dozen spellings.
-function bucketLeadSource(raw) {
-  const s = String(raw || '').toLowerCase().trim();
-  if (!s || ['seed', 'crm', 'manual', 'estimate', 'direct'].includes(s)) return { key: 'direct', label: 'Direct / manual' };
-  if (/\b(meta|facebook|fb|instagram|ig)\b/.test(s))                    return { key: 'meta', label: 'Meta ads' };
-  if (/\b(google|gmb|lsa|maps)\b/.test(s))                              return { key: 'google', label: 'Google' };
-  if (/\b(call|phone|missed|voicemail|receptionist|ai-voice)\b/.test(s)) return { key: 'call', label: 'Phone call' };
-  if (/\b(booking-page|booking|online)\b/.test(s))                      return { key: 'online', label: 'Online booking' };
-  if (/\b(website|web|form|landing)\b/.test(s))                         return { key: 'website', label: 'Website' };
-  if (/\breferral\b/.test(s))                                            return { key: 'referral', label: 'Referral' };
-  if (/\bwalk/.test(s))                                                   return { key: 'walk-in', label: 'Walk-in' };
-  return { key: s.slice(0, 30), label: s.charAt(0).toUpperCase() + s.slice(1, 30) };
-}
 function apptLeadSourceResolver(h) {
   const leads = h.getAll('leads'), customers = h.getAll('customers');
   const last10 = (p) => { const d = String(p || '').replace(/\D/g, ''); return d.length >= 10 ? d.slice(-10) : ''; };
