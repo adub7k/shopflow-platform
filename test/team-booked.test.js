@@ -37,6 +37,9 @@ assert.strictEqual(aidan.bookedValue, 400);
 assert.strictEqual(r.shopMonthRevenue, 2200);              // 900 + 100 + 700 + 500
 assert.strictEqual(r.shareOfMonthRevenue, 45);             // 1000 / 2200
 assert.strictEqual(r.monthMultiple, 1.4);                  // 1400 / 1000
+assert.strictEqual(r.monthCompletedMultiple, 1);           // 1000 / 1000
+assert.deepStrictEqual(r.jobs.filter(j => j.completedThisMonth).map(j => j.id).sort(), ['b1', 'gone']);
+assert.deepStrictEqual(r.jobs.filter(j => j.bookedThisMonth).map(j => j.id).sort(), ['b1', 'b2', 'gone']);
 assert.strictEqual(r.months.length, 6);
 assert.deepStrictEqual(r.months[5], { month: '2026-09', booked: 1400, completed: 1000, shopRevenue: 2200 });
 assert.strictEqual(r.months[4].booked, 300);
@@ -45,5 +48,6 @@ assert.strictEqual(r.months[4].booked, 300);
 const empty = teamBooked({ appointments: [appointments[5]], accounts, rate: 0, now });
 assert.strictEqual(empty.jobs.length, 0);
 assert.strictEqual(empty.monthMultiple, null);
+assert.strictEqual(empty.monthCompletedMultiple, null);
 
 console.log('team-booked: all assertions passed');

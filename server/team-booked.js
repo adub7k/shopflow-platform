@@ -48,6 +48,10 @@ function teamBooked({ appointments = [], accounts = [], rate = 0, now = new Date
       customer: a.customerName || '', vehicle: vehicleOf(a), service: a.service || '',
       price: r2(money(a)), status: a.status || '',
       state: done ? 'completed' : ((a.date || '') >= today ? 'upcoming' : 'open'),
+      // The report is this-month only: completed = job done with a date this
+      // month; booked = entered this month (any live status).
+      completedThisMonth: done && String(a.date || '').startsWith(thisMonth),
+      bookedThisMonth: String(a.createdAt || '').slice(0, 7) === thisMonth,
     });
   });
   jobs.sort((x, y) => (y.date + y.time).localeCompare(x.date + x.time));
@@ -97,7 +101,9 @@ function teamBooked({ appointments = [], accounts = [], rate = 0, now = new Date
     shopMonthRevenue, shopTotalRevenue,
     shareOfMonthRevenue: pct(totals.monthCompletedValue, shopMonthRevenue),
     shareOfTotalRevenue: pct(totals.completedValue, shopTotalRevenue),
-    // Booked this month ÷ monthly fee — "every $1 you pay us, we put $N on your calendar".
+    // Completed this month ÷ monthly fee — the headline "every $1 you pay us" line.
+    monthCompletedMultiple: multiple(totals.monthCompletedValue),
+    // Booked this month ÷ monthly fee — the secondary number.
     monthMultiple: multiple(totals.monthBookedValue),
   };
 }
