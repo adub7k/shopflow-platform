@@ -5,7 +5,8 @@
 // as a ShopFlow-team booking when the login that entered it belongs to a team
 // member (matched by account name/email, falling back to the snapshot name so
 // a deleted login keeps its history). Public-page, AI-voice and owner/staff
-// bookings never count — this is ONLY what the team booked.
+// bookings never count — this is ONLY what the team booked. Past jobs entered
+// after the fact never count either — only jobs booked ahead of their date.
 //
 // Pure function (no db access) so the numbers are unit-testable.
 
@@ -15,6 +16,8 @@ const TEAM = [
 ];
 
 const DEAD = ['cancelled', 'canceled', 'declined', 'no-show'];
+
+const dayBefore = (ymd) => { const d = new Date(ymd + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - 1); return d.toISOString().slice(0, 10); };
 
 function teamMemberFor(appt, accountsById) {
   if (!appt || !appt.createdBy) return null;
@@ -41,6 +44,12 @@ function teamBooked({ appointments = [], accounts = [], rate = 0, now = new Date
   appointments.forEach(a => {
     const who = teamMemberFor(a, accountsById);
     if (!who || DEAD.includes(a.status)) return;
+    // Only real bookings count: the job must have been booked AHEAD (job date
+    // on or after the day it was entered). Old/past jobs logged after the fact
+    // under a team login are skipped. One day of slack because createdAt is
+    // UTC while the job date is shop-local (evening entries roll over in UTC).
+    const entered = String(a.createdAt || '').slice(0, 10);
+    if (!entered || !a.date || a.date < dayBefore(entered)) return;
     const done = a.status === 'done';
     jobs.push({
       id: a.id, who: who.key, whoLabel: who.label,

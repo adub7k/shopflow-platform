@@ -3057,7 +3057,7 @@ function openTeamReport() {
     ${table('Completed this month', jobs.filter(j => j.completedThisMonth).sort((a, b) => a.date.localeCompare(b.date)), 'Completed work from ShopFlow')}
     ${table('Booked this month, still coming up', upcoming.sort((a, b) => a.date.localeCompare(b.date)), 'Still on your calendar')}
 
-    <div class="note">This report covers <b>${esc(monthName)} only</b> and counts <b>only</b> appointments entered under ${esc(names)}'s own logins. Jobs you or your staff booked, online bookings, walk-ins and the AI receptionist are <b>not</b> included. <b>Completed</b> = jobs marked done with a date this month. <b>Booked</b> = every job we put on your calendar this month, done or not. Cancelled and no-show jobs are left out. Values are the booked price of each job.</div>
+    <div class="note">This report covers <b>${esc(monthName)} only</b> and counts <b>only</b> appointments entered under ${esc(names)}'s own logins. Jobs you or your staff booked, online bookings, walk-ins and the AI receptionist are <b>not</b> included. <b>Completed</b> = jobs marked done with a date this month. <b>Booked</b> = every job we put on your calendar this month, done or not. Only jobs booked <b>ahead of time</b> count — past jobs logged after they happened are left out, as are cancelled and no-show jobs. Values are the booked price of each job.</div>
     <div class="foot">Prepared ${esc(now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))} · ShopFlow — your growth engine</div>
     <script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
   </body></html>`);
