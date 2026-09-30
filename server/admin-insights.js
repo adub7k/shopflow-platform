@@ -2,7 +2,8 @@
 // One computation shared by the admin shop profile, the client-shop list and
 // the HQ overview, so every admin screen reads the same numbers: lead funnel,
 // revenue, forecast, AI-receptionist recovery, quota pace, bi-weekly window.
-const { getShopDb } = require('./db');
+const { getShopDb, master } = require('./db');
+const { teamBooked } = require('./team-booked');
 
 // A shop's rate is ONLY its editable monthlyRate — no tier fallback. A shop
 // with no rate set contributes $0 until one is entered in the admin UI.
@@ -150,6 +151,8 @@ function shopInsights(shop, db = getShopDb(shop.id)) {
     estimates: { open: quotes.filter(q => q.status === 'sent').length, approved: wonQuotes.length, total: quotes.length },
     quota: { monthly: quota, pct: quota > 0 ? Math.round(revenueThisMonth / quota * 100) : null },
     billing: { rate: shopRate(shop) },
+    // Only what Bryce + Aidan booked on this shop's calendar (team-booked.js).
+    team: teamBooked({ appointments, accounts: master.get('accounts').value() || [], rate: shopRate(shop), now }),
   };
 
   return {

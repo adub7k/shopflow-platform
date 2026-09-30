@@ -1593,6 +1593,7 @@ function renderDrawer(d) {
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-green btn-sm" onclick="openClientReport()">📄 Client report</button>
           <button class="btn btn-green btn-sm" onclick="openClientReport('biweekly')">📄 Bi-weekly report</button>
+          <button class="btn btn-green btn-sm" onclick="openTeamReport()" title="Only jobs Bryce or Aidan booked">📄 What we booked</button>
           <a href="/shop/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Open App</a>
           <a href="/book/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ ${s.bookingMode==='booking'?'Booking page':'Lead page'}</a>
           <button class="btn btn-outline btn-sm" onclick="resetPassword('${shop.id}','${esc(shop.email||'')}')">🔑 Reset</button>
@@ -2940,6 +2941,133 @@ function openClientReport(period) {
     <div class="note">solid — booked so far this month · shaded — where the month is pacing</div>` : ''}
 
     <div class="foot">Prepared ${esc(new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))} · ShopFlow — your growth engine</div>
+    <script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
+  </body></html>`);
+  w.document.close();
+}
+
+// ── "What we booked" report ──────────────────────────────────────────────────
+// Client-facing proof of what the ShopFlow team (Bryce + Aidan) personally put
+// on this shop's calendar — ONLY appointments entered under their logins
+// (server/team-booked.js). Every job is itemized so the number can't be argued.
+function openTeamReport() {
+  const d = window._profileData; if (!d) { toast('Open a shop first'); return; }
+  const shop = d.shop, s = d.settings || {}, T = (d.insights || {}).team;
+  if (!T || !T.jobs || !T.jobs.length) { toast('No bookings by Bryce or Aidan on this shop yet'); return; }
+  const accent = s.accentColor || '#065F41';
+  const t = T.totals, rate = Number(shop.monthlyRate) || T.rate || 0;
+  const now = new Date();
+  const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const mShort = k => new Date(k + '-15T12:00:00').toLocaleDateString('en-US', { month: 'short' });
+  const fmtD = ds => ds ? new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—';
+  const $ = n => '$' + Math.round(n || 0).toLocaleString('en-US');
+  const people = T.byPerson.filter(p => p.bookedJobs);
+  const names = people.map(p => p.label).join(' & ') || 'ShopFlow';
+
+  // Fee vs booked this month — the one comparison that has to be obvious.
+  const feeMax = Math.max(rate, t.monthBookedValue, 1);
+  const feeBar = rate > 0 ? `
+    <h2>This month: what you paid vs. what we booked</h2>
+    <div class="vs"><div class="vl">Your ShopFlow fee</div><div class="vb"><div style="width:${Math.max(2, rate / feeMax * 100)}%;background:#C9D2CD;"></div></div><div class="vv">${$(rate)}</div></div>
+    <div class="vs"><div class="vl"><b>We booked you</b></div><div class="vb"><div style="width:${Math.max(2, t.monthBookedValue / feeMax * 100)}%;background:${accent};"></div></div><div class="vv" style="color:${accent};">${$(t.monthBookedValue)}</div></div>
+    ${T.monthMultiple != null ? `<div class="call">For every <b>$1</b> you paid us this month, we put <b>$${T.monthMultiple >= 10 ? Math.round(T.monthMultiple) : T.monthMultiple.toFixed(2)}</b> of work on your calendar.</div>` : ''}` : '';
+
+  const maxM = Math.max(...T.months.map(m => m.booked || 0), 1);
+  const monthRows = T.months.map(m => `<div class="mo">
+      <div class="ml">${mShort(m.month)}</div>
+      <div class="mb"><div style="width:${m.booked / maxM * 100}%;background:${accent};"></div></div>
+      <div class="mv">${m.booked ? $(m.booked) : '<span style="color:#B7C2BC;">—</span>'}</div>
+      <div class="mv mut">${m.completed ? $(m.completed) + ' done' : ''}</div>
+    </div>`).join('');
+
+  const personCards = people.map(p => `<div class="kpi">
+      <div class="l">Booked by ${esc(p.label)}</div>
+      <div class="v">${$(p.bookedValue)}</div>
+      <div class="s">${p.bookedJobs} job${p.bookedJobs === 1 ? '' : 's'} · ${$(p.completedValue)} completed${p.upcomingValue ? ' · ' + $(p.upcomingValue) + ' coming up' : ''}</div>
+    </div>`).join('');
+
+  const pill = st => st === 'completed' ? '<span class="pill ok">Completed</span>' : st === 'upcoming' ? '<span class="pill up">Coming up</span>' : '<span class="pill">Booked</span>';
+  const jobRows = T.jobs.map(j => `<tr>
+      <td>${fmtD(j.date)}</td>
+      <td><b>${esc(j.customer || 'Customer')}</b><div class="mut">${esc([j.vehicle, j.service].filter(Boolean).join(' · '))}</div></td>
+      <td>${esc(j.whoLabel)}</td>
+      <td>${pill(j.state)}</td>
+      <td class="r">${$(j.price)}</td>
+    </tr>`).join('');
+
+  const w = window.open('', '_blank');
+  w.document.write(`<!DOCTYPE html><html><head><title>${esc(shop.shopName)} — What ShopFlow Booked</title><style>
+    body{font-family:-apple-system,'SF Pro Text','Segoe UI',sans-serif;color:#141F1A;max-width:760px;margin:0 auto;padding:36px 26px;font-variant-numeric:tabular-nums;}
+    .hd{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:6px;}
+    h1{font-size:22px;letter-spacing:-.02em;margin:0;}
+    .month{color:#93A29A;font-size:13px;font-weight:600;}
+    .sub{color:#5C6B63;font-size:13px;margin:4px 0 22px;}
+    .hero{background:${accent};color:#fff;border-radius:16px;padding:26px 26px 22px;margin-bottom:14px;}
+    .hero .l{font-size:12px;text-transform:uppercase;letter-spacing:.08em;opacity:.85;font-weight:700;}
+    .hero .v{font-size:56px;font-weight:800;letter-spacing:-.04em;line-height:1;margin:8px 0 10px;}
+    .hero .m{font-size:14px;opacity:.95;line-height:1.5;}
+    .split{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:rgba(255,255,255,.25);border-radius:10px;overflow:hidden;margin-top:18px;}
+    .split>div{background:${accent};padding:10px 12px;}
+    .split .n{font-size:20px;font-weight:800;}
+    .split .t{font-size:11px;opacity:.85;text-transform:uppercase;letter-spacing:.05em;font-weight:700;}
+    .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;margin-bottom:8px;}
+    .kpi{border:1px solid #E5EAE7;border-radius:10px;padding:12px 14px;}
+    .kpi .l{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#93A29A;font-weight:700;}
+    .kpi .v{font-size:24px;font-weight:800;margin-top:3px;}
+    .kpi .s{font-size:11.5px;color:#5C6B63;margin-top:2px;}
+    h2{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:#5C6B63;margin:26px 0 10px;border-bottom:2px solid ${accent};padding-bottom:5px;}
+    .vs{display:grid;grid-template-columns:130px 1fr 90px;gap:10px;align-items:center;margin:8px 0;font-size:14px;}
+    .vb{height:22px;background:#F2F5F3;border-radius:6px;overflow:hidden;}.vb>div{height:100%;border-radius:6px;}
+    .vv{text-align:right;font-weight:800;font-size:16px;}
+    .call{margin-top:12px;background:#F2F5F3;border-left:4px solid ${accent};padding:12px 14px;border-radius:6px;font-size:15px;}
+    .mo{display:grid;grid-template-columns:40px 1fr 80px 100px;gap:10px;align-items:center;font-size:13px;margin:5px 0;}
+    .mb{height:14px;background:#F2F5F3;border-radius:4px;overflow:hidden;}.mb>div{height:100%;}
+    .mv{text-align:right;font-weight:700;}
+    .mut{color:#93A29A;font-weight:500;font-size:12px;}
+    table{width:100%;border-collapse:collapse;font-size:13px;}
+    th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#93A29A;padding:6px;border-bottom:1px solid #E5EAE7;}
+    td{padding:8px 6px;border-bottom:1px solid #EEF2F0;vertical-align:top;}
+    .r{text-align:right;font-weight:700;}
+    tfoot td{font-weight:800;border-top:2px solid #141F1A;border-bottom:none;font-size:14px;}
+    .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:100px;background:#EEF2F0;color:#5C6B63;white-space:nowrap;}
+    .pill.ok{background:#DCF3E6;color:#0B6B3A;}.pill.up{background:#E4EEFB;color:#1F4E8C;}
+    .note{font-size:12px;color:#5C6B63;margin-top:18px;line-height:1.55;background:#FAFBFA;border:1px solid #EEF2F0;border-radius:8px;padding:10px 12px;}
+    .foot{margin-top:28px;padding-top:14px;border-top:1px solid #E5EAE7;font-size:11.5px;color:#93A29A;text-align:center;}
+    @media (max-width:560px){.hero .v{font-size:42px;}.split{grid-template-columns:1fr;}.vs{grid-template-columns:90px 1fr 70px;}.mo{grid-template-columns:34px 1fr 70px;}.mo .mut{display:none;}}
+    @media print{body{padding:0;}tr{break-inside:avoid;}}
+  </style></head><body>
+    <div class="hd"><h1>${esc(shop.shopName)}</h1><span class="month">${esc(monthName)}</span></div>
+    <div class="sub">What ShopFlow booked for you — only jobs ${esc(names)} personally put on your calendar</div>
+
+    <div class="hero">
+      <div class="l">Work we booked for you</div>
+      <div class="v">${$(t.bookedValue)}</div>
+      <div class="m">${t.bookedJobs} job${t.bookedJobs === 1 ? '' : 's'} booked by ${esc(names)}${T.shareOfTotalRevenue != null && t.completedValue ? ` · <b>${T.shareOfTotalRevenue}% of all the revenue</b> you've closed in ShopFlow` : ''}</div>
+      <div class="split">
+        <div><div class="t">Completed</div><div class="n">${$(t.completedValue)}</div></div>
+        <div><div class="t">Still coming up</div><div class="n">${$(t.upcomingValue)}</div></div>
+        <div><div class="t">Booked this month</div><div class="n">${$(t.monthBookedValue)}</div></div>
+      </div>
+    </div>
+
+    ${feeBar}
+
+    ${T.shareOfMonthRevenue != null && t.monthCompletedValue ? `<div class="call" style="margin-top:14px;"><b>${T.shareOfMonthRevenue}%</b> of your completed revenue this month (${$(t.monthCompletedValue)} of ${$(T.shopMonthRevenue)}) came from jobs we booked.</div>` : ''}
+
+    ${people.length > 1 ? `<h2>Who booked it</h2><div class="kpis">${personCards}</div>` : ''}
+
+    <h2>Booked by month</h2>
+    ${monthRows}
+    <div class="mut" style="margin-top:6px;">Bar = work we booked that month (by the day we booked it) · right = what's already been completed</div>
+
+    <h2>Every job we booked</h2>
+    <table><thead><tr><th>Job date</th><th>Customer / job</th><th>Booked by</th><th>Status</th><th class="r">Value</th></tr></thead>
+      <tbody>${jobRows}</tbody>
+      <tfoot><tr><td colspan="4">Total booked by ShopFlow</td><td class="r">${$(t.bookedValue)}</td></tr></tfoot>
+    </table>
+
+    <div class="note">This report counts <b>only</b> appointments entered under ${esc(names)}'s own logins. Jobs you or your staff booked, online bookings, walk-ins and the AI receptionist are <b>not</b> included. Cancelled and no-show jobs are left out. Values are the booked price of each job.</div>
+    <div class="foot">Prepared ${esc(now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }))} · ShopFlow — your growth engine</div>
     <script>window.onload=()=>setTimeout(()=>window.print(),400);<\/script>
   </body></html>`);
   w.document.close();
