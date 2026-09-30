@@ -160,9 +160,13 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const db = tintShop(); const ctx = ctxFor(db);
     const { getMenu } = require('../server/booking');
     const tools = voice.toolsFor(true, voice.voiceConfig(ctx.settings), getMenu(db));
-    check('every tool is strict', tools.every(t => t.strict === true), tools.map(t => t.name + ':' + t.strict).join(','));
+    // API-side strict is OPT-IN since 2026-09-18: the API rejected these schemas as
+    // "Schema is too complex" after ~10s of compile on every call; the server
+    // re-validates every field the model writes instead.
+    check('strict is off by default on every tool', tools.every(t => t.strict === false), tools.map(t => t.name + ':' + t.strict).join(','));
+    check('strict opts in per shop (voiceAI.strictTools)', voice.toolsFor(true, { ...voice.voiceConfig(ctx.settings), strictTools: true }, getMenu(db)).every(t => t.strict === true));
     const cap = tools.find(t => t.name === 'capture_lead');
-    check('capture_lead.serviceId is an enum of menu ids (+null)', JSON.stringify(cap.input_schema.properties.serviceId.enum) === JSON.stringify(['s1', 's2', 's3', 's4', null]));
+    check('capture_lead.serviceId is a nullable enum of menu ids (anyOf form)', JSON.stringify(cap.input_schema.properties.serviceId.anyOf[0].enum) === JSON.stringify(['s1', 's2', 's3', 's4']) && cap.input_schema.properties.serviceId.anyOf[1].type === 'null' && !cap.input_schema.properties.serviceId.enum, JSON.stringify(cap.input_schema.properties.serviceId));
     check('capture_lead.servicesDiscussed items enum = menu ids', JSON.stringify(cap.input_schema.properties.servicesDiscussed.items.enum) === JSON.stringify(['s1', 's2', 's3', 's4']));
     check('no free-text serviceNeeded field remains', !cap.input_schema.properties.serviceNeeded && !!cap.input_schema.properties.otherRequested);
     check('qualification fields present + required', ['goal', 'condition', 'objection'].every(k => cap.input_schema.properties[k] && cap.input_schema.required.includes(k)));
@@ -225,7 +229,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const sys2 = voice.buildSystemPrompt({ ...ctx, callerPhone: '+15550000000', lead: { name: '', phone: '+15550000000' } }, voice.voiceConfig(ctx.settings));
     check('no returning-caller line for a fresh lead', !/RETURNING CALLER/.test(sys2));
     check('gather STT default = deepgram nova-3', voice.voiceConfig(ctx.settings).speechModel === 'deepgram_nova-3');
-    check('model default = claude-opus-5 (env override respected)', process.env.VOICE_AI_MODEL ? voice.MODEL === process.env.VOICE_AI_MODEL : voice.MODEL === 'claude-opus-5', voice.MODEL);
+    // Sonnet 5 since 2026-09-18: time-to-first-word matters more than depth on a live call.
+    check('model default = claude-sonnet-5 (env override respected)', process.env.VOICE_AI_MODEL ? voice.MODEL === process.env.VOICE_AI_MODEL : voice.MODEL === 'claude-sonnet-5', voice.MODEL);
   }
 
   console.log('\n— relay: streamed deltas guarded + spoken at word boundaries —');
@@ -255,8 +260,10 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     voice.__setTestClient({ messages: { create: async (p) => { seen.push(p); if (n++ === 0) { const e = new Error('tools.0.input_schema: unsupported keyword'); e.status = 400; throw e; } return { stop_reason: 'end_turn', content: [{ type: 'text', text: 'What year is the Tacoma?' }], usage: { input_tokens: 5, output_tokens: 5 } }; } } });
     const r = await voice.runTurn(ctx, call, 'ppf on my tacoma');
     check('gather: caller still gets a real reply after a 400', /What year/.test(r.say) && r.end === false, JSON.stringify(r));
-    check('gather: retry stripped strict / effort / cache_control', seen.length === 2 && !seen[1].output_config && seen[1].tools.every(t => t.strict === undefined) && seen[1].system.every(b => !b.cache_control) && seen[0].tools[0].strict === true, JSON.stringify(Object.keys(seen[1])));
-    check('gather: compat flagged in the brain trace', call.voiceAI.compat === true && /compat mode/.test(call.voiceAI.trace[0].compat || ''));
+    // Staged fallback: the first retry drops ONLY `strict`; effort and the
+    // prompt-cache marker survive (losing the cache triples the cost of a call).
+    check('gather: first retry strips only strict — effort + cache kept', seen.length === 2 && seen[0].tools.every(t => 'strict' in t) && seen[1].tools.every(t => t.strict === undefined) && !!seen[1].output_config && seen[1].system.some(b => b.cache_control), JSON.stringify(Object.keys(seen[1])));
+    check('gather: brain trace names the rejected piece + the API reason', call.voiceAI.compat && call.voiceAI.compat.step === 'strict tools' && /served without strict tools/.test(call.voiceAI.trace[0].compat || '') && /unsupported keyword/.test(call.voiceAI.trace[0].compat || ''), JSON.stringify(call.voiceAI.trace[0].compat));
     // Relay path: first stream() rejects with a 400 before any token, second streams.
     const call2 = { id: 'CA10', from: '+15551234567', leadId: 'lead1', voiceAI: voice.initState('relay') };
     const seen2 = []; let m = 0;
@@ -270,7 +277,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
     const s2 = relaySession(ctx, call2);
     await relay.__test.handlePrompt(s2, 'ppf quote please');
     check('relay: reply spoken after a 400 (no "something went wrong")', /what year/.test(spokenText(s2.sent)) && !/something went wrong/.test(spokenText(s2.sent)), spokenText(s2.sent));
-    check('relay: compat retry stripped the new request features', seen2.length === 2 && !seen2[1].output_config && seen2[1].tools.every(t => t.strict === undefined), JSON.stringify(Object.keys(seen2[1])));
+    check('relay: first compat retry strips only strict (staged), effort kept', seen2.length === 2 && seen2[1].tools.every(t => t.strict === undefined) && !!seen2[1].output_config && seen2[1].system.some(b => b.cache_control), JSON.stringify(Object.keys(seen2[1])));
     check('relay: call not ended by the 400', !s2.sent.some(x => x.type === 'end'));
   }
 
