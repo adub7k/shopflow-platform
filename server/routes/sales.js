@@ -147,10 +147,19 @@ function buildLead(b) {
   const existing = b.id ? leads.find({ id: b.id }).value() : null;
 
   const lead = {
+    // Keep fields this form doesn't know about (Google import: website,
+    // rating, placeId…) — the whitelisted fields below still win.
+    ...(existing || {}),
     id:       existing ? existing.id : genId('lead'),
     name,
     contact:  String(b.contact || '').trim(),
     city:     String(b.city || '').trim(),
+    // Territory-map pin. The rep's hub never sends these, so a missing key
+    // keeps what's stored instead of wiping the pin on every rep edit.
+    address:  b.address !== undefined ? String(b.address || '').trim() : (existing?.address || ''),
+    lat:      b.lat !== undefined ? coord(b.lat, 90)  : (existing?.lat ?? null),
+    lng:      b.lng !== undefined ? coord(b.lng, 180) : (existing?.lng ?? null),
+    territory: b.territory !== undefined ? String(b.territory || '').trim().slice(0, 40) : (existing?.territory || ''),
     method:   b.method || 'Instagram DM',
     tool:     b.tool   || 'Nothing / texts',
     status:   b.status || 'contacted',
@@ -306,12 +315,15 @@ function adminSalesPayload() {
   return {
     repName: s.rep.name,
     totals: {
-      leads:    s.leads.length,
+      leads:    s.leads.filter(l => l.status !== 'not-contacted').length,
+      prospects: s.leads.filter(l => l.status === 'not-contacted').length,
       closed:   closed.length,
       pipeline: s.leads.filter(l => ['contacted', 'responded', 'demo'].includes(l.status)).length,
       mrrClosed: closed.reduce((sum, l) => sum + (Number(l.value) || 0), 0),
     },
     leads:    s.leads,
+    plan:     sales().get('plan').value() || null,
+    aiReady:  !!process.env.ANTHROPIC_API_KEY,
     goals:    s.goals,
     todos:    s.todos,
     activity: s.activity,
@@ -372,6 +384,309 @@ router.patch('/api/admin/sales/settings', requireAdmin, salesRoute(async (req, r
   res.json({ ok: true, ...adminSalesPayload() });
 }));
 
+// ── Admin: geocode an address for the territory map ──────────────────────────
+// Proxies OpenStreetMap Nominatim (free, no key) so the request carries a real
+// User-Agent per their usage policy. Results are biased to the ABQ / Rio Rancho
+// / Los Lunas box but not locked to it. Cached in memory — addresses rarely move.
+const GEO_VIEWBOX = '-107.05,35.42,-106.35,34.70'; // W,N,E,S — Rio Rancho down to Los Lunas
+const geoCache = new Map();
+let geoLast = 0;
+router.get('/api/admin/sales/geocode', requireAdmin, async (req, res) => {
+  const q = String(req.query.q || '').trim().slice(0, 200);
+  if (q.length < 3) return res.status(400).json({ ok: false, error: 'Type an address' });
+  const key = q.toLowerCase();
+  if (geoCache.has(key)) return res.json({ ok: true, results: geoCache.get(key) });
+  // Nominatim allows 1 req/s — space ours out rather than get blocked.
+  const wait = geoLast + 1100 - Date.now();
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  geoLast = Date.now();
+  try {
+    const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=5&countrycodes=us'
+      + '&viewbox=' + GEO_VIEWBOX + '&q=' + encodeURIComponent(q);
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'ShopFlowHQ/1.0 (support@shopflowtech.com)', 'Accept-Language': 'en' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return res.status(502).json({ ok: false, error: 'Geocoder unavailable' });
+    const rows = await r.json();
+    const results = (rows || []).map(x => {
+      const a = x.address || {};
+      return {
+        label: x.display_name,
+        lat: Number(x.lat), lng: Number(x.lon),
+        city: a.city || a.town || a.village || a.hamlet || a.county || '',
+      };
+    });
+    geoCache.set(key, results);
+    res.json({ ok: true, results });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: 'Geocoder timed out' });
+  }
+});
+
+// ── Admin: import shops from Google Maps (via Apify) ─────────────────────────
+// Runs Apify's Google Maps Scraper (compass/crawler-google-places) over the
+// metro for detailing / tint / wrap / PPF shops, then adds the ones we don't
+// already have as "Not contacted". Needs APIFY_TOKEN.
+//
+// Apify bills per place scraped (duplicates across search terms count too), so:
+//   • every run has a hard cap (maxItems + maxTotalChargeUsd) the admin picks;
+//   • no Apify-side filters — those are billed extra per place; we filter here;
+//   • the run is remembered in master.sales.importRun, so the preview and the
+//     "Add" click both read the finished dataset (free) instead of re-scraping.
+// Flow: POST …/start → poll GET …/status until done (shows the preview) → POST …/apply.
+const APIFY_ACTOR = 'compass~crawler-google-places';
+const APIFY_PRICE_PER_PLACE = 0.004;   // free-tier price; only used to size the charge cap
+const IMPORT_KINDS = {
+  detailing: { label: 'Detailing',   terms: ['auto detailing', 'ceramic coating'] },
+  tint:      { label: 'Tint & wrap', terms: ['car window tinting', 'car wrap', 'paint protection film'] },
+};
+// Rio Rancho down to Los Lunas / Belen — the search area and the keep-filter.
+const METRO = { south: 34.62, west: -106.98, north: 35.36, east: -106.45 };
+const SKIP_CATEGORIES = /dealer|gas station|car rental|parking|storage|insurance|towing|tire shop|junkyard|salvage|auto parts/i;
+const KEEP_NAMES = /detail|tint|wrap|ppf|ceramic|coating|film|shine|polish|protect/i;
+
+function normName(n) { return String(n || '').toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]/g, ''); }
+function termKind(term) {
+  return Object.keys(IMPORT_KINDS).find(k => IMPORT_KINDS[k].terms.includes(String(term || '').toLowerCase())) || null;
+}
+
+async function apify(pathAndQuery, opts = {}) {
+  const r = await fetch('https://api.apify.com/v2' + pathAndQuery, {
+    method: opts.method || 'GET',
+    headers: { Authorization: 'Bearer ' + process.env.APIFY_TOKEN, 'Content-Type': 'application/json' },
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+    signal: AbortSignal.timeout(30000),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((data.error && data.error.message) || ('Apify HTTP ' + r.status));
+  return data;
+}
+
+// Dataset rows → clean shop records (in-lane, open, inside the metro, one per place).
+function shopsFromItems(items) {
+  const skipped = { closed: 0, offTopic: 0, outside: 0 };
+  const byId = new Map();
+  (items || []).forEach(it => {
+    const loc = it.location || {};
+    if (!it.title || loc.lat == null || loc.lng == null) return;
+    const id = it.placeId || normName(it.title) + ':' + loc.lat.toFixed(4);
+    const kind = termKind(it.searchString);
+    const prev = byId.get(id);
+    if (prev) { if (kind) prev.kinds.add(kind); return; }
+    if (it.permanentlyClosed) { skipped.closed++; return; }
+    if (loc.lat < METRO.south || loc.lat > METRO.north || loc.lng < METRO.west || loc.lng > METRO.east) { skipped.outside++; return; }
+    const cats = [it.categoryName, ...(it.categories || [])].filter(Boolean).join(' | ');
+    if (SKIP_CATEGORIES.test(cats) && !KEEP_NAMES.test(it.title)) { skipped.offTopic++; return; }
+    byId.set(id, {
+      kinds: new Set(kind ? [kind] : []),
+      shop: {
+        placeId: it.placeId || '', name: it.title,
+        address: String(it.address || '').replace(/, (USA|United States)$/, ''),
+        city: it.city || '', lat: loc.lat, lng: loc.lng,
+        contact: it.phone || '', website: it.website || '',
+        rating: it.totalScore || null, reviews: it.reviewsCount || 0,
+        googleCategory: it.categoryName || '',
+      },
+    });
+  });
+  const shops = [...byId.values()].map(({ kinds, shop }) => ({
+    ...shop, category: [...kinds].map(k => IMPORT_KINDS[k].label).join(' + ') || shop.googleCategory,
+  }));
+  return { shops, skipped, rows: (items || []).length };
+}
+
+// Split scraped shops into new vs already-in-the-pipeline.
+function matchShops(shops) {
+  const existing = sales().get('leads').value() || [];
+  const byPlace = new Map(existing.filter(l => l.placeId).map(l => [l.placeId, l]));
+  const byName = new Map(existing.map(l => [normName(l.name), l]));
+  const toAdd = [], matched = [];
+  shops.forEach(sh => {
+    const hit = (sh.placeId && byPlace.get(sh.placeId)) || byName.get(normName(sh.name));
+    if (hit) matched.push({ lead: hit, shop: sh }); else toAdd.push(sh);
+  });
+  return { existing, toAdd, matched };
+}
+
+async function datasetItems(datasetId) {
+  const fields = 'title,placeId,address,city,location,phone,website,totalScore,reviewsCount,permanentlyClosed,categoryName,categories,searchString';
+  const items = [];
+  for (let offset = 0; ; offset += 1000) {
+    const page = await apify(`/datasets/${datasetId}/items?clean=true&format=json&fields=${fields}&limit=1000&offset=${offset}`);
+    items.push(...page);
+    if (page.length < 1000) return items;
+  }
+}
+
+// What the admin panel shows for the remembered run.
+async function importStatus() {
+  const run = sales().get('importRun').value();
+  if (!run) return { ok: true, run: null };
+  if (['READY', 'RUNNING'].includes(run.status)) {
+    const r = (await apify('/actor-runs/' + run.runId)).data || {};
+    sales().get('importRun').assign({ status: r.status || run.status, finishedAt: r.finishedAt || null }).write();
+  }
+  const cur = sales().get('importRun').value();
+  const out = { ok: true, run: { status: cur.status, kinds: cur.kinds, maxPlaces: cur.maxPlaces, startedAt: cur.startedAt, finishedAt: cur.finishedAt || null, appliedAt: cur.appliedAt || null } };
+  if (['READY', 'RUNNING'].includes(cur.status)) {
+    const ds = (await apify('/datasets/' + cur.datasetId).catch(() => ({}))).data || {};
+    out.run.scraped = ds.itemCount || 0;
+    return out;
+  }
+  // Finished (or stopped at the cap / timed out) — preview whatever it got.
+  const { shops, skipped, rows } = shopsFromItems(await datasetItems(cur.datasetId));
+  const { toAdd, matched } = matchShops(shops);
+  Object.assign(out.run, {
+    scraped: rows, found: shops.length, wouldAdd: toAdd.length, alreadyHave: matched.length, skipped,
+    sample: toAdd.slice(0, 12).map(s => ({ name: s.name, city: s.city, category: s.category, rating: s.rating, reviews: s.reviews })),
+  });
+  return out;
+}
+
+router.post('/api/admin/sales/import-places/start', requireAdmin, salesRoute(async (req, res) => {
+  if (!process.env.APIFY_TOKEN) return res.status(400).json({ ok: false, error: 'APIFY_TOKEN is not set on the server.' });
+  const kinds = (Array.isArray(req.body.kinds) ? req.body.kinds : Object.keys(IMPORT_KINDS)).filter(k => IMPORT_KINDS[k]);
+  if (!kinds.length) return res.status(400).json({ ok: false, error: 'Pick at least one kind of shop.' });
+  const prev = sales().get('importRun').value();
+  if (prev && ['READY', 'RUNNING'].includes(prev.status)) return res.status(409).json({ ok: false, error: 'A scrape is already running.' });
+
+  const maxPlaces = Math.min(5000, Math.max(20, parseInt(req.body.maxPlaces, 10) || 900));
+  const terms = kinds.flatMap(k => IMPORT_KINDS[k].terms);
+  const perTerm = Math.max(10, Math.floor(maxPlaces / terms.length));
+  const { south, west, north, east } = METRO;
+  const input = {
+    searchStringsArray: terms,
+    customGeolocation: { type: 'Polygon', coordinates: [[[west, north], [east, north], [east, south], [west, south], [west, north]]] },
+    maxCrawledPlacesPerSearch: perTerm,
+    language: 'en',
+    // Everything below stays at the cheapest setting — extras are billed per place.
+    skipClosedPlaces: false, scrapePlaceDetailPage: false, scrapeContacts: false, includeWebResults: false,
+    maxReviews: 0, maxImages: 0, maxQuestions: 0, scrapeDirectories: false,
+  };
+  // Hard caps: never bill past maxPlaces, whatever the actor does.
+  const chargeCap = Math.max(0.5, +(maxPlaces * APIFY_PRICE_PER_PLACE + 0.05).toFixed(2));
+  try {
+    const run = (await apify(`/acts/${APIFY_ACTOR}/runs?maxItems=${maxPlaces}&maxTotalChargeUsd=${chargeCap}`, { method: 'POST', body: input })).data;
+    sales().set('importRun', {
+      runId: run.id, datasetId: run.defaultDatasetId, status: run.status,
+      kinds, maxPlaces, startedAt: new Date().toISOString(), finishedAt: null, appliedAt: null,
+    }).write();
+    res.json(await importStatus());
+  } catch (e) {
+    res.status(502).json({ ok: false, error: 'Apify: ' + e.message });
+  }
+}));
+
+router.get('/api/admin/sales/import-places/status', requireAdmin, salesRoute(async (req, res) => {
+  try { res.json(await importStatus()); }
+  catch (e) { res.status(502).json({ ok: false, error: 'Apify: ' + e.message }); }
+}));
+
+router.post('/api/admin/sales/import-places/apply', requireAdmin, salesRoute(async (req, res) => {
+  const run = sales().get('importRun').value();
+  if (!run) return res.status(400).json({ ok: false, error: 'Run a scrape first.' });
+  if (['READY', 'RUNNING'].includes(run.status)) return res.status(409).json({ ok: false, error: 'The scrape is still running.' });
+  let shops;
+  try { ({ shops } = shopsFromItems(await datasetItems(run.datasetId))); }
+  catch (e) { return res.status(502).json({ ok: false, error: 'Apify: ' + e.message }); }
+
+  const { existing, toAdd, matched } = matchShops(shops);
+  const leads = sales().get('leads');
+  const now = new Date().toISOString();
+  let enriched = 0;
+  // Fill in blanks on shops we already have — never touch their stage or notes.
+  matched.forEach(({ lead, shop }) => {
+    const fill = {};
+    if (!lead.placeId && shop.placeId) fill.placeId = shop.placeId;
+    if (lead.lat == null && lead.lng == null) { fill.lat = shop.lat; fill.lng = shop.lng; }
+    if (!lead.address) fill.address = shop.address;
+    if (!lead.contact && shop.contact) fill.contact = shop.contact;
+    if (!lead.city && shop.city) fill.city = shop.city;
+    if (!lead.website && shop.website) fill.website = shop.website;
+    if (lead.rating == null && shop.rating != null) { fill.rating = shop.rating; fill.reviews = shop.reviews; }
+    if (Object.keys(fill).length) { leads.find({ id: lead.id }).assign(fill).write(); enriched++; }
+  });
+  const fresh = toAdd.map(sh => ({
+    id: genId('lead'), ...sh,
+    method: 'Cold call', tool: 'Unknown', status: 'not-contacted',
+    plan: 'Unknown', value: 0, followup: '', notes: '', territory: '',
+    source: 'google-maps', log: [],
+    createdAt: now, updatedAt: now, lastContact: null, closedAt: null,
+  }));
+  if (fresh.length) sales().set('leads', [...existing, ...fresh]).write();
+  sales().get('importRun').assign({ appliedAt: now }).write();
+  res.json({ ok: true, added: fresh.length, enriched, ...adminSalesPayload() });
+}));
+
+// ── Admin: prospect profiles — touch log + AI sales intel ───────────────────
+router.post('/api/admin/sales/leads/:id/log', requireAdmin, salesRoute(async (req, res) => {
+  const lead = sales().get('leads').find({ id: req.params.id });
+  if (!lead.value()) return res.status(404).json({ ok: false, error: 'Lead not found' });
+  const text = String(req.body.text || '').trim().slice(0, 2000);
+  if (!text) return res.status(400).json({ ok: false, error: 'Write what happened' });
+  const now = new Date().toISOString();
+  const entry = { id: genId('log'), at: now, type: String(req.body.type || 'note').slice(0, 20), text, by: 'admin' };
+  const patch = { log: [entry, ...(lead.value().log || [])], updatedAt: now };
+  if (entry.type !== 'note') patch.lastContact = now;   // a call/DM/visit is a real touch
+  // First real touch moves a cold prospect into the pipeline.
+  if (entry.type !== 'note' && lead.value().status === 'not-contacted') patch.status = 'contacted';
+  lead.assign(patch).write();
+  res.json({ ok: true, ...adminSalesPayload() });
+}));
+
+// AI work runs in the background (a minute or more); the page polls the sales
+// payload. A job still "running" after this long died with a restart.
+const AI_STALE_MS = 10 * 60 * 1000;
+const running = v => v && v.status === 'running' && Date.now() - Date.parse(v.startedAt) < AI_STALE_MS;
+
+router.post('/api/admin/sales/leads/:id/analyze', requireAdmin, salesRoute(async (req, res) => {
+  const intel = require('../prospect-intel');
+  if (!intel.configured()) return res.status(400).json({ ok: false, error: 'ANTHROPIC_API_KEY is not set on the server.' });
+  const ref = sales().get('leads').find({ id: req.params.id });
+  const lead = ref.value();
+  if (!lead) return res.status(404).json({ ok: false, error: 'Lead not found' });
+  if (running(lead.intel)) return res.status(409).json({ ok: false, error: 'Already analyzing this shop.' });
+  const territory = String(req.body.territory || '').slice(0, 60);
+  const prev = lead.intel && lead.intel.brief ? { brief: lead.intel.brief, sources: lead.intel.sources, finishedAt: lead.intel.finishedAt } : {};
+  ref.assign({ intel: { ...prev, status: 'running', startedAt: new Date().toISOString(), error: null } }).write();
+  res.json({ ok: true, ...adminSalesPayload() });
+
+  intel.analyzeProspect(lead, { territory })
+    .then(r => sales().get('leads').find({ id: lead.id }).assign({ intel: {
+      status: 'done', startedAt: lead.intel?.startedAt, finishedAt: new Date().toISOString(),
+      brief: r.brief, research: r.research, sources: r.sources, model: r.model, error: null,
+    } }).write())
+    .catch(e => {
+      console.error('Prospect analysis error:', e.message);
+      const cur = sales().get('leads').find({ id: lead.id });
+      if (cur.value()) cur.assign({ intel: { ...(cur.value().intel || {}), status: 'error', error: e.message } }).write();
+    });
+}));
+
+router.post('/api/admin/sales/plan', requireAdmin, salesRoute(async (req, res) => {
+  const intel = require('../prospect-intel');
+  if (!intel.configured()) return res.status(400).json({ ok: false, error: 'ANTHROPIC_API_KEY is not set on the server.' });
+  if (running(sales().get('plan').value())) return res.status(409).json({ ok: false, error: 'Already building a game plan.' });
+  // Territories are drawn in the browser, so the page sends each lead's territory.
+  const terr = req.body.territories || {};
+  const rows = (sales().get('leads').value() || [])
+    .filter(l => l.status !== 'closed' && l.status !== 'not-interested')
+    .map(l => ({ lead: l, territory: String(terr[l.id] || '').slice(0, 60) }));
+  if (!rows.length) return res.status(400).json({ ok: false, error: 'No open shops to plan around yet.' });
+  const prev = sales().get('plan').value() || {};
+  const startedAt = new Date().toISOString();
+  sales().set('plan', { ...prev, status: 'running', startedAt, error: null }).write();
+  res.json({ ok: true, ...adminSalesPayload() });
+
+  intel.buildGamePlan(rows)
+    .then(r => sales().set('plan', { status: 'done', startedAt, finishedAt: new Date().toISOString(), ...r, error: null }).write())
+    .catch(e => {
+      console.error('Game plan error:', e.message);
+      sales().set('plan', { ...(sales().get('plan').value() || {}), status: 'error', error: e.message }).write();
+    });
+}));
+
 // ── Admin: reset the rep's PIN (no current PIN needed) ────────────────────────
 router.post('/api/admin/sales/pin/reset', requireAdmin, salesRoute(async (req, res) => {
   const next = String(req.body.newPin || '').trim();
@@ -387,6 +702,10 @@ function planValue(plan) {
   if (plan.includes('99'))  return 99;
   if (plan.includes('200')) return 200;
   return 19.99;
+}
+function coord(v, max) {
+  const n = Number(v);
+  return v === null || v === '' || !Number.isFinite(n) || Math.abs(n) > max ? null : n;
 }
 function cleanTargets(t, fallback) {
   return {

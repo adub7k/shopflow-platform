@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>ShopFlow Admin</title>
+<title>ShopFlow HQ · Admin</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 /* Tokens mirror the client CRM (css/app2.css) so admin feels like the same
@@ -105,6 +105,8 @@ body.admin-sidebar-open #sidebar-backdrop{display:block;}
 .goal-milestones{display:flex;justify-content:space-between;margin-top:8px;}
 .goal-milestone{font-size:10px;color:var(--green-md);opacity:.75;}
 .goal-milestone.reached{color:#fff;font-weight:700;opacity:1;}
+
+.section-label{font-size:11px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.08em;margin:4px 0 10px;}
 
 /* ── Metric cards ── */
 .metrics-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;}
@@ -330,6 +332,101 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 .spinner{display:inline-block;width:16px;height:16px;border:2px solid #e5e7eb;border-top-color:var(--green);border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px;}
 @keyframes spin{to{transform:rotate(360deg)}}
 
+/* ── Territory map ── */
+.map-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.map-seg{display:flex;flex-wrap:wrap;gap:6px;}
+.map-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 11px;border-radius:100px;border:1px solid var(--border-md);background:var(--white);font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;font-family:var(--font);}
+.map-chip.on{color:var(--text);border-color:var(--text);}
+.map-chip .dot{width:9px;height:9px;border-radius:50%;flex:none;}
+.map-chip:not(.on) .dot{opacity:.35;}
+.map-chip .n{color:var(--faint);font-weight:700;}
+.map-layout{display:grid;grid-template-columns:1fr 300px;gap:14px;height:calc(100vh - 190px);min-height:460px;}
+#territory-map{position:relative;z-index:0;border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;background:#eef1ef;}
+#territory-map.placing{cursor:crosshair;}
+#territory-map.placing .leaflet-grab{cursor:crosshair;}
+.map-side{display:flex;flex-direction:column;min-height:0;margin:0;}
+.map-side-head{padding:12px;border-bottom:1px solid var(--border);}
+.map-list{overflow-y:auto;flex:1;}
+.map-row{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;}
+.map-row:hover{background:var(--off);}
+.map-row .dot{width:10px;height:10px;border-radius:50%;margin-top:4px;flex:none;}
+.map-row-name{font-size:13px;font-weight:600;}
+.map-row-meta{font-size:11px;color:var(--muted);margin-top:2px;}
+.map-row-loc{border:none;background:none;font-size:15px;cursor:pointer;padding:2px 4px;border-radius:6px;opacity:.7;}
+.map-row-loc:hover{background:var(--border);opacity:1;}
+.pr-fit-mini{font-size:10px;font-weight:800;padding:1px 6px;border-radius:100px;vertical-align:1px;background:var(--off);color:var(--muted);}
+.pr-fit-mini.hot{background:#FEE4E2;color:#B42318;} .pr-fit-mini.warm{background:#FEF0C7;color:#B54708;}
+.map-row-nopin{font-size:11px;font-weight:700;color:var(--yellow);}
+.map-pin{width:24px;height:24px;border-radius:50%;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.45),0 0 0 1px rgba(0,0,0,.25);transition:transform .12s;}
+.map-pin:hover{transform:scale(1.25);}
+.map-pin.cold{width:18px;height:18px;border-width:2.5px;}
+.map-pin.closed{width:28px;height:28px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:800;}
+.map-pin.hot{box-shadow:0 0 0 3px #F04438,0 2px 8px rgba(240,68,56,.6);}
+.map-banner{background:var(--yellow-lt);color:var(--yellow);border:1px solid #FEDF89;border-radius:var(--radius);padding:9px 12px;font-size:13px;font-weight:600;margin-bottom:10px;display:none;justify-content:space-between;align-items:center;gap:10px;}
+.map-pop{font-family:var(--font);min-width:220px;}
+.map-pop-name{font-size:14px;font-weight:700;margin-bottom:2px;}
+.map-pop-meta{font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.45;}
+.map-pop-notes{font-size:12px;background:var(--off);border-radius:8px;padding:7px 9px;margin-bottom:8px;white-space:pre-wrap;max-height:90px;overflow:auto;}
+.map-pop-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;}
+.terr-label{background:rgba(255,255,255,.85);border:none;box-shadow:none;font-size:11px;font-weight:700;color:var(--text);padding:2px 6px;border-radius:6px;white-space:nowrap;}
+.terr-label::before{display:none;}
+.terr-labels-off .terr-label{display:none;}
+.terr-row{cursor:pointer;}
+.terr-row:hover td{background:var(--off);}
+.terr-row.on td{background:var(--green-lt);}
+.terr-swatch{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px;vertical-align:-1px;}
+.geo-results{margin-top:6px;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.geo-results div{padding:8px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border);}
+.geo-results div:last-child{border-bottom:none;}
+.geo-results div:hover{background:var(--green-lt);}
+@media(max-width:900px){
+  .map-layout{grid-template-columns:1fr;height:auto;}
+  #territory-map{height:62vh;}
+  .map-side{max-height:420px;}
+}
+
+/* ── Prospect profile ── */
+.pr-back{font-size:13px;color:var(--muted);cursor:pointer;display:inline-block;margin-bottom:12px;}
+.pr-back:hover{color:var(--text);}
+.pr-head{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;margin-bottom:18px;}
+.pr-avatar{width:56px;height:56px;border-radius:14px;color:#fff;font-size:20px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;}
+.pr-name{font-size:24px;font-weight:800;letter-spacing:-.02em;line-height:1.15;}
+.pr-meta{font-size:13px;color:var(--muted);margin-top:4px;}
+.pr-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+.pr-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start;}
+.pr-grid .card{margin:0 0 16px;}
+.pr-sec{padding:16px 18px;border-top:1px solid var(--border);}
+.pr-sec:first-child{border-top:none;}
+.pr-h{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:8px;}
+.pr-kv{display:grid;grid-template-columns:96px 1fr;gap:6px 10px;font-size:13px;}
+.pr-kv div:nth-child(odd){color:var(--muted);}
+.pr-kv a{color:var(--green-deep);word-break:break-all;}
+.pr-score{display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
+.pr-score-num{font-size:40px;font-weight:800;letter-spacing:-.03em;line-height:1;}
+.pr-score-num small{font-size:16px;color:var(--faint);font-weight:700;}
+.pr-pill{display:inline-block;font-size:12px;font-weight:700;padding:4px 10px;border-radius:100px;background:var(--off);color:var(--text);margin:2px 4px 2px 0;}
+.pr-pill.hot{background:#FEE4E2;color:#B42318;} .pr-pill.warm{background:#FEF0C7;color:#B54708;} .pr-pill.cold{background:var(--blue-lt);color:var(--blue);}
+.pr-pill.offer{background:var(--green-lt);color:var(--green-deep);}
+.pr-opener{background:var(--green-lt);border-left:3px solid var(--green);border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.55;position:relative;}
+.pr-list{margin:0;padding-left:18px;font-size:13px;line-height:1.6;}
+.pr-sig{display:flex;gap:8px;font-size:13px;line-height:1.45;padding:6px 0;}
+.pr-sig-k{font-size:10px;font-weight:800;text-transform:uppercase;padding:2px 6px;border-radius:5px;height:fit-content;flex:none;margin-top:1px;}
+.pr-sig-k.strength{background:var(--green-lt);color:var(--green-deep);} .pr-sig-k.gap{background:#FEF0C7;color:#B54708;} .pr-sig-k.risk{background:#FEE4E2;color:#B42318;}
+.pr-obj{border:1px solid var(--border);border-radius:8px;margin-bottom:6px;}
+.pr-obj summary{padding:9px 12px;font-size:13px;font-weight:600;cursor:pointer;}
+.pr-obj div{padding:0 12px 10px;font-size:13px;color:var(--muted);line-height:1.5;}
+.pr-next{background:var(--black);color:#fff;border-radius:10px;padding:12px 14px;font-size:14px;font-weight:600;}
+.pr-log-item{padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;}
+.pr-log-item:last-child{border-bottom:none;}
+.pr-dim{opacity:.45;pointer-events:none;}
+.gp-target{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);}
+.gp-rank{width:26px;height:26px;border-radius:50%;background:var(--black);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex:none;}
+.gp-days{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;}
+.gp-day{background:var(--off);border-radius:10px;padding:12px;}
+.gp-chip{display:inline-block;font-size:12px;padding:2px 8px;border-radius:100px;background:var(--off);border:1px solid var(--border);margin:2px 3px 2px 0;cursor:pointer;color:var(--text);}
+.gp-chip:hover{border-color:var(--text);}
+@media(max-width:900px){ .pr-grid{grid-template-columns:1fr;} }
+
 /* ── Responsive ── */
 @media(max-width:900px){
   #mobile-topbar{display:flex;}
@@ -362,12 +459,12 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
   <div class="auth-card">
     <div class="auth-logo">
       <div class="auth-logo-mark"><img src="/icons/icon-192.png" style="width:24px;height:24px;border-radius:6px;display:block;" /></div>
-      <div class="auth-logo-text">ShopFlow<span class="auth-badge">ADMIN</span></div>
+      <div class="auth-logo-text">ShopFlow<span class="auth-badge">HQ</span></div>
     </div>
-    <div class="auth-h2">Owner access</div>
-    <div class="auth-sub">Enter your admin key to continue.</div>
+    <div class="auth-h2">ShopFlow HQ</div>
+    <div class="auth-sub">Client shops, results, billing and sales for the ShopFlow CRM. Enter the admin key to continue.</div>
     <input id="admin-key-input" class="auth-input" type="password" placeholder="Admin key" onkeydown="if(event.key==='Enter')doLogin()"/>
-    <button class="auth-btn" onclick="doLogin()">Access Dashboard</button>
+    <button class="auth-btn" onclick="doLogin()">Open HQ</button>
     <div id="auth-err" class="auth-err"></div>
   </div>
 </div>
@@ -379,7 +476,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       <line x1="3" y1="5" x2="17" y2="5"/><line x1="3" y1="10" x2="17" y2="10"/><line x1="3" y1="15" x2="17" y2="15"/>
     </svg>
   </button>
-  <div id="mobile-topbar-title">ShopFlow <span class="mobile-topbar-badge">ADMIN</span></div>
+  <div id="mobile-topbar-title">ShopFlow <span class="mobile-topbar-badge">HQ</span></div>
 </div>
 
 <!-- Sidebar backdrop -->
@@ -395,7 +492,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       <div class="sb-logo-mark"><img src="/icons/icon-192.png" style="width:20px;height:20px;border-radius:5px;display:block;" /></div>
       <div>
         <div class="sb-logo-text">ShopFlow</div>
-        <span class="sb-badge">ADMIN</span>
+        <span class="sb-badge">HQ</span>
       </div>
     </div>
 
@@ -410,28 +507,39 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       <div class="sb-goal-pct" id="sb-goal-pct">0% there</div>
     </div>
 
-    <div class="sb-section">Platform</div>
+    <div class="sb-section">Clients</div>
     <div class="sb-item active" data-page="overview" onclick="nav('overview');closeAdminSidebar()">
       <span class="sb-item-icon">⊞</span>Overview
     </div>
     <div class="sb-item" data-page="shops" onclick="nav('shops');closeAdminSidebar()">
-      <span class="sb-item-icon">🏪</span>Shops
+      <span class="sb-item-icon">🏪</span>Client shops
     </div>
     <div class="sb-item" data-page="addlead" onclick="nav('addlead');closeAdminSidebar()">
-      <span class="sb-item-icon">➕</span>Add Lead
+      <span class="sb-item-icon">➕</span>Add lead
+    </div>
+
+    <div class="sb-section">Sales</div>
+    <div class="sb-item" data-page="demos" onclick="nav('demos');closeAdminSidebar()">
+      <span class="sb-item-icon">📞</span>Demo calls
+    </div>
+    <div class="sb-item" data-page="playbook" onclick="nav('playbook');closeAdminSidebar()">
+      <span class="sb-item-icon">📘</span>Playbook leads
+      <span id="sb-playbook-badge" style="margin-left:auto;background:#16a34a;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:100px;display:none;"></span>
+    </div>
+    <div class="sb-item" data-page="map" onclick="nav('map');closeAdminSidebar()">
+      <span class="sb-item-icon">🗺️</span>Territory map
+    </div>
+    <div class="sb-item" data-page="sales" onclick="nav('sales');closeAdminSidebar()">
+      <span class="sb-item-icon">🎯</span>Sales rep
+    </div>
+    <div class="sb-item" data-page="billing" onclick="nav('billing');closeAdminSidebar()">
+      <span class="sb-item-icon">💰</span>Billing & MRR
     </div>
     <div class="sb-item" data-page="growth" onclick="nav('growth');closeAdminSidebar()">
       <span class="sb-item-icon">📈</span>Growth
     </div>
-    <div class="sb-item" data-page="demos" onclick="nav('demos');closeAdminSidebar()">
-      <span class="sb-item-icon">🚀</span>Demos
-    </div>
-    <div class="sb-item" data-page="sales" onclick="nav('sales');closeAdminSidebar()">
-      <span class="sb-item-icon">🎯</span>Sales Rep
-    </div>
-    <div class="sb-item" data-page="billing" onclick="nav('billing');closeAdminSidebar()">
-      <span class="sb-item-icon">💰</span>Billing
-    </div>
+
+    <div class="sb-section">Company</div>
     <div class="sb-item" data-page="checklist" onclick="nav('checklist');closeAdminSidebar()">
       <span class="sb-item-icon">✅</span>Checklist
       <span id="sb-checklist-badge" style="margin-left:auto;background:#dc2626;color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:100px;display:none;"></span>
@@ -441,7 +549,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     </div>
 
     <div class="sb-footer">
-      <div class="sb-footer-text">ShopFlow Platform</div>
+      <div class="sb-footer-text">ShopFlow CRM · HQ</div>
       <div class="sb-signout" onclick="signOut()">Sign out →</div>
     </div>
   </div>
@@ -507,16 +615,42 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         </div>
       </div>
 
+      <!-- What ShopFlow is producing for its clients this month (summed over
+           every active shop) — the funnel the whole business is sold on. -->
+      <div class="section-label">This month, across every client shop</div>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-label">Leads</div>
+          <div class="metric-value" id="m-cl-leads">—</div>
+          <div class="metric-sub" id="m-cl-leads-sub">— last month</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Jobs booked</div>
+          <div class="metric-value" id="m-cl-booked">—</div>
+          <div class="metric-sub" id="m-cl-booked-sub">— of leads</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Client revenue</div>
+          <div class="metric-value green" id="m-cl-rev">—</div>
+          <div class="metric-sub" id="m-cl-rev-sub">completed work in their CRMs</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">AI receptionist recovered</div>
+          <div class="metric-value" id="m-cl-ai">—</div>
+          <div class="metric-sub" id="m-cl-ai-sub">— calls answered</div>
+        </div>
+      </div>
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Plan Breakdown</div>
+            <div class="card-title">Revenue by plan</div>
           </div>
           <div class="plan-bars" id="plan-bars"><div class="empty-state">Loading...</div></div>
         </div>
         <div class="card">
           <div class="card-header">
-            <div class="card-title">Recent Signups</div>
+            <div class="card-title">Recent client shops</div>
             <button class="btn btn-sm btn-green" onclick="openCreateModal()">+ Add</button>
           </div>
           <div id="recent-signups"><div class="empty-state">Loading...</div></div>
@@ -528,19 +662,16 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div id="page-shops" class="page">
       <div class="page-header">
         <div>
-          <div class="page-title">All Shops</div>
+          <div class="page-title">Client shops</div>
           <div class="page-sub" id="shops-count-label">—</div>
         </div>
-        <button class="btn btn-green" onclick="openCreateModal()">+ Add Shop</button>
+        <button class="btn btn-green" onclick="openCreateModal()">+ Add client shop</button>
       </div>
       <div class="card" style="margin-bottom:0;">
         <div class="toolbar">
           <input class="search-input" id="shop-search" placeholder="Search name, email, slug…" oninput="filterShops()"/>
           <select class="filter-select" id="shop-filter-plan" onchange="filterShops()">
             <option value="">All plans</option>
-            <option value="starter">Starter</option>
-            <option value="pro">Pro</option>
-            <option value="shop">Shop</option>
           </select>
           <select class="filter-select" id="shop-filter-status" onchange="filterShops()">
             <option value="">All status</option>
@@ -555,14 +686,15 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
                 <th>Shop</th>
                 <th>Plan</th>
                 <th>Rate</th>
-                <th>Clients</th>
-                <th>Appts</th>
+                <th>Leads (mo)</th>
+                <th>Booked (mo)</th>
+                <th>Their revenue (mo)</th>
                 <th>Status</th>
                 <th></th>
               </tr>
             </thead>
             <tbody id="shops-tbody">
-              <tr><td colspan="7"><div class="empty-state"><span class="spinner"></span>Loading…</div></td></tr>
+              <tr><td colspan="8"><div class="empty-state"><span class="spinner"></span>Loading…</div></td></tr>
             </tbody>
           </table>
         </div>
@@ -644,7 +776,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       <div class="page-header">
         <div>
           <div class="page-title">Growth</div>
-          <div class="page-sub" id="growth-sub">Track your path to your MRR goal</div>
+          <div class="page-sub" id="growth-sub">Path to the MRR goal, in client shops</div>
         </div>
       </div>
 
@@ -694,8 +826,8 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div id="page-billing" class="page">
       <div class="page-header">
         <div>
-          <div class="page-title">Billing</div>
-          <div class="page-sub">Subscription revenue breakdown</div>
+          <div class="page-title">Billing & MRR</div>
+          <div class="page-sub">What each client shop pays ShopFlow, by plan label</div>
         </div>
       </div>
       <div class="metrics-grid" style="grid-template-columns:repeat(3,1fr);">
@@ -731,41 +863,41 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div id="page-demos" class="page">
       <div class="page-header">
         <div>
-          <div class="page-title">Demo Pipeline</div>
-          <div class="page-sub">Booked demos and conversion tracking</div>
+          <div class="page-title">Demo calls</div>
+          <div class="page-sub">15-minute calls booked at shopflowtech.com/demo, and what each one turned into</div>
         </div>
-        <a href="/demo" target="_blank" class="btn btn-green btn-sm">↗ Share Demo Page</a>
+        <a href="/demo" target="_blank" class="btn btn-green btn-sm">↗ Open the /demo page</a>
       </div>
 
       <div class="metrics-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:20px;">
         <div class="metric-card">
-          <div class="metric-label">Total Demos</div>
+          <div class="metric-label">Calls booked</div>
           <div class="metric-value" id="dm-total">—</div>
           <div class="metric-sub" id="dm-scheduled">— scheduled</div>
         </div>
         <div class="metric-card">
           <div class="metric-label">Converted</div>
           <div class="metric-value green" id="dm-converted">—</div>
-          <div class="metric-sub">became paying customers</div>
+          <div class="metric-sub">became client shops</div>
         </div>
         <div class="metric-card">
           <div class="metric-label">Conversion Rate</div>
           <div class="metric-value" id="dm-rate">—</div>
-          <div class="metric-sub">demos → customers</div>
+          <div class="metric-sub">calls → client shops</div>
         </div>
       </div>
 
       <div class="card">
         <div class="card-header">
-          <div class="card-title">All Demos</div>
+          <div class="card-title">All demo calls</div>
         </div>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>Contact</th>
-                <th>Date & Time</th>
-                <th>Current Tool</th>
+                <th>Date & time</th>
+                <th>Using now</th>
                 <th>Status</th>
                 <th>Notes</th>
                 <th></th>
@@ -779,34 +911,108 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       </div>
     </div>
 
+    <!-- Playbook leads page -->
+    <div id="page-playbook" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Playbook leads</div>
+          <div class="page-sub">Shop owners who downloaded the free Sales Playbook at shopflowtech.com/playbook. You get an email for every one.</div>
+        </div>
+        <a href="/playbook" target="_blank" class="btn btn-green btn-sm">↗ Open the /playbook page</a>
+      </div>
+
+      <div class="metrics-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
+        <div class="metric-card"><div class="metric-label">Downloads requested</div><div class="metric-value" id="pbl-total">—</div><div class="metric-sub" id="pbl-week">— this week</div></div>
+        <div class="metric-card"><div class="metric-label">Still new</div><div class="metric-value" id="pbl-new">—</div><div class="metric-sub">not contacted yet</div></div>
+        <div class="metric-card"><div class="metric-label">Opened the PDF</div><div class="metric-value" id="pbl-opened">—</div><div class="metric-sub">clicked the download link</div></div>
+        <div class="metric-card"><div class="metric-label">Became clients</div><div class="metric-value green" id="pbl-clients">—</div><div class="metric-sub" id="pbl-calls">— calls booked</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><div class="card-title">All playbook leads</div></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Contact</th><th>Service</th><th>Requested</th><th>Opened</th><th>Status</th><th>Notes</th><th></th></tr></thead>
+            <tbody id="playbook-tbody">
+              <tr><td colspan="7"><div class="empty-state"><span class="spinner"></span>Loading…</div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- Sales Rep page -->
+    <div id="page-map" class="page">
+      <div class="page-header">
+        <div>
+          <div class="page-title">Territory map</div>
+          <div class="page-sub" id="map-sub">Every shop we're talking to — Albuquerque, Rio Rancho &amp; Los Lunas</div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-outline btn-sm" onclick="openPlacesImport()">⬇ Import shops</button>
+          <button class="btn btn-outline btn-sm" id="map-drop-btn" onclick="startPlacing(null)">📍 Drop a pin</button>
+          <button class="btn btn-green btn-sm" onclick="openSalesLead(null)">+ Add shop</button>
+        </div>
+      </div>
+      <div class="map-banner" id="map-banner"><span id="map-banner-text"></span><button class="btn btn-outline btn-sm" onclick="stopPlacing()">Cancel</button></div>
+      <div class="map-toolbar">
+        <select class="form-input" id="map-terr-select" style="max-width:280px;padding:7px 10px;font-size:13px;font-weight:600;" onchange="selectTerritory(this.value)"></select>
+        <div class="map-seg" id="map-stages"></div>
+      </div>
+      <div class="map-layout">
+        <div id="territory-map"></div>
+        <div class="card map-side">
+          <div class="map-side-head"><input class="form-input" id="map-search" placeholder="Search shops…" oninput="renderTerritory()"/></div>
+          <div class="map-list" id="map-list"></div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:14px;" id="gp-card">
+        <div class="card-header">
+          <div><div class="card-title">🧠 Sales game plan</div><div class="card-sub">Claude reads every open shop on the map — size, reviews, website, territory, where each conversation stands — and tells you who to hit first and how.</div></div>
+          <button class="btn btn-green btn-sm" id="gp-btn" onclick="buildGamePlan()">Build game plan</button>
+        </div>
+        <div id="gp-body" style="padding:0 18px 18px;"></div>
+      </div>
+      <div class="card" style="margin-top:14px;">
+        <div class="card-header"><div><div class="card-title">Territories</div><div class="card-sub">Where the conversations are. Tap a territory to zoom to it and filter the list.</div></div></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Territory</th><th>Not contacted</th><th>Active</th><th>In demo</th><th>Signed</th><th>Lost</th><th>Last touch</th></tr></thead>
+            <tbody id="terr-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="page-prospect" class="page"><div id="pr-body"></div></div>
+
     <div id="page-sales" class="page">
       <div class="page-header">
         <div>
-          <div class="page-title">Sales Rep</div>
-          <div class="page-sub" id="sales-rep-sub">Manage your rep's pipeline, goals, to-dos, and dashboard</div>
+          <div class="page-title">Sales rep</div>
+          <div class="page-sub" id="sales-rep-sub">Your rep's pipeline, goals, to-dos and what they see on their dashboard</div>
         </div>
-        <a href="/sales" target="_blank" class="btn btn-green btn-sm">↗ Open Sales Hub</a>
+        <a href="/sales" target="_blank" class="btn btn-green btn-sm">↗ Open the sales hub</a>
       </div>
 
       <div class="metrics-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:20px;">
         <div class="metric-card"><div class="metric-label">Total Leads</div><div class="metric-value" id="sa-leads">—</div></div>
-        <div class="metric-card"><div class="metric-label">Closed</div><div class="metric-value green" id="sa-closed">—</div><div class="metric-sub">paying shops</div></div>
+        <div class="metric-card"><div class="metric-label">Closed</div><div class="metric-value green" id="sa-closed">—</div><div class="metric-sub">client shops signed</div></div>
         <div class="metric-card"><div class="metric-label">In Pipeline</div><div class="metric-value" id="sa-pipeline">—</div><div class="metric-sub">active convos</div></div>
-        <div class="metric-card"><div class="metric-label">Closed MRR</div><div class="metric-value" id="sa-mrr">—</div><div class="metric-sub">from his clients</div></div>
+        <div class="metric-card"><div class="metric-label">Closed MRR</div><div class="metric-value" id="sa-mrr">—</div><div class="metric-sub">from shops they closed</div></div>
       </div>
 
-      <!-- Customize his dashboard -->
+      <!-- The rep's dashboard -->
       <div class="card">
-        <div class="card-header"><div><div class="card-title">Customize His Dashboard</div><div class="card-sub">Sets what he sees on his Home screen + his goal targets.</div></div></div>
+        <div class="card-header"><div><div class="card-title">Their dashboard</div><div class="card-sub">Sets what the rep sees on their Home screen and their targets.</div></div></div>
         <div style="padding:18px;">
           <div class="form-row">
             <label class="form-label">Rep name</label>
             <input class="form-input" id="sa-name" placeholder="Rep name"/>
           </div>
           <div class="form-row">
-            <label class="form-label">📌 Focus message (banner on his Home screen)</label>
-            <textarea class="form-input" id="sa-focus" rows="2" placeholder="e.g. Push the $99 Pro plan this week — call me at 3pm to review your demos."></textarea>
+            <label class="form-label">📌 Focus message (banner on their Home screen)</label>
+            <textarea class="form-input" id="sa-focus" rows="2" placeholder="e.g. Lead with the missed-call audit this week — call me at 3pm to review your demo calls."></textarea>
           </div>
           <div class="form-row-2">
             <div class="form-row"><label class="form-label">Daily targets — DMs / Walk-ins / Demos</label>
@@ -825,8 +1031,8 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
             </div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
-            <button class="btn btn-green btn-sm" onclick="saveSalesSettings()">Save Dashboard Settings</button>
-            <button class="btn btn-outline btn-sm" onclick="resetSalesPin()">Reset his PIN</button>
+            <button class="btn btn-green btn-sm" onclick="saveSalesSettings()">Save dashboard settings</button>
+            <button class="btn btn-outline btn-sm" onclick="resetSalesPin()">Reset their PIN</button>
             <span id="sa-settings-msg" style="font-size:12px;color:var(--muted);"></span>
           </div>
         </div>
@@ -834,10 +1040,10 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 
       <!-- To-Dos -->
       <div class="card">
-        <div class="card-header"><div><div class="card-title">To-Dos for the Rep</div><div class="card-sub">These show up in his Goals tab. He checks them off.</div></div></div>
+        <div class="card-header"><div><div class="card-title">To-dos for the rep</div><div class="card-sub">These show up in their Goals tab. They check them off.</div></div></div>
         <div style="padding:18px;">
           <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
-            <input class="form-input" id="sa-todo-text" placeholder="e.g. Follow up with Fadez ABQ" style="flex:1;min-width:180px;"/>
+            <input class="form-input" id="sa-todo-text" placeholder="e.g. Follow up with the tint shop on Menaul" style="flex:1;min-width:180px;"/>
             <input class="form-input" id="sa-todo-due" type="date" style="max-width:160px;"/>
             <button class="btn btn-black btn-sm" onclick="addSalesTodo()">+ Add</button>
           </div>
@@ -847,14 +1053,14 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 
       <!-- Goals -->
       <div class="card">
-        <div class="card-header"><div><div class="card-title">His Goals</div><div class="card-sub">Bigger targets shown on his Goals tab.</div></div></div>
+        <div class="card-header"><div><div class="card-title">Their goals</div><div class="card-sub">Bigger targets shown on their Goals tab.</div></div></div>
         <div style="padding:18px;">
           <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
-            <input class="form-input" id="sa-goal-name" placeholder="e.g. Close 10 shops by Aug 1" style="flex:1;min-width:160px;"/>
+            <input class="form-input" id="sa-goal-name" placeholder="e.g. Sign 5 client shops by Dec 1" style="flex:1;min-width:160px;"/>
             <input class="form-input" id="sa-goal-target" type="number" min="1" placeholder="Target" style="max-width:100px;"/>
             <select class="form-input" id="sa-goal-type" style="max-width:150px;">
-              <option value="clients">Clients closed</option>
-              <option value="demos">Demos run</option>
+              <option value="clients">Client shops signed</option>
+              <option value="demos">Demo calls run</option>
               <option value="custom">Custom</option>
             </select>
             <button class="btn btn-black btn-sm" onclick="addSalesGoal()">+ Add</button>
@@ -866,12 +1072,12 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
       <!-- Leads -->
       <div class="card">
         <div class="card-header">
-          <div><div class="card-title">His Pipeline</div><div class="card-sub">Edit a lead's stage, open to edit details, or remove it.</div></div>
+          <div><div class="card-title">Their pipeline</div><div class="card-sub">Shops the rep is working. Edit a stage, open to edit details, or remove it.</div></div>
           <button class="btn btn-outline btn-sm" onclick="openSalesLead(null)">+ Add Lead</button>
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Name / Shop</th><th>City</th><th>Using</th><th>Stage</th><th>Plan</th><th></th></tr></thead>
+            <thead><tr><th>Name / Shop</th><th>Territory</th><th>Using</th><th>Stage</th><th>Plan</th><th></th></tr></thead>
             <tbody id="sa-leads-tbody"><tr><td colspan="6"><div class="empty-state">Loading…</div></td></tr></tbody>
           </table>
         </div>
@@ -882,8 +1088,8 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div id="page-checklist" class="page">
       <div class="page-header">
         <div>
-          <div class="page-title">Go-Live Checklist</div>
-          <div class="page-sub">Everything you need to do to launch ShopFlow. Your business brain. 🧠</div>
+          <div class="page-title">Checklist</div>
+          <div class="page-sub">What's open across clients, sales, product and the platform. Add your own sections and tasks.</div>
         </div>
         <button class="btn btn-outline btn-sm" onclick="resetChecklist()">Reset All</button>
       </div>
@@ -906,14 +1112,14 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     <div id="page-settings" class="page">
       <div class="page-header">
         <div>
-          <div class="page-title">Platform Settings</div>
-          <div class="page-sub">Controls that apply across the entire ShopFlow platform.</div>
+          <div class="page-title">Settings</div>
+          <div class="page-sub">Controls that apply to every client shop on ShopFlow.</div>
         </div>
       </div>
 
       <div class="card" style="max-width:560px;">
         <div class="card-header">
-          <div><div class="card-title">Signup &amp; Access</div><div class="card-sub">Control who can create new shop accounts.</div></div>
+          <div><div class="card-title">Signup &amp; access</div><div class="card-sub">Who can create a shop account on their own.</div></div>
         </div>
         <div style="padding:18px;">
           <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border);">
@@ -934,7 +1140,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 
       <div class="card" style="max-width:560px;">
         <div class="card-header">
-          <div><div class="card-title">SMS / Twilio</div><div class="card-sub">One shared Twilio account powers SMS for every shop.</div></div>
+          <div><div class="card-title">SMS / Twilio</div><div class="card-sub">One shared Twilio account powers the tracking numbers and texts for every client shop.</div></div>
         </div>
         <div style="padding:18px;">
           <div id="sms-status-rows" style="font-size:13px;color:var(--muted);">Checking connection…</div>
@@ -964,16 +1170,16 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 
       <div class="card" style="max-width:560px;">
         <div class="card-header">
-          <div><div class="card-title">Demo Data</div><div class="card-sub">Seed a realistic demo shop for testing.</div></div>
+          <div><div class="card-title">Demo shop</div><div class="card-sub">The shop you show on demo calls.</div></div>
         </div>
         <div style="padding:18px;">
           <div style="font-size:13px;color:var(--muted);margin-bottom:14px;">
-            Creates the <strong style="color:var(--text);">King's Cuts</strong> demo account with 20 clients, 3 barbers, and ~200 appointments. Safe to re-run — replaces existing demo account.
+            Rebuilds the <strong style="color:var(--text);">Demo Auto Studio</strong> detail shop: vehicle-size pricing, add-ons, estimates with deposits, a membership, before/after photos. Safe to re-run — it resets the demo to clean.
           </div>
           <div style="background:var(--off);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--muted);margin-bottom:14px;font-family:monospace;">
-            📧 demo@shopflow.com &nbsp;·&nbsp; 🔑 demo1234
+            📧 demo@detail.com &nbsp;·&nbsp; 🔑 demo1234 &nbsp;·&nbsp; /shop/demo-detail
           </div>
-          <button class="btn btn-green" id="seed-btn" onclick="seedDemo()">⚡ Seed Demo Account</button>
+          <button class="btn btn-green" id="seed-btn" onclick="seedDemo()">⚡ Reset the demo shop</button>
           <div id="seed-result" style="margin-top:10px;font-size:12px;color:var(--muted);display:none;"></div>
         </div>
       </div>
@@ -996,12 +1202,12 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
 <!-- Create shop modal -->
 <div id="modal-overlay">
   <div id="modal-box">
-    <div class="modal-title">Add New Shop</div>
-    <div class="modal-sub">Creates a new shop account on the platform.</div>
+    <div class="modal-title">Add a client shop</div>
+    <div class="modal-sub">Creates the shop's CRM login. Set the plan label and the rate you agreed on the call.</div>
     <div class="form-row-2">
       <div class="form-row">
         <label class="form-label">Shop Name *</label>
-        <input class="form-input" id="new-shopname" placeholder="e.g. Mad Detailing"/>
+        <input class="form-input" id="new-shopname" placeholder="e.g. Evo Solutions"/>
       </div>
       <div class="form-row">
         <label class="form-label">Plan label</label>
@@ -1010,7 +1216,7 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
     </div>
     <div class="form-row">
       <label class="form-label">Monthly rate ($/mo)</label>
-      <input class="form-input" id="new-rate" type="number" min="0" step="1" placeholder="e.g. 349"/>
+      <input class="form-input" id="new-rate" type="number" min="0" step="1" placeholder="e.g. 3000"/>
     </div>
     <datalist id="plan-suggestions"></datalist>
     <div class="form-row">
@@ -1087,7 +1293,10 @@ function nav(page) {
   if (page === 'settings')  loadPlatformSettings();
   if (page === 'checklist') renderChecklist();
   if (page === 'demos')     loadDemos();
+  if (page === 'playbook')  loadPlaybookLeads();
   if (page === 'sales')     loadSalesAdmin();
+  if (page === 'map')       loadTerritory();
+  if (page !== 'map')       stopPlacing();
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -1095,6 +1304,7 @@ async function initApp() {
   document.getElementById('overview-date').textContent = new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   await Promise.all([loadStats(), loadShops()]);
   renderChecklist(); // init badge count
+  loadPlaybookLeads(); // init "new" badge
 }
 async function refreshAll() { await Promise.all([loadStats(), loadShops()]); toast('Refreshed ✓'); }
 
@@ -1181,6 +1391,18 @@ function renderOverview(d) {
   document.getElementById('m-churn').className = 'metric-value ' + (d.churnRate > 5 ? 'red' : '');
   document.getElementById('m-churned').textContent = (d.churnedShops || 0) + ' shops lost';
 
+  // Client results (summed over active shops — see /api/admin/stats)
+  const c = d.clientResults || {};
+  const setT = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setT('m-cl-leads', c.leadsThisMonth != null ? c.leadsThisMonth : '—');
+  setT('m-cl-leads-sub', (c.leadsLastMonth || 0) + ' last month · ' + (c.callsThisMonth || 0) + ' calls');
+  setT('m-cl-booked', c.bookedThisMonth != null ? c.bookedThisMonth : '—');
+  setT('m-cl-booked-sub', c.bookRateThisMonth != null ? c.bookRateThisMonth + '% of this month\'s leads' : 'no leads yet this month');
+  setT('m-cl-rev', '$' + fmtK(c.revenueThisMonth || 0));
+  setT('m-cl-rev-sub', 'completed work · $' + fmtK(c.revenueLastMonth || 0) + ' last month');
+  setT('m-cl-ai', '$' + fmtK(c.aiRecoveredThisMonth || 0));
+  setT('m-cl-ai-sub', (c.aiCalls || 0) + ' calls answered by the AI · $' + fmtK(c.aiRecoveredTotal || 0) + ' all-time');
+
   // Plan bars — dynamic labels + revenue from real per-shop rates
   const total = d.activeShops || 1;
   const ps = d.planStats || {};
@@ -1209,7 +1431,7 @@ function renderOverview(d) {
           <td style="padding:10px 14px;">${planBadge(s.plan)}<div style="font-size:10px;color:var(--faint);margin-top:2px;">${fmtRate(s.rate)}/mo</div></td>
           <td style="padding:10px 14px;font-size:11px;color:var(--faint);white-space:nowrap;">${relTime(s.createdAt)}</td>
         </tr>`).join('')}
-    </table>` : '<div class="empty-state">No shops yet.</div>';
+    </table>` : '<div class="empty-state">No client shops yet.</div>';
 }
 
 // ── Growth page ───────────────────────────────────────────────────────────────
@@ -1262,7 +1484,8 @@ async function loadShops() {
   try {
     const res = await fetch('/api/admin/shops', { headers: { 'x-admin-key': adminKey } });
     allShops = await res.json();
-    document.getElementById('shops-count-label').textContent = allShops.length + ' total shops';
+    const activeN = allShops.filter(s => s.active).length;
+    document.getElementById('shops-count-label').textContent = activeN + ' active · ' + allShops.length + ' total';
     // Plan filter + datalist suggestions from the labels actually in use.
     const labels = planLabels();
     const filter = document.getElementById('shop-filter-plan');
@@ -1292,18 +1515,19 @@ function filterShops() {
 
 function renderShopsTable(shops) {
   const tbody = document.getElementById('shops-tbody');
-  if (!shops.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No shops found.</div></td></tr>'; return; }
+  if (!shops.length) { tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state">No client shops found.</div></td></tr>'; return; }
   tbody.innerHTML = shops.map(s => `
     <tr class="clickable" onclick="openDrawer('${s.id}')">
       <td>
         <div style="font-weight:600;color:var(--text);">${esc(s.shopName)}</div>
         <div style="font-size:11px;color:var(--muted);">${esc(s.email||'')}</div>
-        <div style="font-size:11px;color:var(--faint);font-family:monospace;">/book/${esc(s.slug||'')}</div>
+        <div style="font-size:11px;color:var(--faint);font-family:monospace;">/shop/${esc(s.slug||'')}</div>
       </td>
       <td>${planBadge(s.plan)}</td>
       <td style="font-weight:700;color:var(--green);white-space:nowrap;">${fmtRate(effRate(s))}<span style="font-size:10px;color:var(--faint);font-weight:400;">/mo</span></td>
-      <td style="font-weight:600;">${s.customers}</td>
-      <td style="color:var(--muted);">${s.appointments}</td>
+      <td style="font-weight:600;">${(s.month||{}).leads||0}</td>
+      <td style="font-weight:600;">${(s.month||{}).booked||0}</td>
+      <td style="color:var(--muted);white-space:nowrap;">$${fmtK((s.month||{}).revenue||0)}${(s.month||{}).aiRecovered?` <span style="font-size:10px;color:var(--green-deep);" title="recovered by the AI receptionist">🤖 $${fmtK(s.month.aiRecovered)}</span>`:''}</td>
       <td><span class="badge badge-${s.active?'active':'inactive'}">${s.active?'Active':'Inactive'}</span></td>
       <td><button class="btn btn-sm btn-outline" onclick="event.stopPropagation();openDrawer('${s.id}')">View →</button></td>
     </tr>`).join('');
@@ -1364,13 +1588,13 @@ function renderDrawer(d) {
             ${planBadge(shop.plan)}
             <span class="badge badge-${shop.active?'active':'inactive'}">${shop.active?'Active':'Inactive'}</span>
           </div>
-          <div style="font-size:12.5px;color:var(--muted);margin-top:3px;">${esc(shop.email||'')}${shop.phone?' · '+esc(shop.phone):''} · <span style="font-family:monospace;font-size:11.5px;">/book/${esc(shop.slug)}</span> · joined ${fmtDate(shop.createdAt)} · last active ${shop.lastActivity?relTime(shop.lastActivity):'never'}</div>
+          <div style="font-size:12.5px;color:var(--muted);margin-top:3px;">${esc(shop.email||'')}${shop.phone?' · '+esc(shop.phone):''} · <span style="font-family:monospace;font-size:11.5px;">/shop/${esc(shop.slug)}</span> · joined ${fmtDate(shop.createdAt)} · last active ${shop.lastActivity?relTime(shop.lastActivity):'never'}</div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button class="btn btn-green btn-sm" onclick="openClientReport()">📄 Client report</button>
           <button class="btn btn-green btn-sm" onclick="openClientReport('biweekly')">📄 Bi-weekly report</button>
           <a href="/shop/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Open App</a>
-          <a href="/book/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ Booking Page</a>
+          <a href="/book/${esc(shop.slug)}" target="_blank" class="btn btn-outline btn-sm">↗ ${s.bookingMode==='booking'?'Booking page':'Lead page'}</a>
           <button class="btn btn-outline btn-sm" onclick="resetPassword('${shop.id}','${esc(shop.email||'')}')">🔑 Reset</button>
           <button class="btn btn-red btn-sm" onclick="deleteShop('${shop.id}','${esc(shop.shopName)}')">Delete</button>
         </div>
@@ -1480,13 +1704,25 @@ function renderDrawer(d) {
           </div>
         </div>
 
-        <!-- Usage -->
+        <!-- AI receptionist -->
         <div class="card">
-          <div class="card-header"><div class="card-title">Usage</div></div>
+          <div class="card-header"><div class="card-title">AI receptionist</div><div class="card-sub">calls it answered and work traced back to them</div></div>
           <div style="padding:16px 18px;">
-            <div class="drawer-info-row"><span class="drawer-info-label">Clients</span><span class="drawer-info-val">${stats.totalCustomers}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Calls answered</span><span class="drawer-info-val">${(ins.ai||{}).calls||0}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Leads captured</span><span class="drawer-info-val">${(ins.ai||{}).leads||0}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Revenue recovered (this mo)</span><span class="drawer-info-val" style="color:var(--green-deep);">$${fmt((ins.ai||{}).recoveredThisMonth||0)}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Revenue recovered (all-time)</span><span class="drawer-info-val">$${fmt((ins.ai||{}).recovered||0)}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">SMS line</span><span class="badge badge-${s.twilioConfigured?'yes':'no'}">${s.twilioConfigured?'✓ Connected':'Not set'}</span></div>
+          </div>
+        </div>
+
+        <!-- Account usage -->
+        <div class="card">
+          <div class="card-header"><div class="card-title">Account usage</div></div>
+          <div style="padding:16px 18px;">
+            <div class="drawer-info-row"><span class="drawer-info-label">Customers in their CRM</span><span class="drawer-info-val">${stats.totalCustomers}</span></div>
             <div class="drawer-info-row"><span class="drawer-info-label">Appointments</span><span class="drawer-info-val">${stats.totalAppointments} <span style="color:var(--faint);font-weight:400;">(${stats.apptThisMonth} this mo)</span></span></div>
-            <div class="drawer-info-row"><span class="drawer-info-label">Staff</span><span class="drawer-info-val">${stats.activeBarbers}</span></div>
+            <div class="drawer-info-row"><span class="drawer-info-label">Staff</span><span class="drawer-info-val">${stats.activeStaff}</span></div>
             <div class="drawer-info-row"><span class="drawer-info-label">Services</span><span class="drawer-info-val">${d.services.length}</span></div>
           </div>
         </div>
@@ -1556,7 +1792,7 @@ function renderDrawer(d) {
         <div class="drawer-info-row">
           <div>
             <div style="font-size:13px;font-weight:600;color:var(--text);">Manual Messaging</div>
-            <div style="font-size:11px;color:var(--muted);">SMS inbox & send from the CRM</div>
+            <div style="font-size:11px;color:var(--muted);">SMS inbox & send from their CRM</div>
           </div>
           <label class="toggle">
             <input type="checkbox" ${(shop.features?.manualSms !== false)?'checked':''} onchange="toggleFeature('${shop.id}','manualSms',this.checked)"/>
@@ -1566,11 +1802,11 @@ function renderDrawer(d) {
       </div>
     </div>
 
-    <!-- Team & services -->
+    <!-- Staff & services -->
     <div class="card">
-      <div class="card-header"><div class="card-title">Team & services</div><div class="card-sub">${d.barbers.length} staff · ${d.services.length} services</div></div>
+      <div class="card-header"><div class="card-title">Staff & services</div><div class="card-sub">${(d.staff||[]).length} staff · ${d.services.length} services</div></div>
       <div style="padding:12px 18px 16px;">
-        ${d.barbers.map(b => `
+        ${(d.staff||[]).map(b => `
           <div style="display:flex;align-items:center;gap:10px;padding:6px 0;">
             <div style="width:26px;height:26px;border-radius:50%;background:${b.color||'#93A29A'};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#fff;flex-shrink:0;">${(b.name||'?').slice(0,2).toUpperCase()}</div>
             <div style="flex:1;font-size:13px;font-weight:600;">${esc(b.name)}</div>
@@ -1617,9 +1853,629 @@ function renderDrawer(d) {
 }
 
 function closeDrawer() {
+  clearTimeout(impPoll);   // stop polling an Apify scrape once the panel is closed
   document.getElementById('drawer').classList.remove('open');
   document.getElementById('drawer-overlay').style.display = 'none';
   currentShopId = null;
+}
+
+// ── Territory map ─────────────────────────────────────────────────────────────
+// Plots the sales pipeline (master.sales.leads — the same list the rep works in
+// /sales) on a map of the ABQ metro. Pins live on the lead as lat/lng.
+const MAP_STAGES = [
+  ['not-contacted','Not contacted','#1D2939'], ['contacted','Contacted','#155EEF'], ['responded','Responded','#D97706'],
+  ['demo','Demo','#7A5AF8'], ['closed','Signed','#0E9F6E'], ['not-interested','Lost','#98A2B3'],
+];
+const METRO_BOUNDS = [[35.36,-106.98],[34.62,-106.45]];
+
+// Sales territories. Boundaries follow the lines people actually use to talk
+// about town — the Rio Grande, I-25, I-40 (≈35.103), Central (≈35.085) and
+// Montgomery (≈35.14) — traced approximately, so a shop right on a line can
+// land on the wrong side. A lead's `territory` field overrides the pin.
+const RIVER = [[35.36,-106.54],[35.30,-106.56],[35.25,-106.60],[35.21,-106.63],[35.195,-106.64],[35.17,-106.655],
+  [35.14,-106.675],[35.10,-106.68],[35.085,-106.68],[35.07,-106.675],[35.035,-106.68],[35.00,-106.685],[34.95,-106.69]];
+const I25 = [[35.21,-106.575],[35.17,-106.589],[35.14,-106.603],[35.13,-106.607],[35.105,-106.628],[35.103,-106.629],
+  [35.08,-106.636],[35.06,-106.628],[35.03,-106.63]];
+// Longitude of a north→south line at `lat`, interpolated.
+function lineLng(line, lat) {
+  for (let i = 0; i < line.length - 1; i++) {
+    const [a, b] = [line[i], line[i+1]];
+    if (lat <= a[0] && lat >= b[0]) return a[1] + (b[1]-a[1]) * (a[0]-lat) / (a[0]-b[0]);
+  }
+  return lat > line[0][0] ? line[0][1] : line[line.length-1][1];
+}
+// The stretch of a line between two latitudes, north→south.
+function lineSeg(line, n, s) {
+  return [[n, lineLng(line,n)], ...line.filter(p => p[0] < n && p[0] > s), [s, lineLng(line,s)]];
+}
+const rev = a => [...a].reverse();
+const TERRITORIES = [
+  { id:'rio-rancho', name:'Rio Rancho & Corrales', color:'#0891B2', label:[35.28,-106.72],
+    poly:[[35.36,-106.80], ...lineSeg(RIVER,35.36,35.195), [35.195,-106.80]] },
+  { id:'westside', name:'Westside', color:'#4F46E5', label:[35.14,-106.73],
+    poly:[[35.195,-106.80], ...lineSeg(RIVER,35.195,35.085), [35.085,-106.80]] },
+  { id:'south-valley', name:'South Valley & SW Mesa', color:'#CA8A04', label:[35.02,-106.72],
+    poly:[[35.085,-106.80], ...lineSeg(RIVER,35.085,35.03), [35.03, lineLng(I25,35.03)], [34.95,-106.60], [34.95,-106.80]] },
+  { id:'north-valley', name:'North Valley', color:'#059669', label:[35.16,-106.63],
+    poly:[...lineSeg(RIVER,35.21,35.103), ...rev(lineSeg(I25,35.21,35.103))] },
+  { id:'downtown', name:'Downtown & Old Town', color:'#E11D48', label:[35.075,-106.655],
+    poly:[...lineSeg(RIVER,35.103,35.03), ...rev(lineSeg(I25,35.103,35.03))] },
+  { id:'uptown', name:'Uptown & Midtown', color:'#EA580C', label:[35.12,-106.57],
+    poly:[...rev(lineSeg(I25,35.14,35.103)), [35.14,-106.53], [35.103,-106.53]] },
+  { id:'ne-heights', name:'NE Heights', color:'#9333EA', label:[35.17,-106.52],
+    poly:[...rev(lineSeg(I25,35.21,35.14)), [35.21,-106.46], [35.103,-106.46], [35.103,-106.53], [35.14,-106.53]] },
+  { id:'se-heights', name:'SE Heights & Nob Hill', color:'#DB2777', label:[35.07,-106.56],
+    poly:[...lineSeg(I25,35.103,35.03), [35.03,-106.46], [35.103,-106.46]] },
+  { id:'valencia', name:'Los Lunas & Valencia Co.', color:'#0284C7', label:[34.78,-106.73],
+    poly:[[34.95,-106.90], [34.95,-106.55], [34.62,-106.55], [34.62,-106.90]] },
+];
+const OUTSIDE = { id:'', name:'Outside territories', color:'#98A2B3' };
+
+function inPoly(lat, lng, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [yi, xi] = poly[i], [yj, xj] = poly[j];
+    if ((yi > lat) !== (yj > lat) && lng < (xj - xi) * (lat - yi) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+function autoTerritory(l) {
+  if (l.lat == null || l.lng == null) return null;
+  return TERRITORIES.find(t => inPoly(+l.lat, +l.lng, t.poly)) || OUTSIDE;
+}
+// The territory a lead counts toward: manual pick first, then its pin. null = no pin, no pick.
+function territoryOf(l) {
+  return (l.territory && TERRITORIES.find(t => t.id === l.territory)) || autoTerritory(l);
+}
+
+let terrMap = null, terrLayer = null, terrPolys = {}, terrMarkers = {}, terrPlacing = false, terrPlacingId = null;
+let terrShow = new Set(['not-contacted','contacted','responded','demo','closed']);
+let terrSel = '';   // '' = all territories
+
+function stageOf(l) { return MAP_STAGES.find(s => s[0] === l.status) || MAP_STAGES[1]; }
+
+function loadLeaflet() {
+  if (window.L) return Promise.resolve();
+  return new Promise((ok, fail) => {
+    const css = document.createElement('link');
+    css.rel = 'stylesheet'; css.href = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+    document.head.appendChild(css);
+    const js = document.createElement('script');
+    js.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+    js.onload = ok; js.onerror = fail;
+    document.head.appendChild(js);
+  });
+}
+
+async function loadTerritory() {
+  try { await loadLeaflet(); } catch(e) { toast('Map failed to load — check your connection'); return; }
+  if (!terrMap) {
+    terrMap = L.map('territory-map', { zoomControl: true }).fitBounds(METRO_BOUNDS);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    }).addTo(terrMap);
+    TERRITORIES.forEach(t => {
+      const poly = L.polygon(t.poly, { color: t.color, weight: 1.5, opacity: .7, fillOpacity: .08, dashArray: '5 4' }).addTo(terrMap);
+      poly.on('click', () => { if (!terrPlacing) selectTerritory(t.id); });
+      L.tooltip({ permanent: true, direction: 'center', className: 'terr-label', interactive: false })
+        .setLatLng(t.label).setContent(t.name).addTo(terrMap);
+      terrPolys[t.id] = poly;
+    });
+    terrLayer = L.layerGroup().addTo(terrMap);
+    terrMap.on('click', onMapClick);
+    // Labels only once zoomed in far enough to read them without clutter.
+    const syncLabels = () => document.getElementById('territory-map').classList.toggle('terr-labels-off', terrMap.getZoom() < 11);
+    terrMap.on('zoomend', syncLabels); syncLabels();
+  }
+  setTimeout(() => terrMap.invalidateSize(), 50);
+  applySalesData(await salesApi(''));
+}
+
+function selectTerritory(id) {
+  terrSel = id || '';
+  terrMap.closePopup();
+  terrMap.flyToBounds(terrSel ? terrPolys[terrSel].getBounds() : METRO_BOUNDS, { duration: .6, padding: [20,20] });
+  renderTerritory();
+}
+function toggleStage(k) { terrShow.has(k) ? terrShow.delete(k) : terrShow.add(k); renderTerritory(); }
+
+function renderTerritory() {
+  if (!terrMap) return;
+  const leads = salesData.leads || [];
+  const q = (document.getElementById('map-search').value || '').toLowerCase().trim();
+  const counts = {}; leads.forEach(l => { const k = stageOf(l)[0]; counts[k] = (counts[k]||0) + 1; });
+  document.getElementById('map-stages').innerHTML = MAP_STAGES.map(([k,lbl,c]) =>
+    `<button class="map-chip${terrShow.has(k)?' on':''}" onclick="toggleStage('${k}')"><span class="dot" style="background:${c}"></span>${lbl} <span class="n">${counts[k]||0}</span></button>`).join('');
+
+  // Territory picker + breakdown (counts ignore the stage chips so the totals stay honest).
+  const byTerr = {};
+  leads.forEach(l => {
+    const t = territoryOf(l); const k = t ? t.id || 'outside' : 'nopin';
+    const r = byTerr[k] || (byTerr[k] = { cold:0, active:0, demo:0, signed:0, lost:0, last:'' });
+    if (l.status === 'not-contacted') r.cold++;
+    if (['contacted','responded','demo'].includes(l.status)) r.active++;
+    if (l.status === 'demo') r.demo++;
+    if (l.status === 'closed') r.signed++;
+    if (l.status === 'not-interested') r.lost++;
+    const touch = l.lastContact || l.updatedAt || '';
+    if (touch > r.last) r.last = touch;
+  });
+  const sel = document.getElementById('map-terr-select');
+  sel.innerHTML = `<option value="">All territories</option>` + TERRITORIES.map(t =>
+    `<option value="${t.id}"${terrSel===t.id?' selected':''}>${esc(t.name)} (${(byTerr[t.id]||{}).active||0} active)</option>`).join('');
+  Object.entries(terrPolys).forEach(([id, p]) => p.setStyle(
+    !terrSel ? { weight: 1.5, opacity: .7, fillOpacity: .08 }
+    : id === terrSel ? { weight: 3, opacity: 1, fillOpacity: .16 } : { weight: 1, opacity: .35, fillOpacity: .03 }));
+  const rows = [...TERRITORIES.map(t => [t, byTerr[t.id]]), [OUTSIDE, byTerr.outside]]
+    .filter(([t, r]) => t !== OUTSIDE || r);
+  document.getElementById('terr-tbody').innerHTML = rows.map(([t, r]) => { r = r || {};
+    return `<tr class="terr-row${terrSel===t.id && t.id?' on':''}" ${t.id?`onclick="selectTerritory(terrSel==='${t.id}'?'':'${t.id}')"`:''}>
+      <td><span class="terr-swatch" style="background:${t.color}"></span>${esc(t.name)}</td>
+      <td style="color:var(--muted);">${r.cold||0}</td><td style="font-weight:700;">${r.active||0}</td><td>${r.demo||0}</td>
+      <td style="color:var(--green-deep);font-weight:600;">${r.signed||0}</td><td style="color:var(--faint);">${r.lost||0}</td>
+      <td style="color:var(--muted);">${r.last ? relTime(r.last) : '—'}</td></tr>`; }).join('')
+    + (byTerr.nopin ? `<tr><td colspan="7" style="font-size:12px;color:var(--yellow);font-weight:600;">${byTerr.nopin.cold + byTerr.nopin.active + byTerr.nopin.signed + byTerr.nopin.lost} shop(s) have no pin yet, so they aren't in a territory — place them from the list.</td></tr>` : '');
+
+  const visible = leads.filter(l => terrShow.has(stageOf(l)[0]) &&
+    (!terrSel || (territoryOf(l) || {}).id === terrSel) &&
+    (!q || [l.name,l.city,l.address,l.notes,l.contact].some(x => String(x||'').toLowerCase().includes(q))));
+  const pinned = visible.filter(l => l.lat != null && l.lng != null);
+  const active = leads.filter(l => ['contacted','responded','demo'].includes(l.status)).length;
+  const unpinnedAll = leads.filter(l => l.lat == null).length;
+  document.getElementById('map-sub').textContent =
+    `${active} active conversation${active===1?'':'s'} · ${counts.closed||0} signed`
+    + (counts['not-contacted'] ? ` · ${counts['not-contacted']} not contacted yet` : '') + (unpinnedAll ? ` · ${unpinnedAll} still need a pin` : '');
+
+  terrLayer.clearLayers(); terrMarkers = {};
+  pinned.forEach(l => {
+    const [k,,c] = stageOf(l);
+    const cold = k === 'not-contacted';
+    const size = k==='closed' ? 28 : cold ? 18 : 24;
+    const hot = l.intel && l.intel.brief && l.intel.brief.priority === 'hot' && !['closed','not-interested'].includes(k);
+    const icon = L.divIcon({
+      className: '', iconSize: [size,size], iconAnchor: [size/2,size/2], popupAnchor: [0,-10],
+      html: `<div class="map-pin${cold?' cold':''}${k==='closed'?' closed':''}${hot?' hot':''}" style="background:${c}">${k==='closed'?'✓':''}</div>`,
+    });
+    const m = L.marker([l.lat, l.lng], { icon, title: l.name, zIndexOffset: k==='closed'?500:cold?-500:0 })
+      .bindPopup(() => mapPopup(l.id), { maxWidth: 300 }).addTo(terrLayer);
+    terrMarkers[l.id] = m;
+  });
+
+  // Side list: unpinned first (they need attention), then most recently touched.
+  const sorted = [...visible].sort((a,b) => ((a.lat==null)-(b.lat==null)) * -1 ||
+    String(b.lastContact||b.updatedAt||'').localeCompare(String(a.lastContact||a.updatedAt||'')));
+  document.getElementById('map-list').innerHTML = sorted.length ? sorted.map(l => {
+    const [,lbl,c] = stageOf(l);
+    const b = l.intel && l.intel.brief;
+    return `<div class="map-row" onclick="openProspect('${l.id}')">
+      <span class="dot" style="background:${c}"></span>
+      <div style="flex:1;min-width:0;">
+        <div class="map-row-name">${esc(l.name)}${b ? ` <span class="pr-fit-mini ${esc(b.priority)}">${b.priority==='hot'?'🔥 ':''}${b.fitScore}/10</span>` : ''}</div>
+        <div class="map-row-meta">${esc(lbl)}${territoryOf(l)?' · '+esc(territoryOf(l).name):l.city?' · '+esc(l.city):''}${l.lastContact?' · '+relTime(l.lastContact):''}</div>
+        ${l.lat==null?`<div class="map-row-nopin">No pin yet — tap 📍 to place</div>`:''}
+      </div>
+      <button class="map-row-loc" title="${l.lat==null?'Place on map':'Show on map'}" onclick="event.stopPropagation();focusLead('${l.id}')">📍</button></div>`;
+  }).join('') : `<div class="empty-state">${leads.length ? (terrSel ? 'No shops in this territory with these filters.' : 'Nothing matches these filters.') : 'No shops yet. Hit “📍 Drop a pin” and click where the shop is.'}</div>`;
+}
+
+function mapPopup(id) {
+  const l = (salesData.leads||[]).find(x => x.id === id); if (!l) return '';
+  const dir = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(l.address || (l.lat+','+l.lng));
+  const terr = territoryOf(l);
+  const tel = String(l.contact||'').replace(/[^\d+]/g, '');
+  const meta = [terr && '🧭 ' + terr.name, l.category, l.rating && `★ ${l.rating} (${l.reviews||0} Google reviews)`, l.address || l.city, l.contact, l.tool && l.tool !== 'Unknown' && 'Using ' + l.tool, l.plan && l.plan !== 'Unknown' && 'Interested in ' + l.plan,
+    l.followup && '⏰ Follow up ' + fmtDate(l.followup), l.lastContact && 'Last touch ' + relTime(l.lastContact)].filter(Boolean);
+  return `<div class="map-pop">
+    <div class="map-pop-name">${esc(l.name)}</div>
+    <div class="map-pop-meta">${meta.map(esc).join('<br>')}</div>
+    ${l.notes?`<div class="map-pop-notes">${esc(l.notes)}</div>`:''}
+    <select class="form-input" style="padding:5px 8px;font-size:12px;" onchange="setSalesLeadStage('${l.id}',this.value)">
+      ${MAP_STAGES.map(([v,lbl])=>`<option value="${v}"${l.status===v?' selected':''}>${lbl}</option>`).join('')}
+    </select>
+    <div class="map-pop-actions">
+      <button class="btn btn-green btn-sm" onclick="openProspect('${l.id}')">Open profile</button>
+      <button class="btn btn-outline btn-sm" onclick="openSalesLead('${l.id}')">Edit</button>
+      <button class="btn btn-outline btn-sm" onclick="startPlacing('${l.id}')">Move pin</button>
+      ${tel.length >= 10 ? `<a class="btn btn-outline btn-sm" href="tel:${tel}">📞 Call</a>` : ''}
+      ${/^https?:\/\//i.test(l.website||'') ? `<a class="btn btn-outline btn-sm" href="${esc(l.website)}" target="_blank" rel="noopener">Website</a>` : ''}
+      <a class="btn btn-outline btn-sm" href="${dir}" target="_blank" rel="noopener">Directions</a>
+    </div></div>`;
+}
+
+function focusLead(id) {
+  const l = (salesData.leads||[]).find(x => x.id === id); if (!l) return;
+  if (l.lat == null) { startPlacing(id); return; }
+  terrMap.flyTo([l.lat, l.lng], Math.max(terrMap.getZoom(), 15), { duration: .5 });
+  setTimeout(() => terrMarkers[id] && terrMarkers[id].openPopup(), 550);
+  if (window.innerWidth <= 900) document.getElementById('territory-map').scrollIntoView({ behavior: 'smooth' });
+}
+
+function startPlacing(id) {
+  if (!terrMap) return;
+  terrPlacing = true; terrPlacingId = id;
+  const l = id && (salesData.leads||[]).find(x => x.id === id);
+  document.getElementById('territory-map').classList.add('placing');
+  document.getElementById('map-banner-text').textContent = l ? `Click the map where ${l.name} is.` : 'Click the map where the shop is — then fill in its details.';
+  document.getElementById('map-banner').style.display = 'flex';
+  terrMap.closePopup();
+  if (window.innerWidth <= 900) document.getElementById('map-banner').scrollIntoView({ behavior: 'smooth' });
+}
+function stopPlacing() {
+  terrPlacing = false; terrPlacingId = null;
+  const el = document.getElementById('territory-map'); if (el) el.classList.remove('placing');
+  const b = document.getElementById('map-banner'); if (b) b.style.display = 'none';
+}
+async function onMapClick(e) {
+  if (!terrPlacing) return;
+  const id = terrPlacingId, lat = +e.latlng.lat.toFixed(6), lng = +e.latlng.lng.toFixed(6);
+  stopPlacing();
+  if (!id) { openSalesLead(null, { lat, lng }); return; }
+  const lead = (salesData.leads||[]).find(l => l.id === id); if (!lead) return;
+  applySalesData(await salesApi('/leads', { method:'POST', body:{ ...lead, lat, lng } }));
+  toast('Pin saved ✓');
+}
+
+// ── Import every detailer / tinter in the metro (Google Maps via Apify) ──────
+// A scrape runs on Apify for a few minutes; the panel polls its status, then
+// previews what's new. The last run is remembered server-side, so reopening
+// the panel shows it again instead of paying for another scrape.
+let impPoll = null;
+function openPlacesImport() {
+  document.getElementById('drawer-overlay').style.display = 'block';
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawer-shop-name').textContent = 'Import shops from Google Maps';
+  document.getElementById('drawer-body').innerHTML = `
+    <div class="drawer-section">
+      <div style="font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:14px;">
+        Scrapes Google Maps (through Apify) across Rio Rancho, Albuquerque and Valencia County and adds every shop we don't
+        already have as <b>Not contacted</b>, pinned and sorted into territories. Shops already in the pipeline keep their stage
+        and notes — only blanks (address, phone, pin) get filled in.</div>
+      <div id="imp-body"><div style="font-size:13px;color:var(--muted);"><span class="spinner"></span>Checking the last scrape…</div></div>
+    </div>`;
+  impRefresh();
+}
+function impForm(note) {
+  return `${note || ''}
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;margin-bottom:8px;"><input type="checkbox" id="imp-detailing" checked/> Auto detailing <span style="color:var(--faint);font-size:12px;">(incl. ceramic coating)</span></label>
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;margin-bottom:14px;"><input type="checkbox" id="imp-tint" checked/> Tint, wraps &amp; PPF</label>
+    <div class="form-row"><label class="form-label">Max places to scrape (Apify credits)</label>
+      <input class="form-input" id="imp-max" type="number" min="20" max="5000" step="10" value="900"/>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;">Every place Apify returns counts — including the same shop found by two searches. It stops hard at this number.</div></div>
+    <button class="btn btn-green" style="width:100%;" onclick="impStart()">Start scrape (takes a few minutes)</button>
+    <div id="imp-err" style="margin-top:10px;"></div>`;
+}
+function impRender(d) {
+  const body = document.getElementById('imp-body'); if (!body) return;
+  if (!d || !d.ok) { body.innerHTML = impForm(`<div style="font-size:13px;color:var(--red);font-weight:600;margin-bottom:12px;">${esc((d && d.error) || 'Could not reach Apify')}</div>`); return; }
+  const r = d.run;
+  if (!r) { body.innerHTML = impForm(); return; }
+  if (['READY','RUNNING'].includes(r.status)) {
+    body.innerHTML = `<div class="card" style="margin:0;padding:14px;">
+      <div style="font-size:15px;font-weight:700;"><span class="spinner"></span>Scraping Google Maps…</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:6px;">${r.scraped||0} of up to ${r.maxPlaces} places so far · started ${relTime(r.startedAt)}.
+      You can close this — it keeps going and will be here when you come back.</div></div>`;
+    clearTimeout(impPoll); impPoll = setTimeout(impRefresh, 6000);
+    return;
+  }
+  const failed = !['SUCCEEDED','ABORTED','TIMED-OUT'].includes(r.status);
+  const sk = r.skipped || {};
+  const skippedTxt = [sk.closed && `${sk.closed} closed`, sk.offTopic && `${sk.offTopic} off-topic`, sk.outside && `${sk.outside} outside the metro`].filter(Boolean).join(', ');
+  const stars = x => x.rating ? ` · ★ ${x.rating} (${x.reviews})` : '';
+  body.innerHTML = `
+    <div class="card" style="margin:0 0 12px;padding:14px;">
+      <div style="font-size:11px;font-weight:700;color:var(--faint);letter-spacing:.04em;text-transform:uppercase;margin-bottom:4px;">
+        Last scrape · ${fmtDate(r.startedAt)}${r.appliedAt ? ' · imported' : ''}${failed ? ' · ' + esc(r.status) : ''}</div>
+      <div style="font-size:22px;font-weight:800;">${r.wouldAdd||0} new shop${r.wouldAdd===1?'':'s'}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px;">${r.scraped||0} places scraped → ${r.found||0} unique shops · ${r.alreadyHave||0} already in the pipeline${skippedTxt ? ' · skipped ' + skippedTxt : ''}</div>
+    </div>
+    ${(r.sample||[]).length ? `<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;">A few of them</div>
+    <div style="font-size:13px;line-height:1.7;margin-bottom:14px;">${r.sample.map(x => `<div><b>${esc(x.name)}</b> <span style="color:var(--muted);">${esc(x.city||'')} · ${esc(x.category||'')}${stars(x)}</span></div>`).join('')}</div>` : ''}
+    ${r.wouldAdd ? `<button class="btn btn-green" style="width:100%;margin-bottom:8px;" id="imp-apply" onclick="impApply()">Add ${r.wouldAdd} shop${r.wouldAdd===1?'':'s'} as Not contacted</button>` : ''}
+    <details style="margin-top:10px;"><summary style="font-size:13px;color:var(--muted);cursor:pointer;">Run a new scrape (uses Apify credits)</summary>
+      <div style="margin-top:12px;">${impForm()}</div></details>`;
+}
+async function impRefresh() {
+  if (!document.getElementById('imp-body')) return;   // drawer closed or reused
+  impRender(await salesApi('/import-places/status'));
+}
+async function impStart() {
+  const kinds = [['detailing','imp-detailing'],['tint','imp-tint']].filter(([,id]) => document.getElementById(id).checked).map(([k]) => k);
+  if (!kinds.length) { toast('Pick at least one kind of shop'); return; }
+  const maxPlaces = parseInt(document.getElementById('imp-max').value, 10) || 900;
+  if (!confirm(`Start a Google Maps scrape of up to ${maxPlaces} places on Apify?`)) return;
+  document.querySelectorAll('#imp-body button').forEach(b => b.disabled = true);
+  const d = await salesApi('/import-places/start', { method: 'POST', body: { kinds, maxPlaces } });
+  if (!d || !d.ok) {
+    document.querySelectorAll('#imp-body button').forEach(b => b.disabled = false);
+    document.getElementById('imp-err').innerHTML = `<div style="font-size:13px;color:var(--red);font-weight:600;">${esc((d && d.error) || 'Could not start the scrape')}</div>`;
+    return;
+  }
+  impRender(d);
+}
+async function impApply() {
+  const btn = document.getElementById('imp-apply'); btn.disabled = true; btn.textContent = 'Adding shops…';
+  const d = await salesApi('/import-places/apply', { method: 'POST' });
+  if (!d || !d.ok) { btn.disabled = false; toast((d && d.error) || 'Import failed'); return; }
+  closeDrawer(); applySalesData(d);
+  toast(`Added ${d.added} shop${d.added===1?'':'s'} as Not contacted ✓`);
+}
+
+// ── Prospect profile ─────────────────────────────────────────────────────────
+// A full page per shop we're selling: details, the AI sales brief, notes and
+// the touch log. Opened from the map list, a pin popup or the Sales rep table.
+let prId = null;
+function prLead() { return (salesData.leads||[]).find(l => l.id === prId); }
+
+async function openProspect(id) {
+  prId = id;
+  if (terrMap) terrMap.closePopup();
+  stopPlacing();
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
+  document.getElementById('page-prospect').classList.add('active');
+  const sb = document.querySelector('.sb-item[data-page="map"]'); if (sb) sb.classList.add('active');
+  window.scrollTo(0, 0);
+  if (!prLead()) applySalesData(await salesApi(''));
+  renderProspect();
+}
+
+function renderProspect() {
+  const l = prLead(), el = document.getElementById('pr-body');
+  if (!l) { el.innerHTML = '<div class="empty-state">This shop is no longer in the pipeline.</div>'; return; }
+  const [, stageLbl, c] = stageOf(l);
+  const terr = territoryOf(l);
+  const tel = String(l.contact||'').replace(/[^\d+]/g, '');
+  const site = /^https?:\/\//i.test(l.website||'') ? l.website : '';
+  const dir = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(l.address || (l.lat != null ? l.lat+','+l.lng : l.name));
+  const initials = l.name.split(/\s+/).map(w => w[0]||'').join('').slice(0,2).toUpperCase();
+  const kv = [
+    ['Stage', esc(stageLbl)],
+    ['Territory', terr ? esc(terr.name) + (l.territory ? ' <span style="color:var(--faint);">(set by hand)</span>' : '') : '—'],
+    ['Category', esc(l.category || '—')],
+    ['Google', l.rating != null ? `★ ${l.rating} · ${l.reviews||0} reviews` : '—'],
+    ['Phone', tel.length >= 10 ? `<a href="tel:${tel}">${esc(l.contact)}</a>` : esc(l.contact || '—')],
+    ['Website', site ? `<a href="${esc(site)}" target="_blank" rel="noopener">${esc(site.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, ''))}</a>` : '—'],
+    ['Address', esc(l.address || l.city || '—')],
+    ['Using', esc(l.tool && l.tool !== 'Unknown' ? l.tool : '—')],
+    ['Follow up', l.followup ? fmtDate(l.followup) : '—'],
+    ['Last touch', l.lastContact ? relTime(l.lastContact) : 'Never'],
+    ['Added', fmtDate(l.createdAt) + (l.source === 'google-maps' ? ' · Google Maps import' : '')],
+  ];
+  const log = l.log || [];
+  const icon = { call: '📞', dm: '💬', 'walk-in': '🚶', demo: '🖥️', email: '✉️', note: '📝' };
+  document.getElementById('pr-body').innerHTML = `
+    <span class="pr-back" onclick="nav('map')">← Territory map</span>
+    <div class="pr-head">
+      <div class="pr-avatar" style="background:${c}">${esc(initials)}</div>
+      <div style="flex:1;min-width:220px;">
+        <div class="pr-name">${esc(l.name)}</div>
+        <div class="pr-meta">${[l.category, terr && terr.name, l.rating != null && `★ ${l.rating} (${l.reviews||0})`].filter(Boolean).map(esc).join(' · ') || '&nbsp;'}</div>
+        <div class="pr-actions">
+          <select class="form-input" style="width:auto;padding:6px 10px;font-size:13px;font-weight:600;" onchange="prSetStage(this.value)">
+            ${MAP_STAGES.map(([v,lbl])=>`<option value="${v}"${l.status===v?' selected':''}>${lbl}</option>`).join('')}
+          </select>
+          ${tel.length >= 10 ? `<a class="btn btn-green btn-sm" href="tel:${tel}">📞 Call</a>` : ''}
+          ${site ? `<a class="btn btn-outline btn-sm" href="${esc(site)}" target="_blank" rel="noopener">Website</a>` : ''}
+          <a class="btn btn-outline btn-sm" href="${dir}" target="_blank" rel="noopener">Directions</a>
+          <button class="btn btn-outline btn-sm" onclick="nav('map');setTimeout(()=>focusLead('${l.id}'),300)">📍 Map</button>
+          <button class="btn btn-outline btn-sm" onclick="openSalesLead('${l.id}')">Edit details</button>
+        </div>
+      </div>
+    </div>
+    <div class="pr-grid">
+      <div><div class="card" id="pr-ai"></div></div>
+      <div>
+        <div class="card"><div class="pr-sec"><div class="pr-h">Details</div><div class="pr-kv">${kv.map(([k,v]) => `<div>${k}</div><div>${v}</div>`).join('')}</div></div></div>
+        <div class="card"><div class="pr-sec">
+          <div class="pr-h">Log a touch</div>
+          <div style="display:flex;gap:6px;margin-bottom:6px;">
+            <select class="form-input" id="pr-log-type" style="width:auto;padding:6px 8px;font-size:13px;">
+              <option value="call">📞 Call</option><option value="dm">💬 DM / text</option><option value="walk-in">🚶 Walk-in</option>
+              <option value="demo">🖥️ Demo</option><option value="email">✉️ Email</option><option value="note">📝 Note</option>
+            </select>
+          </div>
+          <textarea class="form-input" id="pr-log-text" rows="2" placeholder="What happened? e.g. Talked to owner, busy till 5 — call back Thursday"></textarea>
+          <button class="btn btn-black btn-sm" style="margin-top:6px;" onclick="prLog()">Save</button>
+          <div style="font-size:11px;color:var(--faint);margin-top:6px;">A call, DM, walk-in or demo counts as contact — it moves a Not contacted shop to Contacted.</div>
+        </div>
+        <div class="pr-sec"><div class="pr-h">History</div>
+          ${log.length ? log.map(e => `<div class="pr-log-item"><div>${icon[e.type]||'•'} ${esc(e.text)}</div><div style="font-size:11px;color:var(--faint);margin-top:2px;">${relTime(e.at)}${e.by==='admin'?' · you':''}</div></div>`).join('') : '<div style="font-size:13px;color:var(--faint);">No touches yet.</div>'}
+        </div></div>
+        <div class="card"><div class="pr-sec"><div class="pr-h">Notes</div>
+          <textarea class="form-input" id="pr-notes" rows="5" placeholder="Owner's name, what they care about, who else works there…">${esc(l.notes||'')}</textarea>
+          <button class="btn btn-outline btn-sm" style="margin-top:6px;" onclick="prSaveNotes()">Save notes</button>
+        </div></div>
+      </div>
+    </div>`;
+  renderProspectAI();
+}
+
+function renderProspectAI() {
+  const el = document.getElementById('pr-ai'); const l = prLead();
+  if (!el || !l) return;
+  const it = l.intel || {}, b = it.brief;
+  const runningNow = it.status === 'running' && Date.now() - Date.parse(it.startedAt) < 10*60*1000;
+  const head = `<div class="card-header"><div><div class="card-title">🧠 How to sell them</div>
+      <div class="card-sub">${b && it.finishedAt ? 'Analyzed ' + relTime(it.finishedAt) : 'Claude researches their website, Google reviews and socials, then writes the play.'}</div></div>
+      ${salesData.aiReady === false ? '' : `<button class="btn ${b ? 'btn-outline' : 'btn-green'} btn-sm" ${runningNow ? 'disabled' : ''} onclick="prAnalyze()">${runningNow ? 'Analyzing…' : b ? 'Re-analyze' : 'Analyze this shop'}</button>`}</div>`;
+  let body = '';
+  if (salesData.aiReady === false) body = `<div class="pr-sec" style="font-size:13px;color:var(--muted);">Set <b>ANTHROPIC_API_KEY</b> on the server to turn on AI analysis.</div>`;
+  else if (runningNow) body = `<div class="pr-sec" style="font-size:13px;color:var(--muted);"><span class="spinner"></span>Researching ${esc(l.name)} — reading their site, reviews and socials. Takes a minute or two; you can leave this page.</div>`;
+  else if (it.status === 'error') body = `<div class="pr-sec" style="font-size:13px;color:var(--red);font-weight:600;">Analysis failed: ${esc(it.error||'unknown error')}</div>`;
+  if (b) body += briefHtml(b, it, runningNow);
+  else if (!body) body = `<div class="pr-sec" style="font-size:13px;color:var(--muted);line-height:1.6;">You'll get: how good a fit they are, which offer to lead with, the best way and time to reach them, the exact opener to use, the objections they'll raise and how to answer them.</div>`;
+  el.innerHTML = head + body;
+}
+
+function briefHtml(b, it, dim) {
+  const list = arr => (arr||[]).length ? `<ul class="pr-list">${arr.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '<div style="font-size:13px;color:var(--faint);">—</div>';
+  const a = b.approach || {};
+  return `<div class="${dim ? 'pr-dim' : ''}">
+    <div class="pr-sec"><div class="pr-score">
+      <div><div class="pr-score-num">${b.fitScore}<small>/10</small></div><div style="font-size:11px;color:var(--faint);font-weight:700;">FIT</div></div>
+      <div style="flex:1;min-width:200px;">
+        <span class="pr-pill ${esc(b.priority)}">${b.priority==='hot'?'🔥 ':''}${esc(b.priority)}</span><span class="pr-pill offer">${esc(b.recommendedOffer)}</span>
+        <div style="font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5;">${esc(b.fitReason)}</div>
+      </div></div>
+      <div style="font-size:14px;line-height:1.6;margin-top:12px;">${esc(b.summary)}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:8px;line-height:1.5;"><b style="color:var(--text);">Why this offer:</b> ${esc(b.offerReason)}</div>
+    </div>
+    <div class="pr-sec"><div class="pr-h">How to reach them</div>
+      <div style="font-size:14px;font-weight:700;">${esc(a.channel||'')}${a.bestTime ? ' · ' + esc(a.bestTime) : ''}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:4px;line-height:1.5;">${esc(a.why||'')}</div>
+      <div class="pr-h" style="margin-top:14px;">Opener <button class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:11px;margin-left:6px;" onclick="navigator.clipboard.writeText(prLead().intel.brief.opener).then(()=>toast('Copied ✓'))">Copy</button></div>
+      <div class="pr-opener">${esc(b.opener)}</div>
+    </div>
+    <div class="pr-sec"><div class="pr-h">What we found</div>
+      ${(b.signals||[]).map(sg => `<div class="pr-sig"><span class="pr-sig-k ${esc(sg.kind)}">${esc(sg.kind)}</span><div><b>${esc(sg.label)}</b> — ${esc(sg.detail)}</div></div>`).join('') || '<div style="font-size:13px;color:var(--faint);">—</div>'}
+    </div>
+    <div class="pr-sec" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
+      <div><div class="pr-h">Their likely pain</div>${list(b.painPoints)}</div>
+      <div><div class="pr-h">Talking points</div>${list(b.talkingPoints)}</div>
+    </div>
+    <div class="pr-sec"><div class="pr-h">Objections they'll raise</div>
+      ${(b.objections||[]).map(o => `<details class="pr-obj"><summary>“${esc(o.objection)}”</summary><div>${esc(o.response)}</div></details>`).join('') || '<div style="font-size:13px;color:var(--faint);">—</div>'}
+    </div>
+    <div class="pr-sec"><div class="pr-h">Questions to ask</div>${list(b.questionsToAsk)}</div>
+    <div class="pr-sec"><div class="pr-h">Next step</div><div class="pr-next">${esc(b.nextStep)}</div></div>
+    ${(it.sources||[]).length || it.research ? `<div class="pr-sec">
+      ${it.research ? `<details><summary style="font-size:13px;color:var(--muted);cursor:pointer;">Research notes</summary><div style="font-size:12px;white-space:pre-wrap;line-height:1.55;margin-top:8px;color:var(--muted);">${esc(it.research)}</div></details>` : ''}
+      ${(it.sources||[]).length ? `<details style="margin-top:6px;"><summary style="font-size:13px;color:var(--muted);cursor:pointer;">Sources (${it.sources.length})</summary><div style="font-size:12px;line-height:1.7;margin-top:6px;">${it.sources.map(u => /^https?:\/\//i.test(u) ? `<div><a href="${esc(u)}" target="_blank" rel="noopener" style="color:var(--green-deep);word-break:break-all;">${esc(u)}</a></div>` : '').join('')}</div></details>` : ''}
+    </div>` : ''}
+  </div>`;
+}
+
+async function prAnalyze() {
+  const l = prLead(); if (!l) return;
+  const t = territoryOf(l);
+  const d = await salesApi('/leads/' + l.id + '/analyze', { method: 'POST', body: { territory: t ? t.name : '' } });
+  if (!d || !d.ok) { toast((d && d.error) || 'Could not start the analysis'); return; }
+  applySalesData(d);
+}
+async function prSetStage(status) {
+  const l = prLead(); if (!l) return;
+  applySalesData(await salesApi('/leads', { method: 'POST', body: { ...l, status } }));
+  renderProspect(); toast('Stage updated ✓');
+}
+async function prSaveNotes() {
+  const l = prLead(); if (!l) return;
+  applySalesData(await salesApi('/leads', { method: 'POST', body: { ...l, notes: document.getElementById('pr-notes').value } }));
+  toast('Notes saved ✓');
+}
+async function prLog() {
+  const l = prLead(); if (!l) return;
+  const text = document.getElementById('pr-log-text').value.trim();
+  if (!text) { toast('Write what happened'); return; }
+  const d = await salesApi('/leads/' + l.id + '/log', { method: 'POST', body: { type: document.getElementById('pr-log-type').value, text } });
+  if (!d || !d.ok) { toast((d && d.error) || 'Could not save'); return; }
+  applySalesData(d); renderProspect(); toast('Logged ✓');
+}
+
+// ── Sales game plan (whole book) ────────────────────────────────────────────
+async function buildGamePlan() {
+  const territories = {};
+  (salesData.leads||[]).forEach(l => { const t = territoryOf(l); if (t && t.id) territories[l.id] = t.name; });
+  const d = await salesApi('/plan', { method: 'POST', body: { territories } });
+  if (!d || !d.ok) { toast((d && d.error) || 'Could not start the game plan'); return; }
+  applySalesData(d);
+}
+function renderGamePlan() {
+  const body = document.getElementById('gp-body'), btn = document.getElementById('gp-btn');
+  if (!body) return;
+  const gp = salesData.plan || {};
+  const runningNow = gp.status === 'running' && Date.now() - Date.parse(gp.startedAt) < 10*60*1000;
+  btn.style.display = salesData.aiReady === false ? 'none' : '';
+  btn.disabled = runningNow;
+  btn.textContent = runningNow ? 'Building…' : gp.plan ? 'Rebuild' : 'Build game plan';
+  const byId = id => (salesData.leads||[]).find(l => l.id === id);
+  const chip = id => { const l = byId(id); return l ? `<span class="gp-chip" onclick="openProspect('${l.id}')">${esc(l.name)}</span>` : ''; };
+  let html = '';
+  if (salesData.aiReady === false) html = `<div style="font-size:13px;color:var(--muted);">Set <b>ANTHROPIC_API_KEY</b> on the server to turn this on.</div>`;
+  else if (runningNow) html = `<div style="font-size:13px;color:var(--muted);margin-bottom:10px;"><span class="spinner"></span>Reading every shop and building the plan — a minute or two.</div>`;
+  else if (gp.status === 'error') html = `<div style="font-size:13px;color:var(--red);font-weight:600;margin-bottom:10px;">Game plan failed: ${esc(gp.error||'unknown error')}</div>`;
+  const p = gp.plan;
+  if (p) html += `<div class="${runningNow ? 'pr-dim' : ''}">
+    <div style="font-size:11px;color:var(--faint);font-weight:700;margin-bottom:6px;">BUILT ${gp.finishedAt ? relTime(gp.finishedAt).toUpperCase() : ''} · ${gp.shopCount||0} OPEN SHOPS</div>
+    <div style="font-size:17px;font-weight:800;line-height:1.35;">${esc(p.headline)}</div>
+    <div style="font-size:14px;line-height:1.6;color:var(--muted);margin-top:8px;">${esc(p.marketRead)}</div>
+    <div class="pr-h" style="margin-top:20px;">Hit these first</div>
+    ${p.topTargets.map((t,i) => { const l = byId(t.leadId); return l ? `<div class="gp-target"><div class="gp-rank">${i+1}</div><div style="flex:1;min-width:0;">
+      <a href="#" onclick="openProspect('${l.id}');return false;" style="font-weight:700;color:var(--text);">${esc(l.name)}</a>
+      <span class="pr-pill offer" style="font-size:11px;">${esc(t.offer)}</span>
+      <div style="font-size:13px;color:var(--muted);margin-top:3px;line-height:1.5;">${esc(t.why)}</div>
+      <div style="font-size:13px;margin-top:6px;font-style:italic;line-height:1.5;">“${esc(t.opener)}”</div></div></div>` : ''; }).join('')}
+    <div class="pr-h" style="margin-top:20px;">Segments</div>
+    ${p.segments.map(sg => `<div style="padding:10px 0;border-bottom:1px solid var(--border);">
+      <div style="font-weight:700;">${esc(sg.name)} <span style="color:var(--faint);font-weight:600;font-size:12px;">· ${sg.leadIds.length} shops</span></div>
+      <div style="font-size:13px;color:var(--muted);margin-top:3px;line-height:1.5;">${esc(sg.who)}</div>
+      <div style="font-size:13px;margin-top:4px;line-height:1.5;"><b>Offer:</b> ${esc(sg.offer)} · <b>Approach:</b> ${esc(sg.approach)}</div>
+      <div style="margin-top:6px;">${sg.leadIds.slice(0,24).map(chip).join('')}${sg.leadIds.length > 24 ? `<span style="font-size:12px;color:var(--faint);"> +${sg.leadIds.length-24} more</span>` : ''}</div></div>`).join('')}
+    <div class="pr-h" style="margin-top:20px;">By territory</div>
+    ${p.territoryPlan.map(t => `<div style="font-size:13px;line-height:1.55;padding:6px 0;"><b>${esc(t.territory)}</b> — ${esc(t.plan)}</div>`).join('')}
+    <div class="pr-h" style="margin-top:20px;">This week</div>
+    <div class="gp-days">${p.weekPlan.map(d => `<div class="gp-day"><div style="font-weight:800;">${esc(d.day)}</div><div style="font-size:12px;color:var(--muted);margin:2px 0 6px;">${esc(d.focus)}</div><ul class="pr-list" style="font-size:12px;">${d.tasks.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`).join('')}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;margin-top:20px;">
+      <div><div class="pr-h">Pitch angles that land</div><ul class="pr-list">${p.pitchAngles.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
+      <div><div class="pr-h">Watch out for</div><ul class="pr-list">${p.watchOuts.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
+    </div></div>`;
+  else if (!html) html = `<div style="font-size:13px;color:var(--muted);line-height:1.6;">You'll get: which shops to go after first and the opener for each, the shops grouped by how to sell them, a plan per territory, and a day-by-day week for the rep.</div>`;
+  body.innerHTML = html;
+}
+
+// While any AI job runs, refresh every few seconds so results appear on their own.
+let aiPollTimer = null;
+function scheduleAiPoll() {
+  clearTimeout(aiPollTimer);
+  const live = v => v && v.status === 'running' && Date.now() - Date.parse(v.startedAt) < 10*60*1000;
+  if (!live(salesData.plan) && !(salesData.leads||[]).some(l => live(l.intel))) return;
+  aiPollTimer = setTimeout(async () => applySalesData(await salesApi('')), 6000);
+}
+
+// Address lookup in the lead drawer (server proxies OpenStreetMap).
+async function geocode(q) {
+  q = String(q||'').trim(); if (q.length < 3) return [];
+  const d = await salesApi('/geocode?q=' + encodeURIComponent(q));
+  return (d && d.results) || [];
+}
+let slGeoHits = [];
+async function slFindAddress() {
+  const box = document.getElementById('sl-geo');
+  box.innerHTML = '<div style="font-size:12px;color:var(--muted);margin-top:6px;"><span class="spinner"></span>Looking up…</div>';
+  slGeoHits = await geocode(document.getElementById('sl-address').value);
+  box.innerHTML = slGeoHits.length
+    ? `<div class="geo-results">${slGeoHits.map((h,i)=>`<div onclick="slPickGeo(slGeoHits[${i}])">${esc(h.label)}</div>`).join('')}</div>`
+    : '<div style="font-size:12px;color:var(--red);margin-top:6px;">No match. Try adding the street type or city — or drop the pin by hand on the map.</div>';
+}
+function slPickGeo(h) {
+  document.getElementById('sl-lat').value = h.lat;
+  document.getElementById('sl-lng').value = h.lng;
+  const city = document.getElementById('sl-city');
+  if (!city.value.trim() && h.city) city.value = h.city;
+  document.getElementById('sl-geo').innerHTML = '';
+  slPinFromGeo = true;
+  slPinStatus();
+}
+let slPinFromGeo = false;
+function slPinDirty() {
+  // A pin looked up from the old address is now wrong — drop it so save re-finds
+  // it. A hand-placed pin stays; the user just gets a nudge to re-check it.
+  if (slPinFromGeo) { document.getElementById('sl-lat').value = ''; document.getElementById('sl-lng').value = ''; slPinFromGeo = false; }
+  slPinStatus(true);
+}
+function slTerritoryOptions(l, pre) {
+  const pin = pre && pre.lat != null ? pre : l;
+  const auto = pin ? autoTerritory(pin) : null;
+  const cur = (l && l.territory) || '';
+  return `<option value="">Auto — ${auto ? esc(auto.name) : 'from the pin once it has one'}</option>`
+    + TERRITORIES.map(t => `<option value="${t.id}"${cur===t.id?' selected':''}>${esc(t.name)}</option>`).join('');
+}
+function slPinStatus(edited) {
+  const el = document.getElementById('sl-pin-status'); if (!el) return;
+  const pinned = document.getElementById('sl-lat').value !== '';
+  el.innerHTML = pinned ? '<span style="color:var(--green-deep);font-weight:600;">📍 On the map</span>'
+      + (edited ? ' <span style="color:var(--muted);">— address changed? hit Find to move the pin</span>' : '')
+    : '<span style="color:var(--faint);">Not on the map yet</span>';
 }
 
 // ── Sales Rep admin ───────────────────────────────────────────────────────────
@@ -1654,12 +2510,20 @@ function applySalesData(d) {
   document.getElementById('sa-wt-walkins').value = wt.walkins||5;
   document.getElementById('sa-wt-demos').value   = wt.demos||5;
   renderSalesTodos(); renderSalesGoals(); renderSalesLeads();
+  if (terrMap) renderTerritory();
+  renderGamePlan();
+  // Refresh an open profile — whole page unless the user is mid-typing in it.
+  if (document.getElementById('page-prospect').classList.contains('active')) {
+    const typing = document.activeElement && document.getElementById('pr-body').contains(document.activeElement) && /TEXTAREA|INPUT|SELECT/.test(document.activeElement.tagName);
+    typing ? renderProspectAI() : renderProspect();
+  }
+  scheduleAiPoll();
 }
 
 function renderSalesTodos() {
   const el = document.getElementById('sa-todos-list');
   const todos = salesData.todos||[];
-  if (!todos.length) { el.innerHTML = '<div style="font-size:13px;color:var(--muted);">No to-dos yet. Add one above — it appears on his Goals tab.</div>'; return; }
+  if (!todos.length) { el.innerHTML = '<div style="font-size:13px;color:var(--muted);">No to-dos yet. Add one above — it appears on their Goals tab.</div>'; return; }
   el.innerHTML = todos.map(t => `
     <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">
       <span style="font-size:15px;">${t.done?'✅':'⬜'}</span>
@@ -1700,15 +2564,17 @@ async function addSalesGoal() {
 }
 async function delSalesGoal(id) { applySalesData(await salesApi('/goals/'+id, { method:'DELETE' })); }
 
-const SA_STAGES = [['contacted','Contacted'],['responded','Responded'],['demo','Demo'],['closed','Closed'],['not-interested','Lost']];
+const SA_STAGES = [['not-contacted','Not contacted'],['contacted','Contacted'],['responded','Responded'],['demo','Demo'],['closed','Closed'],['not-interested','Lost']];
 function renderSalesLeads() {
   const tb = document.getElementById('sa-leads-tbody');
-  const leads = salesData.leads||[];
-  if (!leads.length) { tb.innerHTML = '<tr><td colspan="6"><div class="empty-state">No leads yet.</div></td></tr>'; return; }
-  tb.innerHTML = leads.map(l => `
+  const leads = (salesData.leads||[]).filter(l => l.status !== 'not-contacted');
+  const cold = (salesData.leads||[]).length - leads.length;
+  const coldRow = cold ? `<tr><td colspan="6" style="font-size:12px;color:var(--muted);">+ ${cold} not-contacted shop${cold===1?'':'s'} — work them from the <a href="#" onclick="nav('map');return false;" style="color:var(--green-deep);font-weight:600;">Territory map</a>.</td></tr>` : '';
+  if (!leads.length) { tb.innerHTML = '<tr><td colspan="6"><div class="empty-state">No leads yet.</div></td></tr>' + coldRow; return; }
+  tb.innerHTML = coldRow + leads.map(l => `
     <tr>
-      <td><div style="font-weight:600;">${esc(l.name)}</div><div style="font-size:11px;color:var(--muted);">${esc(l.contact||'')}</div></td>
-      <td>${esc(l.city||'—')}</td>
+      <td><a href="#" onclick="openProspect('${l.id}');return false;" style="font-weight:600;color:var(--text);">${esc(l.name)}</a><div style="font-size:11px;color:var(--muted);">${esc(l.contact||'')}</div></td>
+      <td>${esc((territoryOf(l)||{}).name || l.city || '—')}</td>
       <td>${esc(l.tool||'—')}</td>
       <td><select class="form-input" style="padding:5px 8px;font-size:12px;min-width:120px;" onchange="setSalesLeadStage('${l.id}',this.value)">
         ${SA_STAGES.map(([v,lbl])=>`<option value="${v}"${l.status===v?' selected':''}>${lbl}</option>`).join('')}
@@ -1730,34 +2596,53 @@ async function delSalesLead(id) {
   applySalesData(await salesApi('/leads/'+id, { method:'DELETE' })); toast('Lead deleted');
 }
 
-function openSalesLead(id) {
+function openSalesLead(id, pre) {
   const l = id ? (salesData.leads||[]).find(x=>x.id===id) : null;
   const v = (k) => esc(l && l[k]!=null ? l[k] : '');
   const opt = (arr, cur) => arr.map(o=>`<option${o===cur?' selected':''}>${o}</option>`).join('');
   document.getElementById('drawer-overlay').style.display = 'block';
   document.getElementById('drawer').classList.add('open');
   document.getElementById('drawer-shop-name').textContent = id ? 'Edit Lead' : 'New Lead';
+  slPinFromGeo = false;
   document.getElementById('drawer-body').innerHTML = `
     <div class="drawer-section">
       <input type="hidden" id="sl-id" value="${id||''}"/>
       <div class="form-row"><label class="form-label">Name &amp; Shop *</label><input class="form-input" id="sl-name" value="${v('name')}"/></div>
       <div class="form-row"><label class="form-label">Phone / Instagram</label><input class="form-input" id="sl-contact" value="${v('contact')}"/></div>
+      <div class="form-row"><label class="form-label">Address <span style="font-weight:400;color:var(--faint);">— puts them on the territory map</span></label>
+        <div style="display:flex;gap:6px;"><input class="form-input" id="sl-address" value="${v('address')}" placeholder="e.g. 4801 Menaul Blvd NE, Albuquerque" oninput="slPinDirty()" onkeydown="if(event.key==='Enter'){event.preventDefault();slFindAddress();}"/>
+        <button class="btn btn-outline btn-sm" type="button" onclick="slFindAddress()">Find</button></div>
+        <input type="hidden" id="sl-lat" value="${pre && pre.lat!=null ? pre.lat : v('lat')}"/><input type="hidden" id="sl-lng" value="${pre && pre.lng!=null ? pre.lng : v('lng')}"/>
+        <div id="sl-geo"></div>
+        <div id="sl-pin-status" style="font-size:11px;margin-top:5px;"></div>
+      </div>
       <div class="form-row"><label class="form-label">City</label><input class="form-input" id="sl-city" value="${v('city')}"/></div>
-      <div class="form-row"><label class="form-label">Currently using</label><select class="form-input" id="sl-tool">${opt(['Nothing / texts','Booksy','Square','Vagaro','StyleSeat','Hey Goldie','The Cut','Other'], l&&l.tool)}</select></div>
+      <div class="form-row"><label class="form-label">Territory</label><select class="form-input" id="sl-territory">${slTerritoryOptions(l, pre)}</select></div>
+      <div class="form-row"><label class="form-label">Currently using</label><select class="form-input" id="sl-tool">${opt(['Nothing / texts','Urable','Jobber','Square','Housecall Pro','Google Sheets','Another agency','Other'], l&&l.tool)}</select></div>
       <div class="form-row"><label class="form-label">Stage</label><select class="form-input" id="sl-status">${SA_STAGES.map(([vv,lbl])=>`<option value="${vv}"${l&&l.status===vv?' selected':''}>${lbl}</option>`).join('')}</select></div>
-      <div class="form-row"><label class="form-label">Plan interest</label><select class="form-input" id="sl-plan">${opt(['Starter — $19.99','Pro — $99','Shop — $200','Unknown'], l&&l.plan)}</select></div>
+      <div class="form-row"><label class="form-label">Plan interest</label><select class="form-input" id="sl-plan">${opt(['Receptionist — $349','Receptionist + Ads — $1,599','Growth Engine — $3,000','Custom quote','Unknown'], l&&l.plan)}</select></div>
       <div class="form-row"><label class="form-label">Follow up date</label><input class="form-input" id="sl-followup" type="date" value="${v('followup')}"/></div>
       <div class="form-row"><label class="form-label">Notes</label><textarea class="form-input" id="sl-notes" rows="4">${v('notes')}</textarea></div>
       <button class="btn btn-green" style="width:100%;margin-top:6px;" onclick="saveSalesLead()">Save Lead</button>
     </div>`;
+  slPinStatus();
 }
 async function saveSalesLead() {
   const name = document.getElementById('sl-name').value.trim();
   if (!name) { toast('Enter a name'); return; }
+  // Typed an address but never picked a match — pin the best match on save.
+  if (document.getElementById('sl-address').value.trim() && !document.getElementById('sl-lat').value) {
+    const hit = (await geocode(document.getElementById('sl-address').value))[0];
+    if (hit) slPickGeo(hit);
+  }
   const body = {
     id: document.getElementById('sl-id').value || undefined, name,
     contact:  document.getElementById('sl-contact').value.trim(),
     city:     document.getElementById('sl-city').value.trim(),
+    address:  document.getElementById('sl-address').value.trim(),
+    territory: document.getElementById('sl-territory').value,
+    lat:      document.getElementById('sl-lat').value || null,
+    lng:      document.getElementById('sl-lng').value || null,
     tool:     document.getElementById('sl-tool').value,
     status:   document.getElementById('sl-status').value,
     plan:     document.getElementById('sl-plan').value,
@@ -1785,7 +2670,7 @@ async function saveSalesSettings() {
   };
   applySalesData(await salesApi('/settings', { method:'PATCH', body }));
   const msg = document.getElementById('sa-settings-msg');
-  msg.textContent = 'Saved ✓ — live on his screen';
+  msg.textContent = 'Saved ✓ — live on their screen';
   setTimeout(()=>msg.textContent='', 2500);
 }
 
@@ -2203,7 +3088,7 @@ function renderDemos(demos) {
 
   const tbody = document.getElementById('demos-tbody');
   if (!demos.length) {
-    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No demos booked yet.<br><a href="/demo" target="_blank" style="color:var(--green);">Share your demo page →</a></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No demo calls booked yet.<br><a href="/demo" target="_blank" style="color:var(--green);">Open the /demo page →</a></div></td></tr>';
     return;
   }
 
@@ -2255,54 +3140,117 @@ async function deleteDemo(id) {
   } catch(e) { toast('Failed'); }
 }
 
+// ── Playbook leads (free Sales Playbook opt-ins from /playbook) ───────────────
+let pbStatuses = ['new','contacted','call booked','client','not a fit'];
+const PB_STATUS_COLORS = { new:'badge-blue', contacted:'badge-gray', 'call booked':'badge-shop', client:'badge-shop', 'not a fit':'badge-inactive' };
+
+async function loadPlaybookLeads() {
+  try {
+    const res = await fetch('/api/admin/playbook-leads', { headers: { 'x-admin-key': adminKey } });
+    const d = await res.json();
+    if (d.statuses) pbStatuses = d.statuses;
+    renderPlaybookLeads(d.leads || []);
+  } catch(e) {
+    const tb = document.getElementById('playbook-tbody');
+    if (tb) tb.innerHTML = '<tr><td colspan="7"><div class="empty-state">Failed to load playbook leads.</div></td></tr>';
+  }
+}
+
+function renderPlaybookLeads(list) {
+  const weekAgo = Date.now() - 7*24*60*60*1000;
+  const fresh = list.filter(l => l.status === 'new').length;
+  document.getElementById('pbl-total').textContent   = list.length;
+  document.getElementById('pbl-week').textContent    = list.filter(l => Date.parse(l.createdAt) > weekAgo).length + ' this week';
+  document.getElementById('pbl-new').textContent     = fresh;
+  document.getElementById('pbl-opened').textContent  = list.filter(l => l.downloads > 0).length;
+  document.getElementById('pbl-clients').textContent = list.filter(l => l.status === 'client').length;
+  document.getElementById('pbl-calls').textContent   = list.filter(l => l.status === 'call booked').length + ' calls booked';
+  const badge = document.getElementById('sb-playbook-badge');
+  if (badge) { badge.textContent = fresh; badge.style.display = fresh ? '' : 'none'; }
+
+  const tbody = document.getElementById('playbook-tbody');
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No playbook downloads yet.<br><a href="/playbook" target="_blank" style="color:var(--green);">Open the /playbook page →</a></div></td></tr>';
+    return;
+  }
+  const digits = p => String(p||'').replace(/\D/g,'').slice(-10);
+  tbody.innerHTML = list.map(l => `
+    <tr>
+      <td>
+        <div style="font-weight:600;">${esc(l.name)}</div>
+        <div style="font-size:11px;color:var(--muted);">${esc(l.shopName||'—')}</div>
+        <div style="font-size:11px;"><a href="tel:+1${digits(l.phone)}" style="color:var(--green);font-weight:600;">${esc(l.phone||'')}</a></div>
+        <div style="font-size:11px;"><a href="mailto:${esc(l.email)}" style="color:var(--muted);">${esc(l.email)}</a></div>
+        ${l.source ? `<div style="font-size:11px;color:var(--faint);">via ${esc(l.source)}</div>` : ''}
+      </td>
+      <td style="font-size:12px;color:var(--muted);">${esc(l.service||'—')}</td>
+      <td style="white-space:nowrap;font-size:12px;">
+        <div style="font-weight:600;">${fmtDate(l.createdAt)}</div>
+        ${(l.requests||1) > 1 ? `<div style="font-size:11px;color:var(--muted);">asked ${l.requests}×</div>` : ''}
+      </td>
+      <td style="font-size:12px;white-space:nowrap;">${l.downloads ? `<span class="badge badge-shop">✓ ${l.downloads}×</span>` : '<span style="color:var(--faint);">not yet</span>'}</td>
+      <td>
+        <select class="filter-select" style="font-size:11px;padding:4px 6px;" onchange="updatePlaybookLead('${l.id}','status',this.value)">
+          ${pbStatuses.map(s => `<option value="${s}" ${l.status===s?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
+      <td>
+        <input type="text" value="${esc(l.notes||'')}" placeholder="Add notes…"
+          style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;width:160px;font-family:inherit;"
+          onblur="updatePlaybookLead('${l.id}','notes',this.value)"
+          onkeydown="if(event.key==='Enter')this.blur()" />
+      </td>
+      <td><button class="btn btn-sm btn-red" onclick="deletePlaybookLead('${l.id}')">✕</button></td>
+    </tr>`).join('');
+}
+
+async function updatePlaybookLead(id, field, value) {
+  try {
+    await fetch('/api/admin/playbook-leads/' + id, {
+      method: 'PATCH',
+      headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [field]: value }),
+    });
+    if (field === 'status') { toast('Status updated ✓'); loadPlaybookLeads(); }
+  } catch(e) { toast('Update failed'); }
+}
+
+async function deletePlaybookLead(id) {
+  if (!confirm('Remove this playbook lead?')) return;
+  try {
+    await fetch('/api/admin/playbook-leads/' + id, { method: 'DELETE', headers: { 'x-admin-key': adminKey } });
+    toast('Removed ✓'); loadPlaybookLeads();
+  } catch(e) { toast('Failed'); }
+}
+
 // ── Checklist ─────────────────────────────────────────────────────────────────
 const CHECKLIST = [
   {
-    id: 'legal',
-    icon: '⚖️',
-    title: 'Legal & Business',
+    id: 'clients',
+    icon: '🏪',
+    title: 'Client shops',
     items: [
-      { id: 'llc-approved',   label: 'LLC approved (New Mexico)',             note: 'Pending with the state. Check your email for approval notice.',                                         tag: 'waiting' },
-      { id: 'bank-account',   label: 'Open a business bank account',          note: 'Use the LLC to open a dedicated business checking account. Keep finances separate from day 1.',        tag: 'waiting' },
-      { id: 'ein',            label: 'Get your EIN (Employer ID Number)',      note: 'Free from IRS.gov in 5 minutes. Needed for bank account and Stripe.',                                  tag: 'waiting' },
-      { id: 'stripe-account', label: 'Create Stripe account under the LLC',   note: 'Use the business name, EIN, and business bank account. This is your payment processor.',              tag: 'waiting' },
+      { id: 'cl-evo-report',      label: 'Send the tint shop their monthly one-pager',          note: 'Shop profile → 📄 Client report. Spend, leads, booked, collected. Same page every month.',                        tag: 'soon' },
+      { id: 'cl-ss-tenant',       label: 'Create the Street Soundz tenant + load their prices', note: 'Client shops → + Add client shop (slug street-soundz-nm). Then set up the lead page and tracking number at the shop.', tag: 'urgent' },
+      { id: 'cl-ss-facts',        label: 'Get Street Soundz launch facts (LAUNCH.md)',          note: 'Hours, address, phone, services, reviews for their site. Stock photos swap out once they upload work photos.',       tag: 'waiting' },
+      { id: 'cl-ead-tenant',      label: 'Create the Enchantment Auto Details tenant',           note: 'Detailing-only, prices hidden. Slug enchantment-auto-details. Three lead-form options on their site.',              tag: 'urgent' },
+      { id: 'cl-ead-facts',       label: 'Get Enchantment Auto Details launch facts',            note: 'Same LAUNCH.md list as Street Soundz. Site is live on Railway waiting on real details.',                           tag: 'waiting' },
+      { id: 'cl-in-person',       label: 'In-person setup at each new shop',                     note: 'See the bays, learn the price list, hear how they talk to customers. That is how the phone sounds like them.',    tag: 'soon' },
+      { id: 'cl-weekly-advisor',  label: 'Read every Monday Growth Advisor review',              note: 'Shop profile → Growth Advisor. Act on it or add the lesson to the playbook in Settings.',                          tag: 'soon' },
     ],
   },
   {
-    id: 'stripe',
-    icon: '💳',
-    title: 'Stripe Setup',
-    items: [
-      { id: 'stripe-key',        label: 'STRIPE_SECRET_KEY added to Railway',           note: 'Already done ✓ — live key is in Railway environment variables.',                                                             tag: 'done' },
-      { id: 'stripe-onetime-pro',  label: 'Recreate Pro setup fee ($150) as One-time',  note: 'In Stripe dashboard → Products → archive the old recurring price → create new One-time price for $150. Copy the price ID.', tag: 'urgent' },
-      { id: 'stripe-onetime-shop', label: 'Recreate Shop setup fee ($500) as One-time', note: 'Same as above but $500. One-time type so it only charges once at signup, not monthly.',                                      tag: 'urgent' },
-      { id: 'stripe-update-ids',   label: 'Update price IDs in create-checkout.js',     note: 'File: shopflow-site/netlify/functions/create-checkout.js — replace setupFee price IDs with the new One-time ones.',          tag: 'urgent' },
-      { id: 'stripe-anchor',       label: 'Verify billing anchors to the 5th',          note: 'Monthly subscriptions should start billing on the 5th. The trial_end logic is already in create-checkout.js.',               tag: 'soon' },
-      { id: 'stripe-test',         label: 'Run end-to-end payment test',                note: 'Pricing page → Stripe checkout → success page → signup → CRM login. Use a Stripe test card first.',                          tag: 'urgent' },
-    ],
-  },
-  {
-    id: 'infrastructure',
-    icon: '🚀',
-    title: 'Infrastructure & Deploy',
-    items: [
-      { id: 'railway-deploy',   label: 'shopflow-multitenant live on Railway',     note: 'Already deployed ✓ — your CRM platform is running.',                                                                              tag: 'done' },
-      { id: 'railway-twilio',   label: 'Add Twilio env vars to Railway',           note: 'Railway dashboard → Variables → add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER. This activates SMS for all shops.', tag: 'urgent' },
-      { id: 'netlify-deploy',   label: 'Deploy shopflow-site to Netlify',          note: 'Drag and drop the full shopflow-site folder into Netlify. Includes fixed create-checkout.js, get-session.js, and success.html.',   tag: 'urgent' },
-      { id: 'custom-domain',    label: 'Point domain to Railway + Netlify',        note: 'app.shopflow.com → Railway. shopflow.com → Netlify. Set up in your domain registrar DNS settings.',                               tag: 'soon' },
-      { id: 'backup-plan',      label: 'Set up data backup for Railway volume',    note: 'Railway persistent volumes don\'t auto-backup. Consider a cron job to copy /data to S3 or GitHub daily.',                         tag: 'soon' },
-    ],
-  },
-  {
-    id: 'marketing',
+    id: 'sales',
     icon: '📣',
-    title: 'Marketing & Sales',
+    title: 'Sales & marketing',
     items: [
-      { id: 'site-live',        label: 'shopflow-site fully live with pricing',    note: 'Marketing site needs to be on Netlify with working Stripe checkout before you can sell.',                                          tag: 'urgent' },
-      { id: 'google-review',    label: 'Set up Google Business Profile',           note: 'Create a Google Business listing for ShopFlow LLC. Helps with credibility and SEO.',                                              tag: 'soon' },
-      { id: 'first-customer',   label: 'Sign first paying customer',               note: 'Pitch a local barber or shop owner. Offer a 30-day free trial. Get real feedback.',                                               tag: 'soon' },
-      { id: 'case-study',       label: 'Get a testimonial / case study',           note: 'After first customer is using it, ask for a short quote and results. Put it on the site.',                                         tag: 'soon' },
-      { id: 'instagram',        label: 'Post demo videos on Instagram / TikTok',   note: 'Short screen recordings of the app in action — booking flow, client profile, dashboard. Show the barber audience.',               tag: 'soon' },
+      { id: 'sa-search-console',  label: 'Google Search Console: add shopflowtech.com, submit sitemap', note: 'Domain property via DNS TXT at Name.com. Then URL-inspect / request indexing on /, /guides/ and the tint guide.', tag: 'urgent' },
+      { id: 'sa-analytics',       label: 'Add GA4 or Plausible, tag /demo clicks as a conversion', note: 'One snippet on landing.html + guides. Check monthly which guide the booked calls read.',                          tag: 'soon' },
+      { id: 'sa-gbp',             label: 'Google Business Profile for ShopFlow Technologies LLC', note: 'Category "Marketing agency", Albuquerque. Shop owners search "marketing agency albuquerque"; the map pack is free.', tag: 'soon' },
+      { id: 'sa-client-links',    label: '"Marketing by ShopFlow" footer links on client sites',  note: 'evosolution.org + the Street Soundz and Enchantment sites → shopflowtech.com. Real local links in the exact niche.', tag: 'soon' },
+      { id: 'sa-guide-2',         label: 'Publish guide #2: Facebook ads for tint shops (offer vs heat hook)', note: 'docs/seo-plan.md has the outline and the data. Add it to sitemap.xml with the publish date as lastmod.', tag: 'soon' },
+      { id: 'sa-audit-outreach',  label: 'Missed-call audit outreach: 10 shops this week',          note: 'Call the shop mid-day, note whether a human answers, send the audit. Book the 15-minute call from there.',        tag: 'soon' },
+      { id: 'sa-www',             label: 'Add www.shopflowtech.com as a Railway custom domain',    note: 'www currently fails TLS. The server already 301s www → apex once Railway has the cert.',                           tag: 'soon' },
     ],
   },
   {
@@ -2310,19 +3258,29 @@ const CHECKLIST = [
     icon: '🛠️',
     title: 'Product',
     items: [
-      { id: 'sms-live',         label: 'SMS confirmations & reminders live',       note: 'Blocked on Twilio Railway env vars. Once those are added, SMS fires automatically on every booking.',                             tag: 'urgent' },
-      { id: 'rebook-nudge',     label: 'Rebook nudge scheduler live',              note: 'Code is done. Fires when Twilio is live. Customizable interval per shop in Settings.',                                            tag: 'soon' },
-      { id: 'booking-page',     label: 'Test public booking page per shop',        note: 'Visit /book/kings-cuts and book a test appointment end-to-end.',                                                                   tag: 'soon' },
-      { id: 'pwa-test',         label: 'Test PWA install on iPhone + Android',     note: 'Have a barber add it to their home screen. Should feel like a native app.',                                                        tag: 'soon' },
-      { id: 'stripe-connect',   label: 'Test Stripe Connect deposit flow',         note: 'Shop connects their Stripe account → client pays deposit at booking → barber gets paid.',                                         tag: 'soon' },
+      { id: 'pr-receptionist-ff', label: 'Receptionist accuracy branch: staging test call, then fast-forward main', note: 'Terminology layer, sonnet-5 voice brain, relay fixes, objection capture are on staging. One real call, then ship.', tag: 'urgent' },
+      { id: 'pr-password-reset',  label: 'Self-serve password reset for shop owners',              note: 'Admin set-password exists; owners still cannot reset on their own. Email a reset link via Resend.',               tag: 'soon' },
+      { id: 'pr-portal-button',   label: 'Admin button to mint client-portal logins',               note: '/portal works (role=client) but there is no UI to create the login. Add it to the shop profile.',                 tag: 'soon' },
+      { id: 'pr-4b-upsell',       label: 'Phase 4b: conversational AI upsell to the two test shops', note: 'Once 4a is stable for both, pitch the conversational tier at +$100–200/mo.',                                    tag: 'waiting' },
+    ],
+  },
+  {
+    id: 'platform',
+    icon: '🚀',
+    title: 'Platform & infrastructure',
+    items: [
+      { id: 'pl-square-env',      label: 'SQUARE_* env vars in Railway + connect each shop',        note: 'Square is live on main; every shop needs the OAuth connect from its Settings before deposits work.',              tag: 'soon' },
+      { id: 'pl-a2p',             label: 'A2P 10DLC campaign approved',                             note: 'Answers are drafted (speed-to-lead notes). Until approved, texts stay manual sms: links, no automated SMS.',     tag: 'waiting' },
+      { id: 'pl-backups',         label: 'Nightly backup of the Railway volume',                    note: 'Tenant JSON + uploads live on the volume and are not backed up. Cron a copy to S3 or a private repo.',           tag: 'soon' },
+      { id: 'pl-staging-parity',  label: 'Keep staging env vars in step with prod',                 note: 'Staging is the isolated Railway env on the staging branch. Twilio test numbers only.',                            tag: 'soon' },
     ],
   },
 ];
 
-const CL_STORAGE_KEY    = 'sf_admin_checklist_v2';
+const CL_STORAGE_KEY    = 'sf_admin_checklist_v3';
 const CL_CUSTOM_KEY     = 'sf_admin_checklist_custom';
 const tagMap   = { urgent:'cl-tag-urgent', waiting:'cl-tag-waiting', done:'cl-tag-done', soon:'cl-tag-soon' };
-const tagLabel = { urgent:'🔴 Urgent', waiting:'⏳ Waiting on LLC', done:'✓ Done', soon:'🔵 Up Next' };
+const tagLabel = { urgent:'🔴 Urgent', waiting:'⏳ Waiting', done:'✓ Done', soon:'🔵 Up next' };
 
 function clLoadState()   { try { return JSON.parse(localStorage.getItem(CL_STORAGE_KEY)  || '{}'); } catch(e) { return {}; } }
 function clLoadCustom()  { try { return JSON.parse(localStorage.getItem(CL_CUSTOM_KEY)   || '[]'); } catch(e) { return []; } }
@@ -2607,13 +3565,13 @@ async function seedDemo() {
     const d = await res.json();
     if (!d.ok) throw new Error(d.error);
     result.style.display = 'block';
-    result.innerHTML = `✅ <strong style="color:var(--green);">Done!</strong> ${d.clients} clients · ${d.appointments} appointments · $${Number(d.revenue).toLocaleString()} revenue<br><span style="color:var(--muted);">demo@shopflow.com / demo1234</span>`;
+    result.innerHTML = `✅ <strong style="color:var(--green);">Done!</strong> ${esc(d.shopName||'Demo shop')} · ${d.clients} customers · ${d.appointments} appointments · $${Number(d.revenue).toLocaleString()} completed<br><span style="color:var(--muted);">${esc(d.email||'')} / ${esc(d.password||'')} · <a href="/shop/${esc(d.slug||'')}" target="_blank" style="color:var(--green-deep);">open the CRM ↗</a></span>`;
     toast('Demo seeded ✓');
     await Promise.all([loadShops(), loadStats()]);
   } catch(e) {
     result.style.display = 'block';
     result.innerHTML = `❌ <span style="color:var(--red);">Seed failed: ${e.message}</span>`;
-  } finally { btn.textContent = '⚡ Seed Demo Account'; btn.disabled = false; }
+  } finally { btn.textContent = '⚡ Reset the demo shop'; btn.disabled = false; }
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────

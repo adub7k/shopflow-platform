@@ -463,7 +463,7 @@ const Quotes = {
         ${q.customerEmail?`<button class="btn btn-full" onclick="Quotes.sendEmail('${q.id}')">✉️ Email to customer</button>`:''}
         ${(q.customerPhone||q.customerId)?`<button class="btn btn-full" onclick="Quotes.sendLink('${q.id}')">📱 Text to customer</button>`:''}
         ${q.customerPhone?`<a class="btn btn-full" href="tel:${esc(String(q.customerPhone).replace(/[^\d+]/g,''))}" style="text-decoration:none;text-align:center;" onclick="Quotes._logCall('${q.id}')">📞 Call ${esc(q.customerPhone)}</a>`:''}
-        ${(q.customerId||q.customerPhone)?`<button class="btn btn-full" onclick="Quotes.openLead('${q.id}')">👤 View lead profile</button>`:''}
+        ${(q.customerId||q.customerPhone)?`<button class="btn btn-full" onclick="Quotes.openLead('${q.id}')">${this._isFleet(q)&&q.customerId?'🚚 Open fleet profile':'👤 View lead profile'}</button>`:''}
         ${q.status==='approved'?`<button class="btn btn-green btn-full" onclick="Quotes.schedule('${q.id}')">📅 Schedule appointment</button>`:''}
         ${['approved','scheduled','completed'].includes(q.status)&&!q.balancePaid&&!q.contract&&Number(q.total)>0?`<button class="btn btn-full" onclick="Quotes.paymentLink('${q.id}')">💳 Text payment link${q.depositPaid?` — ${fmtMoney(Math.max(0,(Number(q.total)||0)-(Number(q.depositAmount)||0)))} balance`:` — ${fmtMoney(q.total)}`}</button>`:''}
         ${q.status==='sent'?`<button class="btn btn-full" onclick="Quotes.mark('${q.id}','approved')">Mark approved</button>`:''}

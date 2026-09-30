@@ -79,6 +79,24 @@ app.get('/js/build.js', (req, res) => {
   res.send(`window.__BUILD__=${JSON.stringify(BUILD)};`);
 });
 
+// ── Marketing host canonicalisation ──────────────────────────────────────────
+// shopflowtech.com is the public site. Google should see exactly one URL per
+// page, so www → apex and http → https as 301s (GET/HEAD only — webhooks POST
+// to the Railway host and must never be redirected).
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  const host = req.hostname;
+  const wantsApex = host === 'www.shopflowtech.com';
+  const wantsTls  = host === 'shopflowtech.com' && req.protocol !== 'https';
+  if (wantsApex || wantsTls) return res.redirect(301, 'https://shopflowtech.com' + req.originalUrl);
+  next();
+});
+app.use(require('compression')());
+
+// Static marketing site + app assets. The directory index is on (so /guides/
+// serves guides/index.html) and serve-static 301s /guides → /guides/ for us.
+// robots.txt and sitemap.xml live in client/ and are served here with their
+// real content types — before this they fell through to the landing page.
 app.use(express.static(CLIENT_DIR));
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '30d' }));
 app.use('/api', rateLimit({ windowMs: 60000, max: 500 }));
@@ -104,9 +122,12 @@ app.use('/api/accounts/signup', authLimiter);
 app.use(limitWhen(authLimiter, req => req.method === 'POST' && req.path === '/api/shop/auth/verify-pin'));
 app.use(limitWhen(authLimiter, req => req.method === 'POST' && req.path === '/api/sales/login'));
 app.use(limitWhen(publicWriteLimiter, req => req.method === 'POST' && /^\/api\/public\/[^/]+\/(lead|book)$/.test(req.path)));
+// Playbook opt-in: 5 per 15 min per IP is plenty for a real person.
+app.use(limitWhen(strictLimiter(5), req => req.method === 'POST' && req.path === '/api/public/playbook'));
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 app.use(require('./routes/auth'));
+app.use(require('./routes/playbook'));
 app.use(require('./routes/public'));
 app.use(require('./routes/twilio'));
 app.use(require('./routes/shop'));
@@ -216,12 +237,23 @@ app.get('/book/*',  (req, res) => {
 app.get('/review/*',(req, res) => res.sendFile(path.join(CLIENT_DIR, 'review.html')));
 app.get('/quote/*', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'quote.html')));
 app.get('/demo',    (req, res) => res.sendFile(path.join(CLIENT_DIR, 'demo.html')));
+app.get('/about',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'about.html')));
+app.get('/playbook', (req, res) => res.sendFile(path.join(CLIENT_DIR, 'playbook.html')));
 app.get('/sales',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'sales.html')));
 app.get(['/portal', '/portal/*'], (req, res) => res.sendFile(path.join(CLIENT_DIR, 'portal.html')));
 app.get('/signup',  (req, res) => res.sendFile(path.join(CLIENT_DIR, 'signup.html')));
 app.get('/login',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'login.html')));
 app.get('/admin',   (req, res) => res.sendFile(path.join(CLIENT_DIR, 'admin.html')));
-app.get('*',        (req, res) => res.sendFile(path.join(CLIENT_DIR, 'landing.html')));
+app.get('/',        (req, res) => res.sendFile(path.join(CLIENT_DIR, 'landing.html')));
+// Anything else is a real 404. It used to fall through to landing.html with a
+// 200, which made every mistyped URL a duplicate of the homepage to Googlebot
+// (soft 404s), including /robots.txt and /sitemap.xml before they existed.
+app.use((req, res) => {
+  res.status(404);
+  if (req.path.startsWith('/api/')) return res.json({ ok: false, error: 'Not found' });
+  if (req.accepts('html')) return res.sendFile(path.join(CLIENT_DIR, '404.html'));
+  res.type('txt').send('Not found');
+});
 
 // ── Optional one-time demo seed ───────────────────────────────────────────────
 // Set SEED_DEMO=true in the environment (e.g. on Railway) to seed the generic
@@ -232,12 +264,6 @@ if (process.env.SEED_DEMO === 'true') {
   catch(e) { console.error('Demo seed failed:', e.message); }
 }
 
-// Set SEED_CLEANING=true to seed a self-contained cleaning-company demo
-// (Summit Home Cleaning) into the volume on boot. Create-only; unset once seeded.
-if (process.env.SEED_CLEANING === 'true') {
-  try { require('../seed-cleaning-demo')({ force: false }); }
-  catch(e) { console.error('Cleaning demo seed failed:', e.message); }
-}
 
 // ── One-time: claim the legacy global tracking number for one shop ─────────────
 // Historically TWILIO_FROM_NUMBER was a single shared default, so every shop
