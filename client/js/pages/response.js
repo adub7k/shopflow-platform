@@ -255,7 +255,7 @@ const Response = {
     Modal.close();
     // Touch stamp (sinks the lead in today's lists) — but no auto status move:
     // "Mark responded" is its own explicit button.
-    db.leads.note(id, 'Texted').catch(() => {});
+    db.leads.note(id, body.trim(), { kind: 'text' }).catch(() => {});
     this.render();
   },
 

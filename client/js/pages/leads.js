@@ -639,14 +639,7 @@ const Leads = {
         <div class="lead-calls">${calls}</div>
       </div>
 
-      <div class="form-group">
-        <label class="form-label">Notes</label>
-        <div style="display:flex;gap:8px;align-items:flex-end;">
-          <textarea class="form-input" id="lead-note-new" data-lead="${l.id}" rows="2" placeholder="Add a note…" style="flex:1;"></textarea>
-          <button class="btn" onclick="Leads.addNote('${l.id}')">Save note</button>
-        </div>
-        ${this._noteHistory(l)}
-      </div>
+      <div class="form-group" id="lead-activity">${this._activityBlock(l)}</div>
 
       <div class="modal-actions" style="flex-wrap:wrap;gap:8px;">
         <button class="btn btn-green btn-full" onclick="Leads.book('${l.id}')">📅 Book appointment</button>
@@ -782,35 +775,105 @@ const Leads = {
     const el = document.getElementById('lead-sms');
     if (l && l.ai && l.ai.followUp && el) { el.value = l.ai.followUp; el.focus(); }
   },
-  // Saved-note history, newest first. A pre-history lead keeps its old free-text
-  // notes as a trailing "Earlier note" entry (read-only, still saved on the lead).
+  // ── Activity log (replaces free-text notes) ──────────────────────────────
+  // Every entry is a logged CALL (with outcome), TEXT, EMAIL or NOTE, stamped
+  // server-side with who did it. The Sales activity page rolls these up per
+  // person — so "log the call, then the notes" is the whole habit.
+  _ACT_KINDS: [
+    { key: 'call',  icon: '📞', label: 'Call',  btn: 'Log call',  ph: 'What happened on the call? Next step?' },
+    { key: 'text',  icon: '💬', label: 'Text',  btn: 'Log text',  ph: 'What did you text? (optional)' },
+    { key: 'email', icon: '✉️', label: 'Email', btn: 'Log email', ph: 'What did you send? (optional)' },
+    { key: 'note',  icon: '📝', label: 'Note',  btn: 'Save note', ph: 'Add a note…' },
+  ],
+  _ACT_OUTCOMES: [
+    { key: 'answered',  label: 'Answered' },
+    { key: 'no_answer', label: 'No answer' },
+    { key: 'voicemail', label: 'Left voicemail' },
+  ],
+  _actKind: 'call',
+  _actOutcome: 'answered',
+  _actMeta(n) {
+    // Legacy entries (no kind): "Texted" / drip sends read as texts, else notes.
+    const kind = n.kind || (/^texted\b|follow-up text sent$/i.test(n.text || '') ? 'text' : 'note');
+    const k = this._ACT_KINDS.find(x => x.key === kind) || this._ACT_KINDS[3];
+    const o = kind === 'call' ? (this._ACT_OUTCOMES.find(x => x.key === n.outcome) || null) : null;
+    return { kind, icon: k.icon, label: k.label + (o ? ' · ' + o.label : ''), outcome: o && o.key };
+  },
+  _activityBlock(l) {
+    const kind = this._actKind, k = this._ACT_KINDS.find(x => x.key === kind) || this._ACT_KINDS[0];
+    const on = 'background:var(--green-lt);color:var(--green);border-color:var(--green);';
+    const kinds = this._ACT_KINDS.map(x => `<button class="lead-status-opt ${x.key===kind?'active':''}" style="${x.key===kind?on:''}" onclick="Leads.setActKind('${l.id}','${x.key}')">${x.icon} ${x.label}</button>`).join('');
+    const outcomes = kind === 'call' ? `<div class="lead-status-row" style="margin-top:8px;">${this._ACT_OUTCOMES.map(o => {
+      const sel = o.key === this._actOutcome;
+      const col = o.key === 'answered' ? 'var(--green)' : o.key === 'no_answer' ? '#c2410c' : '#b45309';
+      return `<button class="lead-status-opt ${sel?'active':''}" style="${sel?`color:${col};border-color:${col};`:''}" onclick="Leads.setActOutcome('${l.id}','${o.key}')">${o.label}</button>`;
+    }).join('')}</div>` : '';
+    return `<label class="form-label">Log activity</label>
+      <div class="lead-status-row">${kinds}</div>
+      ${outcomes}
+      <div style="display:flex;gap:8px;align-items:flex-end;margin-top:8px;">
+        <textarea class="form-input" id="lead-note-new" data-lead="${l.id}" rows="2" placeholder="${esc(k.ph)}" style="flex:1;" onkeydown="if(event.key==='Enter'&&(event.metaKey||event.ctrlKey)){event.preventDefault();Leads.logActivity('${l.id}');}"></textarea>
+        <button class="btn btn-primary" onclick="Leads.logActivity('${l.id}')">${k.btn}</button>
+      </div>
+      ${this._noteHistory(l)}`;
+  },
+  _repaintActivity(l) {
+    const host = document.getElementById('lead-activity'); if (!host) return;
+    const box = document.getElementById('lead-note-new');
+    const draft = (box && box.dataset.lead === l.id) ? box.value : '';
+    host.innerHTML = this._activityBlock(l);
+    const nb = document.getElementById('lead-note-new'); if (nb && draft) nb.value = draft;
+  },
+  setActKind(id, kind) {
+    const l = this._leads.find(x => x.id === id); if (!l) return;
+    this._actKind = kind;
+    this._repaintActivity(l);
+    const nb = document.getElementById('lead-note-new'); if (nb) nb.focus();
+  },
+  setActOutcome(id, o) {
+    const l = this._leads.find(x => x.id === id); if (!l) return;
+    this._actOutcome = o;
+    this._repaintActivity(l);
+  },
+  // Saved activity history, newest first. A pre-history lead keeps its old
+  // free-text notes as a trailing "Earlier note" entry (read-only).
   _noteHistory(l) {
-    const rows = (l.noteLog || []).map(n => `
+    const rows = (l.noteLog || []).map(n => {
+      const m = this._actMeta(n);
+      const tone = m.outcome === 'answered' ? 'color:var(--green);' : (m.outcome === 'no_answer' || m.outcome === 'voicemail') ? 'color:#c2410c;' : 'color:var(--muted);';
+      return `
       <div style="padding:8px 0;border-bottom:1px solid var(--border);">
-        <div style="font-size:13px;color:var(--text);line-height:1.45;white-space:pre-wrap;">${esc(n.text)}</div>
+        <div style="font-size:11.5px;font-weight:700;${tone}">${m.icon} ${esc(m.label)}</div>
+        ${n.text ? `<div style="font-size:13px;color:var(--text);line-height:1.45;white-space:pre-wrap;margin-top:2px;">${esc(n.text)}</div>` : ''}
         <div style="font-size:11px;color:var(--faint);margin-top:3px;">${_msgTimeFull(n.at)}${n.by ? ' · ' + esc(n.by) : ''}</div>
-      </div>`).join('');
+      </div>`; }).join('');
     const legacy = l.notes ? `
       <div style="padding:8px 0;">
         <div style="font-size:13px;color:var(--muted);line-height:1.45;white-space:pre-wrap;">${esc(l.notes)}</div>
         <div style="font-size:11px;color:var(--faint);margin-top:3px;">Earlier note</div>
       </div>` : '';
-    if (!rows && !legacy) return '';
+    if (!rows && !legacy) return `<div style="font-size:12px;color:var(--faint);margin-top:10px;">Nothing logged yet — log your first call.</div>`;
     return `<div style="margin-top:8px;">${rows}${legacy}</div>`;
   },
-  async addNote(id) {
+  async logActivity(id) {
     const box = document.getElementById('lead-note-new');
     const text = box ? box.value.trim() : '';
-    if (!text) { toast('Type a note first', 'warning'); return; }
+    const kind = this._actKind, outcome = kind === 'call' ? this._actOutcome : undefined;
+    if (!text && kind === 'note') { toast('Type a note first', 'warning'); return; }
     const l = this._leads.find(x => x.id === id); if (!l) return;
     try {
-      const res = await db.leads.note(id, text);
+      const res = await db.leads.note(id, text, { kind, ...(outcome ? { outcome } : {}) });
       l.noteLog = (res && res.noteLog) || l.noteLog;
-      if (this._openId === id) this._captureModalEdits(l);   // keep a half-typed name across the re-render
-      toast('Note saved ✓');
-      this._reopenIf(id);
-    } catch(e) { toast(e.message || 'Could not save note', 'error'); }
+      l.followTouchAt = new Date().toISOString();
+      if (typeof Pipeline !== 'undefined' && Pipeline._leads) { const p = Pipeline._leads.find(x => x.id === id); if (p) { p.noteLog = l.noteLog; p.followTouchAt = l.followTouchAt; } }
+      const k = this._ACT_KINDS.find(x => x.key === kind);
+      toast(`${k ? k.label : 'Activity'} logged ✓`);
+      if (this._openId === id) { if (box) box.value = ''; this._repaintActivity(l); }
+      // A logged call/text on a brand-new lead → nudge the stage pill, never auto-move.
+      if (l.status === 'new' && kind !== 'note' && !this._pendingStatus) toast('Tip: tap “Contacted” then Save to move the stage', 'info');
+    } catch(e) { toast(e.message || 'Could not save', 'error'); }
   },
+  addNote(id) { return this.logActivity(id); },
   // Template picker → fill the Text-back box with the preset, merge fields resolved
   // for this lead. Leaves the box editable so the owner can tweak before sending.
   useTemplate(id) {
@@ -945,8 +1008,12 @@ const Leads = {
     // Texting does NOT move the stage — the owner advances leads explicitly
     // (a stray auto-move here was silently reshuffling the pipeline).
     _cpSms(l.phone, body);
-    // Touch stamp: today's reached-out leads sink below the untouched ones.
-    db.leads.note(id, 'Texted').catch(() => {});
+    // Logged as a TEXT activity (touch stamp: today's reached-out leads sink
+    // below the untouched ones; the Sales activity page counts it).
+    db.leads.note(id, body, { kind: 'text' }).then(res => {
+      if (res && res.noteLog) { l.noteLog = res.noteLog; if (this._openId === id) this._repaintActivity(l); }
+    }).catch(() => {});
+    if (input) input.value = '';
   },
 
   // Hot flag: the owner's "call this one first" marker. Saves immediately

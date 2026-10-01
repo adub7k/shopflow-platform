@@ -22,6 +22,7 @@ const NavRegistry = {
     crews:        { label: 'Crews',        icon: '👥' },
     recurring:    { label: 'Recurring',    icon: '🔁' },
     tasks:        { label: 'Tasks',        icon: '✓' },
+    team:         { label: 'Sales activity', icon: '📊' },
     quotes:       { label: 'Estimates',    icon: '📄' },
     revenue:      { label: 'Revenue',      icon: '📈' },
     reviews:      { label: 'Reviews',      icon: '⭐' },
@@ -47,6 +48,7 @@ const NavRegistry = {
     crews:        '<path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>',
     recurring:    '<polyline points="23 4 23 10 17 10"/><path d="M20.5 15a9 9 0 1 1-2-9.4L23 10"/>',
     tasks:        '<circle cx="12" cy="12" r="9"/><polyline points="16 9.5 10.7 15 8 12.2"/>',
+    team:         '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/>',
     quotes:       '<line x1="12" y1="2" x2="12" y2="22"/><path d="M17 5.5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
     revenue:      '<line x1="3" y1="21" x2="21" y2="21"/><line x1="7" y1="21" x2="7" y2="13"/><line x1="12" y1="21" x2="12" y2="5"/><line x1="17" y1="21" x2="17" y2="9"/>',
     reviews:      '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
@@ -71,7 +73,7 @@ const NavRegistry = {
   // (messages: no real chat inbox until A2P approval).
   GROUPS: [
     { title: 'Overview',   pages: ['dashboard'] },
-    { title: 'CRM',        pages: ['response', 'pipeline', 'leads', 'clients', 'tasks'] },
+    { title: 'CRM',        pages: ['response', 'pipeline', 'leads', 'clients', 'tasks', 'team'] },
     { title: 'Operations', pages: ['appointments'], industry: true },
     { title: 'Money',      pages: ['quotes', 'revenue'] },
     { title: 'Growth',     pages: ['reviews', 'newsletter'] },

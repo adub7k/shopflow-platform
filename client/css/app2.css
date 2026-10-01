@@ -473,3 +473,6 @@ table.v2-table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:68
 /* ── Tasks select mode ── */
 .tk-cb{width:18px;height:18px;flex-shrink:0;accent-color:var(--green-deep);cursor:pointer;margin-top:9px;}
 .list-row.on{background:var(--green-lt);}
+
+/* Sales activity page: negative metric tone (stale open leads). */
+.metric-value.red{color:var(--red);}

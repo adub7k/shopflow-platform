@@ -400,9 +400,11 @@ const Pipeline = {
     if (!l || !l.phone) { toast('No phone number on file', 'warning'); return; }
     const first = String(l.name || '').trim().split(/\s+/)[0];
     const shop = (Shop.settings && Shop.settings.shopName) || '';
-    _cpSms(l.phone, `Hey${first ? ' ' + first : ''}! This is ${shop || 'us'} — thanks for reaching out. When works for a quick call about your vehicle?`);
-    // Touch stamp: today's reached-out leads sink below the untouched ones.
-    db.leads.note(id, 'Texted').catch(() => {});
+    const body = `Hey${first ? ' ' + first : ''}! This is ${shop || 'us'} — thanks for reaching out. When works for a quick call about your vehicle?`;
+    _cpSms(l.phone, body);
+    // Logged as a text activity (touch stamp: today's reached-out leads sink
+    // below the untouched ones; the Sales activity page counts it).
+    db.leads.note(id, body, { kind: 'text' }).catch(() => {});
   },
 
   async advance(id, btn) {

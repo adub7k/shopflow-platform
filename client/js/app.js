@@ -5,7 +5,7 @@ function closeSidebar(){document.body.classList.remove('sidebar-open');}
 // ── Role-based page permissions ───────────────────────────────────────────────
 // full = owner/full access · technician = appts + clients · viewonly = calendar only
 const ROLE_PAGES = {
-  full:       ['dashboard','messages','appointments','response','pipeline','leads','clients','quotes','revenue','tasks','reviews','automations','newsletter','settings'],
+  full:       ['dashboard','messages','appointments','response','pipeline','leads','clients','quotes','revenue','tasks','team','reviews','automations','newsletter','settings'],
   technician: ['dashboard','messages','appointments','response','pipeline','leads','clients','quotes','tasks','notifications'],
   viewonly:   ['appointments'],
 };
@@ -47,7 +47,7 @@ const App = {
     document.querySelectorAll('.nav-item,.bottom-nav-item').forEach(b=>b.classList.remove('active'));
     const el=document.getElementById('page-'+page); if(el)el.classList.add('active');
     document.querySelectorAll('[data-page="'+page+'"]').forEach(b=>b.classList.add('active'));
-    const titles={dashboard:'Dashboard',messages:'Messages',appointments:'Appointments',jobs:'Jobs',properties:'Properties',crews:'Crews',recurring:'Recurring',response:'Response Center',pipeline:'Pipeline',leads:'Leads',clients:'Clients',quotes:'Estimates',revenue:'Revenue',tasks:'Tasks',reviews:'Reviews',automations:'Automations',notifications:'Notifications',settings:'Settings'};
+    const titles={dashboard:'Dashboard',messages:'Messages',appointments:'Appointments',jobs:'Jobs',properties:'Properties',crews:'Crews',recurring:'Recurring',response:'Response Center',pipeline:'Pipeline',leads:'Leads',clients:'Clients',quotes:'Estimates',revenue:'Revenue',tasks:'Tasks',team:'Sales activity',reviews:'Reviews',automations:'Automations',notifications:'Notifications',settings:'Settings'};
     const tt=document.getElementById('topbar-title'); if(tt&&titles[page])tt.textContent=titles[page];
     this._render(page);
   },
@@ -66,6 +66,7 @@ const App = {
     if(page==='quotes')      Quotes.render();
     if(page==='revenue')     Revenue.render();
     if(page==='tasks')       Tasks.render();
+    if(page==='team')        Team.render();
     if(page==='reviews')     Reviews.render();
     if(page==='automations') Automations.render();
     if(page==='newsletter')  Newsletter.render();

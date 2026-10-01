@@ -7,6 +7,17 @@ const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, shopOwnNumber
 const { bucketLeadSource } = require('../lead-source');
 const { ensureQuoteCustomer } = require('../quotes-core');
 const objections = require('../objections');
+const salesActivity = require('../sales-activity');
+
+// Who is doing this (for lead activity + stage attribution): the account id
+// from the auth token plus a name snapshot from master accounts — never from
+// the request body (a crafted request could credit someone else). The client-
+// sent `by` is only a fallback label for a login that's since been deleted.
+function actorOf(req) {
+  const acct = req.accountId ? master.get('accounts').find({ id: req.accountId }).value() : null;
+  const by = (acct && (acct.name || acct.email)) || String((req.body && req.body.by) || '').slice(0, 60);
+  return { byId: req.accountId || null, by };
+}
 
 // ── PROTECTED: Settings ───────────────────────────────────────────────────────
 // Readable by any signed-in staff (needed for vocabulary/statuses), but sensitive
@@ -1347,7 +1358,7 @@ function shopStageKeys(db) {
 // Apply a (validated) pipeline status to a lead with all its bookkeeping —
 // shared by the single-lead update and the bulk clean-out endpoint so a bulk
 // move behaves exactly like tapping each lead by hand.
-function applyLeadStatus(lead, status, via) {
+function applyLeadStatus(lead, status, via, actor) {
   const now = new Date().toISOString();
   const prevStage = lead.pipelineStatus || lead.status;
   if (lead.channel === 'website') {
@@ -1380,7 +1391,7 @@ function applyLeadStatus(lead, status, via) {
     lead.stageChangedAt = now;
     lead.stageLog = lead.stageLog || [];
     // `via` = forensics for "it moved by itself" reports: manual | bulk | convert.
-    lead.stageLog.push({ from: prevStage, to: status, at: now, via: via || 'manual' });
+    lead.stageLog.push({ from: prevStage, to: status, at: now, via: via || 'manual', byId: (actor && actor.byId) || null, by: (actor && actor.by) || '' });
     if (status === 'closed' && !lead.closedAt) lead.closedAt = now;
     // Lost stamps; a reopened lead sheds them so old reasons don't haunt it.
     if (status === 'lost' && !lead.lostAt) lead.lostAt = now;
@@ -1431,10 +1442,11 @@ router.post('/api/shop/leads/bulk-status', requireAuth, requireRole('full','tech
   if (!ids.length || !shopStageKeys(db).has(status)) return res.status(400).json({ ok:false, error:'Bad request' });
   // A bulk mark-lost sweep can carry one shared reason for the whole batch.
   const lostReason = status === 'lost' && req.body.lostReason ? String(req.body.lostReason).trim().slice(0, 200) : null;
+  const actor = actorOf(req);
   let updated = 0;
   ids.forEach(id => {
     const lead = h.getById('leads', id);
-    if (lead) { if (lostReason) lead.lostReason = lostReason; applyLeadStatus(lead, status, 'bulk'); h.upsert('leads', lead); updated++; }
+    if (lead) { if (lostReason) lead.lostReason = lostReason; applyLeadStatus(lead, status, 'bulk', actor); h.upsert('leads', lead); updated++; }
   });
   res.json({ ok:true, updated });
 }));
@@ -1569,7 +1581,7 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   if (req.body.objection !== undefined) {
     const o = objections.cleanObjection(req.body.objection, 'owner');
     lead.objection = o;
-    if (o) { lead.noteLog = lead.noteLog || []; lead.noteLog.unshift({ id: genId('note'), text: `Objection: ${objections.byKey(o.type).label}${o.note ? ' — ' + o.note : ''}`, at: o.at, by: String(req.body.by || '').slice(0, 60) }); }
+    if (o) { lead.noteLog = lead.noteLog || []; lead.noteLog.unshift({ id: genId('note'), kind: 'note', text: `Objection: ${objections.byKey(o.type).label}${o.note ? ' — ' + o.note : ''}`, at: o.at, ...actorOf(req) }); }
   }
   if (req.body.followUp !== undefined) {
     const fu = cleanFollowUp(req.body.followUp);
@@ -1592,28 +1604,53 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
       // (see the followUp comment above). followTouchAt resets the "late" timer.
       lead.followTouchAt = now;
       lead.noteLog = lead.noteLog || [];
-      lead.noteLog.unshift({ id: genId('note'), text: `Day-${d} follow-up text sent`, at: now, by: String(req.body.by || '').slice(0, 60) });
+      lead.noteLog.unshift({ id: genId('note'), kind: 'text', text: `Day-${d} follow-up text sent`, at: now, ...actorOf(req) });
     }
   }
-  if (status !== undefined && shopStageKeys(db).has(status)) applyLeadStatus(lead, status);
+  if (status !== undefined && shopStageKeys(db).has(status)) applyLeadStatus(lead, status, 'manual', actorOf(req));
   h.upsert('leads', lead);
   res.json({ ok:true, lead });
 }));
 
-// Notes history: append a timestamped note to the lead (newest first). Mirrors
-// the client noteLog — the "by" name comes from the signed-in user client-side.
+// Activity log: append a timestamped entry to the lead (newest first). Each
+// entry is a logged CALL (with outcome), TEXT, EMAIL or plain NOTE, stamped
+// with WHO did it from the auth token — this is what the Sales activity page
+// rolls up per person. A call/text/email may carry no text (the act itself is
+// the record); a bare note needs words.
 router.post('/api/shop/leads/:id/note', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   const lead = h.getById('leads', req.params.id);
   if (!lead) return res.status(404).json({ ok:false, error:'Lead not found' });
   const text = String(req.body.text || '').trim().slice(0, 2000);
-  if (!text) return res.status(400).json({ ok:false, error:'Note is empty' });
+  const kind = salesActivity.ACTIVITY_KINDS.includes(req.body.kind) ? req.body.kind : 'note';
+  const outcome = kind === 'call' ? (salesActivity.CALL_OUTCOMES.includes(req.body.outcome) ? req.body.outcome : 'answered') : null;
+  if (!text && kind === 'note') return res.status(400).json({ ok:false, error:'Type a note first' });
   lead.noteLog = lead.noteLog || [];
-  lead.noteLog.unshift({ id: genId('note'), text, at: new Date().toISOString(), by: String(req.body.by || '').slice(0, 60) });
-  // Saving a note = the owner worked this lead → reset the board's follow-up
+  const entry = { id: genId('note'), kind, text, at: new Date().toISOString(), ...actorOf(req) };
+  if (outcome) entry.outcome = outcome;
+  lead.noteLog.unshift(entry);
+  // Logging activity = someone worked this lead → reset the board's follow-up
   // ("late") timer. Deliberately NOT lastContactAt (customer-only clock).
-  lead.followTouchAt = new Date().toISOString();
+  lead.followTouchAt = entry.at;
   h.upsert('leads', lead);
-  res.json({ ok:true, noteLog: lead.noteLog });
+  res.json({ ok:true, noteLog: lead.noteLog, entry });
+}));
+
+// Sales activity rollup — what each login did with the leads over a local-date
+// window (calls / texts / stage moves / bookings / still-open), for coaching.
+// Owner-only: it's the coaching view across the whole team.
+router.get('/api/shop/sales-activity', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
+  const settings = db.get('settings').value() || {};
+  const tz = settings.timezone || salesActivity.DEFAULT_TZ();
+  const win = salesActivity.resolveWindow({ preset: req.query.preset, from: req.query.from, to: req.query.to, tz });
+  const accounts = master.get('accounts').filter({ shopId: req.shopId }).value() || [];
+  const out = salesActivity.computeSalesActivity({
+    leads: h.getAll('leads'), appointments: h.getAll('appointments'), settings, tz,
+    accounts: accounts.map(a => ({ id: a.id, name: a.name, email: a.email, role: a.role, active: a.active !== false })),
+    from: win.from, to: win.to,
+  });
+  out.window.preset = win.preset;
+  out.accounts = accounts.filter(a => a.active !== false).map(a => ({ id: a.id, name: a.name || a.email, role: a.role }));
+  res.json({ ok:true, ...out });
 }));
 
 router.delete('/api/shop/leads/:id', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
@@ -1652,7 +1689,7 @@ router.post('/api/shop/leads/:id/convert', requireAuth, requireRole('full','tech
       : (stages ? (((stages.find(s => s && s.won && !s.terminal)) || {}).key || null) : 'booked');
     const curIdx = keys.indexOf(lead.status);
     if (wonKey && lead.status !== 'lost' && (curIdx === -1 || curIdx < keys.indexOf(wonKey))) {
-      lead.stageLog = (lead.stageLog || []).concat({ from: lead.status, to: wonKey, at: new Date().toISOString(), via: 'convert' });
+      lead.stageLog = (lead.stageLog || []).concat({ from: lead.status, to: wonKey, at: new Date().toISOString(), via: 'convert', ...actorOf(req) });
       lead.status = wonKey;
       lead.stageChangedAt = new Date().toISOString();
     }
