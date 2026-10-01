@@ -1,7 +1,7 @@
 // Sales activity: (1) the lead activity log + stage moves are stamped with WHO
 // did them from the auth token (never the body), (2) the pure rollup counts
 // calls / texts / worked / booked / rate / open per person over a local-date
-// window, (3) GET /api/shop/sales-activity is owner-only and returns it.
+// window, (3) GET /api/admin/shop/:id/sales-activity (admin key) and returns it.
 // Run: node test/sales-activity.test.js
 const fs = require('fs');
 const path = require('path');
@@ -112,6 +112,7 @@ db.set('appointments', []).write(); db.set('customers', []).write(); db.set('cal
 const app = express();
 app.use(express.json());
 app.use(require('../server/routes/shop'));
+app.use(require('../server/routes/admin'));
 const server = app.listen(0, async () => {
   const base = `http://127.0.0.1:${server.address().port}`;
   const tokOwner = jwt.sign({ shopId, accountId: ownerId, role: 'full' }, JWT_SECRET);
@@ -143,10 +144,12 @@ const server = app.listen(0, async () => {
     const L2 = getShopDb(shopId).get('leads').find({ id: 'L2' }).value();
     eq('bulk move stamped with owner', [L2.stageLog[0].via, L2.stageLog[0].byId], ['bulk', ownerId]);
 
-    r = await get('/api/shop/sales-activity?preset=today', tokTech);
-    eq('rollup is owner-only', r.status, 403);
-    r = await get('/api/shop/sales-activity?preset=today', tokOwner);
+    const ADMIN = { 'x-admin-key': process.env.ADMIN_KEY || 'shopflow-admin' };
+    r = await fetch(base + '/api/admin/shop/' + shopId + '/sales-activity?preset=today').then(async x => ({ status: x.status }));
+    eq('rollup needs the admin key', r.status, 401);
+    r = await fetch(base + '/api/admin/shop/' + shopId + '/sales-activity?preset=today', { headers: ADMIN }).then(async x => ({ status: x.status, json: await x.json() }));
     eq('rollup 200', r.status, 200);
+    eq('rollup names the shop', r.json.shop && r.json.shop.slug, 'sa-test');
     const bryce = (r.json.people || []).find(p => p.id === techId) || {};
     eq('bryce calls 2 / answered 1 / texts 1 / notes 1', [bryce.calls, bryce.callsAnswered, bryce.texts, bryce.notes], [2, 1, 1, 1]);
     eq('bryce worked 1, booked 1, rate 100%', [bryce.leadsWorked, bryce.booked, bryce.bookedRate], [1, 1, 100]);

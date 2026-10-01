@@ -1605,6 +1605,9 @@ function renderDrawer(d) {
     <!-- Growth Advisor (loads async; see loadAdvisor) -->
     <div id="sp-advisor"></div>
 
+    <!-- Sales activity (loads async; see loadSalesActivity) -->
+    <div id="sp-salesact"></div>
+
     <!-- Top metrics -->
     <div class="metrics-grid">
       <div class="metric-card">
@@ -1851,6 +1854,7 @@ function renderDrawer(d) {
       </div>
     </div>`;
   loadAdvisor(shop.id);
+  loadSalesActivity(shop.id);
 }
 
 function closeDrawer() {
@@ -2136,19 +2140,25 @@ function openPlacesImport() {
     </div>`;
   impRefresh();
 }
+let impCredit = null;
 function impForm(note) {
+  const c = impCredit;
+  // Default to most of what's left this month (keep a little slack), else 900.
+  const def = c ? Math.max(0, Math.min(1500, Math.floor(c.placesLeft * 0.95 / 10) * 10)) : 900;
   return `${note || ''}
-    <label style="display:flex;gap:8px;align-items:center;font-size:14px;margin-bottom:8px;"><input type="checkbox" id="imp-detailing" checked/> Auto detailing <span style="color:var(--faint);font-size:12px;">(incl. ceramic coating)</span></label>
-    <label style="display:flex;gap:8px;align-items:center;font-size:14px;margin-bottom:14px;"><input type="checkbox" id="imp-tint" checked/> Tint, wraps &amp; PPF</label>
+    ${c ? `<div style="font-size:13px;background:var(--off);border-radius:8px;padding:9px 12px;margin-bottom:12px;">Apify credit left this month: <b>$${c.leftUsd.toFixed(2)}</b> ≈ <b>${c.placesLeft.toLocaleString()} places</b>${c.resetsAt ? ` · resets ${fmtDate(c.resetsAt)}` : ''}</div>` : ''}
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;margin-bottom:8px;"><input type="checkbox" id="imp-detailing" checked/> Auto detailing <span style="color:var(--faint);font-size:12px;">(incl. mobile detailers)</span></label>
+    <label style="display:flex;gap:8px;align-items:center;font-size:14px;margin-bottom:14px;"><input type="checkbox" id="imp-tint" checked/> Window tint &amp; wraps</label>
     <div class="form-row"><label class="form-label">Max places to scrape (Apify credits)</label>
-      <input class="form-input" id="imp-max" type="number" min="20" max="5000" step="10" value="900"/>
-      <div style="font-size:11px;color:var(--muted);margin-top:4px;">Every place Apify returns counts — including the same shop found by two searches. It stops hard at this number.</div></div>
+      <input class="form-input" id="imp-max" type="number" min="20" max="5000" step="10" value="${def}"/>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;">Split evenly across the search terms, and it stops hard at this number. Too low and it only covers part of the metro — for the whole area use 800+. The same shop found by two searches counts twice.</div></div>
     <button class="btn btn-green" style="width:100%;" onclick="impStart()">Start scrape (takes a few minutes)</button>
     <div id="imp-err" style="margin-top:10px;"></div>`;
 }
 function impRender(d) {
   const body = document.getElementById('imp-body'); if (!body) return;
   if (!d || !d.ok) { body.innerHTML = impForm(`<div style="font-size:13px;color:var(--red);font-weight:600;margin-bottom:12px;">${esc((d && d.error) || 'Could not reach Apify')}</div>`); return; }
+  if (d.credit !== undefined) impCredit = d.credit;
   const r = d.run;
   if (!r) { body.innerHTML = impForm(); return; }
   if (['READY','RUNNING'].includes(r.status)) {
@@ -2169,11 +2179,12 @@ function impRender(d) {
         Last scrape · ${fmtDate(r.startedAt)}${r.appliedAt ? ' · imported' : ''}${failed ? ' · ' + esc(r.status) : ''}</div>
       <div style="font-size:22px;font-weight:800;">${r.wouldAdd||0} new shop${r.wouldAdd===1?'':'s'}</div>
       <div style="font-size:12px;color:var(--muted);margin-top:4px;">${r.scraped||0} places scraped → ${r.found||0} unique shops · ${r.alreadyHave||0} already in the pipeline${skippedTxt ? ' · skipped ' + skippedTxt : ''}</div>
+      ${r.hitCap ? `<div style="font-size:12px;color:var(--yellow);font-weight:700;margin-top:8px;line-height:1.5;">⚠ This scrape stopped at its ${r.maxPlaces}-place cap, so Google had more — shops were missed. Run a bigger one below; shops you already have won't be added twice.</div>` : ''}
     </div>
     ${(r.sample||[]).length ? `<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px;">A few of them</div>
     <div style="font-size:13px;line-height:1.7;margin-bottom:14px;">${r.sample.map(x => `<div><b>${esc(x.name)}</b> <span style="color:var(--muted);">${esc(x.city||'')} · ${esc(x.category||'')}${stars(x)}</span></div>`).join('')}</div>` : ''}
     ${r.wouldAdd ? `<button class="btn btn-green" style="width:100%;margin-bottom:8px;" id="imp-apply" onclick="impApply()">Add ${r.wouldAdd} shop${r.wouldAdd===1?'':'s'} as Not contacted</button>` : ''}
-    <details style="margin-top:10px;"><summary style="font-size:13px;color:var(--muted);cursor:pointer;">Run a new scrape (uses Apify credits)</summary>
+    <details style="margin-top:10px;"${r.hitCap ? ' open' : ''}><summary style="font-size:13px;color:var(--muted);cursor:pointer;">Run a new scrape (uses Apify credits)</summary>
       <div style="margin-top:12px;">${impForm()}</div></details>`;
 }
 async function impRefresh() {
@@ -2302,7 +2313,12 @@ function renderProspectAI() {
       ${salesData.aiReady === false ? '' : `<button class="btn ${b ? 'btn-outline' : 'btn-green'} btn-sm" ${runningNow ? 'disabled' : ''} onclick="prAnalyze()">${runningNow ? 'Analyzing…' : b ? 'Re-analyze' : 'Analyze this shop'}</button>`}</div>`;
   let body = '';
   if (salesData.aiReady === false) body = `<div class="pr-sec" style="font-size:13px;color:var(--muted);">Set <b>ANTHROPIC_API_KEY</b> on the server to turn on AI analysis.</div>`;
-  else if (runningNow) body = `<div class="pr-sec" style="font-size:13px;color:var(--muted);"><span class="spinner"></span>Researching ${esc(l.name)} — reading their site, reviews and socials. Takes a minute or two; you can leave this page.</div>`;
+  else if (runningNow) {
+    const secs = Math.max(0, Math.round((Date.now() - Date.parse(it.startedAt)) / 1000));
+    const elapsed = secs < 60 ? secs + 's' : Math.floor(secs / 60) + 'm ' + String(secs % 60).padStart(2, '0') + 's';
+    const step = it.stage === 'writing' ? `Step 2 of 2 — writing the sales brief` : `Step 1 of 2 — researching ${esc(l.name)}: their site, Google reviews and socials`;
+    body = `<div class="pr-sec" style="font-size:13px;color:var(--muted);line-height:1.6;"><span class="spinner"></span><b style="color:var(--text);">${step}</b> · ${elapsed}<br>Usually 1–3 minutes. You can leave this page — it keeps going.</div>`;
+  }
   else if (it.status === 'error') body = `<div class="pr-sec" style="font-size:13px;color:var(--red);font-weight:600;">Analysis failed: ${esc(it.error||'unknown error')}</div>`;
   if (b) body += briefHtml(b, it, runningNow);
   else if (!body) body = `<div class="pr-sec" style="font-size:13px;color:var(--muted);line-height:1.6;">You'll get: how good a fit they are, which offer to lead with, the best way and time to reach them, the exact opener to use, the objections they'll raise and how to answer them.</div>`;
@@ -2430,7 +2446,7 @@ function scheduleAiPoll() {
   clearTimeout(aiPollTimer);
   const live = v => v && v.status === 'running' && Date.now() - Date.parse(v.startedAt) < 10*60*1000;
   if (!live(salesData.plan) && !(salesData.leads||[]).some(l => live(l.intel))) return;
-  aiPollTimer = setTimeout(async () => applySalesData(await salesApi('')), 6000);
+  aiPollTimer = setTimeout(async () => applySalesData(await salesApi('')), 4000);
 }
 
 // Address lookup in the lead drawer (server proxies OpenStreetMap).
@@ -3873,6 +3889,160 @@ document.getElementById('modal-overlay').addEventListener('click',function(e){if
 // Weekly AI review of one shop's lead funnel. GET returns fresh metrics + flags
 // with no model call; "Run review" spends one Claude call and stores the report
 // on the shop db. Feedback (👍/👎/done/note) feeds the next review's prompt.
+// ── Sales activity (per shop) ────────────────────────────────────────────────
+// What each login did with this shop's leads — the coaching view for our own
+// sales people working inside client shops. Rolls up the lead activity log
+// (calls w/ outcome, texts, emails, notes), stage moves and appointments
+// entered, all stamped server-side from the login that did them.
+let saState = { shopId: null, data: null, preset: 'week', from: null, to: null, person: 'all', feedShow: 40 };
+const saQuery = () => (saState.preset === 'custom' && saState.from && saState.to) ? `?from=${saState.from}&to=${saState.to}` : `?preset=${saState.preset}`;
+const saMoney = (n) => '$' + Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 0 });
+const SA_PRESETS = [['today', 'Today'], ['week', 'This week'], ['month', 'This month'], ['30d', 'Last 30 days'], ['90d', 'Last 90 days'], ['custom', 'Custom']];
+const SA_KIND = { call: ['📞', 'Call'], text: ['💬', 'Text'], email: ['✉️', 'Email'], note: ['📝', 'Note'], stage: ['➜', 'Stage'] };
+const SA_OUTCOME = { answered: 'Answered', no_answer: 'No answer', voicemail: 'Left voicemail' };
+async function loadSalesActivity(shopId) {
+  const host = document.getElementById('sp-salesact'); if (!host) return;
+  if (saState.shopId !== shopId) saState = { shopId, data: null, preset: 'week', from: null, to: null, person: 'all', feedShow: 40 };
+  if (!saState.data) host.innerHTML = '<div class="card"><div style="padding:18px;color:var(--muted);font-size:13px;"><span class="spinner"></span> Loading sales activity…</div></div>';
+  try {
+    const res = await fetch('/api/admin/shop/' + shopId + '/sales-activity' + saQuery(), { headers: { 'x-admin-key': adminKey } });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || ('Request failed (' + res.status + ')'));
+    saState.data = body; renderSalesActivity();
+  } catch (e) { host.innerHTML = '<div class="card"><div style="padding:18px;color:var(--red);font-size:13px;">Sales activity failed to load: ' + esc(e.message) + '</div></div>'; }
+}
+function saSetPreset(k) { saState.preset = k; saState.feedShow = 40; if (k !== 'custom') { saState.from = saState.to = null; loadSalesActivity(saState.shopId); } else renderSalesActivity(); }
+function saApplyCustom() {
+  const f = (document.getElementById('sa-from') || {}).value, t = (document.getElementById('sa-to') || {}).value;
+  if (!f || !t || f > t) { toast('Pick a valid date range', 'error'); return; }
+  saState.from = f; saState.to = t; saState.preset = 'custom'; loadSalesActivity(saState.shopId);
+}
+function saSetPerson(id) { saState.person = id; saState.feedShow = 40; renderSalesActivity(); }
+function saEmpty(id, name) {
+  return { id, name, calls: 0, callsAnswered: 0, callsNoAnswer: 0, voicemails: 0, texts: 0, emails: 0, notes: 0, touches: 0, stageMoves: 0,
+    leadsWorked: 0, leadsContacted: 0, leadsConnected: 0, pickedUp: 0, quoted: 0, booked: 0, lost: 0, bookedRate: null, connectRate: null, noAnswerRate: null,
+    open: 0, openStale: 0, openList: [], appts: 0, apptValue: 0, medianFirstTouchMin: null, avgTouchesPerBooked: null, avgTouchesPerOpen: null, days: {}, flags: [] };
+}
+function saPeople(d) {
+  const seen = new Map();
+  (d.people || []).forEach(p => seen.set(p.id, p));
+  (d.accounts || []).forEach(a => { if (!seen.has(a.id)) seen.set(a.id, saEmpty(a.id, a.name)); });
+  return Array.from(seen.values());
+}
+function saSelected(d) {
+  if (saState.person === 'all') {
+    const t = Object.assign(saEmpty('all', 'Whole team'), d.team || {});
+    t.days = {}; const open = [];
+    (d.people || []).forEach(p => {
+      Object.keys(p.days || {}).forEach(k => { const a = t.days[k] || (t.days[k] = { calls: 0, texts: 0, emails: 0, notes: 0, booked: 0 }); const b = p.days[k]; a.calls += b.calls; a.texts += b.texts; a.emails += b.emails; a.notes += b.notes; a.booked += b.booked; });
+      (p.openList || []).forEach(o => { if (!open.find(x => x.id === o.id)) open.push(Object.assign({ by: p.name }, o)); });
+    });
+    t.openList = open.sort((a, b) => (b.daysSinceTouch || 0) - (a.daysSinceTouch || 0));
+    t.open = open.length; t.openStale = open.filter(o => o.daysSinceTouch >= 3).length;
+    t.flags = [];
+    if (t.untouchedNew) t.flags.push({ level: 'warn', text: `${t.untouchedNew} new lead${t.untouchedNew === 1 ? '' : 's'} nobody has touched yet.` });
+    if (t.openStale >= 3) t.flags.push({ level: 'warn', text: `${t.openStale} open leads haven’t been touched in 3+ days.` });
+    return t;
+  }
+  return (d.people || []).find(x => x.id === saState.person) || saEmpty(saState.person, ((d.accounts || []).find(x => x.id === saState.person) || {}).name || 'Unknown');
+}
+const saDay = (k, long) => { if (!k) return ''; const d = new Date(k + 'T12:00:00Z'); return d.toLocaleDateString('en-US', long ? { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' } : { timeZone: 'UTC', weekday: 'short', month: 'numeric', day: 'numeric' }); };
+const saMins = (m) => m < 60 ? m + ' min' : m < 60 * 48 ? (Math.round(m / 6) / 10) + ' h' : Math.round(m / 1440) + ' d';
+const saWhen = (iso) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+function saDayRange(from, to) { const out = []; if (!from || !to) return out; let d = new Date(from + 'T00:00:00Z'); const end = new Date(to + 'T00:00:00Z'); let g = 0; while (d <= end && g++ < 400) { out.push(d.toISOString().slice(0, 10)); d.setUTCDate(d.getUTCDate() + 1); } return out; }
+function renderSalesActivity() {
+  const host = document.getElementById('sp-salesact'); if (!host || !saState.data) return;
+  const d = saState.data, w = d.window || {}, s = saSelected(d);
+  const range = w.from === w.to ? saDay(w.from, true) : `${saDay(w.from, true)} – ${saDay(w.to, true)}`;
+  const chip = (on, onclick, label) => `<button class="adv-fb-btn ${on ? 'on' : ''}" onclick="${onclick}">${label}</button>`;
+  const presets = SA_PRESETS.map(([k, l]) => chip(saState.preset === k, `saSetPreset('${k}')`, l)).join('');
+  const custom = saState.preset === 'custom' ? `<div style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
+      <input class="adv-select" type="date" id="sa-from" value="${esc(saState.from || w.from)}"><span style="color:var(--muted);font-size:12px;">to</span>
+      <input class="adv-select" type="date" id="sa-to" value="${esc(saState.to || w.to)}"><button class="btn btn-green btn-sm" onclick="saApplyCustom()">Apply</button></div>` : '';
+  const people = saPeople(d);
+  const chips = [chip(saState.person === 'all', "saSetPerson('all')", 'Whole team')].concat(people.map(p => chip(saState.person === p.id, `saSetPerson('${esc(p.id)}')`, `${esc(p.name)} <span style="opacity:.6;font-weight:500;">${p.touches + p.stageMoves}</span>`)));
+
+  const mc = (label, value, sub, color) => `<div class="metric-card"><div class="metric-label">${label}</div><div class="metric-value ${color || ''}">${value}</div><div class="metric-sub">${sub || ''}</div></div>`;
+  const stale = s.openStale ? `<span style="color:var(--red);font-weight:700;">${s.openStale} stale</span> (3+ days quiet)` : 'none stale';
+  const metrics = `<div class="metrics-grid" style="margin-top:12px;">
+    ${mc('Calls', s.calls, `${s.callsAnswered} answered · ${s.callsNoAnswer} no answer${s.connectRate != null ? ' · ' + s.connectRate + '% connect' : ''}`)}
+    ${mc('Texts + emails', s.texts + s.emails, `${s.texts} texts · ${s.emails} emails · ${s.notes} notes`)}
+    ${mc('Leads contacted', s.leadsContacted, `${s.leadsWorked} worked · ${s.pickedUp || 0} picked up new`)}
+    ${mc('Booked', s.booked, `${s.quoted} quoted · ${s.lost} marked lost`, 'green')}
+    ${mc('Booked rate', s.bookedRate != null ? s.bookedRate + '%' : '—', 'booked ÷ leads worked', s.bookedRate >= 30 ? 'green' : '')}
+    ${mc('Still open', s.open, stale)}
+    ${mc('Appointments entered', s.appts, saMoney(s.apptValue) + ' on the calendar')}
+    ${mc('First touch', s.medianFirstTouchMin != null ? saMins(s.medianFirstTouchMin) : '—', 'median, lead in → first outreach')}
+  </div>`;
+  const flags = (s.flags && s.flags.length) ? `<div class="adv-flags" style="margin-top:12px;">${s.flags.map(f => `<span class="adv-flag ${f.level === 'good' ? 'adv-flag-ok' : ''}">${esc(f.text)}</span>`).join('')}</div>` : '';
+
+  // Daily strip (weekly buckets past 31 days).
+  let rows = saDayRange(w.from, w.to).map(k => ({ key: k, label: saDay(k), ...(s.days[k] || { calls: 0, texts: 0, emails: 0, notes: 0, booked: 0 }) }));
+  if (rows.length > 31) { const wk = []; rows.forEach((r, i) => { if (i % 7 === 0) wk.push({ key: r.key, label: 'Wk of ' + saDay(r.key), calls: 0, texts: 0, emails: 0, notes: 0, booked: 0 }); const t = wk[wk.length - 1]; t.calls += r.calls; t.texts += r.texts; t.emails += r.emails; t.notes += r.notes; t.booked += r.booked; }); rows = wk; }
+  const max = Math.max(1, ...rows.map(r => r.calls + r.texts + r.emails));
+  const strip = rows.some(r => r.calls + r.texts + r.emails + r.booked) ? rows.map(r => { const tot = r.calls + r.texts + r.emails; return `<div style="display:flex;align-items:center;gap:10px;padding:2px 0;font-size:12px;">
+      <span style="width:74px;color:var(--muted);white-space:nowrap;">${esc(r.label)}</span>
+      <div style="flex:1;height:7px;background:var(--off);border-radius:99px;overflow:hidden;display:flex;"><div style="width:${(r.calls / max) * 100}%;background:var(--green-deep);"></div><div style="width:${((r.texts + r.emails) / max) * 100}%;background:#60a5fa;"></div></div>
+      <span style="width:92px;text-align:right;font-variant-numeric:tabular-nums;">${tot || '<span style="color:var(--faint)">0</span>'}${r.booked ? ` <span style="color:var(--green-deep);font-weight:700;">· ${r.booked} booked</span>` : ''}</span></div>`; }).join('')
+    : '<div style="font-size:12.5px;color:var(--muted);">No calls or texts logged in this window. Activity is logged from each lead’s profile in the shop app (Log call / Log text).</div>';
+
+  // By person.
+  const th = (t, r) => `<th style="${r ? 'text-align:right;' : ''}">${t}</th>`;
+  const td = (v, r, st) => `<td style="${r ? 'text-align:right;' : ''}font-variant-numeric:tabular-nums;${st || ''}">${v}</td>`;
+  const table = saState.person === 'all' && people.length ? `<div class="table-wrap" style="margin-top:14px;"><table class="tbl" style="width:100%;font-size:12.5px;">
+      <thead><tr>${th('Person')}${th('Calls', 1)}${th('Texts', 1)}${th('Worked', 1)}${th('Booked', 1)}${th('Rate', 1)}${th('Open', 1)}${th('Stale', 1)}${th('Appts $', 1)}</tr></thead>
+      <tbody>${people.map(p => `<tr style="cursor:pointer;" onclick="saSetPerson('${esc(p.id)}')">${td(`<strong>${esc(p.name)}</strong>`)}${td(p.calls + (p.calls ? ` <span style="color:var(--faint);font-size:10.5px;">${p.callsAnswered}✓</span>` : ''), 1)}${td(p.texts + p.emails, 1)}${td(p.leadsWorked, 1)}${td(p.booked, 1, 'color:var(--green-deep);font-weight:700;')}${td(p.bookedRate != null ? p.bookedRate + '%' : '—', 1)}${td(p.open, 1)}${td(p.openStale || '', 1, p.openStale ? 'color:var(--red);font-weight:700;' : '')}${td(p.appts ? saMoney(p.apptValue) : '—', 1)}</tr>`).join('')}</tbody></table></div>
+    <div style="font-size:11px;color:var(--faint);margin-top:6px;">Worked = leads they logged activity on or moved. Rate = booked ÷ worked. Open = leads they’ve ever touched that are still chaseable; stale = nobody has touched it in 3+ days. Only activity under each person’s own login counts.</div>` : '';
+
+  // Still open + untouched.
+  const openList = (s.openList || []).slice(0, 30);
+  const openHtml = `<div style="margin-top:16px;"><div class="card-title" style="font-size:13px;">Still open${saState.person === 'all' ? '' : ' · ' + esc(s.name)} <span style="color:var(--faint);font-weight:500;font-size:11.5px;">${(s.openList || []).length} lead${(s.openList || []).length === 1 ? '' : 's'} · quietest first</span></div>
+    ${openList.length ? openList.map(o => `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12.5px;">
+      <div style="flex:1;min-width:0;"><div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${o.hot ? '🔥 ' : ''}${esc(o.name)}${o.by && saState.person === 'all' ? ` <span style="color:var(--faint);font-weight:500;font-size:11px;">· ${esc(o.by)}</span>` : ''}</div>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:1px;"><span class="adv-pill">${esc(o.stage)}</span> ${o.touches} touch${o.touches === 1 ? '' : 'es'}${o.quotedAmount != null ? ' · quoted ' + saMoney(o.quotedAmount) : ''}${o.phone ? ' · <a href="tel:' + esc(o.phone) + '" style="color:var(--green-deep);text-decoration:none;">' + esc(o.phone) + '</a>' : ''}</div></div>
+      <div style="font-weight:700;color:${o.daysSinceTouch >= 3 ? 'var(--red)' : 'var(--text)'};white-space:nowrap;">${o.daysSinceTouch == null ? '—' : o.daysSinceTouch === 0 ? 'today' : o.daysSinceTouch + 'd quiet'}</div></div>`).join('')
+    : '<div style="font-size:12.5px;color:var(--muted);">No open leads — everything touched is booked or closed out.</div>'}</div>`;
+  const unt = (saState.person === 'all' && d.team && d.team.untouchedNew) ? `<div style="margin-top:16px;"><div class="card-title" style="font-size:13px;color:var(--red);">New leads nobody has touched · ${d.team.untouchedNew}</div>
+    ${(d.team.untouchedNewList || []).map(l => `<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12.5px;"><span style="font-weight:600;">${esc(l.name)} <span style="color:var(--faint);font-weight:500;font-size:11px;">· ${esc(l.source || 'lead')}</span></span><span style="color:var(--muted);">${l.createdAt ? relTime(l.createdAt) : ''}</span></div>`).join('')}</div>` : '';
+
+  // Feed.
+  let feed = d.feed || []; if (saState.person !== 'all') feed = feed.filter(r => r.byId === saState.person);
+  const shown = feed.slice(0, saState.feedShow);
+  const feedHtml = `<div style="margin-top:16px;"><div class="card-title" style="font-size:13px;">Activity log <span style="color:var(--faint);font-weight:500;font-size:11.5px;">${feed.length} entr${feed.length === 1 ? 'y' : 'ies'}</span></div>
+    ${shown.length ? shown.map(r => { const k = SA_KIND[r.kind] || SA_KIND.note; let label = k[1], tone = 'color:var(--muted);';
+      if (r.kind === 'call') { label += r.outcome ? ' · ' + (SA_OUTCOME[r.outcome] || r.outcome) : ''; tone = r.outcome === 'answered' ? 'color:var(--green-deep);' : 'color:var(--red);'; }
+      if (r.kind === 'stage') { label = 'Moved to ' + String(r.outcome || '').replace(/_/g, ' '); tone = ['booked', 'worked', 'closed'].includes(r.outcome) ? 'color:var(--green-deep);' : r.outcome === 'lost' ? 'color:var(--red);' : 'color:var(--muted);'; }
+      const text = r.kind === 'stage' ? '' : String(r.text || '');
+      return `<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);align-items:flex-start;"><div style="width:18px;text-align:center;flex-shrink:0;">${k[0]}</div>
+        <div style="flex:1;min-width:0;"><div style="font-size:12.5px;"><strong>${esc(r.leadName)}</strong> <span style="font-size:11.5px;font-weight:700;${tone}">${esc(label)}</span></div>
+        ${text ? `<div style="font-size:12.5px;line-height:1.4;white-space:pre-wrap;margin-top:1px;">${esc(text.length > 240 ? text.slice(0, 240) + '…' : text)}</div>` : ''}
+        <div style="font-size:11px;color:var(--faint);margin-top:2px;">${saWhen(r.at)}${r.by ? ' · ' + esc(r.by) : ''}</div></div></div>`; }).join('')
+    : '<div style="font-size:12.5px;color:var(--muted);">Nothing logged in this window.</div>'}
+    ${feed.length > shown.length ? `<button class="btn btn-outline btn-sm" style="margin-top:8px;" onclick="saState.feedShow+=40;renderSalesActivity()">Show more</button>` : ''}</div>`;
+
+  host.innerHTML = `<div class="card">
+    <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:220px;"><div class="card-title">📊 Sales activity</div><div class="card-sub">What each login did with this shop’s leads · ${esc(range)}. Calls, texts and notes logged from the lead profile; stage moves; appointments entered.</div></div>
+      <button class="btn btn-outline btn-sm" onclick="saExportCsv()">⬇ CSV</button></div>
+    <div class="adv-fb" style="margin-top:10px;">${presets}</div>${custom}
+    <div class="adv-fb" style="margin-top:8px;">${chips.join('')}</div>
+    ${metrics}${flags}
+    <div style="margin-top:14px;"><div class="card-title" style="font-size:13px;display:flex;justify-content:space-between;align-items:center;"><span>Activity by day</span><span style="font-size:11px;color:var(--faint);font-weight:500;"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--green-deep);vertical-align:middle;"></span> calls &nbsp;<span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#60a5fa;vertical-align:middle;"></span> texts/emails</span></div>${strip}</div>
+    ${table}${openHtml}${unt}${feedHtml}
+  </div>`;
+}
+function saExportCsv() {
+  const d = saState.data; if (!d) return;
+  let rows = d.feed || []; if (saState.person !== 'all') rows = rows.filter(r => r.byId === saState.person);
+  const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const lines = [['When', 'Who', 'Type', 'Outcome', 'Lead', 'Phone', 'Notes'].map(q).join(',')]
+    .concat(rows.map(r => [r.at, r.by, r.kind, r.kind === 'call' ? (SA_OUTCOME[r.outcome] || r.outcome || '') : (r.kind === 'stage' ? r.outcome : ''), r.leadName, r.leadPhone, r.kind === 'stage' ? '' : r.text].map(q).join(',')));
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `sales-activity-${(d.shop && d.shop.slug) || 'shop'}-${d.window.from}-to-${d.window.to}.csv`; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
 let advState = { shopId: null, data: null, viewing: null, busy: false, range: { preset: '7d' } };
 const advQuery = () => { const r = advState.range || {}; return r.from && r.to ? `?from=${r.from}&to=${r.to}` : `?preset=${r.preset || '7d'}`; };
 const advApi = async (shopId, path, opts = {}) => {

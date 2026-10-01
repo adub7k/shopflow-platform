@@ -72,7 +72,6 @@ const db = {
   checkout:      { cash: (o) => apiFetch('/checkout/cash',{method:'POST',body:o}), session: (o) => apiFetch('/checkout/session',{method:'POST',body:o}), verify: (sid,aid) => apiFetch('/checkout/verify/'+sid+'?apptId='+aid) },
   stripe:        { status: () => apiFetch('/stripe/connect/status'), onboard: () => apiFetch('/stripe/connect/onboard',{method:'POST'}), disconnect: () => apiFetch('/stripe/connect/disconnect',{method:'POST'}) },
   square:        { status: () => apiFetch('/square/connect/status'), onboard: () => apiFetch('/square/connect/onboard',{method:'POST'}), disconnect: () => apiFetch('/square/connect/disconnect',{method:'POST'}), reconcileDeposits: (customerId) => apiFetch('/square/reconcile-deposits',{method:'POST',body:{customerId}}) },
-  salesActivity: { get: (q) => apiFetch('/sales-activity?'+new URLSearchParams(q||{}).toString()) },
   staff:         { all: () => apiFetch('/staff'), save: (u) => apiFetch('/staff',{method:'POST',body:u}), delete: (id) => apiFetch('/staff/'+id,{method:'DELETE'}) },
   clientActivity:{ get: () => apiFetch('/client-activity') },
   gallery:       { add: (image,caption) => apiFetch('/gallery',{method:'POST',body:{image,caption}}), remove: (id) => apiFetch('/gallery/'+id,{method:'DELETE'}) },

@@ -812,4 +812,26 @@ router.delete('/api/admin/shop/:shopId/advisor/spend/:rowId', requireAdmin, (req
   res.json({ ok: true });
 });
 
+// ── Sales activity (per shop) ────────────────────────────────────────────────
+// What each login did with the shop's leads over a local-date window — the
+// coaching view for our own sales people working inside client shops. Pure
+// rollup in server/sales-activity.js over noteLog/stageLog actors + createdBy.
+const salesActivity = require('../sales-activity');
+router.get('/api/admin/shop/:shopId/sales-activity', requireAdmin, (req, res) => {
+  const shop = withShop(req, res); if (!shop) return;
+  const db = getShopDb(shop.id);
+  const settings = db.get('settings').value() || {};
+  const tz = settings.timezone || salesActivity.DEFAULT_TZ();
+  const win = salesActivity.resolveWindow({ preset: req.query.preset, from: req.query.from, to: req.query.to, tz });
+  const accounts = master.get('accounts').filter({ shopId: shop.id }).value() || [];
+  const out = salesActivity.computeSalesActivity({
+    leads: db.get('leads').value() || [], appointments: db.get('appointments').value() || [], settings, tz,
+    accounts: accounts.map(a => ({ id: a.id, name: a.name, email: a.email, role: a.role, active: a.active !== false })),
+    from: win.from, to: win.to,
+  });
+  out.window.preset = win.preset;
+  out.accounts = accounts.filter(a => a.active !== false).map(a => ({ id: a.id, name: a.name || a.email, role: a.role }));
+  res.json({ ok: true, shop: { id: shop.id, slug: shop.slug, shopName: shop.shopName }, ...out });
+});
+
 module.exports = router;

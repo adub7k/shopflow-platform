@@ -1635,24 +1635,6 @@ router.post('/api/shop/leads/:id/note', requireAuth, requireRole('full','technic
   res.json({ ok:true, noteLog: lead.noteLog, entry });
 }));
 
-// Sales activity rollup — what each login did with the leads over a local-date
-// window (calls / texts / stage moves / bookings / still-open), for coaching.
-// Owner-only: it's the coaching view across the whole team.
-router.get('/api/shop/sales-activity', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
-  const settings = db.get('settings').value() || {};
-  const tz = settings.timezone || salesActivity.DEFAULT_TZ();
-  const win = salesActivity.resolveWindow({ preset: req.query.preset, from: req.query.from, to: req.query.to, tz });
-  const accounts = master.get('accounts').filter({ shopId: req.shopId }).value() || [];
-  const out = salesActivity.computeSalesActivity({
-    leads: h.getAll('leads'), appointments: h.getAll('appointments'), settings, tz,
-    accounts: accounts.map(a => ({ id: a.id, name: a.name, email: a.email, role: a.role, active: a.active !== false })),
-    from: win.from, to: win.to,
-  });
-  out.window.preset = win.preset;
-  out.accounts = accounts.filter(a => a.active !== false).map(a => ({ id: a.id, name: a.name || a.email, role: a.role }));
-  res.json({ ok:true, ...out });
-}));
-
 router.delete('/api/shop/leads/:id', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
   db.get('calls').remove({ leadId: req.params.id }).write();
   h.remove('leads', req.params.id);
