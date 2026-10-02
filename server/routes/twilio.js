@@ -526,7 +526,7 @@ function upsertLeadFromCall(ctx, fromRaw, city, state) {
   // Last-10-digit match (see leads-core.phoneKey): callers arrive as E.164
   // (+1505…) but the same person may already exist as a 10-digit web lead.
   // Sub-10-digit callers (anonymous/short codes) never match anything.
-  const { phoneKey } = require('../leads-core');
+  const { phoneKey, freshFollowUp } = require('../leads-core');
   const phone = phoneKey(fromRaw);
   const now = new Date().toISOString();
   const existing = ctx.h.getAll('leads').find(l => phoneKey(l.phone) === phone && phone);
@@ -542,6 +542,11 @@ function upsertLeadFromCall(ctx, fromRaw, city, state) {
     source: 'call', status: 'new',
     callCount: 1, missedCount: 0, customerId: null, notes: '',
     firstContactAt: now, lastContactAt: now, createdAt: now,
+    stageChangedAt: now,
+    // Every new lead starts the 30-day follow-up sequence (see leads-core):
+    // a first-time caller is a lead touch like any other. Enrollment only —
+    // Day 0 shows in Tasks; the owner sends by hand.
+    followUp: freshFollowUp(now),
   };
   ctx.h.upsert('leads', lead);
   return lead;
@@ -551,3 +556,4 @@ module.exports = router;
 // Exported for unit tests (test/verify-twilio.test.js).
 module.exports.verifyTwilio = verifyTwilio;
 module.exports.twilioSignedUrlCandidates = twilioSignedUrlCandidates;
+module.exports.upsertLeadFromCall = upsertLeadFromCall;

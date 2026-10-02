@@ -9,7 +9,8 @@
 // ad lead silently never entered the sequence.
 //
 // Verifies (1) the mapping itself, including that an unknown source is kept
-// rather than bucketed, (2) a messily-tagged Meta lead now enrols in follow-up,
+// rather than bucketed, (2) a messily-tagged Meta lead now enrols in follow-up
+// (and, since every lead enrols, so does a plain website lead),
 // (3) the pre-normalisation value survives on `sourceRaw`, (4) the backfill is
 // dry-run by default and reports what it would change, (5) applying it rewrites
 // the stored leads, and (6) the backfill does NOT retroactively enrol old leads
@@ -85,11 +86,13 @@ const post = (url, body) => new Promise((resolve) => {
   eq('messy Meta tag enrolled in follow-up', messy.followUp && messy.followUp.status, 'active');
   eq('original tag preserved on sourceRaw', messy.sourceRaw, 'facebook_mobile_feed');
 
-  /* ── 3. an ordinary website lead is untouched and does NOT enrol ─────────── */
+  /* ── 3. an ordinary website lead keeps its source and ALSO enrols ────────── */
+  // Since 2026-10-02 the sequence is the playbook for every lead, not just ads.
   upsertLead(db, shop, { name: 'Plain Web', phone: '5055550222', source: 'website' });
   const web = byPhone('5550222');
   eq('website stays website', web.source, 'website');
-  eq('website lead not enrolled', web.followUp, undefined);
+  eq('website lead enrolled in follow-up', web.followUp && web.followUp.status, 'active');
+  eq('website lead Day 0 due now', web.followUp && web.followUp.idx, 0);
   eq('no sourceRaw when nothing changed', web.sourceRaw, undefined);
 
   /* ── 4. backfill: dry run reports without writing ────────────────────────── */

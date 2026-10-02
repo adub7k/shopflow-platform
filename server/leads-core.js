@@ -59,6 +59,13 @@ function normalizeSource(raw) {
 /** Channels that auto-enter the 30-day follow-up sequence. */
 const PAID_SOCIAL_SOURCES = ['facebook', 'instagram'];
 
+// Day-0-due-now follow-up state for a brand-new lead. Mirrors the client's
+// Leads.fuFreshState() so a lead created anywhere (web form, Meta webhook,
+// admin add, inbound call) starts the sequence exactly like "Start sequence".
+function freshFollowUp(now = new Date().toISOString()) {
+  return { idx: 0, status: 'active', nextAt: now, startedAt: now, log: [] };
+}
+
 // A re-submit of the same inquiry repeats most of its note lines (service,
 // vehicle, timeline) and adds a few (requested appointment, photos). Merge
 // line-wise so the lead reads as one note instead of the same block twice.
@@ -149,12 +156,13 @@ function upsertLead(db, shop, f = {}) {
       firstContactAt: now, lastContactAt: now, createdAt: now,
       stageChangedAt: now,   // pipeline time-in-stage baseline
     };
-    // Meta ad leads auto-enter the 30-day follow-up sequence: Day 0 lands in
-    // the Tasks queue immediately. Enrollment only — every send stays manual
-    // (owner taps through their Messages app); nothing is texted from here.
-    if (PAID_SOCIAL_SOURCES.includes(source)) {
-      lead.followUp = { idx: 0, status: 'active', nextAt: now, startedAt: now, log: [] };
-    }
+    // EVERY new lead auto-enters the 30-day follow-up sequence (owner's call,
+    // 2026-10-02: the sequence is the one playbook for every lead touch, not a
+    // Meta-only thing). Day 0 lands in the Tasks queue immediately. Enrollment
+    // only — every send stays manual (owner taps through their Messages app);
+    // nothing is texted from here. Inbound phone leads get the same treatment
+    // in routes/twilio.js upsertLeadFromCall.
+    lead.followUp = freshFollowUp(now);
     // Keep the campaign's own tag when it differs, so an odd utm_source is
     // still traceable after normalisation.
     if (rawSource && rawSource !== source) lead.sourceRaw = rawSource;
@@ -258,4 +266,4 @@ function recordLeadPayload(shopSlug, body) {
 }
 function getLeadPayloads() { return _payloads; }
 
-module.exports = { upsertLead, resolveContact, recordLeadPayload, getLeadPayloads, phoneKey, normalizeSource, PAID_SOCIAL_SOURCES };
+module.exports = { upsertLead, resolveContact, recordLeadPayload, getLeadPayloads, phoneKey, normalizeSource, freshFollowUp, PAID_SOCIAL_SOURCES };

@@ -43,7 +43,7 @@ const Leads = {
     }
     return stages;
   },
-  // ── 30-day follow-up sequence (Meta leads; worked from the Tasks page) ──────
+  // ── 30-day follow-up sequence (every lead; worked from the Tasks page) ──────
   // Per-lead state lives at lead.followUp = { idx, status, nextAt, startedAt,
   // log[] }. status: active (in the queue when due) · paused (customer replied /
   // manual hold) · completed (booked — auto-set server-side) · stopped (lost or

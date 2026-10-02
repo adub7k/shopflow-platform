@@ -98,7 +98,7 @@ const Tasks = {
     let n = 0;
     const add = (task, bucket) => { task.id = 'task' + (n++); this._tasks[task.id] = task; groups[bucket].push(task); };
 
-    // 0. 30-day follow-up sequence (Meta leads) — the TODAY queue. A lead shows
+    // 0. 30-day follow-up sequence (every lead) — the TODAY queue. A lead shows
     //    only while its next step is due; sending (or skipping) pushes nextAt
     //    forward and the card disappears until the next step comes due. Config
     //    + per-lead state live in leads.js (Leads.followUpSeq / lead.followUp).
@@ -106,8 +106,9 @@ const Tasks = {
     const fuStats = { entered: 0, active: 0, paused: 0, booked: 0, done: 0, due: 0, sentToday: 0, objection: 0 };
     const stageCfg = Leads.stageConfig();
     const chaseable = (l) => { const s = stageCfg.find(x => x.key === l.status); return !s || (!s.terminal && !s.won); };
-    const META_SRC = ['facebook', 'instagram', 'meta', 'fb', 'ig'];
-    this._fuUnenrolled = this._leads.filter(l => !l.followUp && chaseable(l) && META_SRC.includes(String(l.source || '').toLowerCase()));
+    // Every lead belongs in the sequence (server auto-enrols new ones from any
+    // source); this catches the ones created before that rule, any source.
+    this._fuUnenrolled = this._leads.filter(l => !l.followUp && chaseable(l));
     this._leads.forEach(l => {
       const fu = l.followUp;
       if (!fu || !fu.status) return;
@@ -241,7 +242,7 @@ const Tasks = {
       + '</div></div>');
 
     // 30-day sequence metrics + enrollment prompt (only once any lead is in it,
-    // or there are Meta leads waiting to be enrolled).
+    // or there are leads waiting to be enrolled).
     const fs = this._fuStats || {};
     if (fs.entered || (this._fuUnenrolled || []).length) {
       const rate = fs.entered ? Math.round((fs.booked / fs.entered) * 100) : 0;
@@ -258,7 +259,7 @@ const Tasks = {
         + '</div>'
         + ((this._fuUnenrolled || []).length
           ? '<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
-            + '<div style="flex:1;font-size:13px;color:var(--muted);">' + this._fuUnenrolled.length + ' Meta lead' + (this._fuUnenrolled.length === 1 ? '' : 's') + ' not in the sequence yet.</div>'
+            + '<div style="flex:1;font-size:13px;color:var(--muted);">' + this._fuUnenrolled.length + ' lead' + (this._fuUnenrolled.length === 1 ? '' : 's') + ' not in the follow-up sequence yet.</div>'
             + '<button class="btn btn-sm btn-green" onclick="Tasks.fuEnrollAll(this)">Start sequence</button></div>'
           : '')
         + '</div>');
@@ -646,7 +647,7 @@ const Tasks = {
   },
 
   // ── Cadence settings modal — ALL the Tasks-page cadences in one place:
-  // the win-back schedule AND the 30-day Meta-lead sequence (+ its [OFFER]).
+  // the win-back schedule AND the 30-day lead follow-up sequence (+ its [OFFER]).
   cadenceModal() {
     if (typeof canWrite === 'function' && !canWrite()) { toast('Read-only access', 'warning'); return; }
     this._wbEdit = JSON.parse(JSON.stringify(this._wb || this._winbackFrom(Shop.settings)));

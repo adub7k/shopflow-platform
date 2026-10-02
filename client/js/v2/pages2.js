@@ -173,7 +173,7 @@
       <div class="sp"></div>
       <button class="btn${this._selMode ? ' btn-primary' : ''}" onclick="Tasks.toggleSelMode()">${this._selMode ? 'Done' : 'Select'}</button>
       <button class="btn" onclick="Tasks.cadenceModal()">Edit cadence</button></div>`);
-    // 30-day Meta-lead sequence: metrics strip + enrollment prompt.
+    // 30-day lead follow-up sequence (every lead): metrics strip + enrollment prompt.
     const fs = this._fuStats || {};
     if (fs.entered || (this._fuUnenrolled || []).length) {
       const rate = fs.entered ? Math.round((fs.booked / fs.entered) * 100) : 0;
@@ -184,7 +184,7 @@
           ${cell(fs.due || 0, 'due today')}${cell(fs.sentToday || 0, 'sent today')}${cell(fs.active || 0, 'in sequence')}${fs.objection ? cell(fs.objection, 'objection follow-ups') : ''}${cell(fs.paused || 0, 'paused')}${cell((fs.booked || 0) + (fs.entered ? ' (' + rate + '%)' : ''), 'booked', 'green')}
         </div>
         ${(this._fuUnenrolled || []).length ? `<div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
-          <div style="flex:1;font-size:12.5px;color:var(--muted);">${this._fuUnenrolled.length} Meta lead${this._fuUnenrolled.length === 1 ? '' : 's'} not in the sequence yet.</div>
+          <div style="flex:1;font-size:12.5px;color:var(--muted);">${this._fuUnenrolled.length} lead${this._fuUnenrolled.length === 1 ? '' : 's'} not in the follow-up sequence yet.</div>
           <button class="btn btn-sm btn-green" onclick="Tasks.fuEnrollAll(this)">Start sequence</button></div>` : ''}
       </div>`);
     }
