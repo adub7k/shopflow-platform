@@ -130,12 +130,23 @@ function computeAvailability(db, date, { barberId, duration } = {}) {
 // (default 'booking-page'; the voice AI passes 'ai-voice') and an optional
 // `createdBy`/`createdByName` (the staff accountId when an authenticated user
 // books on a customer's behalf; anonymous/AI paths leave it null).
+//
+// Several services in one visit: pass `serviceIds` (first = primary) instead of
+// `serviceId`. They become ONE appointment whose price, cost and duration are
+// the sums, `service` is the names joined with " + ", and `services` itemises
+// them. A single serviceId keeps the exact original shape.
 function createAppointment(db, shop, payload = {}) {
   const {
     customerName, customerPhone, customerEmail, barberId, barberName,
     serviceId, date, time, notes, customFields, inspoPhoto, vehicleSize,
-    addons, source, createdBy, createdByName,
+    addons, source, createdBy, createdByName, serviceIds,
   } = payload;
+
+  const wantIds = Array.isArray(serviceIds) && serviceIds.length
+    ? [...new Set(serviceIds.map(String))].slice(0, 6)
+    : (serviceId ? [serviceId] : []);
+  const catalog = db.get('services').value() || [];
+  const svcs = wantIds.map(id => catalog.find(x => x.id === id));
 
   if (!customerName || !customerPhone || !date || !time) {
     return { ok: false, code: 400, error: 'Missing required fields' };
@@ -168,9 +179,10 @@ function createAppointment(db, shop, payload = {}) {
       b.active !== false &&
       (b.schedule?.workDays || [1, 2, 3, 4, 5, 6]).includes(dow) &&
       barberSlotList(b).includes(time));
-    const reqSvc = serviceId ? (db.get('services').value() || []).find(x => x.id === serviceId) : null;
     const reqStart = parseClock(time);
-    const reqEnd = reqStart + ((reqSvc && Number(reqSvc.duration)) || 30);
+    const reqEnd = reqStart + (svcs.length && svcs.every(Boolean)
+      ? svcs.reduce((t, x) => t + (Number(x.duration) || 30), 0)
+      : 30);
     const overlaps = a => { const aStart = parseClock(a.time); const aEnd = aStart + (Number(a.duration) || 30); return reqStart < aEnd && aStart < reqEnd; };
     if (barberId) {
       const b = workingBarbers.find(x => x.id === barberId);
@@ -187,17 +199,18 @@ function createAppointment(db, shop, payload = {}) {
   }
 
   const { getAll, upsert } = shopHelpers(db);
-  const svcFromDb = serviceId ? getAll('services').find(x => x.id === serviceId) : null;
-  if (!svcFromDb) return { ok: false, code: 400, error: 'Please choose a service. If you already did, refresh and try again.' };
+  const svcFromDb = svcs[0];
+  if (!svcs.length || !svcs.every(Boolean)) return { ok: false, code: 400, error: 'Please choose a service. If you already did, refresh and try again.' };
 
   const selAddonIds = Array.isArray(addons) ? addons : [];
   const chosenAddons = (s0.addons || []).filter(a => selAddonIds.includes(a.id)).map(a => ({ id: a.id, name: a.name, price: Number(a.price) || 0 }));
   const addonsTotal = chosenAddons.reduce((t, a) => t + a.price, 0);
-  const basePrice = servicePrice(svcFromDb, vehicleSize);
+  const lines = svcs.map(x => ({ id: x.id, name: x.name, price: servicePrice(x, vehicleSize), duration: Number(x.duration) || 45 }));
+  const basePrice = lines.reduce((t, l) => t + l.price, 0);
   const price = basePrice + addonsTotal;
-  const duration = Number(svcFromDb.duration) || 45;
+  const duration = lines.reduce((t, l) => t + l.duration, 0);
   const addonsCost = (s0.addons || []).filter(a => selAddonIds.includes(a.id)).reduce((t, a) => t + (Number(a.cost) || 0), 0);
-  const cost = Math.round(((Number(svcFromDb.cost) || 0) + addonsCost) * 100) / 100;
+  const cost = Math.round((svcs.reduce((t, x) => t + (Number(x.cost) || 0), 0) + addonsCost) * 100) / 100;
 
   const vehicle = (cf.vehicleYear || cf.vehicleMake || cf.vehicleModel)
     ? { year: cf.vehicleYear || '', make: cf.vehicleMake || '', model: cf.vehicleModel || '', color: cf.vehicleColor || '' }
@@ -228,8 +241,9 @@ function createAppointment(db, shop, payload = {}) {
   const apptId = genId('a');
   const appt = {
     id: apptId, customerId: custId, customerName, customerPhone, customerEmail: customerEmail || '',
-    barberId: barberId || null, barberName: barberName || null, serviceId: serviceId || null,
-    service: svcFromDb.name, price, cost, duration, date, time,
+    barberId: barberId || null, barberName: barberName || null, serviceId: svcFromDb.id,
+    service: lines.map(l => l.name).join(' + '), price, cost, duration, date, time,
+    ...(lines.length > 1 ? { services: lines } : {}),
     status: needsDeposit ? 'pending-deposit' : 'confirmed', notes: notes || '',
     customFields: cf, vehicleSize: vehicleSize || null, addons: chosenAddons, inspoPhoto: inspo,
     source: source || 'booking-page', createdAt: new Date().toISOString(),

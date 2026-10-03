@@ -83,6 +83,18 @@ const server = app.listen(0, async () => {
     eq('paid return → site, status=confirmed, booking id', [loc.origin + loc.pathname, loc.searchParams.get('status'), loc.searchParams.get('booking')], ['https://www.example-shop.test/book/confirmed', 'confirmed', b.appointmentId]);
     const appt = getShopDb(shopId).get('appointments').find({ id: b.appointmentId }).value();
     eq('paid → confirmed with $50 deposit', [appt.status, appt.depositPaid, appt.depositAmount], ['confirmed', true, 50]);
+
+    // Several services in one visit: one appointment, summed price/duration.
+    const multi = await get(`/api/public/${slug}/availability?date=${date}&serviceId=tint,quick`);
+    eq('4h+1h visit: last start is 1:00 PM', multi[multi.length - 1], '1:00 PM');
+    const m = await post(`/api/public/${slug}/book`, { customerName: 'Sam', customerPhone: '5055550102', serviceIds: ['tint', 'quick', 'tint'], date, time: '1:00 PM', source: 'website' });
+    const ma = getShopDb(shopId).get('appointments').find({ id: m.appointmentId }).value();
+    eq('multi-service → one appt, summed, deduped', [m.ok, ma.service, ma.price, ma.duration, ma.serviceId, ma.services.length], [true, 'Ceramic Tint + Front 2', 730, 300, 'tint', 2]);
+    const bad = await post(`/api/public/${slug}/book`, { customerName: 'Sam', customerPhone: '5055550102', serviceIds: ['tint', 'nope'], date, time: '9:00 AM' });
+    eq('unknown service in the list is rejected', bad.ok, false);
+    const single = await post(`/api/public/${slug}/book`, { customerName: 'Lee', customerPhone: '5055550103', serviceId: 'quick', date, time: '9:00 AM' });
+    const sa = getShopDb(shopId).get('appointments').find({ id: single.appointmentId }).value();
+    eq('single serviceId keeps the original shape', [sa.service, sa.price, sa.duration, sa.services], ['Front 2', 170, 60, undefined]);
   } catch (e) { failures++; console.error(e); }
   server.close();
   console.log(failures ? `\n${failures} FAILED` : '\nALL PASS');

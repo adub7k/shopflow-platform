@@ -424,9 +424,13 @@ router.get('/api/public/:shopSlug/availability', (req, res) => {
     if (!shop) return res.status(404).json({ error: 'Shop not found' });
     const db = getShopDb(shop.id);
     const { date, barberId, serviceId } = req.query;
-    // With a serviceId, only start times where that whole job fits are returned.
-    const svc = serviceId ? (db.get('services').value() || []).find(s => s.id === serviceId) : null;
-    res.json(computeAvailability(db, date, { barberId, duration: svc ? Number(svc.duration) || 0 : 0 }));
+    // With serviceId (one id, or several comma-separated for a multi-service
+    // visit), only start times where the WHOLE visit fits are returned.
+    const catalog = db.get('services').value() || [];
+    const duration = String(serviceId || '').split(',').filter(Boolean)
+      .map(id => catalog.find(s => s.id === id))
+      .reduce((t, s) => t + (s ? Number(s.duration) || 0 : 0), 0);
+    res.json(computeAvailability(db, date, { barberId, duration }));
   } catch(e) { res.status(500).json({ error: 'Server error' }); }
 });
 
