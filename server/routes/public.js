@@ -423,8 +423,10 @@ router.get('/api/public/:shopSlug/availability', (req, res) => {
     const shop = master.get('shops').find({ slug: req.params.shopSlug, active: true }).value();
     if (!shop) return res.status(404).json({ error: 'Shop not found' });
     const db = getShopDb(shop.id);
-    const { date, barberId } = req.query;
-    res.json(computeAvailability(db, date, { barberId }));
+    const { date, barberId, serviceId } = req.query;
+    // With a serviceId, only start times where that whole job fits are returned.
+    const svc = serviceId ? (db.get('services').value() || []).find(s => s.id === serviceId) : null;
+    res.json(computeAvailability(db, date, { barberId, duration: svc ? Number(svc.duration) || 0 : 0 }));
   } catch(e) { res.status(500).json({ error: 'Server error' }); }
 });
 

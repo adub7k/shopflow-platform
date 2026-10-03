@@ -12,6 +12,8 @@ const { master, getShopDb, shopHelpers, genId, JWT_SECRET } = require('../db');
 const { requireAuth, requireRole } = require('../middleware');
 const sq = require('../payments/square');
 const { ensureQuoteCustomer } = require('../quotes-core');
+const { deliver } = require('../email');
+const { sendPush } = require('../push-instance');
 
 const APP_URL      = process.env.APP_URL || 'https://shopflowio.up.railway.app';
 const REDIRECT_URI = APP_URL + '/api/square/oauth/callback';
@@ -87,6 +89,64 @@ function fulfillSquareDeposit(shopId, apptId, amountCents) {
   return false;
 }
 
+// Where a paid (or abandoned) deposit checkout may send the customer back to.
+// BOOKING_RETURN_ORIGINS is a comma list of exact origins, e.g.
+// "https://www.evosolution.org,http://localhost:8080". Anything not listed → null
+// (the generic ShopFlow confirmation page is shown instead).
+function safeReturnUrl(raw) {
+  if (!raw) return null;
+  try {
+    const u = new URL(String(raw));
+    const allowed = String(process.env.BOOKING_RETURN_ORIGINS || '').split(',').map(x => x.trim().replace(/\/$/, '')).filter(Boolean);
+    return allowed.includes(u.origin) ? u.toString() : null;
+  } catch (e) { return null; }
+}
+
+// "💰 New booking" push + email to the owner once a deposit lands — a paid
+// online booking is the most valuable thing the website can produce, so it
+// shouldn't wait for someone to open the calendar. Fire-and-forget.
+function notifyOwnerBooked(shopId, appt, s) {
+  if (!appt) return;
+  try {
+    const veh = appt.customFields && [appt.customFields.vehicleYear, appt.customFields.vehicleMake, appt.customFields.vehicleModel].filter(Boolean).join(' ');
+    const dep = Number(appt.depositAmount) || 0;
+    const line = [appt.service, veh, `${appt.date} at ${appt.time}`].filter(Boolean).join(' · ');
+    sendPush(shopId, {
+      title: `💰 New booking — ${appt.customerName || 'online'}${dep ? ` ($${dep} deposit paid)` : ''}`,
+      body: line, url: '/appointments', tag: `booking-${appt.id}`,
+    }).catch(e => console.error('Booking push failed:', e.message));
+
+    const shop = master.get('shops').find({ id: shopId }).value() || {};
+    const to = String(s.notificationEmail || shop.email || '').trim();
+    if (!to) return;
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const digits = String(appt.customerPhone || '').replace(/\D/g, '').slice(-10);
+    const rows = [
+      ['Customer', esc(appt.customerName)],
+      ['Phone', `<a href="tel:+1${digits}" style="color:#16a34a;font-weight:600;">${esc(appt.customerPhone)}</a>`],
+      appt.customerEmail && ['Email', esc(appt.customerEmail)],
+      ['Service', esc(appt.service + ((appt.addons || []).length ? ' + ' + appt.addons.map(a => a.name).join(', ') : ''))],
+      veh && ['Vehicle', esc(veh)],
+      ['When', esc(`${appt.date} at ${appt.time}`)],
+      ['Job total', '$' + esc(appt.price)],
+      dep && ['Deposit paid', '$' + esc(dep)],
+      appt.notes && ['Notes', esc(appt.notes).replace(/\n/g, '<br>')],
+    ].filter(Boolean);
+    deliver({
+      to,
+      subject: `💰 Booked online: ${appt.customerName || 'New customer'} — ${appt.service}, ${appt.date} ${appt.time}`,
+      html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;">
+        <h2 style="color:#16a34a;margin:0 0 6px;">New paid booking</h2>
+        <p style="color:#374151;margin:0 0 16px;">Booked and paid the deposit online. It's on your calendar as confirmed.</p>
+        <table style="width:100%;border-collapse:collapse;background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;">
+          ${rows.map(([k, v]) => `<tr><td style="padding:8px 12px;color:#6b7280;font-size:13px;white-space:nowrap;vertical-align:top;">${k}</td><td style="padding:8px 12px;color:#111827;font-size:13px;">${v}</td></tr>`).join('')}
+        </table>
+        <p style="color:#9ca3af;font-size:11px;margin-top:20px;">Powered by ShopFlow</p>
+      </div>`,
+    }).then(r => r.ok ? console.log('Booking email sent →', to) : console.error('Booking email failed:', r.reason));
+  } catch (e) { console.error('Booking notify error:', e.message); }
+}
+
 // ── PER-SHOP OAUTH: connect / status / disconnect ─────────────────────────────
 router.get('/api/shop/square/connect/status', requireAuth, async (req, res) => {
   const db = getShopDb(req.shopId); const c = (db.get('settings').value() || {}).square || {};
@@ -157,11 +217,20 @@ router.post('/api/public/:shopSlug/square-deposit-session', async (req, res) => 
     const db = getShopDb(shop.id); const s = db.get('settings').value() || {}; const h = shopHelpers(db);
     const creds = await resolveSquare(db, s);
     if (!creds) return res.status(400).json({ ok: false, error: 'Square not connected' });
-    const { appointmentId, amount } = req.body;
+    const { appointmentId, returnUrl } = req.body;
     const appt = h.getById('appointments', appointmentId);
     if (!appt) return res.status(404).json({ ok: false, error: 'Appointment not found' });
 
-    const amountCents = Math.round(Number(amount || s.deposit?.amount || 10) * 100);
+    // The amount is the shop's own deposit setting — never the request body. This
+    // endpoint is anonymous, so a client-supplied amount would let anyone hold a
+    // slot for a $0.01 "deposit".
+    const amountCents = Math.round(Number(s.deposit?.amount || 10) * 100);
+    // A shop's own marketing site can ask to have the customer brought back to it
+    // after paying (instead of the generic ShopFlow confirmation). Only origins
+    // listed in BOOKING_RETURN_ORIGINS are honoured — anything else is dropped, so
+    // this can't be used as an open redirect.
+    const back = safeReturnUrl(returnUrl);
+    if (back) appt.depositReturnUrl = back;
     const link = await sq.createPaymentLink({
       name: 'Deposit — ' + (appt.service || 'Appointment'),
       description: (s.shopName || '') + ' · ' + appt.date + ' at ' + appt.time + ' · non-refundable deposit',
@@ -183,17 +252,28 @@ router.post('/api/public/:shopSlug/square-deposit-session', async (req, res) => 
 
 // ── PUBLIC: deposit success — verify the Square order is paid, then confirm ────
 router.get('/sq/booking-deposit-success', async (req, res) => {
+  let back = null, paid = false;
   try {
     const shopId = req.query.shop, apptId = req.query.appt;
     if (shopId && apptId) {
       const db = getShopDb(shopId); const h = shopHelpers(db); const s = db.get('settings').value() || {};
       const appt = h.getById('appointments', apptId);
+      back = appt && safeReturnUrl(appt.depositReturnUrl);
       const creds = (await resolveSquare(db, s)) || {};
       if (appt && appt.squareOrderId && await sq.isOrderPaid(appt.squareOrderId, { accessToken: creds.accessToken })) {
-        fulfillSquareDeposit(shopId, apptId, Math.round(Number(appt.depositAmount || 0) * 100));
+        paid = true;
+        if (fulfillSquareDeposit(shopId, apptId, Math.round(Number(appt.depositAmount || 0) * 100))) {
+          notifyOwnerBooked(shopId, h.getById('appointments', apptId), s);
+        }
       }
     }
   } catch (e) { /* best-effort; a webhook will be the authoritative path later */ }
+  if (back) {
+    const u = new URL(back);
+    u.searchParams.set('booking', String(req.query.appt || ''));
+    u.searchParams.set('status', paid ? 'confirmed' : 'unpaid');
+    return res.redirect(303, u.toString());
+  }
   res.send('<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="font-family:-apple-system,sans-serif;text-align:center;padding:60px 20px;background:#f5f5f7;"><div style="font-size:64px;margin-bottom:20px;">🎉</div><div style="font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:8px;">You\'re booked!</div><div style="font-size:15px;color:#6e6e73;line-height:1.6;margin-bottom:24px;">Your deposit was received and your appointment is confirmed.</div><div style="font-size:13px;color:#aeaeb2;">You can close this tab.</div></body></html>');
 });
 

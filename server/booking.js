@@ -66,7 +66,15 @@ function servicePrice(svc, sizeKey) {
 // blocks its whole [start, start+duration) span (not just its start slot) so a
 // long detail job can't leave every following slot bookable. Returns [] for
 // blocked/past/closed days. `barberId` optionally narrows to one staff member.
-function computeAvailability(db, date, { barberId } = {}) {
+//
+// `duration` (minutes, optional) is the length of the job being booked. When
+// set, a start time is offered only if the WHOLE job fits before a staff
+// member's end time, and the shop still has a free pair of hands for the entire
+// span — counted exactly the way createAppointment's double-book guard counts
+// (every overlapping booking, assigned or not, against the staff working that
+// slot), so a time shown here is a time that books. Without it a 4-hour tint
+// could be offered at 5:30 PM. Omitted = the legacy start-slot behaviour.
+function computeAvailability(db, date, { barberId, duration } = {}) {
   if (!date) return [];
   const blocked = (db.get('blockedDates').value() || []).find(b => b.date === date);
   if (blocked) return [];
@@ -82,6 +90,22 @@ function computeAvailability(db, date, { barberId } = {}) {
   const settings = db.get('settings').value() || {};
   const occupies = occupyingStatusKeys(settings);
   const appts = (db.get('appointments').value() || []).filter(a => a.date === date && occupies.includes(a.status));
+  const len = Number(duration) || 0;
+  if (len > 0) {
+    const spans = appts.map(a => { const start = parseClock(a.time); return { start, end: start + (Number(a.duration) || 30), barberId: a.barberId }; });
+    const slots = new Set();
+    working.forEach(b => barberSlotList(b).forEach(t => slots.add(t)));
+    return [...slots].filter(t => {
+      const m = parseClock(t), end = m + len;
+      const overlapping = spans.filter(iv => m < iv.end && iv.start < end);
+      const fits = working.filter(b =>
+        barberSlotList(b).includes(t) &&
+        end <= parseClock((b.schedule && b.schedule.endTime) || '6:00 PM'));
+      return barberId
+        ? fits.length > 0 && !overlapping.some(iv => iv.barberId === barberId)
+        : fits.length > overlapping.length;
+    }).sort((a, b) => parseClock(a) - parseClock(b));
+  }
   const allSlots = new Set();
   working.forEach(b => {
     const sched = b.schedule || { startTime: '9:00 AM', endTime: '6:00 PM', slotMinutes: 30 };
