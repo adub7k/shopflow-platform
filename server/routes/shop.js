@@ -1586,8 +1586,19 @@ router.post('/api/shop/leads/:id', requireAuth, requireRole('full','technician')
   if (req.body.followUp !== undefined) {
     const fu = cleanFollowUp(req.body.followUp);
     if (fu) {
-      // A grown log = a sequence text went out → reset the "late" timer too.
-      if (fu.log.length > ((lead.followUp || {}).log || []).length) lead.followTouchAt = new Date().toISOString();
+      // A grown log = a sequence text went out → reset the "late" timer too,
+      // and record each sent step in the activity log (stamped with WHO from
+      // the auth token) so Tasks sends count on the Sales activity page.
+      // via:'sequence' + the same `at` lets the rollup skip the raw log entry.
+      const prevLen = ((lead.followUp || {}).log || []).length;
+      if (fu.log.length > prevLen) {
+        lead.followTouchAt = new Date().toISOString();
+        const actor = actorOf(req);
+        fu.log.slice(prevLen).filter(e => !e.skipped).forEach(e => {
+          lead.noteLog = lead.noteLog || [];
+          lead.noteLog.unshift({ id: genId('note'), kind: 'text', text: e.body || `${e.step || 'Follow-up'} text sent`, at: e.at, via: 'sequence', ...actor });
+        });
+      }
       lead.followUp = fu;
     }
   }

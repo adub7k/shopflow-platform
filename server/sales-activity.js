@@ -135,6 +135,28 @@ function computeSalesActivity({ leads = [], appointments = [], accounts = [], se
   const feed = [];
   const leadMeta = new Map(); // id → { lastTouchAt (anyone), touches (anyone) }
   const untouchedNew = [];
+  // Booked leads that nobody can be credited for (history from before actor
+  // stamping, or moves made by the AI / public booking) still count for the team.
+  let bookedAll = 0, bookedUnattributed = 0;
+  const workedAll = new Set();
+  const acctName = (id, fallback) => { const a = accounts.find(x => x.id === id); return (a && (a.name || a.email)) || fallback || 'Former staff'; };
+
+  // Appointments linked to a lead (customerId, else last-10 phone), oldest
+  // first. A live appointment someone ENTERED for the lead's customer is the
+  // strongest "this lead got booked" signal — and names who booked it.
+  const last10 = (ph) => String(ph || '').replace(/\D/g, '').slice(-10);
+  const apptsByCust = new Map(), apptsByPhone = new Map();
+  appointments.forEach(a => {
+    if (!a || DEAD_APPT.includes(a.status)) return;
+    if (a.customerId) (apptsByCust.get(a.customerId) || apptsByCust.set(a.customerId, []).get(a.customerId)).push(a);
+    const ph = last10(a.customerPhone || a.phone);
+    if (ph.length === 10) (apptsByPhone.get(ph) || apptsByPhone.set(ph, []).get(ph)).push(a);
+  });
+  const linkedAppts = (l) => {
+    const seen = new Set(), out = [];
+    [].concat(l.customerId ? (apptsByCust.get(l.customerId) || []) : [], apptsByPhone.get(last10(l.phone)) || []).forEach(a => { if (!seen.has(a.id)) { seen.add(a.id); out.push(a); } });
+    return out.sort((a, b) => (ms(a.createdAt) || ms(a.date) || 0) - (ms(b.createdAt) || ms(b.date) || 0));
+  };
 
   leads.forEach(l => {
     const stage = stageOf(l);
@@ -144,8 +166,16 @@ function computeSalesActivity({ leads = [], appointments = [], accounts = [], se
     leadMeta.set(l.id, meta);
 
     // Activity entries, oldest first so "first outreach" is right.
-    const acts = (l.noteLog || []).filter(n => n && n.at).slice().sort((a, b) => ms(a.at) - ms(b.at));
+    // Follow-up sequence sends (Tasks → Send follow-up) from before the server
+    // mirrored them into noteLog only live in followUp.log — count those as
+    // texts too, unless a via:'sequence' note already records the same send.
+    const seqNoted = new Set((l.noteLog || []).filter(n => n && n.via === 'sequence').map(n => ms(n.at)));
+    const seqTexts = (((l.followUp || {}).log) || [])
+      .filter(e => e && e.at && !e.skipped && !seqNoted.has(ms(e.at)))
+      .map(e => ({ kind: 'text', text: e.body || `${e.step || 'Follow-up'} text sent`, at: e.at, by: e.by || '' }));
+    const acts = (l.noteLog || []).filter(n => n && n.at).concat(seqTexts).sort((a, b) => ms(a.at) - ms(b.at));
     let firstOutreach = null;
+    const touchActors = []; // [{at, actor}] attributed touches, oldest first
     acts.forEach(n => {
       const kind = ACTIVITY_KINDS.includes(n.kind) ? n.kind : (n.kind === undefined && /^texted\b|follow-up text sent$/i.test(n.text || '') ? 'text' : 'note');
       const actor = who(n);
@@ -154,6 +184,7 @@ function computeSalesActivity({ leads = [], appointments = [], accounts = [], se
         if (!firstOutreach) firstOutreach = { at: n.at, actor };
       } else if (kind === 'note') { meta.lastTouchAt = n.at; }
       if (!actor) return;
+      touchActors.push({ at: n.at, actor });
       const p = person(actor);
       p._everTouched.add(l.id);
       p._touchesByLead.set(l.id, (p._touchesByLead.get(l.id) || 0) + (OUTREACH.has(kind) ? 1 : 0));
@@ -177,20 +208,53 @@ function computeSalesActivity({ leads = [], appointments = [], accounts = [], se
       if (c != null && f != null && f >= c) p._firstTouchMins.push(Math.round((f - c) / 60000));
     }
 
-    // Stage moves.
+    // Who gets credit for a stage move with no stamped actor (history from
+    // before stamping, or a convert from "Book appointment"): the last person
+    // who logged activity on the lead before the move, else whoever entered the
+    // lead's appointment. Honest attribution, not a guess from thin air.
+    const appts = linkedAppts(l);
+    const apptBooker = appts.find(a => a.createdBy);
+    const fallbackActor = (at) => {
+      const t = ms(at);
+      let last = null;
+      touchActors.forEach(x => { if (t == null || ms(x.at) <= t + 60000) last = x.actor; });
+      if (last) return last;
+      if (apptBooker) return { id: apptBooker.createdBy, name: acctName(apptBooker.createdBy, apptBooker.createdByName) };
+      return null;
+    };
+
+    // Stage moves (quoted / lost / booked bookkeeping + feed).
+    let wonMove = null;
     (l.stageLog || []).forEach(s => {
       if (!s || !s.at) return;
-      const actor = who(s);
+      const isWin = won.has(s.to) && !won.has(s.from);
+      if (isWin && !wonMove) wonMove = s;
+      const actor = who(s) || fallbackActor(s.at);
+      if (inWin(s.at)) workedAll.add(l.id);
       if (!actor) return;
       const p = person(actor);
       p._everTouched.add(l.id);
       if (!inWin(s.at)) return;
       p.stageMoves++; p._worked.add(l.id);
-      if (won.has(s.to) && !won.has(s.from)) { p._booked.add(l.id); day(p, s.at).booked++; }
       if (s.to === 'quoted') p._quoted.add(l.id);
       if (terminal.has(s.to)) p._lost.add(l.id);
       feed.push({ at: s.at, byId: p.id, by: p.name, kind: 'stage', outcome: s.to, text: `${s.from || '—'} → ${s.to}`, leadId: l.id, leadName: name, leadPhone: l.phone || '' });
     });
+
+    // Booked = the lead reached a won stage (first such move; else it sits in a
+    // won stage with a closedAt/stageChangedAt stamp — 'closed' needs proof
+    // because it used to mean dead), OR a live appointment was entered for it.
+    // Credited to the stamped mover, else the fallback above.
+    let bookedAt = null, bookedActor = null;
+    if (wonMove) { bookedAt = wonMove.at; bookedActor = who(wonMove) || fallbackActor(wonMove.at); }
+    else if (won.has(stage) && (stage !== 'closed' || l.closedAt)) { bookedAt = l.closedAt || l.stageChangedAt || (appts[0] && appts[0].createdAt) || l.updated_at || null; bookedActor = fallbackActor(bookedAt); }
+    else if (appts.length && (appts[0].createdAt || appts[0].date)) { bookedAt = appts[0].createdAt || appts[0].date; bookedActor = fallbackActor(bookedAt); }
+    if (bookedAt && inWin(bookedAt)) {
+      bookedAll++; workedAll.add(l.id);
+      if (bookedActor) { const p = person(bookedActor); p._everTouched.add(l.id); p._worked.add(l.id); p._booked.add(l.id); day(p, bookedAt).booked++; }
+      else bookedUnattributed++;
+    }
+    if (inWin(meta.lastTouchAt)) workedAll.add(l.id);
 
     if (stage === 'new' && meta.touches === 0) untouchedNew.push({ id: l.id, name, phone: l.phone || '', createdAt, source: l.source || '' });
   });
@@ -245,7 +309,11 @@ function computeSalesActivity({ leads = [], appointments = [], accounts = [], se
     ['calls', 'callsAnswered', 'callsNoAnswer', 'voicemails', 'texts', 'emails', 'notes', 'touches', 'stageMoves', 'leadsWorked', 'leadsContacted', 'leadsConnected', 'pickedUp', 'booked', 'quoted', 'lost', 'open', 'openStale', 'appts', 'apptValue'].forEach(k => { t[k] = (t[k] || 0) + (r[k] || 0); });
     return t;
   }, {});
-  team.bookedRate = pct(team.booked || 0, team.leadsWorked || 0);
+  team.bookedAttributed = team.booked || 0;
+  team.booked = bookedAll;
+  team.bookedUnattributed = bookedUnattributed;
+  team.leadsWorkedAll = workedAll.size;
+  team.bookedRate = pct(bookedAll, workedAll.size);
   team.connectRate = pct(team.callsAnswered || 0, team.calls || 0);
   team.medianFirstTouchMin = median(allFirstTouch);
   team.untouchedNew = untouchedNew.length;

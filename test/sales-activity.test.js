@@ -87,6 +87,53 @@ const eq = (name, got, exp) => { const ok = JSON.stringify(got) === JSON.stringi
   eq('stale-open flag fires at 3', SA.coachingFlags(Object.assign({}, b, { openStale: 3 })).some(f => /3 open leads/.test(f.text)), true);
   eq('no-answer flag fires', SA.coachingFlags(Object.assign({}, b, { calls: 10, noAnswerRate: 70 })).some(f => /70% of calls/.test(f.text)), true);
 
+  // Historical bookings: stage moves from before actor stamping (no byId/by)
+  // and appointment-only bookings still count — credited to the last person
+  // who touched the lead, else to whoever entered the appointment, else to
+  // the team as "unattributed".
+  const h = SA.computeSalesActivity({ accounts, tz, now, from: '2026-09-08', to: '2026-09-14', leads: [
+    // Bryce texted, then the lead was moved to booked with no actor stamped.
+    { id: 'h1', name: 'Hal', phone: '5550000011', status: 'booked', createdAt: T(9, 9),
+      noteLog: [{ kind: 'text', text: 'hi', at: T(9, 10), byId: 'b', by: 'Bryce' }],
+      stageLog: [{ from: 'new', to: 'booked', at: T(10, 10), via: 'convert' }] },
+    // No stage history at all; status booked; appointment entered by Owner.
+    { id: 'h2', name: 'Ida', phone: '5550000012', status: 'booked', createdAt: T(9, 9), stageChangedAt: T(11, 10), noteLog: [], stageLog: [] },
+    // Still 'contacted' on the board, but an appointment exists for the phone — booked.
+    { id: 'h3', name: 'Jo', phone: '5550000013', status: 'contacted', createdAt: T(9, 9), noteLog: [], stageLog: [] },
+    // Booked with nobody to credit.
+    { id: 'h4', name: 'Kim', phone: '5550000014', status: 'booked', createdAt: T(9, 9), noteLog: [], stageLog: [{ from: 'new', to: 'booked', at: T(12, 10), via: 'manual' }] },
+    // Legacy closed=dead with no closedAt must NOT count as booked.
+    { id: 'h5', name: 'Lee', phone: '5550000015', status: 'closed', createdAt: T(9, 9), stageChangedAt: T(12, 10), noteLog: [], stageLog: [] },
+  ], appointments: [
+    { id: 'ha2', customerPhone: '5550000012', createdBy: 'o', createdByName: 'Owner', createdAt: T(11, 10), price: 200, status: 'confirmed' },
+    { id: 'ha3', customerPhone: '5550000013', createdBy: 'b', createdByName: 'Bryce', createdAt: T(13, 10), price: 300, status: 'confirmed' },
+  ] });
+  const hb = h.people.find(p => p.id === 'b') || {}, ho = h.people.find(p => p.id === 'o') || {};
+  eq('unstamped convert credited to last toucher (Bryce) + appt-only lead (Bryce entered) = 2', hb.booked, 2);
+  eq('booked-status lead with no history credited to appointment booker (Owner)', ho.booked, 1);
+  eq('team booked counts all 4 (incl. 1 nobody can be credited for)', [h.team.booked, h.team.bookedAttributed, h.team.bookedUnattributed], [4, 3, 1]);
+  eq('legacy closed without closedAt is not booked', h.feed.some(f => f.leadId === 'h5'), false);
+  eq('bryce booked-day series credits the convert day', (hb.days['2026-09-10'] || {}).booked, 1);
+
+  // Follow-up sequence sends (Tasks → Send follow-up) count as texts: legacy
+  // ones only in followUp.log (credited by name), new ones mirrored to noteLog
+  // with via:'sequence' (not double-counted). Skipped steps don't count.
+  const sq = SA.computeSalesActivity({ accounts, tz, now, from: '2026-09-08', to: '2026-09-14', leads: [
+    { id: 's1', name: 'Sam', phone: '5550000021', status: 'new', createdAt: T(9, 9), noteLog: [], stageLog: [],
+      followUp: { idx: 3, status: 'active', log: [
+        { step: 'Day 0 Initial', day: 0, body: 'hi Sam', at: T(9, 10), by: 'Bryce' },
+        { step: 'Day 0 Follow-Up', day: 0, at: T(9, 13), by: 'Bryce', skipped: true },
+        { step: 'Day 1', day: 1, body: 'checking in', at: T(10, 10), by: 'Bryce' },
+      ] } },
+    { id: 's2', name: 'Tia', phone: '5550000022', status: 'new', createdAt: T(9, 9), stageLog: [],
+      noteLog: [{ kind: 'text', text: 'hey Tia', at: T(11, 10), via: 'sequence', byId: 'b', by: 'Bryce' }],
+      followUp: { idx: 1, status: 'active', log: [{ step: 'Day 0 Initial', day: 0, body: 'hey Tia', at: T(11, 10), by: 'Bryce' }] } },
+  ] });
+  const sb = sq.people.find(p => p.id === 'b') || {};
+  eq('sequence sends count as texts (legacy + mirrored, no doubles, no skips)', sb.texts, 3);
+  eq('sequence-texted leads count as contacted', sb.leadsContacted, 2);
+  eq('sequence sends show in the feed', sq.feed.filter(f => f.kind === 'text').length, 3);
+
   // Window presets resolve in the shop's local day.
   const w = SA.resolveWindow({ preset: 'week', tz: 'UTC', now: Date.parse('2026-09-30T12:00:00Z') }); // a Wednesday
   eq('week preset = Mon..today', [w.from, w.to], ['2026-09-28', '2026-09-30']);
@@ -106,6 +153,8 @@ db.set('settings', { shopName: 'SA Test', timezone: 'UTC' }).write();
 db.set('leads', [
   { id: 'L1', name: 'Ana', phone: '5551110001', status: 'new', source: 'call', createdAt: new Date().toISOString(), noteLog: [], stageLog: [] },
   { id: 'L2', name: 'Ben', phone: '5551110002', status: 'new', source: 'call', createdAt: new Date().toISOString(), noteLog: [], stageLog: [] },
+  { id: 'L3', name: 'Cal', phone: '5551110003', status: 'new', source: 'facebook', createdAt: new Date().toISOString(), noteLog: [], stageLog: [],
+    followUp: { idx: 0, status: 'active', startedAt: new Date().toISOString(), log: [] } },
 ]).write();
 db.set('appointments', []).write(); db.set('customers', []).write(); db.set('calls', []).write();
 
@@ -158,6 +207,23 @@ const server = app.listen(0, async () => {
     eq('owner lost 1 via bulk', me.lost, 1);
     eq('accounts listed for the person picker', (r.json.accounts || []).map(a => a.name).sort(), ['Bryce', 'Me']);
     eq('window echoes preset', r.json.window.preset, 'today');
+
+    // Tasks → Send follow-up: the client posts the grown followUp.log; the
+    // server mirrors each sent (non-skipped) step into noteLog as a text
+    // stamped from the token, so it counts for whoever sent it.
+    const sentAt = new Date().toISOString();
+    await post('/api/shop/leads/L3', { followUp: { idx: 2, status: 'active', log: [
+      { step: 'Day 0 Initial', day: 0, body: 'hi Cal', at: sentAt, by: 'Me' },
+      { step: 'Day 0 Follow-Up', day: 0, at: sentAt, by: 'Me', skipped: true },
+    ] } }, tokTech);
+    const L3 = getShopDb(shopId).get('leads').find({ id: 'L3' }).value();
+    eq('sequence send mirrored to noteLog as a text by the token actor', (L3.noteLog || []).map(n => [n.kind, n.text, n.via, n.byId]), [['text', 'hi Cal', 'sequence', techId]]);
+    // Re-posting the same log (e.g. a pause) adds nothing.
+    await post('/api/shop/leads/L3', { followUp: Object.assign({}, L3.followUp, { status: 'paused', pausedReason: 'replied' }) }, tokTech);
+    eq('unchanged log adds no note', getShopDb(shopId).get('leads').find({ id: 'L3' }).value().noteLog.length, 1);
+    r = await fetch(base + '/api/admin/shop/' + shopId + '/sales-activity?preset=today', { headers: ADMIN }).then(x => x.json());
+    const bryce2 = (r.people || []).find(p => p.id === techId) || {};
+    eq('bryce texts now 2 (Tasks sequence send counted once)', bryce2.texts, 2);
   } catch (e) { failures++; console.log('FAIL  threw', e.stack || e.message); }
   server.close();
   try { fs.rmSync(process.env.DATA_DIR, { recursive: true, force: true }); } catch (e) { /* best effort */ }
