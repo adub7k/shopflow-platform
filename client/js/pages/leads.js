@@ -558,7 +558,10 @@ const Leads = {
         }
         tr = `<div style="font-size:12px;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px 10px;margin:4px 0 8px;line-height:1.5;">${badge}${thread}${brain}</div>`;
       } else {
-        tr = c.transcript ? `<div style="font-size:12px;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px 10px;margin:4px 0 8px;line-height:1.45;"><strong>🎙 Transcript:</strong> ${esc(c.transcript)}</div>` : '';
+        tr = c.transcript ? `<div style="font-size:12px;color:var(--muted);background:var(--surface2);border-radius:8px;padding:8px 10px;margin:4px 0 8px;line-height:1.45;"><strong>🎙 Transcript:</strong> ${esc(c.transcript)}</div>`
+          : c.transcriptStatus === 'processing' ? `<div style="font-size:12px;color:var(--faint);margin:4px 0 8px;">🎙 Transcribing…</div>`
+          : c.transcriptStatus === 'failed' ? `<div style="font-size:12px;color:#d97706;margin:4px 0 8px;" title="${esc(c.transcriptError||'')}">⚠ Transcript failed${c.transcriptError?`: ${esc(c.transcriptError)}`:''} — tap “Analyze with AI” to retry.</div>`
+          : '';
       }
       // AI answered (fallback or always mode) — distinct from a human miss/answer.
       if (c.aiHandled) {

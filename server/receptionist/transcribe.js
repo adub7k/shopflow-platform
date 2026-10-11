@@ -21,18 +21,23 @@ function transcribeEnabled() { return !!EL_KEY && !!TW_SID && !!TW_TOKEN; }
 
 // Fetch a Twilio recording's mp3. Retries a few times because the recording media
 // can lag the status callback by a second or two (404 until it's finalized).
+// Returns { audio } or { error } so the caller can say WHY a transcript is missing.
 async function fetchRecordingMp3(recordingSid, { retries, delayMs }) {
-  const mediaUrl = `https://api.twilio.com/2010-04-01/Accounts/${TW_SID}/Recordings/${recordingSid}.mp3`;
+  // RequestedChannels=2 → keep caller + shop on separate tracks regardless of how
+  // the account's default download format is configured.
+  const mediaUrl = `https://api.twilio.com/2010-04-01/Accounts/${TW_SID}/Recordings/${recordingSid}.mp3?RequestedChannels=2`;
   const basic = 'Basic ' + Buffer.from(TW_SID + ':' + TW_TOKEN).toString('base64');
+  let last = 'recording not ready';
   for (let i = 0; i < retries; i++) {
     try {
       const r = await fetch(mediaUrl, { headers: { Authorization: basic } });
-      if (r.ok) { const buf = Buffer.from(await r.arrayBuffer()); if (buf.length) return buf; }
-      else if (r.status !== 404) return null;   // 401/403/etc → give up; 404 → not ready yet
-    } catch (e) { /* transient — fall through to the retry delay */ }
+      if (r.ok) { const buf = Buffer.from(await r.arrayBuffer()); if (buf.length) return { audio: buf }; last = 'recording empty'; }
+      else if (r.status !== 404) return { error: `Twilio recording fetch ${r.status}` };   // 401/403/etc → give up
+      else last = 'Twilio recording 404 (not ready)';
+    } catch (e) { last = `Twilio recording fetch: ${e.message}`; }   // transient — retry
     await new Promise(s => setTimeout(s, delayMs));
   }
-  return null;
+  return { error: last };
 }
 
 // Merge Scribe's per-channel word streams into a readable, speaker-labelled
@@ -67,13 +72,14 @@ function stitchMultiChannel(transcripts) {
   return lines.join('\n');
 }
 
-// Fetch a Twilio recording and transcribe it with ElevenLabs Scribe. Returns the
-// transcript text, or '' on any failure.
+// Fetch a Twilio recording and transcribe it with ElevenLabs Scribe. Returns
+// { text } on success or { text: '', error } describing what went wrong.
 async function transcribeTwilioRecording(recordingSid, { retries = 4, delayMs = 2000 } = {}) {
-  if (!transcribeEnabled() || !recordingSid) return '';
+  if (!transcribeEnabled()) return { text: '', error: 'transcription not configured' };
+  if (!recordingSid) return { text: '', error: 'no recording' };
 
-  const audio = await fetchRecordingMp3(recordingSid, { retries, delayMs });
-  if (!audio) return '';
+  const { audio, error } = await fetchRecordingMp3(recordingSid, { retries, delayMs });
+  if (!audio) return { text: '', error };
 
   try {
     const form = new FormData();
@@ -87,19 +93,44 @@ async function transcribeTwilioRecording(recordingSid, { retries = 4, delayMs = 
       headers: { 'xi-api-key': EL_KEY },      // fetch sets the multipart boundary itself
       body: form,
     });
-    if (!r.ok) return '';
+    if (!r.ok) {
+      const body = (await r.text().catch(() => '')).slice(0, 300);
+      return { text: '', error: `ElevenLabs ${r.status}${body ? ': ' + body : ''}` };
+    }
     const data = await r.json();
 
     // Multi-channel → { transcripts: [ {text, words}, ... ] }; single-channel or a
     // mono recording → { text, words }. Handle both; prefer the stitched dialogue.
+    let text = '';
     if (Array.isArray(data && data.transcripts) && data.transcripts.length) {
-      return stitchMultiChannel(data.transcripts)
+      text = stitchMultiChannel(data.transcripts)
         || data.transcripts.map(t => (t && t.text) || '').filter(Boolean).join('\n');
-    }
-    return (data && data.text) || '';
+    } else text = (data && data.text) || '';
+    return text.trim() ? { text } : { text: '', error: 'no speech detected' };
   } catch (e) {
-    return '';
+    return { text: '', error: `ElevenLabs request: ${e.message}` };
   }
 }
 
-module.exports = { transcribeEnabled, transcribeTwilioRecording };
+// Transcribe a call's answered-call recording and store the outcome on the call:
+// transcriptStatus 'done' (then AI intake runs) or 'failed' with transcriptError,
+// so a missing transcript is never a silent, forever-"processing" mystery.
+async function transcribeCall(ctx, callSid, recordingSid, { runIntake, retries, delayMs } = {}) {
+  const res = await transcribeTwilioRecording(recordingSid, { retries, delayMs });
+  if (res.text) {
+    const call = ctx.h.getById('calls', callSid);
+    if (call) { delete call.transcriptError; ctx.h.upsert('calls', call); }
+    if (runIntake) await runIntake(ctx, callSid, { transcript: res.text, kind: 'call' });
+    return res;
+  }
+  console.error(`[transcribe] shop=${ctx.shopId} call=${callSid} recording=${recordingSid} failed: ${res.error}`);
+  const call = ctx.h.getById('calls', callSid);
+  if (call && !call.transcript) {
+    call.transcriptStatus = 'failed';
+    call.transcriptError = res.error;
+    ctx.h.upsert('calls', call);
+  }
+  return res;
+}
+
+module.exports = { transcribeEnabled, transcribeTwilioRecording, transcribeCall };

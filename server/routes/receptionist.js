@@ -6,6 +6,7 @@ const router = require('express').Router();
 const { requireAuth, requireRole } = require('../middleware');
 const { shopRoute } = require('../db');
 const { runIntake } = require('../receptionist/intake');
+const { transcribeEnabled, transcribeCall } = require('../receptionist/transcribe');
 
 // Build the ctx shape the intake helper expects from a shop-scoped request.
 function ctxFrom(req, db, h) {
@@ -21,14 +22,25 @@ router.post('/api/shop/leads/:id/ai-intake', requireAuth, requireRole('full', 't
 
   const calls = h.getAll('calls').filter(c => c.leadId === lead.id)
     .sort((a, b) => String(b.startedAt || '').localeCompare(String(a.startedAt || '')));
-  // Prefer a call that already has a transcript; else the most recent call.
-  const call = calls.find(c => c.transcript) || calls[0];
+  const pasted = req.body && req.body.transcript;
+  // Prefer a call that already has a transcript; else a recorded answered call we
+  // can (re)transcribe now; else the most recent call.
+  const recorded = !pasted && !calls.some(c => c.transcript) && transcribeEnabled()
+    ? calls.find(c => c.recording && c.recording.recordingSid) : null;
+  const call = calls.find(c => c.transcript) || recorded || calls[0];
   if (!call) return res.status(400).json({ ok: false, error: 'This lead has no call to analyze.' });
 
-  const result = await runIntake(ctxFrom(req, db, h), call.id, {
-    transcript: req.body && req.body.transcript,
-    force: true,
-  });
+  const ctx = ctxFrom(req, db, h);
+  let transcript = pasted;
+  if (recorded) {
+    // Retry path for answered calls whose automatic transcription failed (or
+    // pre-dates it): transcribe now, surfacing the real error if it fails again.
+    const t = await transcribeCall(ctx, call.id, call.recording.recordingSid, { retries: 2, delayMs: 1000 });
+    if (!t.text) return res.status(502).json({ ok: false, reason: 'transcribe-failed', error: `Couldn't transcribe the call recording (${t.error}).` });
+    transcript = t.text;
+  }
+
+  const result = await runIntake(ctx, call.id, { transcript, force: true });
 
   if (!result.ok) {
     const msg = result.reason === 'no-key'        ? 'AI is not configured. Set ANTHROPIC_API_KEY to enable.'
@@ -36,7 +48,7 @@ router.post('/api/shop/leads/:id/ai-intake', requireAuth, requireRole('full', 't
               : (result.message || 'Could not analyze this call.');
     return res.status(result.reason === 'no-key' ? 503 : 400).json({ ok: false, reason: result.reason, error: msg });
   }
-  res.json({ ok: true, ai: result.ai, transcript: call.transcript || (req.body && req.body.transcript) || '' });
+  res.json({ ok: true, ai: result.ai, transcript: transcript || call.transcript || '' });
 }));
 
 module.exports = router;
