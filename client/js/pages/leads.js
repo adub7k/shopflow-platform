@@ -563,6 +563,7 @@ const Leads = {
           : c.transcriptStatus === 'failed' ? `<div style="font-size:12px;color:#d97706;margin:4px 0 8px;" title="${esc(c.transcriptError||'')}">⚠ Transcript failed${c.transcriptError?`: ${esc(c.transcriptError)}`:''} — tap “Analyze with AI” to retry.</div>`
           : '';
       }
+      if (c.coaching) tr += this._coachCard(c.coaching);
       // AI answered (fallback or always mode) — distinct from a human miss/answer.
       if (c.aiHandled) {
         const ocLabel = va&&va.outcome ? (va.outcome.type==='booked'?' · booked' : va.outcome.type==='captured'?' · lead captured' : '') : '';
@@ -771,6 +772,27 @@ const Leads = {
       </div>
       <div style="font-size:14px;line-height:1.5;margin-top:8px;color:var(--text);">${esc(a.summary)}</div>
       ${price}${grid}${fu}
+    </div>`;
+  },
+  // Sales-skills scorecard for a call a person answered (server: intake.js
+  // COACHING_SCHEMA). Collapsed to score + verdict; tap for the breakdown.
+  _coachCard(k) {
+    const sc = Number(k.score) || 0;
+    const tone = sc >= 8 ? 'var(--green)' : sc >= 5 ? '#d97706' : '#dc2626';
+    const label = { rapport: 'Rapport', discovery: 'Discovery', value: 'Sold the value', objections: 'Objections', close: 'Asked for the booking' };
+    const mark = { strong: ['✅', 'var(--green)'], ok: ['➖', '#d97706'], missed: ['❌', '#dc2626'], 'n/a': ['·', 'var(--faint)'] };
+    const rows = (k.skills || []).map(x => {
+      const m = mark[x.rating] || mark['n/a'];
+      return `<div style="padding:4px 0;border-top:1px solid var(--border);"><span style="color:${m[1]};font-weight:700;">${m[0]} ${esc(label[x.skill] || x.skill)}</span>${x.note ? ` <span style="color:var(--muted);">— ${esc(x.note)}</span>` : ''}</div>`;
+    }).join('');
+    const line = (icon, title, text) => text ? `<div style="margin-top:6px;"><strong>${icon} ${title}:</strong> ${esc(text)}</div>` : '';
+    return `<div style="font-size:12px;background:var(--surface2);border-radius:8px;padding:8px 10px;margin:0 0 8px;line-height:1.45;">
+      <button onclick="event.stopPropagation();const p=this.nextElementSibling;p.style.display=p.style.display==='none'?'block':'none';" style="all:unset;cursor:pointer;display:flex;align-items:center;gap:8px;width:100%;">
+        <span style="font-weight:800;color:${tone};font-size:13px;white-space:nowrap;">🎯 Sales ${sc}/10</span>
+        <span style="color:var(--muted);flex:1;">${esc(k.verdict || '')}</span>
+        <span style="color:var(--faint);font-size:11px;white-space:nowrap;">${k.booked ? '📅 booked · ' : ''}details ▾</span>
+      </button>
+      <div style="display:none;margin-top:6px;">${rows}${line('👍', 'Did well', k.didWell)}${line('📈', 'Next time', k.improve)}${line('💬', 'Try saying', k.tryThis ? `“${k.tryThis}”` : '')}</div>
     </div>`;
   },
   useFollowUp(id) {

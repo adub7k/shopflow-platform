@@ -42,6 +42,42 @@ const INTAKE_SCHEMA = {
   required: ['callerName', 'summary', 'serviceNeeded', 'budget', 'desiredDate', 'quality', 'followUp'],
 };
 
+// Sales-skills scorecard for answered calls (a real person at the shop talked to
+// the customer). Graded against the moves that actually win detailing/tint jobs.
+const COACHING_SKILLS = ['rapport', 'discovery', 'value', 'objections', 'close'];
+const COACHING_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    score:   { type: 'integer', description: 'Overall sales handling of the call, 1-10 (10 = textbook: built rapport, found the need, sold value, handled pushback, booked it).' },
+    verdict: { type: 'string', description: 'One plain sentence on how the shop handled the call, addressed to the person who took it.' },
+    skills: {
+      type: 'array',
+      description: 'Exactly one entry per skill, in this order: rapport, discovery, value, objections, close.',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          skill:  { type: 'string', enum: COACHING_SKILLS, description: 'rapport = warm greeting, used their name, friendly; discovery = asked about vehicle/needs/timing before quoting; value = explained why the service/upgrade is worth it, not just a price; objections = handled price or hesitation without caving; close = asked for the booking or set a firm next step.' },
+          rating: { type: 'string', enum: ['strong', 'ok', 'missed', 'n/a'], description: "n/a only when the situation never came up (e.g. no objection was raised)." },
+          note:   { type: 'string', description: 'One short, specific observation quoting or paraphrasing the call.' },
+        },
+        required: ['skill', 'rating', 'note'],
+      },
+    },
+    didWell:   { type: 'string', description: 'The single best thing they did on this call.' },
+    improve:   { type: 'string', description: 'The single most valuable thing to do differently next time.' },
+    tryThis:   { type: 'string', description: 'A word-for-word line they could have said at the key moment, natural and short.' },
+    booked:    { type: 'boolean', description: 'True only if an appointment was actually set on this call.' },
+  },
+  required: ['score', 'verdict', 'skills', 'didWell', 'improve', 'tryThis', 'booked'],
+};
+const CALL_SCHEMA = {
+  ...INTAKE_SCHEMA,
+  properties: { ...INTAKE_SCHEMA.properties, coaching: COACHING_SCHEMA },
+  required: [...INTAKE_SCHEMA.required, 'coaching'],
+};
+
 // Call Claude on a transcript. Returns the validated intake object, or null on
 // any failure (no key, API error, bad JSON) — callers treat null as "no AI".
 async function analyzeTranscript(transcript, { shopName, industryLabel, callerPhone, location, kind } = {}) {
@@ -67,7 +103,10 @@ async function analyzeTranscript(transcript, { shopName, industryLabel, callerPh
     'Extract structured lead-intake details for the CRM. Be conservative: if a',
     'detail is not actually stated, use null — do not guess. Keep the summary to',
     'at most three sentences. Judge quality honestly (a wrong number or spam is "cold").',
-  ].join(' ');
+    isCall
+      ? 'Then, in "coaching", act as a sales coach for the shop and grade how the person who answered handled the call. Be honest and specific — praise what earned it, and do not inflate the score. Judge the shop side only, never the customer. If the call was not a sales conversation (wrong number, vendor, existing job update), score what applied and mark the rest n/a.'
+      : null,
+  ].filter(Boolean).join(' ');
 
   const user = [
     callerPhone ? `Caller phone: ${callerPhone}` : null,
@@ -83,11 +122,11 @@ async function analyzeTranscript(transcript, { shopName, industryLabel, callerPh
   try {
     const res = await client.messages.create({
       model: MODEL,
-      max_tokens: 700,
+      max_tokens: isCall ? 2000 : 700,
       // Structured JSON output — shape-guaranteed extraction. No effort param:
       // it's Opus/Sonnet-tier only and 400s on claude-haiku-4-5 (a common
       // RECEPTIONIST_MODEL for cost), while json_schema works on both tiers.
-      output_config: { format: { type: 'json_schema', schema: INTAKE_SCHEMA } },
+      output_config: { format: { type: 'json_schema', schema: isCall ? CALL_SCHEMA : INTAKE_SCHEMA } },
       system,
       messages: [{ role: 'user', content: user }],
     });
@@ -129,7 +168,9 @@ async function runIntake(ctx, callId, opts = {}) {
   if (!force && !aiEnabled(ctx.settings)) return { ok: false, reason: 'disabled' };
   if (!process.env.ANTHROPIC_API_KEY)     return { ok: false, reason: 'no-key' };
   if (!transcript.trim())                 return { ok: false, reason: 'no-transcript' };
-  if (lead && lead.ai && !force)          return { ok: true,  reason: 'exists', ai: lead.ai };
+  // Answered calls are judged per call (each gets its own coaching), so an
+  // earlier voicemail's intake on the lead doesn't block them.
+  if (!force && (opts.kind === 'call' ? call.coaching : lead && lead.ai)) return { ok: true, reason: 'exists', ai: lead ? lead.ai : null };
 
   const industry = ctx.db.get('industry').value();
   const ai = await analyzeTranscript(transcript, {
@@ -140,6 +181,15 @@ async function runIntake(ctx, callId, opts = {}) {
     kind: opts.kind,   // 'call' for answered-call transcripts; undefined ⇒ voicemail
   });
   if (!ai) return { ok: false, reason: 'error', message: 'AI analysis unavailable' };
+
+  // The scorecard belongs to this call (who handled it, when) — keep it there,
+  // not on the lead-level intake.
+  if (ai.coaching) {
+    const fresh = ctx.h.getById('calls', callId) || call;
+    fresh.coaching = { ...ai.coaching, model: ai.model, generatedAt: ai.generatedAt };
+    ctx.h.upsert('calls', fresh);
+    delete ai.coaching;
+  }
 
   if (lead) {
     lead.ai = ai;

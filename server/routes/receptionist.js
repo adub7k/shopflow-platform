@@ -40,7 +40,10 @@ router.post('/api/shop/leads/:id/ai-intake', requireAuth, requireRole('full', 't
     transcript = t.text;
   }
 
-  const result = await runIntake(ctx, call.id, { transcript, force: true });
+  // A recorded call a person answered (not the AI receptionist) is a two-way
+  // conversation → intake plus a sales-skills scorecard.
+  const kind = call.recording && !call.voiceAI ? 'call' : undefined;
+  const result = await runIntake(ctx, call.id, { transcript, force: true, kind });
 
   if (!result.ok) {
     const msg = result.reason === 'no-key'        ? 'AI is not configured. Set ANTHROPIC_API_KEY to enable.'
