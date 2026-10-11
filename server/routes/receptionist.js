@@ -13,9 +13,19 @@ function ctxFrom(req, db, h) {
   return { shopId: req.shopId, db, h, settings: db.get('settings').value() || {}, shopName: (db.get('settings').value() || {}).shopName || 'the shop' };
 }
 
+// The call "Analyze with AI" works on: the lead's most recent conversation —
+// a call with a transcript, or a recorded call a person answered (which we can
+// transcribe now even if its automatic transcription failed). `calls` is
+// newest-first. Falls back to the newest call.
+function pickIntakeCall(calls) {
+  const answeredRecording = c => !!(c.recording && c.recording.recordingSid && !c.voiceAI);
+  return calls.find(c => c.transcript || answeredRecording(c)) || calls[0] || null;
+}
+
 // POST /api/shop/leads/:id/ai-intake  { transcript? }
-// Runs AI intake against the lead's most recent call that has a transcript
-// (or the one passed in). force:true so an owner can always (re)analyze.
+// Runs AI intake against the lead's most recent conversation (see
+// pickIntakeCall), transcribing a recorded call first when it has no transcript
+// yet. force:true so an owner can always (re)analyze.
 router.post('/api/shop/leads/:id/ai-intake', requireAuth, requireRole('full', 'technician'), shopRoute(async (req, res, db, h) => {
   const lead = h.getById('leads', req.params.id);
   if (!lead) return res.status(404).json({ ok: false, error: 'Lead not found' });
@@ -23,16 +33,12 @@ router.post('/api/shop/leads/:id/ai-intake', requireAuth, requireRole('full', 't
   const calls = h.getAll('calls').filter(c => c.leadId === lead.id)
     .sort((a, b) => String(b.startedAt || '').localeCompare(String(a.startedAt || '')));
   const pasted = req.body && req.body.transcript;
-  // Prefer a call that already has a transcript; else a recorded answered call we
-  // can (re)transcribe now; else the most recent call.
-  const recorded = !pasted && !calls.some(c => c.transcript) && transcribeEnabled()
-    ? calls.find(c => c.recording && c.recording.recordingSid) : null;
-  const call = calls.find(c => c.transcript) || recorded || calls[0];
+  const call = pickIntakeCall(calls);
   if (!call) return res.status(400).json({ ok: false, error: 'This lead has no call to analyze.' });
 
   const ctx = ctxFrom(req, db, h);
   let transcript = pasted;
-  if (recorded) {
+  if (!pasted && !call.transcript && call.recording && call.recording.recordingSid && transcribeEnabled()) {
     // Retry path for answered calls whose automatic transcription failed (or
     // pre-dates it): transcribe now, surfacing the real error if it fails again.
     const t = await transcribeCall(ctx, call.id, call.recording.recordingSid, { retries: 2, delayMs: 1000 });
@@ -55,3 +61,4 @@ router.post('/api/shop/leads/:id/ai-intake', requireAuth, requireRole('full', 't
 }));
 
 module.exports = router;
+module.exports.pickIntakeCall = pickIntakeCall;

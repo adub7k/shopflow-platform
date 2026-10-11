@@ -63,6 +63,17 @@ function fakeCtx(lead) {
   ok('voicemail uses plain intake schema', !lastReq.output_config.format.schema.properties.coaching);
   ok('voicemail gets no scorecard', !vm.store.calls.CA1.coaching);
 
+  // "Analyze with AI" picks the newest conversation, not just any transcribed call.
+  const { pickIntakeCall } = require('../server/routes/receptionist');
+  const answeredNoTx = { id: 'new', recording: { recordingSid: 'RE2' } };
+  const aiCall = { id: 'ai', transcript: 'AI: hi', voiceAI: { turns: [] }, recording: { recordingSid: 'RE0' } };
+  const vmCall = { id: 'vm', transcript: 'call me back' };
+  ok('picks the newer untranscribed answered call over an older AI call', pickIntakeCall([answeredNoTx, aiCall, vmCall]).id === 'new');
+  ok('picks a newer transcribed voicemail over an older answered call', pickIntakeCall([vmCall, answeredNoTx]).id === 'vm');
+  ok('skips a plain missed call with nothing to read', pickIntakeCall([{ id: 'miss' }, vmCall]).id === 'vm');
+  ok('falls back to the newest call', pickIntakeCall([{ id: 'miss' }]).id === 'miss');
+  ok('no calls → null', pickIntakeCall([]) === null);
+
   console.log(failures ? `\n${failures} FAILED` : '\nall passed');
   process.exit(failures ? 1 : 0);
 })();
