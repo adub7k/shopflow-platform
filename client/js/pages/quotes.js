@@ -428,6 +428,29 @@ const Quotes = {
     if(q&&q.customerId&&typeof logClientNote==='function') logClientNote(q.customerId,'Called about '+(q.number||'estimate'));
   },
 
+  // Owner-only "Sent by" picker: credits the estimate to a person for the
+  // deposit-rate card (older estimates predate sender tracking).
+  async _staffList(){
+    if(!this._staff){ try{ this._staff=(await db.staff.all()||[]).filter(a=>a.role!=='client'&&a.active!==false); }catch(e){ this._staff=[]; } }
+    return this._staff;
+  },
+  async _fillSenderPicker(q){
+    const sel=document.getElementById('qd-sender'); if(!sel)return;
+    const staff=await this._staffList();
+    const gone=q.sentBy&&!staff.some(a=>a.id===q.sentBy); // former staff keeps its label
+    sel.innerHTML=(q.sentBy?(gone?`<option value="" selected>${esc(q.sentByName||'Former staff')}</option>`:''):`<option value="">${q.createdByName?esc(q.createdByName)+' (created it)':'Not assigned'}</option>`)
+      +staff.map(a=>`<option value="${esc(a.id)}"${a.id===q.sentBy?' selected':''}>${esc(a.name||a.email)}</option>`).join('');
+  },
+  async assignSender(id,accountId){
+    if(!accountId)return;
+    try{
+      await db.quotes.assignSender([id],accountId);
+      const q=this._data.find(x=>x.id===id), a=(this._staff||[]).find(x=>x.id===accountId);
+      if(q){ q.sentBy=accountId; q.sentByName=a?(a.name||a.email):q.sentByName; }
+      toast('Credited to '+(a?(a.name||a.email):'them')+' ✓');
+    }catch(e){ toast(e.message||'Could not save','error'); }
+  },
+
   openDetail(id){
     const q=this._data.find(x=>x.id===id); if(!q)return;
     const link=this._publicLink(q);
@@ -438,6 +461,8 @@ const Quotes = {
         ${this._isFleet(q)?`<div style="font-size:13px;color:var(--muted);margin-top:3px;">🚚 ${esc(q.fleetName||'Fleet')}${q.vehicleCount?` · ${q.vehicleCount} vehicles`:''} · ${q.contract?`${this._freqLabel(q.contract.frequency)} · ${q.contract.termMonths}-month term`:'One-time job'}</div>`:''}
         ${q.vehicle&&(q.vehicle.make||q.vehicle.model)?`<div style="font-size:13px;color:var(--muted);margin-top:3px;">🚗 ${esc([q.vehicle.year,q.vehicle.make,q.vehicle.model,q.vehicle.color].filter(Boolean).join(' '))}</div>`:''}
         <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${this._badge(q.status)} ${q.balancePaid?'<span class="badge badge-green">💳 Paid in full</span>':(q.depositPaid?'<span class="badge badge-green">Deposit paid</span>':'')}${this._openTag(q)}</div>
+        ${Auth.getRole()==='full'?`<div style="font-size:12px;color:var(--faint);margin-top:6px;display:flex;align-items:center;gap:6px;">Sent by <select id="qd-sender" class="form-input" style="width:auto;padding:2px 24px 2px 8px;font-size:12px;" onchange="Quotes.assignSender('${q.id}',this.value)"><option value="">${q.sentByName?esc(q.sentByName):(q.createdByName?esc(q.createdByName)+' (created it)':'Not assigned')}</option></select></div>`
+          :(q.sentByName||q.createdByName?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">${q.sentByName?'Sent by '+esc(q.sentByName):'Created by '+esc(q.createdByName)}</div>`:'')}
         ${q.emailSentAt?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">${q.emailOpenedAt?'Customer opened the email':'Emailed — not opened yet'}${(q.reminderCount||0)>0?` · ${q.reminderCount} reminder${q.reminderCount>1?'s':''} sent`:''}</div>`:''}
         ${q.smsSentAt?`<div style="font-size:12px;color:var(--faint);margin-top:6px;">📱 Texted ${(()=>{try{return new Date(q.smsSentAt).toLocaleDateString(undefined,{month:'short',day:'numeric'});}catch(e){return '';}})()}</div>`:''}
         ${q.viewedAt?`<div style="font-size:12px;color:var(--green);margin-top:6px;">👁 Opened the estimate page${q.viewCount>1?` ${q.viewCount}×`:''}${(()=>{try{return ' — first '+new Date(q.viewedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'})+(q.lastViewedAt&&q.lastViewedAt!==q.viewedAt?', last '+new Date(q.lastViewedAt).toLocaleDateString(undefined,{month:'short',day:'numeric'}):'');}catch(e){return '';}})()}</div>`:''}
@@ -474,6 +499,7 @@ const Quotes = {
         ${canWrite()?`<button class="btn btn-danger btn-full" onclick="Quotes.delete('${q.id}')">Delete</button>`:''}
         <button class="btn btn-full" onclick="Modal.close()">Close</button>
       </div>`);
+    if(Auth.getRole()==='full') this._fillSenderPicker(q);
   },
 
   // Canonical public origin for customer-facing links. Prefer the branded

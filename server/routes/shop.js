@@ -6,6 +6,7 @@ const { resolveProfile } = require('../industries');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, shopOwnNumber, buildSms, genId, today, slug, toE164, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, saveImageDataUrl, deleteUpload, computeTax, computeApptCost } = require('../db');
 const { bucketLeadSource } = require('../lead-source');
 const { ensureQuoteCustomer } = require('../quotes-core');
+const { computeEstimateDeposits } = require('../estimate-deposits');
 const objections = require('../objections');
 const salesActivity = require('../sales-activity');
 
@@ -17,6 +18,17 @@ function actorOf(req) {
   const acct = req.accountId ? master.get('accounts').find({ id: req.accountId }).value() : null;
   const by = (acct && (acct.name || acct.email)) || String((req.body && req.body.by) || '').slice(0, 60);
   return { byId: req.accountId || null, by };
+}
+// { createdBy, createdByName } / { sentBy, sentByName } from the token.
+function actorStamp(req, key) {
+  const acct = req.accountId ? master.get('accounts').find({ id: req.accountId }).value() : null;
+  return { [key]: req.accountId || null, [key + 'Name']: acct ? (acct.name || acct.email) : null };
+}
+// First send of an estimate: credit the sender + date it (resends don't move it).
+function stampFirstSend(req, q, existing, at) {
+  if (existing && existing.sentBy) return;
+  Object.assign(q, actorStamp(req, 'sentBy'));
+  if (!(existing && existing.firstSentAt)) q.firstSentAt = at;
 }
 
 // ── PROTECTED: Settings ───────────────────────────────────────────────────────
@@ -556,6 +568,15 @@ router.get('/api/shop/quotes/:id', requireAuth, requireRole('full','technician')
 router.post('/api/shop/quotes', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   ensureQuotes(db);
   const q = req.body;
+  // Sender attribution (deposit-rate tracking): who created / first sent the
+  // estimate comes from the auth token, never the body.
+  delete q.createdBy; delete q.createdByName; delete q.sentBy; delete q.sentByName; delete q.firstSentAt;
+  const existing = q.id ? h.getById('quotes', q.id) : null;
+  if (!existing) Object.assign(q, actorStamp(req, 'createdBy'));
+  // The UI texts estimates itself (sms: deep link) and then saves smsSentAt —
+  // that save IS the send, so credit the sender on it.
+  // (Only a NEW smsSentAt — an edit echoing the stored one isn't a send.)
+  if (q.smsSentAt && q.smsSentAt !== (existing && existing.smsSentAt)) stampFirstSend(req, q, existing, q.smsSentAt);
   // Only (re)compute line items + total when the caller actually sends them —
   // otherwise a partial update (e.g. status change) would wipe the items via merge.
   if (Array.isArray(q.lineItems)) {
@@ -643,6 +664,27 @@ router.post('/api/shop/quotes', requireAuth, requireRole('full','technician'), s
 router.delete('/api/shop/quotes/:id', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
   ensureQuotes(db); h.remove('quotes', req.params.id); res.json({ ok:true });
 }));
+// Owner credits estimates to whoever sent them — for estimates sent before
+// sender tracking existed, or to fix a wrong credit. Body: { ids:[...],
+// accountId } (accountId '' clears it back to unassigned). Owner-only so staff
+// can't move credit onto themselves; the assignment itself is stamped.
+router.post('/api/shop/quotes/assign-sender', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
+  ensureQuotes(db);
+  const ids = Array.isArray(req.body.ids) ? req.body.ids.map(String).slice(0, 500) : [];
+  if (!ids.length) return res.status(400).json({ ok:false, error:'Pick at least one estimate' });
+  const accountId = String(req.body.accountId || '');
+  let acct = null;
+  if (accountId) {
+    acct = master.get('accounts').find({ id: accountId }).value();
+    if (!acct || acct.shopId !== req.shopId) return res.status(404).json({ ok:false, error:'Staff member not found' });
+  }
+  const stamp = acct
+    ? { sentBy: acct.id, sentByName: acct.name || acct.email, sentByAssignedBy: req.accountId || null, sentByAssignedAt: new Date().toISOString() }
+    : { sentBy: null, sentByName: null, sentByAssignedBy: req.accountId || null, sentByAssignedAt: new Date().toISOString() };
+  let updated = 0;
+  ids.forEach(id => { if (h.getById('quotes', id)) { h.upsert('quotes', { id, ...stamp }); updated++; } });
+  res.json({ ok:true, updated });
+}));
 // Text the customer a link to view + approve the quote.
 // Recipient: the quote's own phone, falling back to the linked customer record.
 router.post('/api/shop/quotes/:id/send', requireAuth, requireRole('full','technician'), shopRoute(async (req, res, db, h) => {
@@ -665,6 +707,7 @@ router.post('/api/shop/quotes/:id/send', requireAuth, requireRole('full','techni
       customerName: q.customerName || rawPhone, type:'sms', direction:'outbound', body,
       sentAt: new Date().toISOString(), read:true });
     q.sentAt = new Date().toISOString(); q.smsSentAt = q.sentAt;
+    stampFirstSend(req, q, q, q.sentAt);
     if (!q.customerPhone) q.customerPhone = rawPhone; // persist for future sends
     h.upsert('quotes', q);
     res.json({ ok:true });
@@ -687,6 +730,7 @@ router.post('/api/shop/quotes/:id/send-email', requireAuth, requireRole('full','
   if (!r.ok) return res.status(502).json({ ok:false, error: r.reason || 'Could not send the email' });
   // Persist so future sends default to this address and the timeline reflects it.
   q.sentAt = new Date().toISOString(); q.emailSentAt = q.sentAt; if (!q.customerEmail) q.customerEmail = to;
+  stampFirstSend(req, q, q, q.sentAt);
   h.upsert('quotes', q);
   res.json({ ok:true, to });
 }));
@@ -1089,6 +1133,17 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
     .map(r => ({ ...r, bookedMonth: round2(r.bookedMonth), closedMonth: round2(r.closedMonth), closedTotal: round2(r.closedTotal) }))
     .sort((a, b) => b.bookedMonth - a.bookedMonth || b.closedTotal - a.closedTotal);
 
+  // ── Estimates & deposits by sender ─────────────────────────────────────────
+  // Who sent the estimates that went out this month, how many came back with a
+  // deposit, and the no-shows on jobs booked without one (server/estimate-deposits.js).
+  const edInput = {
+    quotes: Array.isArray(h.getAll('quotes')) ? h.getAll('quotes') : [],
+    appointments: h.getAll('appointments'), accounts: shopAccounts,
+  };
+  const estimatesBySender = computeEstimateDeposits({ ...edInput, inWindow: d => monthOf(d) === curMonth });
+  estimatesBySender.allTime = computeEstimateDeposits(edInput);
+  delete estimatesBySender.allTime.noShowByDeposit; // already all-time on the parent
+
   // ── Bookings by lead source ────────────────────────────────────────────────
   // Which channel each appointment on the calendar came from (any live status,
   // done or not; cancelled/no-show excluded), bucketed by appointment date.
@@ -1186,7 +1241,7 @@ router.get('/api/shop/revenue', requireAuth, requireRole('full'), shopRoute(asyn
   };
 
   res.json({
-    aiReceptionist, quotesGiven,
+    aiReceptionist, quotesGiven, estimatesBySender,
     weekly: weeklyRevenue(h, db.get('settings').value() || {}, 12),
     mrr, activeMembers: activeMembers.length,
     aiRecoveredTotal: round2(aiDone.reduce((s, a) => s + Number(a.price || 0), 0)),

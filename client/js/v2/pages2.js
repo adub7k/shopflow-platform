@@ -482,6 +482,12 @@
         html.push(`<div style="font-size:11px;color:var(--faint);margin-top:8px;">Booked = jobs this person entered this month (any status). Closed = their jobs completed this month. Older appointments (before attribution existed) aren’t counted.</div></div></div>`);
       }
 
+      // Estimates & deposits: who SENT each estimate this month and how many came
+      // back with money down — a deposit is the best no-show insurance there is.
+      const ed = data.estimatesBySender;
+      Revenue._ed = ed;
+      if (ed && (ed.allTime || ed).team.sent) html.push(`<div class="v2-card" id="rev-ed">${Revenue._edCard()}</div>`);
+
       if (data.byBarber?.length > 1) {
         const maxRev = Math.max(...data.byBarber.map(b => b.revenue), 1);
         html.push(`<div class="v2-card"><div class="v2-chd"><div class="t">Revenue by ${esc(V('staffPlural', 'Barber').toLowerCase())}</div></div><div style="padding:10px 16px 12px;">`);
@@ -639,6 +645,80 @@
     const btn = document.getElementById('wg-btn'); disableBtn(btn);
     try { await db.settings.save({ weeklyRevenueGoal: (!isNaN(n) && n > 0) ? Math.round(n) : 0 }); Modal.close(); toast(n > 0 ? 'Weekly goal set ✓' : 'Weekly goal cleared'); this.render(); }
     catch (e) { toast('Could not save goal', 'error'); enableBtn(btn); }
+  };
+  // Estimates & deposits card body (swapped in place by the period toggle).
+  Revenue._edCard = function () {
+    const base = this._ed; if (!base) return '';
+    const all = !!this._edAll && !!base.allTime;
+    const ed = all ? { ...base.allTime, noShowByDeposit: base.noShowByDeposit, unattributedAll: base.unattributedAll } : base;
+    const rateColor = r => r == null ? 'var(--faint)' : r >= 50 ? 'var(--green-deep)' : r >= 25 ? 'var(--orange)' : 'var(--red)';
+    const line = r => {
+      const bits = [`${r.sent} sent`, `${r.deposits} deposit${r.deposits === 1 ? '' : 's'}${r.depositTotal ? ' (' + fmtMoney(r.depositTotal) + ')' : ''}`];
+      if (r.approvedNoDeposit) bits.push(`<span style="color:var(--red);">${r.approvedNoDeposit} approved w/o deposit</span>`);
+      if (r.noShows) bits.push(`<span style="color:var(--red);">${r.noShows} no-show${r.noShows === 1 ? '' : 's'}</span>`);
+      return bits.join(' · ');
+    };
+    const row = (r, bold) => `<div style="padding:6px 0;${bold ? 'border-top:1px solid var(--border);margin-top:4px;padding-top:9px;' : ''}">
+        <div style="display:flex;align-items:baseline;gap:10px;">
+          <span style="font-size:12.5px;font-weight:${bold ? 700 : 600};flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(r.name)}</span>
+          <span class="num" style="font-size:15px;font-weight:750;color:${rateColor(r.depositRate)};font-variant-numeric:tabular-nums;">${r.depositRate == null ? '—' : r.depositRate + '%'}</span></div>
+        <div class="bar-bg" style="margin:4px 0 3px;"><div class="bar-fill" style="width:${r.depositRate || 0}%;background:${rateColor(r.depositRate)};"></div></div>
+        <div style="font-size:11px;color:var(--muted);">${line(r)}</div></div>`;
+    const tab = (on, label, v) => `<button class="act" style="${on ? 'font-weight:700;' : 'color:var(--faint);font-weight:500;'}" onclick="Revenue.toggleEd(${v})">${label}</button>`;
+    const h = [`<div class="v2-chd"><div class="t">Estimates &amp; deposits</div><span class="sub">deposit rate by who sent it</span><div class="sp" style="flex:1;"></div>${tab(!all, 'This month', false)}${tab(all, 'All time', true)}</div><div style="padding:10px 16px 12px;">`];
+    ed.bySender.forEach(r => h.push(row(r)));
+    if (ed.team.sent && (ed.bySender.length !== 1 || ed.unattributed)) h.push(row({ ...ed.team, name: 'Whole shop' }, true));
+    if (!ed.team.sent) h.push(`<div style="font-size:12.5px;color:var(--muted);">No estimates sent ${all ? 'yet' : 'yet this month'}.</div>`);
+    const w = ed.noShowByDeposit.withDeposit, wo = ed.noShowByDeposit.withoutDeposit;
+    if (w.jobs || wo.jobs) {
+      const cell = (label, b, color) => `<div style="flex:1;background:var(--surface2);border-radius:8px;padding:8px 10px;">
+          <div style="font-size:10.5px;color:var(--faint);text-transform:uppercase;letter-spacing:.04em;font-weight:600;">${label}</div>
+          <div class="num" style="font-size:17px;font-weight:750;color:${color};font-variant-numeric:tabular-nums;">${b.rate == null ? '—' : b.rate + '%'}</div>
+          <div style="font-size:10.5px;color:var(--muted);">${b.noShows} no-show${b.noShows === 1 ? '' : 's'} of ${b.jobs} job${b.jobs === 1 ? '' : 's'}</div></div>`;
+      h.push(`<div style="font-size:11.5px;font-weight:650;margin:12px 0 6px;">No-show rate · all time</div>
+        <div style="display:flex;gap:8px;">${cell('With deposit', w, 'var(--green-deep)')}${cell('No deposit', wo, 'var(--red)')}</div>`);
+    }
+    h.push(`<div style="font-size:11px;color:var(--faint);margin-top:8px;">Deposit rate = estimates that came back with a deposit paid ÷ estimates sent. Credited to whoever first texted or emailed it from their login${ed.unattributed ? ` — ${ed.unattributed} unassigned estimate${ed.unattributed === 1 ? '' : 's'} only count toward the whole shop` : ''}.</div>
+      ${ed.unattributedAll ? `<div style="margin-top:8px;font-size:12px;"><a href="javascript:void 0" onclick="Revenue.assignOlder()" style="color:var(--green-deep);font-weight:600;">Assign ${ed.unattributedAll} older estimate${ed.unattributedAll === 1 ? '' : 's'} to a person →</a></div>` : ''}</div>`);
+    return h.join('');
+  };
+  Revenue.toggleEd = function (all) {
+    this._edAll = !!all;
+    const el = document.getElementById('rev-ed'); if (el) el.innerHTML = this._edCard();
+  };
+  // Credit older estimates (sent before sender tracking) to a person so they
+  // count toward that person's deposit rate. Owner picks a person, ticks rows.
+  Revenue.assignOlder = async function () {
+    let quotes = [], staff = [];
+    try { [quotes, staff] = await Promise.all([db.quotes.all(), db.staff.all()]); } catch (e) { toast('Could not load estimates', 'error'); return; }
+    staff = (staff || []).filter(a => a.role !== 'client' && a.active !== false);
+    const list = (quotes || []).filter(q => q.status !== 'draft' && !q.sentBy && !q.createdBy);
+    this._assignIds = list.map(q => q.id);
+    const day = d => { try { return d ? new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' }) : ''; } catch (e) { return ''; } };
+    Modal.show(`<div class="modal-title">Assign older estimates</div>
+      <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px;">These went out before ShopFlow tracked who sent them. Pick who sent them so they count toward that person's deposit rate.</div>
+      <div class="form-group"><label class="form-label">Sent by</label><select class="form-input" id="ao-who"><option value="">Choose a person…</option>${staff.map(a => `<option value="${esc(a.id)}">${esc(a.name || a.email)}</option>`).join('')}</select></div>
+      ${list.length ? `<label style="display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;padding:4px 0 8px;"><input type="checkbox" id="ao-all" onchange="document.querySelectorAll('.ao-q').forEach(c=>c.checked=this.checked);Revenue._aoCount()"> Select all (${list.length})</label>
+      <div class="list-card" style="max-height:46vh;overflow:auto;margin-bottom:12px;">${list.map(q => `<label class="list-row" style="cursor:pointer;gap:10px;">
+        <input type="checkbox" class="ao-q" value="${esc(q.id)}" onchange="Revenue._aoCount()">
+        <div class="list-main"><div class="list-name" style="font-size:13.5px;">${esc(q.customerName || '—')} <span style="color:var(--faint);font-weight:500;font-size:11.5px;">${esc(q.number || '')}</span></div>
+        <div class="list-sub">${day(q.firstSentAt || q.emailSentAt || q.smsSentAt || q.sentAt || q.createdAt)}${q.depositPaid ? ' · <span style="color:var(--green-deep);">deposit paid</span>' : ''}${q.status ? ' · ' + esc(q.status) : ''}</div></div>
+        <div style="font-weight:650;font-size:13px;">${fmtMoney(q.total || 0)}</div></label>`).join('')}</div>`
+      : `<div style="font-size:13px;color:var(--muted);margin-bottom:12px;">Nothing left to assign — every estimate has a sender. ✓</div>`}
+      <div class="modal-actions">${list.length ? `<button id="ao-btn" class="btn btn-primary btn-full" onclick="Revenue.saveAssignOlder()" disabled>Assign</button>` : ''}<button class="btn btn-full" onclick="Modal.close()">${list.length ? 'Cancel' : 'Close'}</button></div>`);
+  };
+  Revenue._aoCount = function () {
+    const n = document.querySelectorAll('.ao-q:checked').length, btn = document.getElementById('ao-btn');
+    if (btn) { btn.disabled = !n; btn.textContent = n ? `Assign ${n} estimate${n === 1 ? '' : 's'}` : 'Assign'; }
+  };
+  Revenue.saveAssignOlder = async function () {
+    const who = document.getElementById('ao-who')?.value;
+    const ids = [...document.querySelectorAll('.ao-q:checked')].map(c => c.value);
+    if (!who) { toast('Choose who sent them', 'warning'); return; }
+    if (!ids.length) return;
+    const btn = document.getElementById('ao-btn'); disableBtn(btn);
+    try { const r = await db.quotes.assignSender(ids, who); Modal.close(); toast(`Assigned ${r.updated} estimate${r.updated === 1 ? '' : 's'} ✓`); this.render(); }
+    catch (e) { toast(e.message || 'Could not assign', 'error'); enableBtn(btn); }
   };
   Revenue.exportWeeks = function () {
     const w = this._weekly; if (!w) return;
