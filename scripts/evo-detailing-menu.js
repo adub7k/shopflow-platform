@@ -54,19 +54,21 @@ const PACKAGES = [
 ];
 const RETIRE_SERVICES = ['Interior Detail', 'Full Detail'];
 
+// [name, price, group] — the group is the heading the Settings screen, the
+// booking page and the website list it under.
 const ADDONS = [
-  ['Pet hair removal', 60],
-  ['Odor / smoke treatment (ozone)', 85],
-  ['Engine bay detail', 75],
-  ['Headlight restoration (pair)', 80],
-  ['Leather clean & condition', 60],
-  ['Fabric & carpet protectant', 60],
+  ['Pet hair removal', 60, 'Interior'],
+  ['Odor / smoke treatment (ozone)', 85, 'Interior'],
+  ['Leather clean & condition', 60, 'Interior'],
+  ['Fabric & carpet protectant', 60, 'Interior'],
+  ['Child seat cleaning (each)', 35, 'Interior'],
+  ['Heavy soil / biohazard surcharge', 110, 'Interior'],
+  ['Engine bay detail', 75, 'Exterior'],
+  ['Headlight restoration (pair)', 80, 'Exterior'],
   // Not "windshield" — the site would file that under tint.
-  ['Glass coating (rain-repellent)', 50],
-  ['One-step polish (swirl removal)', 210],
-  ['Heavy soil / biohazard surcharge', 110],
-  ['Child seat cleaning (each)', 35],
-  ['Tar & overspray removal', 50],
+  ['Glass coating (rain-repellent)', 50, 'Exterior'],
+  ['One-step polish (swirl removal)', 210, 'Exterior'],
+  ['Tar & overspray removal', 50, 'Exterior'],
 ];
 // The live tenant's old "Pet Hair Removal" ($50) is the same name as the new
 // $60 entry (names match case-insensitively), so it's updated in place rather
@@ -126,9 +128,9 @@ async function api(path, { method = 'GET', body, token } = {}) {
   const byName = new Map((settings.addons || []).map((a) => [norm(a.name), a]));
   const addons = [
     ...keep,
-    ...ADDONS.map(([name, price]) => {
+    ...ADDONS.map(([name, price, group]) => {
       const prev = byName.get(norm(name));
-      return { id: prev ? prev.id : 'ad' + Math.random().toString(36).slice(2, 8), name, price, cost: prev && prev.cost != null ? prev.cost : 0 };
+      return { id: prev ? prev.id : 'ad' + Math.random().toString(36).slice(2, 8), name, price, group, cost: prev && prev.cost != null ? prev.cost : 0 };
     }),
   ];
   const sizes = SIZES.map((sz) => {
@@ -147,7 +149,7 @@ async function api(path, { method = 'GET', body, token } = {}) {
     const sp = s.sizePricing || {}, sd = s.sizeDuration || {};
     console.log(`  ${s.name.padEnd(16)} $${sp.sedan}/${sp.suv}/${sp.truck}   ${sd.sedan || s.duration}/${sd.suv || s.duration}/${sd.truck || s.duration} min`);
   }
-  console.log(`  add-ons: ${info.addons.map((a) => `${a.name} $${a.price}`).join(' · ')}`);
+  console.log(`  add-ons: ${info.addons.map((a) => `${a.name} $${a.price}${a.group ? ' [' + a.group + ']' : ''}`).join(' · ')}`);
   console.log(`  sizes:   ${info.vehicleSizes.map((v) => v.label).join(' · ')}`);
   console.log(DRY ? '\nDry run — nothing written.' : '\nDone. evosolution.org/detail reads these live.');
 })().catch((e) => { console.error('Failed:', e.message); process.exit(1); });

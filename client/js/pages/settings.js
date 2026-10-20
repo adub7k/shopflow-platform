@@ -291,9 +291,17 @@ const Settings = {
       if (!addons.length) {
         html.push('<div class="card"><div style="font-size:13px;color:var(--faint);text-align:center;padding:12px 0;">No add-ons yet — extras like Pet Hair, Odor Removal, or Engine Bay that staff and customers can tack onto a job.</div></div>');
       } else {
+        // Listed by group (Interior / Exterior / …) so a long menu scans; the
+        // booking page and client sites group them the same way. Ungrouped
+        // add-ons come last under "Other".
         html.push('<div class="list-card">');
-        addons.forEach(ad=>{
-          html.push(`<div class="list-row"><div class="list-main"><div class="list-name">${esc(ad.name)}</div></div><div style="font-weight:700;color:var(--green);margin-right:8px;">+${fmtMoney(ad.price)}</div><button class="btn btn-sm" onclick="Settings.openAddon('${ad.id}')">Edit</button></div>`);
+        const groups=[...new Set(addons.map(ad=>(ad.group||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+        if(addons.some(ad=>!(ad.group||'').trim())) groups.push('');
+        groups.forEach(g=>{
+          if(groups.length>1||g) html.push(`<div style="padding:10px 14px 4px;font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);">${esc(g||'Other')}</div>`);
+          addons.filter(ad=>(ad.group||'').trim()===g).forEach(ad=>{
+            html.push(`<div class="list-row"><div class="list-main"><div class="list-name">${esc(ad.name)}</div></div><div style="font-weight:700;color:var(--green);margin-right:8px;">+${fmtMoney(ad.price)}</div><button class="btn btn-sm" onclick="Settings.openAddon('${ad.id}')">Edit</button></div>`);
+          });
         });
         html.push('</div>');
       }
@@ -781,6 +789,10 @@ const Settings = {
         <div class="form-group"><label class="form-label">Price</label><input class="form-input" id="fad-price" type="number" value="${ad?(ad.price):25}" /></div>
         <div class="form-group"><label class="form-label">Cost <span style="font-weight:400;color:var(--faint);">(optional)</span></label><input class="form-input" id="fad-cost" type="number" value="${ad&&ad.cost!=null?ad.cost:''}" placeholder="$" /></div>
       </div>
+      <div class="form-group"><label class="form-label">Group <span style="font-weight:400;color:var(--faint);">(optional)</span></label>
+        <input class="form-input" id="fad-group" list="fad-groups" value="${esc(ad?.group||'')}" placeholder="e.g. Interior, Exterior, Protection" />
+        <datalist id="fad-groups">${[...new Set((this._addons||[]).map(a=>(a.group||'').trim()).filter(Boolean))].map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;">Add-ons with the same group are listed together here, on the booking page and on your website.</div></div>
       <div class="modal-actions">
         ${ad?`<button class="btn btn-danger btn-full" onclick="Settings.deleteAddon('${ad.id}')">Delete</button>`:''}
         <button id="fad-btn" class="btn btn-primary btn-full" onclick="Settings.saveAddon('${ad?.id||''}')">Save</button>
@@ -794,10 +806,11 @@ const Settings = {
     if(!name){toast('Enter a name','warning');return;}
     const price=parseFloat(document.getElementById('fad-price')?.value)||0;
     const cost=parseFloat(document.getElementById('fad-cost')?.value)||0;
+    const group=(document.getElementById('fad-group')?.value||'').trim();
     const btn=document.getElementById('fad-btn'); disableBtn(btn);
     const list=[...(this._addons||[])];
-    if(id){ const i=list.findIndex(a=>a.id===id); if(i>=0) list[i]={...list[i],name,price,cost}; }
-    else list.push({id:genId('ad'),name,price,cost});
+    if(id){ const i=list.findIndex(a=>a.id===id); if(i>=0) list[i]={...list[i],name,price,cost,group}; }
+    else list.push({id:genId('ad'),name,price,cost,group});
     try{ await db.settings.save({addons:list}); this._addons=list; Shop.addons=list; Modal.close(); toast(id?'Updated ✓':'Add-on added ✓'); this.render(); }
     catch(e){ toast('Could not save','error'); enableBtn(btn); }
   },

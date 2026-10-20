@@ -47,7 +47,7 @@ function getMenu(db) {
     duration: x.duration, sizePricing: x.sizePricing || null, sizeDuration: x.sizeDuration || null,
     description: x.description || '',
   }));
-  const addons = (s.addons || []).map(a => ({ id: a.id, name: a.name, price: a.price }));
+  const addons = (s.addons || []).map(a => ({ id: a.id, name: a.name, price: a.price, group: String(a.group || '').trim() }));
   const vehicleSizes = (s.vehicleSizes && s.vehicleSizes.length)
     ? s.vehicleSizes
     : (resolveProfile(industry).vehicleSizes || []);
