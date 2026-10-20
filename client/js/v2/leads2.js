@@ -205,8 +205,28 @@
     }
 
     renderList.call(this, html, leads, counts);
+    html.push('</div>');   // closes #lead-results (opened in renderList)
+    // Search keystroke: swap only the results under the box. Rebuilding the
+    // <input> itself makes phones reset their keyboard to letters after every
+    // digit, which made typing a phone number miserable.
+    if (this._resultsOnly) {
+      this._resultsOnly = false;
+      const box = document.getElementById('lead-results');
+      const tpl = document.createElement('div'); tpl.innerHTML = html.join('');
+      const fresh = tpl.querySelector('#lead-results');
+      if (box && fresh) { box.replaceWith(fresh); return; }
+    }
     el.innerHTML = html.join('');
     Leads._refocusSearch();
+  };
+
+  Leads.searchFilter = function (v) {
+    this._searchQ = v;
+    this._skipFetchOnce = true;
+    const input = document.getElementById('lead-search');
+    if (input && input.value !== v) input.value = v;   // "Clear search" button
+    this._resultsOnly = !!(input && document.getElementById('lead-results'));
+    this.render();
   };
 
   Leads.mergeDupes = async function (btn) {
@@ -226,9 +246,10 @@
   function renderList(html, leads, counts) {
     // Compact status filter chips.
     const chip = (key, label, n) => `<button class="v2-chip${this._statusFilter2 === key ? ' on' : ''}" onclick="Leads.setStatusFilter('${key}')">${label}${n ? `<span class="n">${n}</span>` : ''}</button>`;
-    html.push(`<div style="margin-bottom:10px;"><input class="form-input" id="lead-search" placeholder="Search name, phone, vehicle…" value="${esc(Leads._searchQ)}" oninput="Leads.searchFilter(this.value)" style="width:100%;max-width:420px;height:38px;padding:0 12px;"/></div>`);
+    html.push(`<div style="margin-bottom:10px;"><input class="form-input" id="lead-search" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search name, phone, vehicle…" value="${esc(Leads._searchQ)}" oninput="Leads.searchFilter(this.value)" style="width:100%;max-width:420px;height:38px;padding:0 12px;"/></div>`);
     html.push(`<div class="v2-chips" style="margin-bottom:12px;">
       ${chip('all', 'All', counts.all)}${chip('hot', '🔥 Hot', counts.hot)}${stages().map(s => chip(s.key, esc(s.label), counts[s.key])).join('')}${chip('old', '🗄 Old leads', counts.old)}</div>`);
+    html.push('<div id="lead-results">');   // closed by Leads.render; search keystrokes repaint only this
 
     const onOld = this._statusFilter2 === 'old';
     if (onOld && counts.old) html.push(`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px;color:var(--muted);font-size:13px;">Leads with no call, text or form from the customer in ${Leads.OLD_LEAD_DAYS}+ days move here automatically. They jump back to the main list the moment the customer reaches out again.</div>`);
