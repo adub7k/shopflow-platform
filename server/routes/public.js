@@ -9,11 +9,12 @@ const { upsertLead, resolveContact, recordLeadPayload } = require('../leads-core
 // ../booking so the public page and the AI voice receptionist share one
 // implementation. inspoMode is re-exported from there. (The inline slot helpers
 // that used to live here now live in ../booking — do not re-add them.)
-const { computeAvailability, createAppointment, inspoMode } = require('../booking');
+const { computeAvailability, createAppointment, inspoMode, serviceDuration } = require('../booking');
 const { deliver } = require('../email');
 // Square is the payments direction (Stripe kept as legacy fallback for any
 // shop already onboarded there). squareConnected = per-shop OAuth or platform env.
-const { squareConnected, reconcileSquareQuoteDeposit, reconcileSquareQuoteBalance } = require('./square');
+const { squareConnected, reconcileSquareQuoteDeposit, reconcileSquareQuoteBalance, notifyOwnerBooked } = require('./square');
+const { normalizeSource } = require('../leads-core');
 const { ensureQuoteCustomer } = require('../quotes-core');
 
 // ── Per-date availability overrides ───────────────────────────────────────────
@@ -127,8 +128,8 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
     // `cost` (COGS/margin) field that lives on each service for owner reporting.
     const services = (db.get('services').value() || []).map(s => ({
       id: s.id, name: s.name, category: s.category, price: s.price,
-      duration: s.duration, sizePricing: s.sizePricing, description: s.description,
-      image: s.image,
+      duration: s.duration, sizePricing: s.sizePricing, sizeDuration: s.sizeDuration || null,
+      description: s.description, image: s.image,
     }));
     // Same for add-ons: expose id/name/price to the booking page, never `cost`.
     const publicAddons = (s.addons || []).map(a => ({ id: a.id, name: a.name, price: a.price }));
@@ -182,6 +183,9 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
       // hidden). Deliberately a separate field from settings.phone, which is the
       // private call-forwarding destination and must never be exposed here.
       publicPhone: String(s.publicPhone || ''),
+      // Shop address — the same letterhead field the estimate page already
+      // shows customers, for a client site's footer / "serving <city>" line.
+      address: String(s.address || ''),
       // Inspiration photo + work gallery
       inspo: inspoMode(s, db.get('industry').value()),
       gallery: s.gallery || [],
@@ -423,13 +427,16 @@ router.get('/api/public/:shopSlug/availability', (req, res) => {
     const shop = master.get('shops').find({ slug: req.params.shopSlug, active: true }).value();
     if (!shop) return res.status(404).json({ error: 'Shop not found' });
     const db = getShopDb(shop.id);
-    const { date, barberId, serviceId } = req.query;
+    const { date, barberId, serviceId, vehicleSize } = req.query;
     // With serviceId (one id, or several comma-separated for a multi-service
-    // visit), only start times where the WHOLE visit fits are returned.
+    // visit), only start times where the WHOLE visit fits are returned. The
+    // optional vehicleSize picks each service's per-size duration (a truck
+    // detail runs hours longer than a sedan's) — the same length the booking
+    // will be held for, so a time offered here is a time that books.
     const catalog = db.get('services').value() || [];
-    const duration = String(serviceId || '').split(',').filter(Boolean)
-      .map(id => catalog.find(s => s.id === id))
-      .reduce((t, s) => t + (s ? Number(s.duration) || 0 : 0), 0);
+    const svcs = String(serviceId || '').split(',').filter(Boolean)
+      .map(id => catalog.find(s => s.id === id)).filter(Boolean);
+    const duration = svcs.reduce((t, s) => t + serviceDuration(s, vehicleSize, 0), 0);
     res.json(computeAvailability(db, date, { barberId, duration }));
   } catch(e) { res.status(500).json({ error: 'Server error' }); }
 });
@@ -505,6 +512,9 @@ router.post('/api/public/:shopSlug/lead', async (req, res) => {
     const rawUtm = req.body.utm || {};
     const utm = {};
     ['source','medium','campaign','term','content'].forEach(k => { const v = String(rawUtm[k] || '').trim().slice(0, 80); if (v) utm[k] = v; });
+    // Google's click id rides along in the same bag (a landing page reads it
+    // off its own URL) so a Google Ads lead can be matched back to the click.
+    { const g = String(req.body.gclid || rawUtm.gclid || '').trim().slice(0, 120); if (g) utm.gclid = g; }
     const source = (utm.source || 'website').toLowerCase();
     const referrer = String(req.body.referrer || '').trim().slice(0, 300);
 
@@ -534,9 +544,21 @@ router.post('/api/public/:shopSlug/book', async (req, res) => {
     // in booking.createAppointment (shared with the AI voice receptionist).
     // This endpoint is anonymous, so booked-by attribution fields must never be
     // accepted from the request body.
-    const result = createAppointment(db, shop, { ...req.body, createdBy: null, createdByName: null });
+    // A page that knows its channel (a client site's ad landing page sends
+    // utm_source) passes `source`; it's normalised exactly like a lead's ('gads' → 'google')
+    // so revenue-by-source buckets a booked click with the leads from the same
+    // campaign. No source sent = the classic booking page's default, unchanged.
+    const result = createAppointment(db, shop, {
+      ...req.body, createdBy: null, createdByName: null,
+      source: req.body.source ? normalizeSource(req.body.source) : undefined,
+    });
     if (!result.ok) return res.status(result.code || 400).json({ ok: false, error: result.error });
     master.get('shops').find({ id: shop.id }).assign({ lastActivity: new Date().toISOString() }).write();
+    // No processor connected → the booking confirms on the spot, and nobody has
+    // paid anything that would trigger the deposit-success alert. Tell the owner
+    // now (push + email), same as a paid one. Deposit bookings alert when the
+    // deposit lands (routes/square.js), so this never double-notifies.
+    if (result.appt.status === 'confirmed') notifyOwnerBooked(shop.id, result.appt, db.get('settings').value() || {});
     // No confirmation SMS. The platform has no Twilio A2P and the booker isn't the
     // owner (so we can't open their Messages app), so the auto-text is dropped — the
     // new booking shows up immediately in Appointments and on the Dashboard.
