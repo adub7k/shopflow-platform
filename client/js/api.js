@@ -27,7 +27,10 @@ function _normalizeLead(l) {
     ...l,
     status,
     createdAt: l.createdAt || l.created_at,
-    lastContactAt: l.lastContactAt || l.updated_at || l.created_at,
+    // Customer-activity clock only (list order, "Received", the 45-day Old
+    // leads cutoff). updated_at moves on every staff action, so falling back
+    // to it kept worked website leads looking fresh forever.
+    lastContactAt: l.lastContactAt || l.created_at,
     firstResponseAt: l.firstResponseAt || l.first_response_at,
     vehicle: l.vehicle || ((l.vehicle_year || l.vehicle_make || l.vehicle_model)
       ? { year: l.vehicle_year, make: l.vehicle_make, model: l.vehicle_model, color: l.vehicle_color } : null),
