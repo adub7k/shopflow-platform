@@ -17,6 +17,18 @@
 
   Leads._statusFilter2 = Leads._statusFilter2 || 'all';
 
+  // ── Old leads ─────────────────────────────────────────────────────────────
+  // A lead whose last customer activity (call, text, form — the same clock as
+  // the list's "Received" column) is 45+ days back drops out of the working
+  // list and the Pipeline board into the "Old leads" tab. Derived, never
+  // stored: nothing is deleted or re-staged, and the moment the customer
+  // reaches out again lastContactAt moves and the lead is back in the list.
+  Leads.OLD_LEAD_DAYS = 45;
+  Leads.isOld = function (l) {
+    const t = Date.parse((l && (l.lastContactAt || l.createdAt)) || '');
+    return !isNaN(t) && Date.now() - t >= Leads.OLD_LEAD_DAYS * 86400000;
+  };
+
   // ── Select mode (bulk clean-out on the list) ──────────────────────────────
   // Same idea as the Pipeline column "Select": checkboxes on every row plus a
   // sticky bar with Move / Mark lost / Delete, driven by the bulk endpoints.
@@ -154,16 +166,17 @@
     }
     const leads = this._leads || [];
 
-    const counts = { all: leads.length }; orderKeys().forEach(k => counts[k] = 0);
-    leads.forEach(l => { counts[colOf(l)]++; });
-    counts.hot = leads.filter(l => l.hot).length;
+    const active = leads.filter(l => !Leads.isOld(l));
+    const counts = { all: active.length, old: leads.length - active.length }; orderKeys().forEach(k => counts[k] = 0);
+    active.forEach(l => { counts[colOf(l)]++; });
+    counts.hot = active.filter(l => l.hot).length;
 
     const html = [];
 
     // Header + view toggle (list here; "Pipeline" jumps to the board page).
     const seg = (v, label) => `<button class="v2-seg${v === 'list' ? ' on' : ''}" onclick="Leads.setView('${v}')">${label}</button>`;
     html.push(`<div class="v2-pagehd"><div><h1>Leads</h1>
-      <div class="sub">${counts.all} lead${counts.all !== 1 ? 's' : ''}${counts.new ? ` · <span style="color:var(--blue,#2f6feb);font-weight:600;">${counts.new} new</span>` : ''}</div></div>
+      <div class="sub">${counts.all} lead${counts.all !== 1 ? 's' : ''}${counts.new ? ` · <span style="color:var(--blue,#2f6feb);font-weight:600;">${counts.new} new</span>` : ''}${counts.old ? ` · ${counts.old} old` : ''}</div></div>
       <div class="sp"></div>
       <div class="v2-segwrap" style="display:inline-flex;border:1px solid var(--border-md);border-radius:8px;overflow:hidden;margin-right:10px;">${seg('list', 'List')}${seg('pipeline', 'Pipeline')}</div>
       <button class="btn${this._selMode ? ' btn-primary' : ''}" onclick="Leads.toggleSelMode()">${this._selMode ? 'Done' : 'Select'}</button>
@@ -215,11 +228,15 @@
     const chip = (key, label, n) => `<button class="v2-chip${this._statusFilter2 === key ? ' on' : ''}" onclick="Leads.setStatusFilter('${key}')">${label}${n ? `<span class="n">${n}</span>` : ''}</button>`;
     html.push(`<div style="margin-bottom:10px;"><input class="form-input" id="lead-search" placeholder="Search name, phone, vehicle…" value="${esc(Leads._searchQ)}" oninput="Leads.searchFilter(this.value)" style="width:100%;max-width:420px;height:38px;padding:0 12px;"/></div>`);
     html.push(`<div class="v2-chips" style="margin-bottom:12px;">
-      ${chip('all', 'All', counts.all)}${chip('hot', '🔥 Hot', counts.hot)}${stages().map(s => chip(s.key, esc(s.label), counts[s.key])).join('')}</div>`);
+      ${chip('all', 'All', counts.all)}${chip('hot', '🔥 Hot', counts.hot)}${stages().map(s => chip(s.key, esc(s.label), counts[s.key])).join('')}${chip('old', '🗄 Old leads', counts.old)}</div>`);
 
-    let rows = leads.slice();
+    const onOld = this._statusFilter2 === 'old';
+    if (onOld && counts.old) html.push(`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:12px;color:var(--muted);font-size:13px;">Leads with no call, text or form from the customer in ${Leads.OLD_LEAD_DAYS}+ days move here automatically. They jump back to the main list the moment the customer reaches out again.</div>`);
+    // Searching from All also finds old leads, so nobody is ever "lost" in here.
+    const searchingAll = this._statusFilter2 === 'all' && !!String(Leads._searchQ || '').trim();
+    let rows = onOld ? leads.filter(l => Leads.isOld(l)) : searchingAll ? leads.slice() : leads.filter(l => !Leads.isOld(l));
     if (this._statusFilter2 === 'hot') rows = rows.filter(l => l.hot);
-    else if (this._statusFilter2 !== 'all') rows = rows.filter(l => colOf(l) === this._statusFilter2);
+    else if (this._statusFilter2 !== 'all' && !onOld) rows = rows.filter(l => colOf(l) === this._statusFilter2);
     rows = rows.filter(l => Leads.matchesSearch(l, Leads._searchQ));
     // Most recent inbound contact first (arrival time for never-recontacted
     // leads) and NOTHING else. lastContactAt moves on customer activity only,
@@ -235,8 +252,8 @@
     if (!rows.length) {
       const searching = !!String(Leads._searchQ || '').trim();
       html.push(`<div class="v2-card"><div class="empty-state"><div class="empty-icon">📥</div>
-        <div class="empty-text">${searching ? 'No leads match your search' : this._statusFilter2 === 'all' ? 'No leads yet' : (this._statusFilter2 === 'hot' ? 'No hot leads yet' : 'No ' + this._statusFilter2 + ' leads')}</div>
-        <div class="list-sub" style="margin-top:2px;">${searching ? 'Check the spelling or try part of the phone number.' : this._statusFilter2 === 'all' ? 'New calls and website inquiries will show up here.' : this._statusFilter2 === 'hot' ? 'Open a lead and tap “Mark as hot lead” to pin it here.' : 'Try a different filter.'}</div>
+        <div class="empty-text">${searching ? 'No leads match your search' : this._statusFilter2 === 'all' ? 'No leads yet' : onOld ? 'No old leads' : (this._statusFilter2 === 'hot' ? 'No hot leads yet' : 'No ' + this._statusFilter2 + ' leads')}</div>
+        <div class="list-sub" style="margin-top:2px;">${searching ? 'Check the spelling or try part of the phone number.' : this._statusFilter2 === 'all' ? 'New calls and website inquiries will show up here.' : onOld ? `Leads move here automatically after ${Leads.OLD_LEAD_DAYS} days with no call, text or form from the customer.` : this._statusFilter2 === 'hot' ? 'Open a lead and tap “Mark as hot lead” to pin it here.' : 'Try a different filter.'}</div>
         ${searching ? `<div style="margin-top:12px;"><button class="btn btn-sm" onclick="Leads.searchFilter('')">Clear search</button></div>`
           : this._statusFilter2 !== 'all' ? `<div style="margin-top:12px;"><button class="btn btn-sm" onclick="Leads.setStatusFilter('all')">Show all</button></div>` : ''}
       </div></div>`);

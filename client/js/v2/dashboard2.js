@@ -156,7 +156,7 @@
       html.push(renderOnboarding(settings, barbers));
 
       // Hot leads = the owner's call-first list; the header button jumps to it.
-      const hotCount = (leads || []).filter(l => l.hot).length;
+      const hotCount = (leads || []).filter(l => l.hot && !(Leads.isOld && Leads.isOld(l))).length;
       const fleetCount = (customers || []).filter(c => c.isFleet).length;
       html.push(`<div class="v2-pagehd"><div>
         <h1>Good ${greet}</h1>

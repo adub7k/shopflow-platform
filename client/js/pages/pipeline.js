@@ -145,7 +145,7 @@ const Pipeline = {
     if (this._view === 'days') return this._renderDays(el);
 
     const stages = this.stages();
-    const leads = this._leads.filter(l => this._matchSource(l));
+    const leads = this._leads.filter(l => this._matchSource(l) && !this._isOld(l));
     const byStage = {};
     stages.forEach(s => { byStage[s.key] = []; });
     leads.forEach(l => byStage[this._stage(l).key].push(l));
@@ -222,9 +222,12 @@ const Pipeline = {
     const t = Date.parse(l.createdAt || l.firstContactAt || l.lastContactAt || '');
     return isNaN(t) ? 0 : (Date.now() - t) / 86400000;
   },
+  // 45+ days with no customer activity → the Leads page's "Old leads" tab, not
+  // the board (Leads.isOld lives in v2/leads2.js; the classic shell has none).
+  _isOld(l) { return typeof Leads !== 'undefined' && Leads.isOld ? Leads.isOld(l) : false; },
   _renderDays(el) {
     const entries = this.days();
-    const chase = this._leads.filter(l => this._matchSource(l)).filter(l => {
+    const chase = this._leads.filter(l => this._matchSource(l) && !this._isOld(l)).filter(l => {
       const s = this._stage(l);
       return !s.terminal && !s.won;
     });
