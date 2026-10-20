@@ -4055,7 +4055,7 @@ async function loadAdvisor(shopId) {
   const host = document.getElementById('sp-advisor'); if (!host) return;
   advState = { shopId, data: null, viewing: null, busy: false, range: { preset: '7d' } };
   host.innerHTML = '<div class="card"><div style="padding:18px;color:var(--muted);font-size:13px;"><span class="spinner"></span> Loading growth advisor…</div></div>';
-  try { advState.data = await advApi(shopId, advQuery()); renderAdvisor(); }
+  try { advState.data = await advApi(shopId, advQuery()); advSyncAsking(); renderAdvisor(); }
   catch(e) { host.innerHTML = '<div class="card"><div style="padding:18px;color:var(--red);font-size:13px;">Growth Advisor failed to load: ' + esc(e.message) + '</div></div>'; }
 }
 const advMoney = (n) => n == null ? '—' : '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -4180,6 +4180,7 @@ function renderAdvisor(status) {
           <input class="adv-ask-input" id="adv-q" placeholder="e.g. Which Meta leads from this period haven't booked yet? What's our cost per booking on the offer ad?" ${(!d.configured || advState.asking) ? 'disabled' : ''} onkeydown="if(event.key==='Enter'){event.preventDefault();advisorAsk();}"/>
           <button class="btn btn-green btn-sm" id="adv-ask-btn" ${(!d.configured || advState.asking) ? 'disabled' : ''} onclick="advisorAsk()">${advState.asking ? '<span class="spinner"></span> Thinking…' : 'Ask'}</button>
         </div>
+        ${advState.asking ? `<div class="adv-notice" style="margin-top:8px;">Answering “${esc(advState.pendingQ || '')}” — bigger questions can take a minute. It’s saved here when done, even if you leave this page.</div>` : ''}
         ${advState.askError ? `<div class="adv-notice" style="color:var(--red);margin-top:8px;">${esc(advState.askError)}</div>` : ''}
         ${(d.questions || []).length ? `
         <div class="adv-qa">
@@ -4216,6 +4217,9 @@ function renderAdvisor(status) {
   const q = document.getElementById('adv-q');
   if (q && advState.pendingQ) q.value = advState.pendingQ;
 }
+// Questions are answered in the background (a long answer outlives a phone
+// browser's request), so Ask just starts it and we poll the card until the
+// server's `asking` clears — or carries an error.
 async function advisorAsk() {
   const input = document.getElementById('adv-q'); if (!input) return;
   const question = input.value.trim(); if (!question) return toast('Type a question first');
@@ -4223,13 +4227,39 @@ async function advisorAsk() {
   advState.asking = true; advState.askError = null; advState.pendingQ = question; renderAdvisor();
   try {
     await advApi(advState.shopId, '/ask', { method: 'POST', body: JSON.stringify({ question, ...(advState.range || {}) }) });
-    advState.asking = false; advState.pendingQ = null; advState.showAllQ = false;
-    advState.data = await advApi(advState.shopId, advQuery());
-    renderAdvisor();
+    advPollAsk();
   } catch(e) {
     advState.asking = false; advState.askError = e.message; renderAdvisor();
     const i = document.getElementById('adv-q'); if (i) i.value = question;
   }
+}
+// Mirror the server's background question into advState; true while one is in flight.
+function advSyncAsking() {
+  const a = advState.data && advState.data.asking;
+  if (a && a.error) {
+    advState.asking = false; advState.askError = a.error; advState.pendingQ = advState.pendingQ || a.question;
+    advApi(advState.shopId, '/asking', { method: 'DELETE' }).catch(() => {});
+    return false;
+  }
+  if (a) { advState.asking = true; advState.pendingQ = advState.pendingQ || a.question; if (!advState.polling) advPollAsk(); return true; }
+  if (advState.asking) { advState.asking = false; advState.pendingQ = null; advState.showAllQ = false; }
+  return false;
+}
+async function advPollAsk() {
+  const st = advState, startedAt = Date.now();   // reopening the card makes a new advState → this loop stops
+  st.polling = true;
+  try {
+    while (advState === st && Date.now() - startedAt < 10 * 60 * 1000) {
+      await new Promise(r => setTimeout(r, 3000));
+      if (advState !== st) return;
+      // A dropped poll (phone asleep, flaky signal) is fine — the answer is
+      // saved server-side; just try again.
+      try { st.data = await advApi(st.shopId, advQuery()); } catch(e) { continue; }
+      if (advState !== st) return;
+      if (!advSyncAsking()) { renderAdvisor(); return; }
+    }
+    if (advState === st) { st.asking = false; st.askError = 'Still no answer after 10 minutes. Reload the page to check for it.'; renderAdvisor(); }
+  } finally { st.polling = false; }
 }
 async function advisorDelQuestion(id) {
   try { await advApi(advState.shopId, '/ask/' + encodeURIComponent(id), { method: 'DELETE' }); advState.data = await advApi(advState.shopId, advQuery()); renderAdvisor(); }

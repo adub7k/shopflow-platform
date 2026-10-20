@@ -661,6 +661,10 @@ router.get('/api/admin/shop/:shopKey/proof', requireAdmin, (req, res) => {
 // platform router's marketing analytics already read.
 const advisor = require('../advisor/growthAdvisor');
 const advisorRunning = new Set();   // one paid run per shop at a time
+// Questions answered in the background: shopId → { id, question, startedAt, error? }.
+// The model can take a minute+, longer than a phone browser keeps a request
+// open, so the POST returns at once and the card polls the GET below.
+const advisorAsking = new Map();
 
 const advisorPlaybook = () => {
   const ps = master.get('platformSettings').value() || {};
@@ -699,6 +703,7 @@ router.get('/api/admin/shop/:shopId/advisor', requireAdmin, (req, res) => {
     configured: advisor.configured(), model: advisor.MODEL, running: advisorRunning.has(shop.id),
     leadCount, metrics, tz,
     window: { preset: window.preset, from: window.from, to: window.to, days: window.days, label: window.label, prior: window.prior.label, partial: window.partial },
+    asking: advisorAsking.get(shop.id) || null,
     latest: publicReport(reports[reports.length - 1]) || null,
     history: reports.slice(0, -1).reverse().slice(0, 12).map(r => ({ id: r.id, createdAt: r.createdAt, health: r.result && r.result.health, headline: r.result && r.result.headline, trigger: r.trigger, window: r.window || null })),
     spend: spendRows.slice(-20).reverse(),
@@ -735,21 +740,33 @@ router.post('/api/admin/shop/:shopId/advisor/run', requireAdmin, async (req, res
 
 // Ask a direct question about this shop; answered from the same computed
 // numbers (for the chosen period) plus a per-lead list. Saved per shop so
-// follow-up questions have context.
-router.post('/api/admin/shop/:shopId/advisor/ask', requireAdmin, async (req, res) => {
+// follow-up questions have context. Answers in the background (202) — the
+// card polls GET /advisor until `asking` clears or carries an error.
+router.post('/api/admin/shop/:shopId/advisor/ask', requireAdmin, (req, res) => {
   const shop = withShop(req, res); if (!shop) return;
   const question = String((req.body || {}).question || '').trim();
   if (!question) return res.status(422).json({ error: 'Type a question first.' });
   const range = rangeOf(req.body || {});
   try { advisor.resolveWindow({ ...range, now: Date.now() }); } catch (e) { return res.status(422).json({ error: e.message }); }
   if (!advisor.configured()) return res.status(400).json({ error: 'AI is not configured. Set ANTHROPIC_API_KEY to enable the Growth Advisor.' });
-  try {
-    const entry = await advisor.askAdvisor({ db: getShopDb(shop.id), shop, playbook: advisorPlaybook(), question, range });
-    res.json({ entry });
-  } catch (e) {
-    console.error('[advisor ask]', shop.id, e.message);
-    res.status(500).json({ error: 'Could not answer: ' + e.message });
-  }
+  const cur = advisorAsking.get(shop.id);
+  if (cur && !cur.error) return res.status(409).json({ error: 'Still answering the last question — give it a moment.', asking: cur });
+  const job = { id: 'job_' + Date.now().toString(36), question: question.slice(0, 1000), startedAt: new Date().toISOString() };
+  advisorAsking.set(shop.id, job);
+  advisor.askAdvisor({ db: getShopDb(shop.id), shop, playbook: advisorPlaybook(), question, range })
+    .then(() => { if (advisorAsking.get(shop.id) === job) advisorAsking.delete(shop.id); })
+    .catch(e => {
+      console.error('[advisor ask]', shop.id, e.message);
+      if (advisorAsking.get(shop.id) === job) job.error = 'Could not answer: ' + e.message;
+    });
+  res.status(202).json({ asking: job });
+});
+// Dismiss a failed background question so the card stops showing its error.
+router.delete('/api/admin/shop/:shopId/advisor/asking', requireAdmin, (req, res) => {
+  const shop = withShop(req, res); if (!shop) return;
+  const cur = advisorAsking.get(shop.id);
+  if (cur && cur.error) advisorAsking.delete(shop.id);
+  res.json({ ok: true });
 });
 router.delete('/api/admin/shop/:shopId/advisor/ask/:id', requireAdmin, (req, res) => {
   const shop = withShop(req, res); if (!shop) return;
