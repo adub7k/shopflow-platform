@@ -90,29 +90,47 @@ function fulfillSquareDeposit(shopId, apptId, amountCents) {
 }
 
 // Where a paid (or abandoned) deposit checkout may send the customer back to.
-// BOOKING_RETURN_ORIGINS is a comma list of exact origins, e.g.
-// "https://www.evosolution.org,http://localhost:8080". Anything not listed → null
-// (the generic ShopFlow confirmation page is shown instead).
+// Two shapes are honoured, everything else → null (the generic ShopFlow
+// confirmation page is shown instead):
+//  • an absolute URL whose origin is listed in BOOKING_RETURN_ORIGINS (a comma
+//    list of exact origins, e.g. "https://www.evosolution.org,http://localhost:8080")
+//    — a shop's own marketing site;
+//  • a same-site path ("/detailing/mad-detailing") — ShopFlow's own landing
+//    pages, which render the confirmation themselves. Must start with exactly
+//    one "/" so a protocol-relative "//evil.test" can never slip through.
 function safeReturnUrl(raw) {
   if (!raw) return null;
+  const str = String(raw).trim();
+  if (/^\/(?![\/\\])/.test(str)) return str.slice(0, 500);
   try {
-    const u = new URL(String(raw));
+    const u = new URL(str);
     const allowed = String(process.env.BOOKING_RETURN_ORIGINS || '').split(',').map(x => x.trim().replace(/\/$/, '')).filter(Boolean);
     return allowed.includes(u.origin) ? u.toString() : null;
   } catch (e) { return null; }
 }
 
+// Append ?booking=&status= to a return target (absolute or same-site path).
+function withBookingStatus(back, apptId, paid) {
+  const u = new URL(back, 'http://relative.invalid');
+  u.searchParams.set('booking', String(apptId || ''));
+  u.searchParams.set('status', paid ? 'confirmed' : 'unpaid');
+  return back.startsWith('/') ? u.pathname + u.search + u.hash : u.toString();
+}
+
 // "💰 New booking" push + email to the owner once a deposit lands — a paid
 // online booking is the most valuable thing the website can produce, so it
-// shouldn't wait for someone to open the calendar. Fire-and-forget.
+// shouldn't wait for someone to open the calendar. Also used for an online
+// booking that confirms WITHOUT a deposit (shop has no processor connected):
+// the copy drops the "paid" wording, but the owner still hears about it the
+// moment it lands. Fire-and-forget.
 function notifyOwnerBooked(shopId, appt, s) {
   if (!appt) return;
   try {
     const veh = appt.customFields && [appt.customFields.vehicleYear, appt.customFields.vehicleMake, appt.customFields.vehicleModel].filter(Boolean).join(' ');
-    const dep = Number(appt.depositAmount) || 0;
+    const dep = appt.depositPaid ? (Number(appt.depositAmount) || 0) : 0;
     const line = [appt.service, veh, `${appt.date} at ${appt.time}`].filter(Boolean).join(' · ');
     sendPush(shopId, {
-      title: `💰 New booking — ${appt.customerName || 'online'}${dep ? ` ($${dep} deposit paid)` : ''}`,
+      title: `${dep ? '💰' : '📅'} New booking — ${appt.customerName || 'online'}${dep ? ` ($${dep} deposit paid)` : ''}`,
       body: line, url: '/appointments', tag: `booking-${appt.id}`,
     }).catch(e => console.error('Booking push failed:', e.message));
 
@@ -134,10 +152,10 @@ function notifyOwnerBooked(shopId, appt, s) {
     ].filter(Boolean);
     deliver({
       to,
-      subject: `💰 Booked online: ${appt.customerName || 'New customer'} — ${appt.service}, ${appt.date} ${appt.time}`,
+      subject: `${dep ? '💰' : '📅'} Booked online: ${appt.customerName || 'New customer'} — ${appt.service}, ${appt.date} ${appt.time}`,
       html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px 16px;">
-        <h2 style="color:#16a34a;margin:0 0 6px;">New paid booking</h2>
-        <p style="color:#374151;margin:0 0 16px;">Booked and paid the deposit online. It's on your calendar as confirmed.</p>
+        <h2 style="color:#16a34a;margin:0 0 6px;">${dep ? 'New paid booking' : 'New online booking'}</h2>
+        <p style="color:#374151;margin:0 0 16px;">${dep ? 'Booked and paid the deposit online.' : 'Booked online (no deposit collected).'} It's on your calendar as confirmed.</p>
         <table style="width:100%;border-collapse:collapse;background:#f0fdf4;border:1px solid #dcfce7;border-radius:10px;">
           ${rows.map(([k, v]) => `<tr><td style="padding:8px 12px;color:#6b7280;font-size:13px;white-space:nowrap;vertical-align:top;">${k}</td><td style="padding:8px 12px;color:#111827;font-size:13px;">${v}</td></tr>`).join('')}
         </table>
@@ -263,17 +281,14 @@ router.get('/sq/booking-deposit-success', async (req, res) => {
       if (appt && appt.squareOrderId && await sq.isOrderPaid(appt.squareOrderId, { accessToken: creds.accessToken })) {
         paid = true;
         if (fulfillSquareDeposit(shopId, apptId, Math.round(Number(appt.depositAmount || 0) * 100))) {
-          notifyOwnerBooked(shopId, h.getById('appointments', apptId), s);
+          // Fresh handle: getShopDb re-reads the file per call, so `h` still
+          // holds the pre-fulfilment copy (no depositPaid yet).
+          notifyOwnerBooked(shopId, shopHelpers(getShopDb(shopId)).getById('appointments', apptId), s);
         }
       }
     }
   } catch (e) { /* best-effort; a webhook will be the authoritative path later */ }
-  if (back) {
-    const u = new URL(back);
-    u.searchParams.set('booking', String(req.query.appt || ''));
-    u.searchParams.set('status', paid ? 'confirmed' : 'unpaid');
-    return res.redirect(303, u.toString());
-  }
+  if (back) return res.redirect(303, withBookingStatus(back, req.query.appt, paid));
   res.send('<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="font-family:-apple-system,sans-serif;text-align:center;padding:60px 20px;background:#f5f5f7;"><div style="font-size:64px;margin-bottom:20px;">🎉</div><div style="font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:8px;">You\'re booked!</div><div style="font-size:15px;color:#6e6e73;line-height:1.6;margin-bottom:24px;">Your deposit was received and your appointment is confirmed.</div><div style="font-size:13px;color:#aeaeb2;">You can close this tab.</div></body></html>');
 });
 
@@ -500,5 +515,8 @@ router.post('/api/shop/square/reconcile-deposits', requireAuth, async (req, res)
 
 module.exports = router;
 module.exports.squareConnected = squareConnected;
+module.exports.safeReturnUrl = safeReturnUrl;
+module.exports.withBookingStatus = withBookingStatus;
+module.exports.notifyOwnerBooked = notifyOwnerBooked;
 module.exports.reconcileSquareQuoteDeposit = reconcileSquareQuoteDeposit;
 module.exports.reconcileSquareQuoteBalance = reconcileSquareQuoteBalance;

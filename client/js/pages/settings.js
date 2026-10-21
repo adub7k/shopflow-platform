@@ -291,9 +291,17 @@ const Settings = {
       if (!addons.length) {
         html.push('<div class="card"><div style="font-size:13px;color:var(--faint);text-align:center;padding:12px 0;">No add-ons yet — extras like Pet Hair, Odor Removal, or Engine Bay that staff and customers can tack onto a job.</div></div>');
       } else {
+        // Listed by group (Interior / Exterior / …) so a long menu scans; the
+        // booking page and client sites group them the same way. Ungrouped
+        // add-ons come last under "Other".
         html.push('<div class="list-card">');
-        addons.forEach(ad=>{
-          html.push(`<div class="list-row"><div class="list-main"><div class="list-name">${esc(ad.name)}</div></div><div style="font-weight:700;color:var(--green);margin-right:8px;">+${fmtMoney(ad.price)}</div><button class="btn btn-sm" onclick="Settings.openAddon('${ad.id}')">Edit</button></div>`);
+        const groups=[...new Set(addons.map(ad=>(ad.group||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+        if(addons.some(ad=>!(ad.group||'').trim())) groups.push('');
+        groups.forEach(g=>{
+          if(groups.length>1||g) html.push(`<div style="padding:10px 14px 4px;font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);">${esc(g||'Other')}</div>`);
+          addons.filter(ad=>(ad.group||'').trim()===g).forEach(ad=>{
+            html.push(`<div class="list-row"><div class="list-main"><div class="list-name">${esc(ad.name)}</div></div><div style="font-weight:700;color:var(--green);margin-right:8px;">+${fmtMoney(ad.price)}</div><button class="btn btn-sm" onclick="Settings.openAddon('${ad.id}')">Edit</button></div>`);
+          });
         });
         html.push('</div>');
       }
@@ -725,9 +733,10 @@ const Settings = {
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;margin:0;">
           <input type="checkbox" id="fs-size-on" ${s?.sizePricing?'checked':''} onchange="Settings._toggleSizePricing()" /> Price by vehicle size
         </label>
-        <div style="font-size:11px;color:var(--faint);margin-top:4px;">Charge more for larger vehicles. Leave a box blank to use the base price above.</div>
-        <div id="fs-size-rows" style="margin-top:10px;grid-template-columns:1fr 1fr;gap:8px;display:${s?.sizePricing?'grid':'none'};">
-          ${Shop.sizes.map(sz=>`<div class="form-group" style="margin:0;"><label class="form-label">${esc(sz.label)}</label><input class="form-input" id="fs-size-${esc(sz.key)}" type="number" value="${s&&s.sizePricing&&s.sizePricing[sz.key]!=null?s.sizePricing[sz.key]:''}" placeholder="$" /></div>`).join('')}
+        <div style="font-size:11px;color:var(--faint);margin-top:4px;">Charge more for larger vehicles. Leave a box blank to use the base price above. Minutes are optional too — a truck detail that runs hours longer than a sedan's gets the calendar time it needs (blank = the duration above).</div>
+        <div id="fs-size-rows" style="margin-top:10px;grid-template-columns:1fr 1fr 1fr;gap:8px;display:${s?.sizePricing?'grid':'none'};">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);">Size</div><div style="font-size:11px;font-weight:700;color:var(--muted);">Price</div><div style="font-size:11px;font-weight:700;color:var(--muted);">Minutes</div>
+          ${Shop.sizes.map(sz=>`<label class="form-label" style="align-self:center;margin:0;">${esc(sz.label)}</label><input class="form-input" id="fs-size-${esc(sz.key)}" type="number" value="${s&&s.sizePricing&&s.sizePricing[sz.key]!=null?s.sizePricing[sz.key]:''}" placeholder="$" /><input class="form-input" id="fs-sizedur-${esc(sz.key)}" type="number" value="${s&&s.sizeDuration&&s.sizeDuration[sz.key]!=null?s.sizeDuration[sz.key]:''}" placeholder="min" />`).join('')}
         </div>
       </div>`:''}
       <div class="form-group"><label class="form-label">Category</label>
@@ -780,6 +789,10 @@ const Settings = {
         <div class="form-group"><label class="form-label">Price</label><input class="form-input" id="fad-price" type="number" value="${ad?(ad.price):25}" /></div>
         <div class="form-group"><label class="form-label">Cost <span style="font-weight:400;color:var(--faint);">(optional)</span></label><input class="form-input" id="fad-cost" type="number" value="${ad&&ad.cost!=null?ad.cost:''}" placeholder="$" /></div>
       </div>
+      <div class="form-group"><label class="form-label">Group <span style="font-weight:400;color:var(--faint);">(optional)</span></label>
+        <input class="form-input" id="fad-group" list="fad-groups" value="${esc(ad?.group||'')}" placeholder="e.g. Interior, Exterior, Protection" />
+        <datalist id="fad-groups">${[...new Set((this._addons||[]).map(a=>(a.group||'').trim()).filter(Boolean))].map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;">Add-ons with the same group are listed together here, on the booking page and on your website.</div></div>
       <div class="modal-actions">
         ${ad?`<button class="btn btn-danger btn-full" onclick="Settings.deleteAddon('${ad.id}')">Delete</button>`:''}
         <button id="fad-btn" class="btn btn-primary btn-full" onclick="Settings.saveAddon('${ad?.id||''}')">Save</button>
@@ -793,10 +806,11 @@ const Settings = {
     if(!name){toast('Enter a name','warning');return;}
     const price=parseFloat(document.getElementById('fad-price')?.value)||0;
     const cost=parseFloat(document.getElementById('fad-cost')?.value)||0;
+    const group=(document.getElementById('fad-group')?.value||'').trim();
     const btn=document.getElementById('fad-btn'); disableBtn(btn);
     const list=[...(this._addons||[])];
-    if(id){ const i=list.findIndex(a=>a.id===id); if(i>=0) list[i]={...list[i],name,price,cost}; }
-    else list.push({id:genId('ad'),name,price,cost});
+    if(id){ const i=list.findIndex(a=>a.id===id); if(i>=0) list[i]={...list[i],name,price,cost,group}; }
+    else list.push({id:genId('ad'),name,price,cost,group});
     try{ await db.settings.save({addons:list}); this._addons=list; Shop.addons=list; Modal.close(); toast(id?'Updated ✓':'Add-on added ✓'); this.render(); }
     catch(e){ toast('Could not save','error'); enableBtn(btn); }
   },
@@ -854,16 +868,20 @@ const Settings = {
     // Optional per-vehicle-size pricing (detail shops). When on, the base price
     // mirrors the first size tier so revenue/fallback math stays sensible.
     const sizeOn=document.getElementById('fs-size-on')?.checked;
-    let sizePricing=null;
+    let sizePricing=null, sizeDuration=null;
     if(sizeOn){
-      sizePricing={};
-      (Shop.sizes||[]).forEach(sz=>{const v=parseFloat(document.getElementById('fs-size-'+sz.key)?.value);if(!isNaN(v))sizePricing[sz.key]=v;});
+      sizePricing={}; sizeDuration={};
+      (Shop.sizes||[]).forEach(sz=>{
+        const v=parseFloat(document.getElementById('fs-size-'+sz.key)?.value); if(!isNaN(v))sizePricing[sz.key]=v;
+        const m=parseInt(document.getElementById('fs-sizedur-'+sz.key)?.value); if(m>0)sizeDuration[sz.key]=m;
+      });
+      if(!Object.keys(sizeDuration).length) sizeDuration=null;
     }
     const firstKey=(Shop.sizes||[])[0]?.key;
     const basePrice=(sizeOn&&firstKey&&sizePricing[firstKey]!=null)?sizePricing[firstKey]:(parseFloat(document.getElementById('fs-price')?.value)||35);
     const cost=parseFloat(document.getElementById('fs-cost')?.value)||0;
     try{
-      await db.services.save({id:id||genId('s'),name,price:basePrice,cost,duration:parseInt(document.getElementById('fs-dur')?.value)||45,category:document.getElementById('fs-cat')?.value||'cut',sizePricing:sizeOn?sizePricing:null});
+      await db.services.save({id:id||genId('s'),name,price:basePrice,cost,duration:parseInt(document.getElementById('fs-dur')?.value)||45,category:document.getElementById('fs-cat')?.value||'cut',sizePricing:sizeOn?sizePricing:null,sizeDuration:sizeOn?sizeDuration:null});
       Modal.close(); toast(id?'Updated ✓':'Service added ✓'); this.render();
     }catch(e){toast('Could not save','error');enableBtn(btn);}
   },

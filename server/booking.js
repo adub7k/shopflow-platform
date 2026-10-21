@@ -44,9 +44,10 @@ function getMenu(db) {
   const industry = db.get('industry').value();
   const services = (db.get('services').value() || []).map(x => ({
     id: x.id, name: x.name, category: x.category, price: x.price,
-    duration: x.duration, sizePricing: x.sizePricing || null, description: x.description || '',
+    duration: x.duration, sizePricing: x.sizePricing || null, sizeDuration: x.sizeDuration || null,
+    description: x.description || '',
   }));
-  const addons = (s.addons || []).map(a => ({ id: a.id, name: a.name, price: a.price }));
+  const addons = (s.addons || []).map(a => ({ id: a.id, name: a.name, price: a.price, group: String(a.group || '').trim() }));
   const vehicleSizes = (s.vehicleSizes && s.vehicleSizes.length)
     ? s.vehicleSizes
     : (resolveProfile(industry).vehicleSizes || []);
@@ -59,6 +60,22 @@ function servicePrice(svc, sizeKey) {
   return (svc && svc.sizePricing && sizeKey && svc.sizePricing[sizeKey] != null && svc.sizePricing[sizeKey] !== '')
     ? Number(svc.sizePricing[sizeKey])
     : Number(svc && svc.price) || 0;
+}
+
+// Same for how long the job takes: a detail that is 2–3 hours on a sedan is
+// 7–9 on a truck, so a service may carry `sizeDuration` ({sedan,suv,truck} in
+// minutes) beside `sizePricing`. Falls back to the flat `duration` (45 min
+// when unset, matching the legacy default) whenever the size isn't priced.
+function serviceDuration(svc, sizeKey, fallback = 45) {
+  const bySize = svc && svc.sizeDuration && sizeKey ? Number(svc.sizeDuration[sizeKey]) : NaN;
+  if (Number.isFinite(bySize) && bySize > 0) return bySize;
+  return Number(svc && svc.duration) || fallback;
+}
+
+// Total minutes for a visit of one or more services at an optional size —
+// the number availability and the double-book guard both work from.
+function visitDuration(svcs, sizeKey) {
+  return svcs.reduce((t, s) => t + serviceDuration(s, sizeKey), 0);
 }
 
 // ── Availability ──────────────────────────────────────────────────────────────
@@ -120,6 +137,24 @@ function computeAvailability(db, date, { barberId, duration } = {}) {
   return [...allSlots].sort((a, b) => parseClock(a) - parseClock(b));
 }
 
+// Whitelist + truncate the ad-attribution fields a public page may send. Same
+// utm keys the lead endpoint accepts; gclid is Google's click id. Anything
+// missing is simply not stored (no empty keys on the appointment).
+function pickAttribution(payload = {}) {
+  const out = {};
+  const rawUtm = (payload.utm && typeof payload.utm === 'object') ? payload.utm : {};
+  const utm = {};
+  ['source', 'medium', 'campaign', 'term', 'content'].forEach(k => {
+    const v = String(rawUtm[k] || '').trim().slice(0, 80); if (v) utm[k] = v;
+  });
+  if (Object.keys(utm).length) out.utm = utm;
+  const gclid = String(payload.gclid || '').trim().slice(0, 120);
+  if (gclid) out.gclid = gclid;
+  const referrer = String(payload.referrer || '').trim().slice(0, 300);
+  if (referrer) out.referrer = referrer;
+  return out;
+}
+
 // ── Create appointment ────────────────────────────────────────────────────────
 // Validates the slot (double-book guard mirroring computeAvailability), resolves
 // price/duration/deposit server-side, upserts the customer, and writes the
@@ -135,12 +170,18 @@ function computeAvailability(db, date, { barberId, duration } = {}) {
 // `serviceId`. They become ONE appointment whose price, cost and duration are
 // the sums, `service` is the names joined with " + ", and `services` itemises
 // them. A single serviceId keeps the exact original shape.
+//
+// Ad attribution (optional): `utm` ({source,medium,campaign,term,content}),
+// `gclid` and `referrer` are stored on the appointment the same way the lead
+// form stores them on a lead, so a paid click that books straight through the
+// landing page (never becoming a lead) is still traceable to its campaign.
 function createAppointment(db, shop, payload = {}) {
   const {
     customerName, customerPhone, customerEmail, barberId, barberName,
     serviceId, date, time, notes, customFields, inspoPhoto, vehicleSize,
     addons, source, createdBy, createdByName, serviceIds,
   } = payload;
+  const attribution = pickAttribution(payload);
 
   const wantIds = Array.isArray(serviceIds) && serviceIds.length
     ? [...new Set(serviceIds.map(String))].slice(0, 6)
@@ -181,7 +222,7 @@ function createAppointment(db, shop, payload = {}) {
       barberSlotList(b).includes(time));
     const reqStart = parseClock(time);
     const reqEnd = reqStart + (svcs.length && svcs.every(Boolean)
-      ? svcs.reduce((t, x) => t + (Number(x.duration) || 30), 0)
+      ? svcs.reduce((t, x) => t + serviceDuration(x, vehicleSize, 30), 0)
       : 30);
     const overlaps = a => { const aStart = parseClock(a.time); const aEnd = aStart + (Number(a.duration) || 30); return reqStart < aEnd && aStart < reqEnd; };
     if (barberId) {
@@ -205,7 +246,7 @@ function createAppointment(db, shop, payload = {}) {
   const selAddonIds = Array.isArray(addons) ? addons : [];
   const chosenAddons = (s0.addons || []).filter(a => selAddonIds.includes(a.id)).map(a => ({ id: a.id, name: a.name, price: Number(a.price) || 0 }));
   const addonsTotal = chosenAddons.reduce((t, a) => t + a.price, 0);
-  const lines = svcs.map(x => ({ id: x.id, name: x.name, price: servicePrice(x, vehicleSize), duration: Number(x.duration) || 45 }));
+  const lines = svcs.map(x => ({ id: x.id, name: x.name, price: servicePrice(x, vehicleSize), duration: serviceDuration(x, vehicleSize) }));
   const basePrice = lines.reduce((t, l) => t + l.price, 0);
   const price = basePrice + addonsTotal;
   const duration = lines.reduce((t, l) => t + l.duration, 0);
@@ -248,6 +289,7 @@ function createAppointment(db, shop, payload = {}) {
     customFields: cf, vehicleSize: vehicleSize || null, addons: chosenAddons, inspoPhoto: inspo,
     source: source || 'booking-page', createdAt: new Date().toISOString(),
     createdBy: createdBy || null, createdByName: createdByName || null,
+    ...attribution,
   };
   upsert('appointments', appt);
 
@@ -272,5 +314,5 @@ function createAppointment(db, shop, payload = {}) {
 
 module.exports = {
   parseClock, fmtClock, barberSlotList, occupyingStatusKeys, inspoMode,
-  getMenu, servicePrice, computeAvailability, createAppointment,
+  getMenu, servicePrice, serviceDuration, visitDuration, computeAvailability, createAppointment,
 };

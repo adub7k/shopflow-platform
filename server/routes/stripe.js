@@ -2,6 +2,9 @@ const router = require('express').Router();
 const { requireAuth, requireRole } = require('../middleware');
 const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, computeTax } = require('../db');
 const { ensureQuoteCustomer } = require('../quotes-core');
+// Return-to-page rules are shared with the Square deposit flow so both
+// processors bring a landing-page customer back to the same confirmation.
+const { safeReturnUrl, withBookingStatus } = require('./square');
 
 // ── Stripe helpers ────────────────────────────────────────────────────────────
 function getStripe() {
@@ -218,11 +221,15 @@ router.post('/api/public/:shopSlug/deposit-session', async (req, res) => {
     const s = db.get('settings').value() || {};
     const accountId = s.stripe?.connectAccountId;
     if (!accountId || !s.stripe?.onboardingComplete) return res.status(400).json({ ok: false, error: 'Stripe not connected' });
-    const { appointmentId, amount } = req.body;
+    const { appointmentId, amount, returnUrl } = req.body;
     const total = Math.round(Number(amount || 10) * 100);
     const h = shopHelpers(db);
     const appt = h.getById('appointments', appointmentId);
     if (!appt) return res.status(404).json({ ok: false, error: 'Appointment not found' });
+    // Same return-to-page rule as the Square flow (listed origin or same-site
+    // path only) so a ShopFlow landing page gets the customer back after paying.
+    const back = safeReturnUrl(returnUrl);
+    if (back) { appt.depositReturnUrl = back; h.upsert('appointments', appt); }
     const stripe = getStripe();
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
@@ -239,13 +246,20 @@ router.post('/api/public/:shopSlug/deposit-session', async (req, res) => {
 
 // ── PUBLIC: Deposit success callback ─────────────────────────────────────────
 router.get('/booking-deposit-success', async (req, res) => {
+  let back = null, paid = false;
   try {
     const session = await getStripe().checkout.sessions.retrieve(req.query.session);
     const m = session?.metadata || {};
     if (session?.payment_status === 'paid' && m.shopId && m.appointmentId) {
+      paid = true;
       fulfillBookingDeposit(m.shopId, m.appointmentId, session);
     }
+    if (req.query.shop && req.query.appt) {
+      const appt = shopHelpers(getShopDb(req.query.shop)).getById('appointments', req.query.appt);
+      back = appt && safeReturnUrl(appt.depositReturnUrl);
+    }
   } catch(e) {}
+  if (back) return res.redirect(303, withBookingStatus(back, req.query.appt, paid));
   res.send(`<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/></head><body style="font-family:-apple-system,sans-serif;text-align:center;padding:60px 20px;background:#f5f5f7;"><div style="font-size:64px;margin-bottom:20px;">🎉</div><div style="font-size:22px;font-weight:800;letter-spacing:-.03em;margin-bottom:8px;">You're booked!</div><div style="font-size:15px;color:#6e6e73;line-height:1.6;margin-bottom:24px;">Your deposit was received and your appointment is confirmed.</div><div style="font-size:13px;color:#aeaeb2;">You can close this tab.</div></body></html>`);
 });
 
