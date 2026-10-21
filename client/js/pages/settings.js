@@ -793,6 +793,9 @@ const Settings = {
         <input class="form-input" id="fad-group" list="fad-groups" value="${esc(ad?.group||'')}" placeholder="e.g. Interior, Exterior, Protection" />
         <datalist id="fad-groups">${[...new Set((this._addons||[]).map(a=>(a.group||'').trim()).filter(Boolean))].map(g=>`<option value="${esc(g)}">`).join('')}</datalist>
         <div style="font-size:11px;color:var(--muted);margin-top:6px;">Add-ons with the same group are listed together here, on the booking page and on your website.</div></div>
+      <div class="form-group"><label class="form-label">What it is <span style="font-weight:400;color:var(--faint);">(optional)</span></label>
+        <textarea class="form-input" id="fad-desc" rows="2" placeholder="One or two plain sentences — e.g. Embedded hair pulled out of cloth seats and carpets with rubber brushes and extraction, not just vacuumed over.">${esc(ad?.description||'')}</textarea>
+        <div style="font-size:11px;color:var(--muted);margin-top:6px;">Shows as a tap-to-read note next to the add-on on the booking page and your website, so customers know what they're adding.</div></div>
       <div class="modal-actions">
         ${ad?`<button class="btn btn-danger btn-full" onclick="Settings.deleteAddon('${ad.id}')">Delete</button>`:''}
         <button id="fad-btn" class="btn btn-primary btn-full" onclick="Settings.saveAddon('${ad?.id||''}')">Save</button>
@@ -807,10 +810,11 @@ const Settings = {
     const price=parseFloat(document.getElementById('fad-price')?.value)||0;
     const cost=parseFloat(document.getElementById('fad-cost')?.value)||0;
     const group=(document.getElementById('fad-group')?.value||'').trim();
+    const description=(document.getElementById('fad-desc')?.value||'').trim().slice(0,300);
     const btn=document.getElementById('fad-btn'); disableBtn(btn);
     const list=[...(this._addons||[])];
-    if(id){ const i=list.findIndex(a=>a.id===id); if(i>=0) list[i]={...list[i],name,price,cost,group}; }
-    else list.push({id:genId('ad'),name,price,cost,group});
+    if(id){ const i=list.findIndex(a=>a.id===id); if(i>=0) list[i]={...list[i],name,price,cost,group,description}; }
+    else list.push({id:genId('ad'),name,price,cost,group,description});
     try{ await db.settings.save({addons:list}); this._addons=list; Shop.addons=list; Modal.close(); toast(id?'Updated ✓':'Add-on added ✓'); this.render(); }
     catch(e){ toast('Could not save','error'); enableBtn(btn); }
   },

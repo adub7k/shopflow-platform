@@ -134,7 +134,7 @@ router.get('/api/public/:shopSlug/info', (req, res) => {
     // Same for add-ons: expose id/name/price to the booking page, never `cost`.
     // `group` is the owner's own heading (Interior / Exterior / …) so pages
     // can list a long add-on menu in sections.
-    const publicAddons = (s.addons || []).map(a => ({ id: a.id, name: a.name, price: a.price, group: String(a.group || '').trim() }));
+    const publicAddons = (s.addons || []).map(a => ({ id: a.id, name: a.name, price: a.price, group: String(a.group || '').trim(), description: String(a.description || '').trim() }));
     const blockedDates = db.get('blockedDates').value().map(b => b.date);
     // Availability model. In perDate mode only the shop's hand-opened dates are
     // bookable (openDates); weekly-schedule mode ignores per-date openings.
