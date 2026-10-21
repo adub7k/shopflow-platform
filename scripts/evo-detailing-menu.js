@@ -54,21 +54,22 @@ const PACKAGES = [
 ];
 const RETIRE_SERVICES = ['Interior Detail', 'Full Detail'];
 
-// [name, price, group] — the group is the heading the Settings screen, the
-// booking page and the website list it under.
+// [name, price, group, what it is] — the group is the heading the Settings
+// screen, the booking page and the website list it under; the last field is
+// the tap-to-read note customers see next to the add-on.
 const ADDONS = [
-  ['Pet hair removal', 60, 'Interior'],
-  ['Odor / smoke treatment (ozone)', 85, 'Interior'],
-  ['Leather clean & condition', 60, 'Interior'],
-  ['Fabric & carpet protectant', 60, 'Interior'],
-  ['Child seat cleaning (each)', 35, 'Interior'],
-  ['Heavy soil / biohazard surcharge', 110, 'Interior'],
-  ['Engine bay detail', 75, 'Exterior'],
-  ['Headlight restoration (pair)', 80, 'Exterior'],
+  ['Pet hair removal', 60, 'Interior', 'Embedded hair pulled out of cloth seats and carpets with rubber brushes and extraction — not just vacuumed over.'],
+  ['Odor / smoke treatment (ozone)', 85, 'Interior', 'An ozone treatment runs in the closed car to neutralise smoke, pet and mildew smells at the source instead of masking them with fragrance.'],
+  ['Leather clean & condition', 60, 'Interior', 'Leather cleaned first, then conditioned, so it comes back matte and soft rather than shiny and slick.'],
+  ['Fabric & carpet protectant', 60, 'Interior', 'A protectant on cloth seats and carpets so the next spill beads up and vacuums out instead of soaking in.'],
+  ['Child seat cleaning (each)', 35, 'Interior', 'Each seat removed, crumbs and spills extracted from the straps, buckle and base, then refitted.'],
+  ['Heavy soil / biohazard surcharge', 110, 'Interior', 'For cars with heavy mud, mould, vomit or similar — covers the extra time and disposal it takes to do properly. We confirm it with you at drop-off, never after.'],
+  ['Engine bay detail', 75, 'Exterior', 'The engine bay degreased, rinsed carefully and dressed, so it looks like the car has been looked after under the hood too.'],
+  ['Headlight restoration (pair)', 80, 'Exterior', 'Yellowed, hazy lenses sanded and polished clear, then sealed — noticeably brighter at night.'],
   // Not "windshield" — the site would file that under tint.
-  ['Glass coating (rain-repellent)', 50, 'Exterior'],
-  ['One-step polish (swirl removal)', 210, 'Exterior'],
-  ['Tar & overspray removal', 50, 'Exterior'],
+  ['Glass coating (rain-repellent)', 50, 'Exterior', 'A hydrophobic coating on the glass so rain beads and sheets off at speed instead of smearing.'],
+  ['One-step polish (swirl removal)', 210, 'Exterior', 'A machine polish that removes light swirls and haze from the paint — the step that makes it look wet again. Deeper scratches need more; we tell you which yours are.'],
+  ['Tar & overspray removal', 50, 'Exterior', 'Road tar, tree sap and overspray dissolved and lifted off the paint before anything is sealed over them.'],
 ];
 // The live tenant's old "Pet Hair Removal" ($50) is the same name as the new
 // $60 entry (names match case-insensitively), so it's updated in place rather
@@ -128,9 +129,9 @@ async function api(path, { method = 'GET', body, token } = {}) {
   const byName = new Map((settings.addons || []).map((a) => [norm(a.name), a]));
   const addons = [
     ...keep,
-    ...ADDONS.map(([name, price, group]) => {
+    ...ADDONS.map(([name, price, group, description]) => {
       const prev = byName.get(norm(name));
-      return { id: prev ? prev.id : 'ad' + Math.random().toString(36).slice(2, 8), name, price, group, cost: prev && prev.cost != null ? prev.cost : 0 };
+      return { id: prev ? prev.id : 'ad' + Math.random().toString(36).slice(2, 8), name, price, group, description, cost: prev && prev.cost != null ? prev.cost : 0 };
     }),
   ];
   const sizes = SIZES.map((sz) => {
