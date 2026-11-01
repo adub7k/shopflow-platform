@@ -1,4 +1,4 @@
-// ── Recurring services (cleaning module) ─────────────────────────────────────
+// ── Recurring services (field-service module) ─────────────────────────────────────
 // A recurring contract spawns a normal appointment on each due date (weekly /
 // biweekly / monthly / custom). The server scheduler generates them automatically;
 // "Run now" spawns the next one immediately.
@@ -21,7 +21,7 @@ const Recurring = {
       const html=[];
       html.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div class="section-header" style="margin:0;">Recurring Services</div><button class="btn btn-green btn-sm" onclick="Recurring.edit()">+ Add Recurring</button></div>');
       if (!this._recs.length) {
-        html.push('<div class="card empty-state"><div class="empty-icon">🔁</div><div class="empty-text">No recurring services yet. Set up weekly or monthly cleanings and jobs are created automatically.</div></div>');
+        html.push('<div class="card empty-state"><div class="empty-icon">🔁</div><div class="empty-text">No recurring services yet. Set up a weekly, monthly or seasonal schedule and jobs are created automatically.</div></div>');
       } else {
         html.push('<div class="list-card">');
         this._recs.forEach(r=>{

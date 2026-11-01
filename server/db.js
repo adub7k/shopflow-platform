@@ -124,6 +124,11 @@ function initShopDb(db, shopData) {
       staffPicker: profile.staffPicker !== false,
       supportsFleet: profile.supportsFleet,
       supportsQuotes: profile.supportsQuotes || false,
+      // Field-service verticals (cleaning, pressure washing) get the Jobs /
+      // Properties / Crews / Recurring pages; propertyFields drives the
+      // Properties form.
+      fieldService: !!profile.fieldService,
+      propertyFields: profile.propertyFields || [],
       // Auto-email a gentle follow-up on estimates left unapproved. Cadence:
       // first nudge afterDays after send, then everyDays, capped at maxReminders.
       quoteReminders: { enabled: true, afterDays: 3, everyDays: 3, maxReminders: 2 },
@@ -148,6 +153,37 @@ function initShopDb(db, shopData) {
     customers: [], appointments: [], conversations: [], blockedDates: [], quotes: [],
     leads: [], calls: [], expenses: [], campaigns: [],
   }).write();
+}
+
+// Switch an existing shop to another industry profile (e.g. one created from
+// HQ before the business type was asked for, which defaulted to barbershop).
+// Rewrites the profile-driven settings — vocabulary, statuses, job fields,
+// categories, field-service pages — and leaves the shop's own data (leads,
+// clients, appointments, staff, branding) alone. resetServices replaces the
+// service catalog with the profile's defaults; off, the catalog is untouched.
+function applyIndustryProfile(db, industry, { resetServices = false } = {}) {
+  const profile = resolveProfile(industry);
+  const prevVocab = (db.get('settings').value() || {}).vocab || {};
+  db.set('industry', industry).write();
+  db.get('settings').assign({
+    vocab: profile.vocab,
+    statuses: profile.statuses,
+    customFields: profile.customFields,
+    vehicleSizes: profile.vehicleSizes || [],
+    serviceCategories: profile.serviceCategories || [],
+    staffPicker: profile.staffPicker !== false,
+    supportsFleet: !!profile.supportsFleet,
+    supportsQuotes: !!profile.supportsQuotes,
+    fieldService: !!profile.fieldService,
+    propertyFields: profile.propertyFields || [],
+  }).write();
+  if (resetServices) db.set('services', profile.services.map((s, i) => ({ id: 's' + (i + 1), ...s }))).write();
+  // The seeded placeholder staff member ("Barber 1") follows the new vocabulary;
+  // anyone the owner has renamed keeps their name.
+  const placeholder = (prevVocab.staff || 'Barber') + ' 1';
+  (db.get('barbers').value() || []).forEach(b => {
+    if (b && b.name === placeholder) db.get('barbers').find({ id: b.id }).assign({ name: profile.vocab.staff + ' 1' }).write();
+  });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -270,7 +306,7 @@ function buildSms(type, vars, settings) {
 }
 
 module.exports = {
-  master, getShopDb, initShopDb, shopHelpers, shopRoute,
+  master, getShopDb, initShopDb, applyIndustryProfile, shopHelpers, shopRoute,
   shopFromNumber, shopOwnNumber, buildSms, SMS_DEFAULTS,
   genId, today, slug, toE164,
   computeTax, computeApptCost,

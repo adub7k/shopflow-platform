@@ -16,6 +16,13 @@ function requireAuth(req, res, next) {
     const shop = master.get('shops').find({ id: payload.shopId }).value();
     if (!shop)        return res.status(401).json({ error: 'Account not found' });
     if (!shop.active) return res.status(401).json({ error: 'Account suspended. Contact support.' });
+    // The CRM page names the shop it's showing (/shop/<slug> → X-Shop-Slug).
+    // A token for a different shop is refused rather than silently serving
+    // that other shop's data under this shop's URL. Callers that don't send
+    // the header (portal, push client, older cached bundles) are unaffected.
+    const pageSlug = String(req.headers['x-shop-slug'] || '').trim();
+    if (pageSlug && pageSlug !== shop.slug)
+      return res.status(421).json({ error: 'You are signed in to a different shop. Sign in to this one to continue.', code: 'WRONG_SHOP' });
     req.shopId    = payload.shopId;
     req.accountId = payload.accountId;
     req.role      = payload.role || 'full'; // legacy tokens (no role) = owner/full

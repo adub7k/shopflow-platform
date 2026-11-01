@@ -296,7 +296,7 @@ const Pipeline = {
     const due = o.timeView ? 'ok' : this._dueState(l);
     const age = o.timeView ? this._fmtAge(Math.max(1, this._leadAgeDays(l) * 1440)) : this._fmtAge(this._ageMin(l));
     const name = l.name || l.phone || 'Unknown';
-    const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model].filter(Boolean).join(' ') : '';
+    const veh = leadSubject(l);
     const svc = (l.servicesInterested || []).join(', ');
     const sub = [veh, svc].filter(Boolean).join(' · ') || l.phone || '';
     const src = Leads._sourceMeta(l.source).label;
@@ -403,7 +403,7 @@ const Pipeline = {
     if (!l || !l.phone) { toast('No phone number on file', 'warning'); return; }
     const first = String(l.name || '').trim().split(/\s+/)[0];
     const shop = (Shop.settings && Shop.settings.shopName) || '';
-    const body = `Hey${first ? ' ' + first : ''}! This is ${shop || 'us'} — thanks for reaching out. When works for a quick call about your vehicle?`;
+    const body = `Hey${first ? ' ' + first : ''}! This is ${shop || 'us'} — thanks for reaching out. When works for a quick call about your ${Shop.fieldService ? 'project' : 'vehicle'}?`;
     _cpSms(l.phone, body);
     // Logged as a text activity (touch stamp: today's reached-out leads sink
     // below the untouched ones; the Sales activity page counts it).
@@ -558,7 +558,7 @@ const Pipeline = {
 
     const ageChip = (min, label) => `<button class="lead-pill ${cl.minAge === min ? 'active' : ''}" onclick="Pipeline.clAge(${min})">${label}</button>`;
     const rows = list.map(l => {
-      const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model].filter(Boolean).join(' ') : '';
+      const veh = leadSubject(l);
       const note = String((l.noteLog && l.noteLog[0] && l.noteLog[0].text) || l.notes || '').split('\n')[0];
       const amt = this._amt(l);
       const sub = [l.phone, veh || (l.servicesInterested || []).join(', '), amt != null ? fmtMoney(amt) : '', note].filter(Boolean).join(' · ');

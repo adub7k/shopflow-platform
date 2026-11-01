@@ -277,9 +277,14 @@ const Appointments = {
         if (cidEl)   cidEl.value   = customerId;
         if (phoneEl) phoneEl.value = customerPhone;
         if (extras) {
+          // The service the lead asked for, when it's in the catalog by name. Set
+          // before the price so a quoted amount still wins over the list price.
+          if (extras.serviceName) { const sel=document.getElementById('fa-svc'); const svc=(this._services||[]).find(x=>x.name===extras.serviceName); if(sel&&svc){ sel.value=`${svc.id}|${svc.name}|${svc.price}`; this._svcChange(); } }
           if (extras.price != null) { const p=document.getElementById('fa-price'); if(p)p.value=extras.price; }
           if (extras.notes) { const n=document.getElementById('fa-notes'); if(n)n.value=extras.notes; }
           if (extras.vehicle) (Shop.fields||[]).forEach(f=>{ const prop=f.key.replace(/^vehicle/,'').toLowerCase(); const v=extras.vehicle[prop]; if(v!=null){ const el=document.getElementById('fa-cf-'+f.key); if(el)el.value=v; } });
+          // Property-style fields (service address, …) carried over from the lead.
+          if (extras.customFields) Object.entries(extras.customFields).forEach(([k,v])=>{ if(v){ const el=document.getElementById('fa-cf-'+k); if(el&&!el.value)el.value=v; } });
           if (extras.quoteId) { const qe=document.getElementById('fa-quote-id'); if(qe)qe.value=extras.quoteId; }
         }
       }, 220);

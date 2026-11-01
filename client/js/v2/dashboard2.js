@@ -75,9 +75,9 @@
        <div class="metric-sub">${sub}</div></div>`;
 
   Dashboard.render = async function () {
-    // The cleaning vertical has its own operational overview — keep v1 for it
-    // until that block is ported.
-    if (Shop.industry === 'cleaning') return _v1Render();
+    // Field-service verticals have their own operational overview — keep v1
+    // for them until that block is ported.
+    if (Shop.fieldService) return _v1Render();
     const el = document.getElementById('page-dashboard'); if (!el) return;
     el.classList.add('v2-wide');
     try {

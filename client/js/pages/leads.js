@@ -67,6 +67,22 @@ const Leads = {
     { id: 'd27', label: 'Day 27', day: 27, sms: "I don't want to keep blowing you up if tint isn't a priority right now 😂\nShould I close this out for now?" },
     { id: 'd30', label: 'Day 30', day: 30, sms: "Last message from me, [NAME] 👍\nIf you still want to get the [VEHICLE] done, just reply TINT and I'll take care of everything from there." },
   ],
+  // Industry defaults, used when the shop hasn't written its own sequence. The
+  // tint script above stays the default for everyone else.
+  DEFAULT_FOLLOWUP_SEQ_BY_INDUSTRY: {
+    pressure: [
+      { id: 'd0a', label: 'Day 0 Initial',   day: 0,  sms: "Hey [NAME], this is [SHOP] 👋 Thanks for reaching out! What are you looking to get cleaned — the house, driveway, deck, or a bit of everything?" },
+      { id: 'd0b', label: 'Day 0 Follow-Up', day: 0,  sms: "If you can text me a couple of photos of the areas you want done, I can usually get you a price without a visit 👍" },
+      { id: 'd1',  label: 'Day 1',  day: 1,  sms: "Hey [NAME], just making sure I didn't miss you. Still want a price on cleaning up [PROPERTY]?" },
+      { id: 'd3',  label: 'Day 3',  day: 3,  sms: "Quick tip while you're deciding: siding, stucco and wood should be soft washed, not blasted. High pressure can damage them. Happy to explain what we'd use on yours." },
+      { id: 'd5',  label: 'Day 5',  day: 5,  sms: "Are you comparing a few quotes? Totally fine. Send me what you've been quoted and I'll make sure we're comparing the same job." },
+      { id: 'd7',  label: 'Day 7',  day: 7,  sms: "[NAME], the [OFFER] is still available. Want me to check what openings we have this week?" },
+      { id: 'd10', label: 'Day 10', day: 10, sms: "Did you end up getting it done already, or is it still on the list? 😄" },
+      { id: 'd14', label: 'Day 14', day: 14, sms: "We're scheduling jobs in your area over the next couple of weeks. Want me to save you a spot?" },
+      { id: 'd21', label: 'Day 21', day: 21, sms: "I don't want to keep bugging you if now isn't the right time 🙂 Should I close this out for now?" },
+      { id: 'd30', label: 'Day 30', day: 30, sms: "Last message from me, [NAME] 👍 Whenever you're ready to get [PROPERTY] cleaned up, just reply here and I'll take care of it." },
+    ],
+  },
   followUpSeq() {
     const s = (Shop.settings && Shop.settings.followUpSeq);
     if (Array.isArray(s) && s.length) {
@@ -74,7 +90,7 @@ const Leads = {
         .filter(e => e.id && e.sms);
       if (seq.length) return seq;
     }
-    return this.DEFAULT_FOLLOWUP_SEQ;
+    return this.DEFAULT_FOLLOWUP_SEQ_BY_INDUSTRY[Shop.industry] || this.DEFAULT_FOLLOWUP_SEQ;
   },
   // ── Objection follow-ups ──────────────────────────────────────────────────
   // When a lead pushes back (on the phone with the AI, or the owner marks it on
@@ -200,12 +216,15 @@ const Leads = {
   fuFill(body, l) {
     const first = String((l && l.name) || '').trim().split(/\s+/)[0];
     const veh = l && l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model].filter(Boolean).join(' ') : '';
+    // Street part of the service address ("123 Oak St"), never the ZIP alone.
+    const addr = String((l && l.customFields && l.customFields.serviceAddress) || '').split(',')[0].trim();
     const shop = (Shop.settings && Shop.settings.shopName) || 'our shop';
     const now = new Date();
     const map = {
       NAME: first || 'there',
       PHONE: (l && l.phone) || '',
       VEHICLE: veh || 'vehicle',
+      PROPERTY: /[a-z]/i.test(addr) ? addr : 'your place',
       SHOP: shop,
       OFFER: (Shop.settings && Shop.settings.followUpOffer) || 'deal we talked about',
       PRICE: (l && l.quotedAmount != null) ? fmtMoney(l.quotedAmount) : 'a price',
@@ -258,7 +277,7 @@ const Leads = {
   matchesSearch(l, raw) {
     const q = String(raw || '').trim().toLowerCase();
     if (!q) return true;
-    const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model, l.vehicle.color].filter(Boolean).join(' ') : '';
+    const veh = leadSubject(l, true);
     const hay = [l.name, l.email, veh, (l.servicesInterested || []).join(' '), l.location].filter(Boolean).join(' ').toLowerCase();
     if (hay.includes(q)) return true;
     const qd = q.replace(/\D/g, '');
@@ -371,7 +390,7 @@ const Leads = {
     this._leads.forEach(l => { counts[l.status] = (counts[l.status]||0) + 1; });
 
     const pill = (key, label) => `<button class="lead-pill ${this._filter===key?'active':''}" onclick="Leads.setFilter('${key}')">${label}${counts[key]?` <span class="lead-pill-count">${counts[key]}</span>`:''}</button>`;
-    const filters = `<div style="margin-bottom:10px;"><input class="form-input" id="lead-search" placeholder="Search name, phone, vehicle…" value="${esc(this._searchQ)}" oninput="Leads.searchFilter(this.value)" style="width:100%;max-width:420px;height:38px;padding:0 12px;"/></div>
+    const filters = `<div style="margin-bottom:10px;"><input class="form-input" id="lead-search" placeholder="Search name, phone, ${Shop.fieldService ? 'address' : 'vehicle'}…" value="${esc(this._searchQ)}" oninput="Leads.searchFilter(this.value)" style="width:100%;max-width:420px;height:38px;padding:0 12px;"/></div>
     <div class="lead-filters">
       ${pill('all','All')}${Object.keys(this._statusMeta).map(k => pill(k, this._statusMeta[k].label)).join('')}
     </div>`;
@@ -425,7 +444,7 @@ const Leads = {
       const lastCall = (l.calls||[])[0];
       const when = (lastCall && lastCall.startedAt) || l.lastContactAt;
       const missedBadge = (l.missedCount||0) > 0 ? `<span class="lead-missed">⚠ ${l.missedCount} missed</span>` : '';
-      const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model].filter(Boolean).join(' ') : '';
+      const veh = leadSubject(l);
       const sub = [veh || l.location, (l.servicesInterested||[]).join(', ') || l.phone].filter(Boolean).join(' · ');
       return `<div class="msg-inbox-row" onclick="Leads.open('${l.id}')">
         ${avatarEl(l.name || sm.icon, 42)}
@@ -575,9 +594,11 @@ const Leads = {
     }).join('') || `<div style="font-size:12px;color:var(--faint);padding:6px 0;">No calls logged.</div>`;
 
     // Web-lead extras: where the lead came from (channel + campaign), the
-    // vehicle they told us about, and the services they checked on the form.
+    // vehicle or property they told us about, and the services they checked.
     const sm = this._sourceMeta(l.source);
     const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model, l.vehicle.color].filter(Boolean).join(' ') : '';
+    const lcf = l.customFields || {};
+    const propRows = (Shop.fields || []).filter(f => f.key && f.key.indexOf('vehicle') !== 0 && lcf[f.key]);
     const infoRow = (k, v) => v ? `<div style="display:flex;gap:10px;padding:5px 0;font-size:13px;"><span style="width:86px;color:var(--muted);flex-shrink:0;">${k}</span><span style="font-weight:600;color:var(--text);">${esc(v)}</span></div>` : '';
     const contactRow = (k, v, href) => v ? `<div style="display:flex;gap:10px;padding:5px 0;font-size:13px;"><span style="width:86px;color:var(--muted);flex-shrink:0;">${k}</span><a href="${href}:${esc(v)}" style="font-weight:600;color:var(--green);text-decoration:none;">${esc(v)}</a></div>` : '';
     const detailCard = `
@@ -585,6 +606,7 @@ const Leads = {
       ${(l.ai && l.ai.altCallbackNumber) ? infoRow('Alt callback', l.ai.altCallbackNumber + ' · verify') : ''}
       ${infoRow('Source', sm.icon + ' ' + sm.label + (l.utm && l.utm.campaign ? ' · ' + l.utm.campaign : ''))}
       ${infoRow('Vehicle', veh)}
+      ${propRows.map(f => infoRow(esc(f.label || f.key), lcf[f.key])).join('')}
       ${infoRow('Interested in', ((l.ai && l.ai.servicesDiscussed && l.ai.servicesDiscussed.length ? l.ai.servicesDiscussed : l.servicesInterested) || []).join(', '))}
       ${contactRow('Email', l.email, 'mailto')}`;
 
@@ -1091,6 +1113,8 @@ const Leads = {
       const extras = {};
       if (l && Number(l.quotedAmount) > 0) extras.price = Number(l.quotedAmount);
       if (l && l.vehicle) extras.vehicle = l.vehicle;
+      if (l && l.customFields) extras.customFields = l.customFields;
+      if (l && Array.isArray(l.servicesInterested) && l.servicesInterested[0]) extras.serviceName = l.servicesInterested[0];
       setTimeout(() => Appointments.openFormPrefilled(res.customerId, (l && (l.name || l.phone)) || '', (l && l.phone) || '', Object.keys(extras).length ? extras : undefined), 150);
       toast('Client created ✓ — pick a date & time');
     } catch(e) { toast(e.message || 'Could not book', 'error'); }

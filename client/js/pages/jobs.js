@@ -1,4 +1,4 @@
-// ── Jobs (cleaning module) ───────────────────────────────────────────────────
+// ── Jobs (field-service module) ───────────────────────────────────────────────────
 // A cleaning "job" is a normal appointment with property + crew context. This is
 // an operational board over the same appointments[] collection the calendar uses,
 // so revenue/loyalty/reminders all apply — it just presents them crew-first.

@@ -77,6 +77,7 @@ h1{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margi
   <div class="login-link">Already have an account? <a href="/login">Sign in</a></div>
 </div>
 
+<script src="/js/api.js"></script>
 <script>
 // ── Pre-fill from URL params (set by payment success page) ───────────────────
 const planLabels = { starter: 'Starter Plan', pro: 'Pro Plan', shop: 'Shop Plan' };
@@ -165,12 +166,7 @@ async function signup() {
     });
     const data = await res.json();
     if (data.ok) {
-      localStorage.setItem('sf_token', data.token);
-      localStorage.setItem('sf_shopId', data.shopId);
-      localStorage.setItem('sf_shopSlug', data.shopSlug);
-      localStorage.setItem('sf_shopName', data.shopName);
-      localStorage.setItem('sf_role', data.role || 'full');
-      localStorage.setItem('sf_name', data.name || '');
+      Auth.saveSession(data);
       window.location.href = data.crmUrl;
     } else {
       errEl.textContent = data.error || 'Signup failed. Please try again.';

@@ -2,8 +2,21 @@
 
 // Global shop profile (vocabulary, custom fields, statuses) — populated at boot
 // from db.settings.get(). Falls back to barbershop terms if a shop has none.
-const Shop = { settings:{}, industry:'barbershop', vocab:{}, fields:[], statuses:[], sizes:[], addons:[], membershipPlans:[], serviceCategories:[], supportsQuotes:false, tax:{enabled:false,rate:0,label:'Sales Tax'} };
+const Shop = { settings:{}, industry:'barbershop', vocab:{}, fields:[], statuses:[], sizes:[], addons:[], membershipPlans:[], serviceCategories:[], supportsQuotes:false, fieldService:false, propertyFields:[], tax:{enabled:false,rate:0,label:'Sales Tax'} };
 function V(key, fb){ return (Shop.vocab && Shop.vocab[key]) || fb; }
+
+// One-line "what is this lead about": the vehicle for car verticals, or the
+// service address (+ property type) for field-service ones. '' when neither.
+function leadSubject(l, withColor){
+  if (!l) return '';
+  if (l.vehicle) {
+    const v = l.vehicle;
+    const s = [v.year, v.make, v.model, withColor ? v.color : ''].filter(Boolean).join(' ');
+    if (s) return s;
+  }
+  const cf = l.customFields || {};
+  return [cf.serviceAddress, cf.propertyType].filter(Boolean).join(' · ');
+}
 
 // Resolve a service's price for a given vehicle size class. Falls back to the
 // flat price when the service has no per-size table or the size isn't set.

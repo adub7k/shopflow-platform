@@ -1,6 +1,13 @@
-// ── Properties (cleaning module) ─────────────────────────────────────────────
+// ── Properties (field-service module) ────────────────────────────────────────
 // A property is a service location tied to a customer. Holds the operational
 // detail crews need on-site: gate codes, alarm instructions, pets, access notes.
+// The size/shape attributes (bedrooms for a cleaner, stories for a pressure
+// washer) come from the industry profile's propertyFields.
+const PROPERTY_FIELDS_FALLBACK = [
+  { key: 'bedrooms', label: 'Bedrooms' }, { key: 'bathrooms', label: 'Bathrooms' }, { key: 'squareFootage', label: 'Square footage' },
+];
+function propertyFields(){ return (Shop.propertyFields && Shop.propertyFields.length) ? Shop.propertyFields : PROPERTY_FIELDS_FALLBACK; }
+
 const Properties = {
   _props: [], _customers: [],
 
@@ -20,9 +27,14 @@ const Properties = {
         html.push('<div class="list-card">');
         this._props.forEach(p => {
           const tags = [];
-          if (p.bedrooms)  tags.push(esc(p.bedrooms)+' bd');
-          if (p.bathrooms) tags.push(esc(p.bathrooms)+' ba');
-          if (p.squareFootage) tags.push(esc(p.squareFootage)+' sqft');
+          propertyFields().forEach(f => {
+            if (!p[f.key]) return;
+            if (f.key === 'bedrooms') tags.push(esc(p.bedrooms)+' bd');
+            else if (f.key === 'bathrooms') tags.push(esc(p.bathrooms)+' ba');
+            else if (f.key === 'squareFootage') tags.push(esc(p.squareFootage)+' sqft');
+            else if (f.key === 'stories') tags.push(esc(p.stories)+(/stor/i.test(p.stories)?'':' story'));
+            else tags.push(esc(p[f.key]));
+          });
           if (p.gateCode)  tags.push('🔑 '+esc(p.gateCode));
           if (p.petInfo)   tags.push('🐾');
           html.push('<div class="list-row"><div class="list-main">'
@@ -48,8 +60,7 @@ const Properties = {
       + '<div class="form-group"><label class="form-label">Customer</label><select class="form-input" id="prop-customerId"><option value="">— Select customer —</option>'+opts+'</select></div>'
       + f('Label','label',p.label,'e.g. Main house')
       + f('Address','address',p.address,'123 Oak St')
-      + '<div class="form-row">'+f('Bedrooms','bedrooms',p.bedrooms)+f('Bathrooms','bathrooms',p.bathrooms)+'</div>'
-      + f('Square footage','squareFootage',p.squareFootage)
+      + '<div class="form-row">'+propertyFields().map(pf=>f(esc(pf.label),pf.key,p[pf.key])).join('')+'</div>'
       + f('Gate code','gateCode',p.gateCode)
       + f('Alarm instructions','alarmInstructions',p.alarmInstructions)
       + f('Pet info','petInfo',p.petInfo,'Friendly dog in yard')
@@ -59,7 +70,12 @@ const Properties = {
 
   async save(id, btn) {
     const g = (k) => (document.getElementById('prop-'+k)||{}).value || '';
-    const body = { customerId:g('customerId'), label:g('label'), address:g('address'), bedrooms:g('bedrooms'), bathrooms:g('bathrooms'), squareFootage:g('squareFootage'), gateCode:g('gateCode'), alarmInstructions:g('alarmInstructions'), petInfo:g('petInfo'), accessNotes:g('accessNotes') };
+    const body = { customerId:g('customerId'), label:g('label'), address:g('address'), gateCode:g('gateCode'), alarmInstructions:g('alarmInstructions'), petInfo:g('petInfo'), accessNotes:g('accessNotes') };
+    // Keep values for attributes this vertical doesn't show (e.g. a property
+    // created before a profile change) rather than blanking them on save.
+    const prev = id ? (this._props.find(x=>x.id===id) || {}) : {};
+    propertyFields().forEach(pf => { body[pf.key] = g(pf.key); });
+    ['bedrooms','bathrooms','squareFootage','propertyType','stories'].forEach(k => { if (body[k] === undefined && prev[k]) body[k] = prev[k]; });
     if (id) body.id = id;
     if (!body.address) { toast('Address is required','error'); return; }
     disableBtn(btn);

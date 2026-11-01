@@ -75,13 +75,14 @@
   const colOf = (l) => { const ks = orderKeys(); return ks.includes(l.status) ? l.status : ks[0]; };
 
   // Safe read of "what they asked for" — coerces stray shapes so one odd record
-  // can't throw. Returns { services, vehicle, note } strings.
+  // can't throw. Returns { services, vehicle, note } strings; `vehicle` is the
+  // service address (+ property type) for field-service leads.
   function requested(l) {
     const services = Array.isArray(l.servicesInterested) ? l.servicesInterested.filter(Boolean).join(', ')
       : (l.servicesInterested ? String(l.servicesInterested) : '');
     const vehicle = (l.vehicle && typeof l.vehicle === 'object')
       ? [l.vehicle.year, l.vehicle.make, l.vehicle.model, l.vehicle.color].filter(Boolean).join(' ')
-      : (typeof l.vehicle === 'string' ? l.vehicle : '');
+      : (typeof l.vehicle === 'string' ? l.vehicle : leadSubject(l));
     const note = String(l.message || l.notes || '').trim();
     return { services, vehicle, note };
   }
@@ -246,7 +247,7 @@
   function renderList(html, leads, counts) {
     // Compact status filter chips.
     const chip = (key, label, n) => `<button class="v2-chip${this._statusFilter2 === key ? ' on' : ''}" onclick="Leads.setStatusFilter('${key}')">${label}${n ? `<span class="n">${n}</span>` : ''}</button>`;
-    html.push(`<div style="margin-bottom:10px;"><input class="form-input" id="lead-search" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search name, phone, vehicle…" value="${esc(Leads._searchQ)}" oninput="Leads.searchFilter(this.value)" style="width:100%;max-width:420px;height:38px;padding:0 12px;"/></div>`);
+    html.push(`<div style="margin-bottom:10px;"><input class="form-input" id="lead-search" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search name, phone, ${Shop.fieldService ? 'address' : 'vehicle'}…" value="${esc(Leads._searchQ)}" oninput="Leads.searchFilter(this.value)" style="width:100%;max-width:420px;height:38px;padding:0 12px;"/></div>`);
     html.push(`<div class="v2-chips" style="margin-bottom:12px;">
       ${chip('all', 'All', counts.all)}${chip('hot', '🔥 Hot', counts.hot)}${stages().map(s => chip(s.key, esc(s.label), counts[s.key])).join('')}${chip('old', '🗄 Old leads', counts.old)}</div>`);
     html.push('<div id="lead-results">');   // closed by Leads.render; search keystrokes repaint only this

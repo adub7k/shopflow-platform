@@ -1,13 +1,56 @@
 // ── ShopFlow Multi-Tenant API ─────────────────────────────────────────────────
+// Sessions are per shop. One browser can be signed in to several shops (an
+// owner running two businesses), so a /shop/<slug> page always uses THAT
+// shop's token from sf_sessions — never whichever shop signed in last. The
+// flat sf_token/sf_shopSlug/… keys still hold the most recent sign-in: pages
+// with no slug in the URL (push deep links like /pipeline, the portal) use it.
+const SF_SESSION_KEYS = ['token','shopId','shopSlug','shopName','role','name'];
+const _legacyKey = (k) => 'sf_' + k;
+function _readSessions(){ try { return JSON.parse(localStorage.getItem('sf_sessions') || '{}') || {}; } catch(e) { return {}; } }
+function _writeSessions(m){ try { localStorage.setItem('sf_sessions', JSON.stringify(m)); } catch(e) {} }
+// The shop this page is for: /shop/<slug>/… → slug. null elsewhere.
+function _pageShopSlug(){ const m = location.pathname.match(/^\/shop\/([^/?#]+)/); return m ? decodeURIComponent(m[1]) : null; }
+// Older builds only kept the flat keys — fold that sign-in into the map once.
+(function _migrateLegacySession(){
+  const tok = localStorage.getItem('sf_token'), slug = localStorage.getItem('sf_shopSlug');
+  if (!tok || !slug) return;
+  const m = _readSessions();
+  if (!m[slug]) { m[slug] = {}; SF_SESSION_KEYS.forEach(k => { m[slug][k] = localStorage.getItem(_legacyKey(k)) || ''; }); _writeSessions(m); }
+})();
+function _session(){
+  const slug = _pageShopSlug();
+  if (slug) return _readSessions()[slug] || null;
+  const tok = localStorage.getItem('sf_token');
+  if (!tok) return null;
+  const o = {}; SF_SESSION_KEYS.forEach(k => { o[k] = localStorage.getItem(_legacyKey(k)) || ''; }); return o;
+}
+
 const Auth = {
-  getToken: () => localStorage.getItem('sf_token'),
-  getShopSlug: () => localStorage.getItem('sf_shopSlug'),
-  getShopName: () => localStorage.getItem('sf_shopName'),
-  getRole: () => localStorage.getItem('sf_role') || 'full',
-  getName: () => localStorage.getItem('sf_name') || '',
-  isLoggedIn: () => !!localStorage.getItem('sf_token'),
+  getToken: () => (_session() || {}).token || null,
+  getShopSlug: () => (_session() || {}).shopSlug || _pageShopSlug(),
+  getShopName: () => (_session() || {}).shopName || '',
+  getRole: () => (_session() || {}).role || 'full',
+  getName: () => (_session() || {}).name || '',
+  isLoggedIn: () => !!(_session() || {}).token,
+  // Called by login/signup with the server's response.
+  saveSession: (data) => {
+    const sess = { token: data.token, shopId: data.shopId, shopSlug: data.shopSlug, shopName: data.shopName, role: data.role || 'full', name: data.name || '' };
+    SF_SESSION_KEYS.forEach(k => localStorage.setItem(_legacyKey(k), sess[k] || ''));
+    const m = _readSessions(); m[sess.shopSlug] = sess; _writeSessions(m);
+  },
+  // Send the visitor to sign in to the shop this page is for (remembering
+  // where they were going).
+  requireLogin: () => {
+    try { sessionStorage.setItem('sf_next', location.pathname + location.search); } catch(e) {}
+    const slug = _pageShopSlug();
+    window.location.href = '/login' + (slug ? '?shop=' + encodeURIComponent(slug) : '');
+  },
+  // Signs out of THIS shop only; other shops on the device stay signed in.
   logout: () => {
-    ['sf_token','sf_shopId','sf_shopSlug','sf_shopName','sf_role','sf_name'].forEach(k => localStorage.removeItem(k));
+    const slug = Auth.getShopSlug();
+    const m = _readSessions(); if (slug) delete m[slug]; _writeSessions(m);
+    if (!slug || localStorage.getItem('sf_shopSlug') === slug)
+      SF_SESSION_KEYS.forEach(k => localStorage.removeItem(_legacyKey(k)));
     window.location.href = '/login';
   }
 };
@@ -43,12 +86,26 @@ async function apiFetch(path, opts={}) {
   const token = Auth.getToken();
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers['Authorization'] = 'Bearer '+token;
+  // The server refuses a token from a different shop than the page (421
+  // Misdirected Request), so one shop's data can never render under another
+  // shop's URL.
+  const pageSlug = _pageShopSlug();
+  if (pageSlug) headers['X-Shop-Slug'] = pageSlug;
   const res = await fetch('/api/shop'+path, {
     ...opts,
     headers,
     body: opts.body ? JSON.stringify(opts.body) : undefined
   });
   if (res.status === 401) { Auth.logout(); return; }
+  if (res.status === 421 && pageSlug) {
+    // The saved session for this page's shop is someone else's token — drop it
+    // (or the login page would bounce straight back here), then sign in. The
+    // returned promise never settles: the page is navigating away, so callers
+    // shouldn't go on to render with no data.
+    const m = _readSessions(); delete m[pageSlug]; _writeSessions(m);
+    Auth.requireLogin();
+    return new Promise(() => {});
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Request failed '+res.status }));
     throw new Error(err.error || 'Request failed '+res.status);

@@ -9,15 +9,14 @@ const ROLE_PAGES = {
   technician: ['dashboard','messages','appointments','response','pipeline','leads','clients','quotes','tasks','notifications'],
   viewonly:   ['appointments'],
 };
-// Pages that only appear for a given industry. Injected after the role base set,
-// so a barbershop never sees cleaning pages and vice-versa. (Owners + technicians
-// only; view-only stays calendar-only.)
-const INDUSTRY_PAGES = {
-  cleaning: ['jobs','properties','crews','recurring'],
-};
+// Pages that only appear for field-service verticals (cleaning, pressure
+// washing — the profile's `fieldService` flag). Injected after the role base
+// set, so a barbershop never sees them. (Owners + technicians only; view-only
+// stays calendar-only.)
+const FIELD_SERVICE_PAGES = ['jobs','properties','crews','recurring'];
 function allowedPages(){
   let pages = (ROLE_PAGES[Auth.getRole()] || ROLE_PAGES.full).slice();
-  const extra = INDUSTRY_PAGES[Shop.industry];
+  const extra = Shop.fieldService ? FIELD_SERVICE_PAGES : null;
   if (extra && Auth.getRole() !== 'viewonly') pages = pages.concat(extra.filter(p => !pages.includes(p)));
   // Estimates is a detail-shop feature — hide it for industries that don't use it.
   if (!Shop.supportsQuotes) pages = pages.filter(p => p !== 'quotes');
@@ -95,7 +94,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     // Load settings + industry profile (vocabulary, custom fields, statuses)
     const s = await db.settings.get();
-    Shop.settings = s; Shop.industry = s.industry||'barbershop'; Shop.vocab = s.vocab||{}; Shop.fields = s.customFields||[]; Shop.statuses = s.statuses||[]; Shop.sizes = s.vehicleSizes||[]; Shop.addons = s.addons||[]; Shop.membershipPlans = s.membershipPlans||[]; Shop.serviceCategories = s.serviceCategories||[]; Shop.supportsQuotes = !!s.supportsQuotes; Shop.tax = s.tax||{enabled:false,rate:0,label:'Sales Tax'};
+    Shop.settings = s; Shop.industry = s.industry||'barbershop'; Shop.vocab = s.vocab||{}; Shop.fields = s.customFields||[]; Shop.statuses = s.statuses||[]; Shop.sizes = s.vehicleSizes||[]; Shop.addons = s.addons||[]; Shop.membershipPlans = s.membershipPlans||[]; Shop.serviceCategories = s.serviceCategories||[]; Shop.supportsQuotes = !!s.supportsQuotes; Shop.fieldService = !!s.fieldService; Shop.propertyFields = s.propertyFields||[]; Shop.tax = s.tax||{enabled:false,rate:0,label:'Sales Tax'};
     const tt=document.getElementById('topbar-title'); if(tt)tt.textContent=s.shopName||'ShopFlow';
     const sn=document.getElementById('sidebar-shop-name'); if(sn&&s.shopName)sn.textContent=s.shopName;
     // Who's signed in + Sign out, in the sidebar footer. Sign-out also lives in
@@ -115,10 +114,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     // leads), /pipeline (new-lead + missed-call pushes), /appointments (24-hour
     // appointment reminders), or /leads (older cached payloads). The server
     // serves the app shell at all four, so land on the matching page.
-    const wantsResponse = location.pathname.startsWith('/response-center') && canSee('response');
-    const wantsPipeline = location.pathname.startsWith('/pipeline') && canSee('pipeline');
-    const wantsLeads = location.pathname.startsWith('/leads') && canSee('leads');
-    const wantsAppts = location.pathname.startsWith('/appointments') && canSee('appointments');
+    // Pushes now link under the shop (/shop/<slug>/pipeline); strip that
+    // prefix so both forms land on the same page.
+    const deepPath = location.pathname.replace(/^\/shop\/[^/]+/, '');
+    const wantsResponse = deepPath.startsWith('/response-center') && canSee('response');
+    const wantsPipeline = deepPath.startsWith('/pipeline') && canSee('pipeline');
+    const wantsLeads = deepPath.startsWith('/leads') && canSee('leads');
+    const wantsAppts = deepPath.startsWith('/appointments') && canSee('appointments');
     await App.nav(
       wantsResponse ? 'response'
       : wantsPipeline ? 'pipeline'

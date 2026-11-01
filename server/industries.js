@@ -158,6 +158,15 @@ const INDUSTRIES = {
     staffPicker: false,
     serviceCategories: ['standard','deep','move','recurring','commercial','other'],
     supportsQuotes: true,
+    // Work happens at the customer's property: turns on the Jobs / Properties /
+    // Crews / Recurring pages and the field overview on the dashboard.
+    fieldService: true,
+    // Which property attributes the Properties form shows for this vertical.
+    propertyFields: [
+      { key: 'bedrooms',      label: 'Bedrooms' },
+      { key: 'bathrooms',     label: 'Bathrooms' },
+      { key: 'squareFootage', label: 'Square footage' },
+    ],
   },
 
   tint: {
@@ -208,11 +217,16 @@ const INDUSTRIES = {
       staff: 'Technician', staffPlural: 'Technicians', station: 'Crew',
       notes: 'Job notes', bookCta: 'Request a quote', yourStaff: 'Your technician',
     },
+    // Names double as the default lead-form options (leadFormOptions falls back
+    // to service names), so a pressure-washing site posting "House Washing" etc.
+    // tags its leads with no extra setup. Prices are starting points — every job
+    // is really quoted to the property.
     services: [
-      { name: 'Driveway Wash',     category: 'driveway',   price: 120, duration: 60 },
-      { name: 'House Soft Wash',   category: 'house',      price: 300, duration: 180 },
-      { name: 'Deck / Patio Wash', category: 'deck',       price: 200, duration: 120 },
-      { name: 'Commercial Flatwork',category: 'commercial',price: 500, duration: 240 },
+      { name: 'House Washing',     category: 'house',      price: 350, duration: 180 },
+      { name: 'Concrete Cleaning', category: 'concrete',   price: 150, duration: 90 },
+      { name: 'Deck & Fence',      category: 'deck',       price: 250, duration: 150 },
+      { name: 'Roof Soft Wash',    category: 'roof',       price: 450, duration: 240 },
+      { name: 'Commercial',        category: 'commercial', price: 500, duration: 240 },
     ],
     statuses: [
       { key: 'unconfirmed', label: 'Unconfirmed', occupiesSlot: true },
@@ -222,16 +236,24 @@ const INDUSTRIES = {
       { key: 'done',        label: 'Completed',   terminal: true },
       { key: 'no-show',     label: 'No Show',     noShow: true },
     ],
+    // Captured on leads and jobs; a converted lead's address becomes a Property.
     customFields: [
       { key: 'serviceAddress', label: 'Service Address', type: 'text', required: true },
-      { key: 'surfaceType',    label: 'Surface Type',    type: 'text' },
+      { key: 'propertyType',   label: 'Property Type',   type: 'text' },
+      { key: 'stories',        label: 'Stories',         type: 'text' },
     ],
     supportsFleet: false,
-    deposit: { enabled: false, amount: 25, message: 'A deposit is required to secure your booking.' },
+    deposit: { enabled: false, amount: 50, message: 'A deposit is required to secure your booking.' },
     inspoDefault: 'off',
     staffPicker: false,
-    serviceCategories: ['driveway','house','deck','roof','commercial','other'],
+    serviceCategories: ['house','concrete','deck','roof','commercial','other'],
     supportsQuotes: true,
+    fieldService: true,
+    propertyFields: [
+      { key: 'propertyType',  label: 'Property type' },
+      { key: 'stories',       label: 'Stories' },
+      { key: 'squareFootage', label: 'Square footage' },
+    ],
   },
 
   other: {
