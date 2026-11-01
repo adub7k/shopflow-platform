@@ -129,15 +129,23 @@ function notifyNewLead({ shop, settings, lead, kind }) {
       kind === 'ai-callback' ? `🔴 CALL BACK NOW: ${who} asked for a person — ${shopName}`
       : kind === 'missed-call' ? `📞 Missed call: ${who} — ${shopName}`
       : kind === 'form-repeat' ? `🔁 Lead submitted again: ${who} — ${shopName}`
-      : `🚗 New lead: ${who} — ${shopName}`;
+      : `${(settings || {}).fieldService ? '🏠' : '🚗'} New lead: ${who} — ${shopName}`;
 
     const v = lead.vehicle || {};
     const vehicle = [v.year, v.make, v.model, v.color && `(${v.color})`].filter(Boolean).join(' ');
+    // Property-style fields (service address, property type, …), labelled with
+    // the shop's own field labels.
+    const fieldLabels = {};
+    ((settings || {}).customFields || []).forEach(f => { if (f && f.key) fieldLabels[f.key] = f.label || f.key; });
+    const detailRows = Object.entries(lead.customFields || {})
+      .filter(([, val]) => val)
+      .map(([k, val]) => [esc(fieldLabels[k] || k), esc(val)]);
     const rows = [
       ['Name', esc(lead.name) || '—'],
       ['Phone', `<a href="${telHref(lead.phone)}" style="color:#16a34a;font-weight:600;">${esc(phonePretty)}</a>`],
       lead.email && ['Email', esc(lead.email)],
       vehicle && ['Vehicle', esc(vehicle)],
+      ...detailRows,
       (lead.servicesInterested || []).length && ['Interested in', esc(lead.servicesInterested.join(', '))],
       lead.source && ['Source', esc(lead.source + (lead.utm?.campaign ? ` · ${lead.utm.campaign}` : ''))],
       lead.location && ['Location', esc(lead.location)],

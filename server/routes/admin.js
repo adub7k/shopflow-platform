@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { requireAdmin } = require('../middleware');
-const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb } = require('../db');
+const { master, getShopDb, shopHelpers, shopRoute, shopFromNumber, buildSms, genId, today, slug, JWT_SECRET, stripe, twilioClient, TWILIO_DEFAULT_FROM, MASTER_DIR, SHOPS_DIR, CLIENT_DIR, initShopDb, applyIndustryProfile } = require('../db');
 const { upsertLead, getLeadPayloads, normalizeSource } = require('../leads-core');
 const { shopInsights, shopRate } = require('../admin-insights');
 
@@ -227,11 +227,27 @@ router.post('/api/admin/shops/create', requireAdmin, async (req, res) => {
     const accountId = uuidv4();
     const rate = (monthlyRate != null && monthlyRate !== '') ? (Number(monthlyRate) || 0) : null;
     master.get('accounts').push({ id: accountId, shopId, email: email.toLowerCase(), passwordHash, createdAt: new Date().toISOString(), plan: plan || 'pro', active: true }).write();
-    master.get('shops').push({ id: shopId, accountId, shopName, slug: finalSlug, email: email.toLowerCase(), phone: phone || '', plan: plan || 'pro', monthlyRate: rate, active: true, createdAt: new Date().toISOString(), lastActivity: new Date().toISOString() }).write();
+    master.get('shops').push({ id: shopId, accountId, shopName, slug: finalSlug, email: email.toLowerCase(), phone: phone || '', plan: plan || 'pro', monthlyRate: rate, industry: industry || 'barbershop', active: true, createdAt: new Date().toISOString(), lastActivity: new Date().toISOString() }).write();
     const shopDb = getShopDb(shopId);
     initShopDb(shopDb, { shopName, email, phone, industry });
     res.json({ ok: true, shopId, shopSlug: finalSlug, shopName, crmUrl: '/shop/' + finalSlug, bookUrl: '/book/' + finalSlug });
   } catch(e) { res.status(500).json({ ok: false, error: e.message }); }
+});
+
+// ── ADMIN: switch a shop's business type ──────────────────────────────────────
+// Body: { industry, resetServices? }. Re-applies the industry profile to an
+// existing shop without touching its leads/clients/appointments — the fix for
+// a shop created as the wrong type (HQ used to default everything to
+// barbershop). resetServices: true also swaps in the profile's service list.
+router.post('/api/admin/shop/:shopId/industry', requireAdmin, (req, res) => {
+  const { INDUSTRIES } = require('../industries');
+  const shop = master.get('shops').find({ id: req.params.shopId }).value();
+  if (!shop) return res.status(404).json({ ok: false, error: 'Shop not found' });
+  const industry = String((req.body || {}).industry || '');
+  if (!INDUSTRIES[industry]) return res.status(400).json({ ok: false, error: 'Unknown industry. One of: ' + Object.keys(INDUSTRIES).join(', ') });
+  applyIndustryProfile(getShopDb(shop.id), industry, { resetServices: !!(req.body || {}).resetServices });
+  master.get('shops').find({ id: shop.id }).assign({ industry }).write();
+  res.json({ ok: true, shopId: shop.id, industry });
 });
 
 // ── ADMIN: update shop (plan, rate, active, name, contact, notes) ─────────────

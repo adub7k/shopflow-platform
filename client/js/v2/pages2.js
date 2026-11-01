@@ -44,7 +44,7 @@
       waiting.forEach(w => {
         const l = w.l, sm = Leads._sourceMeta(l.source), scm = this._scoreMeta(w.score), wm = this._waitMeta(w.waitMin);
         const name = l.name || l.phone || 'Unknown caller';
-        const veh = l.vehicle ? [l.vehicle.year, l.vehicle.make, l.vehicle.model].filter(Boolean).join(' ') : '';
+        const veh = leadSubject(l);
         const sub = [veh, (l.servicesInterested || []).join(', ')].filter(Boolean).join(' · ');
         const tel = 'tel:' + String(l.phone || '').replace(/[^\d+]/g, '');
         html.push(`<div class="list-row" style="align-items:flex-start;" onclick="Response.open('${l.id}')">

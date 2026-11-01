@@ -26,6 +26,7 @@
 
 const express = require('express');
 const webpush = require('web-push');
+const { master } = require('../db');
 
 module.exports = function createPush({ getShopDb }) {
   const configured =
@@ -110,7 +111,14 @@ module.exports = function createPush({ getShopDb }) {
     const subs = db.data.push_subscriptions || [];
     if (!subs.length) return { ok: true, sent: 0 };
 
-    const payload = JSON.stringify({ title, body, url, tag: tag || 'shopflow' });
+    // Deep links open under the shop's own path (/shop/<slug>/pipeline), so a
+    // device signed in to several shops lands on the shop the alert is about —
+    // not whichever one signed in last.
+    const shop = master.get('shops').find({ id: tenantId }).value();
+    const shopUrl = (shop && shop.slug && typeof url === 'string' && url.startsWith('/') && !url.startsWith('/shop/'))
+      ? '/shop/' + encodeURIComponent(shop.slug) + (url === '/' ? '' : url)
+      : url;
+    const payload = JSON.stringify({ title, body, url: shopUrl, tag: tag || 'shopflow' });
     let sent = 0;
     const dead = [];
 

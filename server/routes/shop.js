@@ -54,6 +54,10 @@ router.get('/api/shop/settings', requireAuth, shopRoute(async (req, res, db) => 
   if (s.staffPicker === undefined) s.staffPicker = _prof.staffPicker !== false;
   if (s.supportsQuotes === undefined) s.supportsQuotes = !!_prof.supportsQuotes;
   if (s.supportsFleet === undefined) s.supportsFleet = !!_prof.supportsFleet;
+  // Backfill field-service capability for shops created before it was a profile
+  // flag (cleaning shops were gated on the industry key alone).
+  if (s.fieldService === undefined) s.fieldService = !!_prof.fieldService;
+  if (!Array.isArray(s.propertyFields)) s.propertyFields = _prof.propertyFields || [];
   // Call tracking: surface the shop's OWN tracking number (read-only). No global
   // fallback — a shop only ever shows a number explicitly assigned to it, so one
   // tenant never sees another tenant's (e.g. the platform default) number.
@@ -1724,6 +1728,23 @@ router.post('/api/shop/leads/:id/convert', requireAuth, requireRole('full','tech
     h.upsert('customers', cust);
   }
   lead.customerId = cust.id;
+  // Field-service shops (cleaning, pressure washing): the address the lead gave
+  // becomes one of the client's Properties, so the job can be booked against it.
+  // Skipped when the client already has a property at that address.
+  const leadCf = lead.customFields || {};
+  const leadAddr = String(leadCf.serviceAddress || '').trim();
+  const _set = db.get('settings').value() || {};
+  const fieldService = _set.fieldService !== undefined ? !!_set.fieldService : !!resolveProfile(db.get('industry').value()).fieldService;
+  if (fieldService && leadAddr) {
+    const norm = (x) => String(x || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    const has = h.getAll('properties').some(p => p.customerId === cust.id && norm(p.address) === norm(leadAddr));
+    if (!has) {
+      const prop = { id: genId('prop'), customerId: cust.id, address: leadAddr, createdAt: new Date().toISOString() };
+      if (leadCf.propertyType) prop.propertyType = leadCf.propertyType;
+      if (leadCf.stories) prop.stories = leadCf.stories;
+      h.upsert('properties', prop);
+    }
+  }
   // Converting FOR BOOKING implies the work is booked: move the lead up to the
   // BOOKED stage — and never past it. But a convert that only needs the client
   // record (e.g. "Send an estimate" linking the lead to a customer) passes

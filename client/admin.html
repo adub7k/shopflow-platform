@@ -1214,9 +1214,15 @@ tr.clickable:hover td{background:#fafafa;cursor:pointer;}
         <input class="form-input" id="new-plan" list="plan-suggestions" placeholder="e.g. Receptionist"/>
       </div>
     </div>
-    <div class="form-row">
-      <label class="form-label">Monthly rate ($/mo)</label>
-      <input class="form-input" id="new-rate" type="number" min="0" step="1" placeholder="e.g. 3000"/>
+    <div class="form-row-2">
+      <div class="form-row">
+        <label class="form-label">Business type *</label>
+        <select class="form-input" id="new-industry"><option value="">— Choose —</option></select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Monthly rate ($/mo)</label>
+        <input class="form-input" id="new-rate" type="number" min="0" step="1" placeholder="e.g. 3000"/>
+      </div>
     </div>
     <datalist id="plan-suggestions"></datalist>
     <div class="form-row">
@@ -2777,8 +2783,19 @@ async function deleteShop(shopId, shopName) {
 }
 
 // ── Create shop ───────────────────────────────────────────────────────────────
+// Business type drives the whole CRM (services, statuses, job fields, pages).
+// Without it the server falls back to Barbershop, so it's required here.
+async function loadIndustryOptions() {
+  const sel = document.getElementById('new-industry');
+  if (!sel || sel.options.length > 1) return;
+  try {
+    const list = await fetch('/api/industries').then(r => r.json());
+    (Array.isArray(list) ? list : []).forEach(i => { const o = document.createElement('option'); o.value = i.key; o.textContent = i.label; sel.appendChild(o); });
+  } catch(e) {}
+}
 function openCreateModal() {
-  ['new-shopname','new-email','new-password','new-phone','new-plan','new-rate'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  ['new-shopname','new-email','new-password','new-phone','new-plan','new-rate','new-industry'].forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  loadIndustryOptions();
   document.getElementById('modal-err').style.display = 'none';
   document.getElementById('modal-overlay').classList.add('open');
   setTimeout(()=>document.getElementById('new-shopname').focus(),100);
@@ -2792,9 +2809,11 @@ async function createShop() {
   const phone    = document.getElementById('new-phone').value.trim();
   const plan     = document.getElementById('new-plan').value.trim() || 'custom';
   const monthlyRate = document.getElementById('new-rate').value.trim();
+  const industry = document.getElementById('new-industry').value;
   const errEl    = document.getElementById('modal-err');
   errEl.style.display = 'none';
   if (!shopName || !email || !password) { errEl.textContent = 'Shop name, email, and password are required.'; errEl.style.display = 'block'; return; }
+  if (!industry) { errEl.textContent = 'Choose the business type.'; errEl.style.display = 'block'; return; }
   if (password.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
   const btn = document.getElementById('create-btn');
   btn.textContent = 'Creating…'; btn.disabled = true;
@@ -2802,7 +2821,7 @@ async function createShop() {
     const res = await fetch('/api/admin/shops/create', {
       method: 'POST',
       headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ shopName, email, password, phone, plan, monthlyRate: monthlyRate || null }),
+      body: JSON.stringify({ shopName, email, password, phone, plan, monthlyRate: monthlyRate || null, industry }),
     });
     const data = await res.json();
     if (!data.ok) { errEl.textContent = data.error || 'Failed to create shop.'; errEl.style.display = 'block'; return; }

@@ -51,15 +51,24 @@ h1{font-size:26px;font-weight:700;color:var(--black);letter-spacing:-.04em;margi
   <div class="signup-link">Don't have an account? <a href="/signup">Get started</a></div>
 </div>
 
+<script src="/js/api.js"></script>
 <script>
 // PWA service worker: registered here too (the manifest start_url is /login),
 // so home-screen installs get offline shell + push before first app visit.
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
-// Auto-redirect if already logged in (client-portal logins go to /portal)
+// Auto-redirect if already logged in (client-portal logins go to /portal).
+// ?shop=<slug> (sent by a /shop/<slug> page with no session for that shop)
+// means "sign in to THIS shop": only skip the form if this device already
+// has a session for it — never bounce to whichever shop signed in last.
+const wantShop = new URLSearchParams(location.search).get('shop');
 const token = localStorage.getItem('sf_token');
 const slug = localStorage.getItem('sf_shopSlug');
-if (token && slug) window.location.href = localStorage.getItem('sf_role') === 'client' ? '/portal' : '/shop/'+slug;
+if (wantShop) {
+  const have = _readSessions()[wantShop];
+  if (have && have.token) window.location.href = '/shop/' + encodeURIComponent(wantShop);
+  else document.querySelector('.subtitle').textContent = 'Sign in to ' + wantShop.replace(/-/g, ' ') + ' — you\'ll stay signed in to your other shops too';
+} else if (token && slug) window.location.href = localStorage.getItem('sf_role') === 'client' ? '/portal' : '/shop/'+slug;
 
 async function login() {
   const email    = document.getElementById('email').value.trim();
@@ -78,15 +87,13 @@ async function login() {
     });
     const data = await res.json();
     if (data.ok) {
-      localStorage.setItem('sf_token', data.token);
-      localStorage.setItem('sf_shopId', data.shopId);
-      localStorage.setItem('sf_shopSlug', data.shopSlug);
-      localStorage.setItem('sf_shopName', data.shopName);
-      localStorage.setItem('sf_role', data.role || 'full');
-      localStorage.setItem('sf_name', data.name || '');
-      // v2 shell sets sf_next before bouncing here — return the user to it.
-      const next = sessionStorage.getItem('sf_next');
+      Auth.saveSession(data);
+      // v2 shell sets sf_next before bouncing here — return the user to it,
+      // unless it's another shop's page (they signed in to a different shop).
+      let next = sessionStorage.getItem('sf_next');
       if (next) sessionStorage.removeItem('sf_next');
+      const nextShop = next && (next.match(/^\/shop\/([^/?#]+)/) || [])[1];
+      if (nextShop && decodeURIComponent(nextShop) !== data.shopSlug) next = null;
       window.location.href = next || data.crmUrl;
     } else {
       errEl.textContent = data.error || 'Invalid email or password.';

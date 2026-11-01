@@ -1,4 +1,4 @@
-// ── Crews (cleaning module) ──────────────────────────────────────────────────
+// ── Crews (field-service module) ──────────────────────────────────────────────────
 // A crew is a named team of staff members. Jobs are assigned to a crew; the
 // dashboard reads crew assignments for utilization + revenue-per-cleaner.
 const Crews = {
@@ -15,7 +15,7 @@ const Crews = {
       const html = [];
       html.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><div class="section-header" style="margin:0;">Crews</div><button class="btn btn-green btn-sm" onclick="Crews.edit()">+ Add Crew</button></div>');
       if (!this._crews.length) {
-        html.push('<div class="card empty-state"><div class="empty-icon">👥</div><div class="empty-text">No crews yet. Group your cleaners into teams you can assign to jobs.</div></div>');
+        html.push('<div class="card empty-state"><div class="empty-icon">👥</div><div class="empty-text">No crews yet. Group your '+esc(V('staffPlural','team').toLowerCase())+' into teams you can assign to jobs.</div></div>');
       } else {
         html.push('<div class="list-card">');
         this._crews.forEach(c => {

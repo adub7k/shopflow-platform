@@ -76,7 +76,7 @@ function mergeNotes(prev, next) {
 }
 
 // db/shop: the target shop's lowdb handle + master shop record.
-// f: { name, phone, email, notes, vehicle, servicesInterested, utm, source, referrer,
+// f: { name, phone, email, notes, vehicle, details, servicesInterested, utm, source, referrer,
 //      metaLeadgenId?, metaCustomFields? }
 // Returns { lead, isNew }.
 function upsertLead(db, shop, f = {}) {
@@ -89,6 +89,10 @@ function upsertLead(db, shop, f = {}) {
   const email = f.email || '';
   const notes = f.notes || '';
   const vehicle = f.vehicle || null;
+  // Non-vehicle custom fields keyed by the shop's field keys — e.g. a pressure
+  // washer's { serviceAddress, propertyType, stories }. Stored as
+  // lead.customFields, the same shape an appointment uses.
+  const details = (f.details && Object.keys(f.details).length) ? f.details : null;
   const servicesInterested = Array.isArray(f.servicesInterested) ? f.servicesInterested : [];
   const utm = (f.utm && Object.keys(f.utm).length) ? f.utm : null;
   const referrer = f.referrer || '';
@@ -136,6 +140,7 @@ function upsertLead(db, shop, f = {}) {
     if (!lead.name && name) lead.name = name;
     if (email) lead.email = email;
     if (vehicle) lead.vehicle = vehicle;
+    if (details) lead.customFields = { ...(lead.customFields || {}), ...details };
     if (servicesInterested.length) lead.servicesInterested = servicesInterested;
     if (notes) lead.notes = mergeNotes(lead.notes, notes);
     if (utm) lead.utm = utm;                 // latest campaign, for reference
@@ -166,6 +171,7 @@ function upsertLead(db, shop, f = {}) {
     // Keep the campaign's own tag when it differs, so an odd utm_source is
     // still traceable after normalisation.
     if (rawSource && rawSource !== source) lead.sourceRaw = rawSource;
+    if (details) lead.customFields = details;
     if (metaLeadgenId) lead.metaLeadgenId = metaLeadgenId;
     if (metaCustomFields) lead.metaCustomFields = metaCustomFields;
   }
@@ -188,7 +194,8 @@ function upsertLead(db, shop, f = {}) {
     notifyNewLead({ shop, settings: s, lead, kind: existing ? 'form-repeat' : 'form' });
 
     // Mobile push to the owner's phone (free, instant) — mirrors the email.
-    const veh = lead.vehicle && [lead.vehicle.year, lead.vehicle.make, lead.vehicle.model].filter(Boolean).join(' ');
+    const veh = (lead.vehicle && [lead.vehicle.year, lead.vehicle.make, lead.vehicle.model].filter(Boolean).join(' '))
+      || (lead.customFields && lead.customFields.serviceAddress) || '';
     sendPush(shop.id, {
       title: `🔔 New lead — ${lead.name || lead.phone || 'website'}`,
       body: [lead.phone, veh, (lead.servicesInterested || []).join(', '), lead.source && `via ${lead.source}`]

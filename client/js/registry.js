@@ -2,7 +2,7 @@
 // Renders the sidebar from a grouped registry instead of a flat, hardcoded list.
 // Groups give the nav a scalable structure (Overview / CRM / Operations / Money /
 // Growth) and the Operations group absorbs industry-specific pages, so a new
-// vertical adds items here (or via INDUSTRY_PAGES) without editing app.html.
+// vertical adds items here (or via FIELD_SERVICE_PAGES) without editing app.html.
 //
 // Output is byte-compatible with the old static markup — same .nav-section /
 // .nav-item / .nav-item-icon / .nav-badge classes and the same data-page +
@@ -63,7 +63,7 @@ const NavRegistry = {
     return m.icon;
   },
 
-  // Grouped layout. `industry: true` appends the active vertical's INDUSTRY_PAGES.
+  // Grouped layout. `industry: true` appends FIELD_SERVICE_PAGES for field-service verticals.
   // `messages` and `automations` are deliberately absent: both keep working in
   // the background (texts still log to client profiles, automations still run
   // server-side, App.nav() still opens the pages from deep links) — they're
@@ -87,7 +87,7 @@ const NavRegistry = {
     // Reuse the role + industry + supportsQuotes filtering already in app.js.
     const allow = (typeof allowedPages === 'function') ? allowedPages() : null;
     const ok = (p) => !allow || allow.includes(p);
-    const industryPages = (typeof INDUSTRY_PAGES !== 'undefined' && INDUSTRY_PAGES[Shop.industry]) || [];
+    const industryPages = (Shop.fieldService && typeof FIELD_SERVICE_PAGES !== 'undefined') ? FIELD_SERVICE_PAGES : [];
 
     const html = [];
     for (const g of this.GROUPS) {

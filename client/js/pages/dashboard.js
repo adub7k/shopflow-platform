@@ -146,8 +146,9 @@ const Dashboard = {
       html.push(stat('New Leads', newLeads.length, newLeads.length?'to contact':'none waiting', 'leads', ''));
       html.push('</div>');
 
-      // Cleaning-specific overview (operational metrics; money cards gated by role)
-      if (Shop.industry === 'cleaning') {
+      // Field-service overview (cleaning, pressure washing): operational metrics;
+      // money cards gated by role.
+      if (Shop.fieldService) {
         let recurring=[], crews=[];
         try { [recurring, crews] = await Promise.all([db.recurring.all().catch(()=>[]), db.crews.all().catch(()=>[])]); } catch(e){}
         const activeRec    = recurring.filter(r=>r.active!==false);
@@ -172,7 +173,7 @@ const Dashboard = {
         if (canSee('revenue')) cards.push(`<div class="metric-card"><div class="metric-label">Recurring Revenue</div><div class="metric-value green">${fmtMoney(recurMrr)}</div><div class="metric-sub">/mo from contracts</div></div>`);
         if (canSee('revenue')) cards.push(`<div class="metric-card"><div class="metric-label">Revenue / ${esc(cleanerLabel)}</div><div class="metric-value">${fmtMoney(activeCleaners?rev.monthRevenue/activeCleaners:0)}</div><div class="metric-sub">${activeCleaners} ${esc(cleanerLabel.toLowerCase())}${activeCleaners!==1?'s':''} · MTD</div></div>`);
         cards.push(`<div class="metric-card"><div class="metric-label">Crew Utilization</div><div class="metric-value">${crewUtil}%</div><div class="metric-sub">${crewsWorking} of ${crews.length} crew${crews.length!==1?'s':''} today</div></div>`);
-        html.push('<div class="section-header">Cleaning Overview</div>');
+        html.push('<div class="section-header">Field Overview</div>');
         html.push('<div class="metric-grid">'+cards.join('')+'</div>');
       }
 

@@ -40,7 +40,7 @@
   </button>
   <img id="topbar-logo" src="/icons/icon-192.png" style="width:28px;height:28px;border-radius:8px;" />
   <div id="topbar-title">ShopFlow</div>
-<script>document.addEventListener("DOMContentLoaded",()=>{const n=localStorage.getItem("sf_shopName");if(n)document.getElementById("topbar-title").textContent=n;});</script>
+<script>document.addEventListener("DOMContentLoaded",()=>{const n=Auth.getShopName();if(n)document.getElementById("topbar-title").textContent=n;});</script>
 </div>
 
 <!-- App -->
@@ -130,7 +130,7 @@
 
 <script src="/js/build.js"></script>
 <script src="/js/api.js"></script>
-<script>if(!localStorage.getItem("sf_token")){try{sessionStorage.setItem("sf_next",location.pathname+location.search);}catch(e){}window.location.href="/login";}</script>
+<script>if(!Auth.isLoggedIn())Auth.requireLogin();</script>
 <script src="/js/utils.js"></script>
 <script src="/js/pwa-push-client.js"></script>
 <script src="/js/client-profile.js"></script>

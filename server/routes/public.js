@@ -498,6 +498,14 @@ router.post('/api/public/:shopSlug/lead', async (req, res) => {
     const vehicle = (cf.vehicleYear || cf.vehicleMake || cf.vehicleModel)
       ? { year: cf.vehicleYear || '', make: cf.vehicleMake || '', model: cf.vehicleModel || '', color: cf.vehicleColor || '' }
       : null;
+    // Every other field the shop defines (service address, property type, …)
+    // rides on the lead as-is. Only the shop's own field keys are kept, so a
+    // crafted request can't park arbitrary data on the lead.
+    const details = {};
+    (s.customFields || []).forEach(f => {
+      if (!f || !f.key || f.key.indexOf('vehicle') === 0) return;
+      if (cf[f.key]) details[f.key] = cf[f.key];
+    });
 
     // Options the visitor checked — plain labels (not service ids; the list is
     // owner-curated copy, not the catalog). Validated against the shop's own
@@ -528,7 +536,7 @@ router.post('/api/public/:shopSlug/lead', async (req, res) => {
     // + Meta/Make via skipRequiredCustomFields), so the push in leads-core is the
     // one place that guarantees a notification for all of them. Phone-call leads
     // are notified separately (routes/twilio.js).
-    upsertLead(db, shop, { name, phone, email, notes, vehicle, servicesInterested, utm, source, referrer });
+    upsertLead(db, shop, { name, phone, email, notes, vehicle, details, servicesInterested, utm, source, referrer });
     res.json({ ok: true });
   } catch(e) {
     console.error('Lead capture error:', e.message);
