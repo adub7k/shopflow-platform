@@ -18,6 +18,13 @@ const doorOutcome = (k) => DOOR_OUTCOMES.find(o => o.key === k) || { label: k, i
 // the late afternoon here).
 const _ymd = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const _addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+// "1201 Oak St, Albuquerque" + 2 → "1203 Oak St, Albuquerque" (null below 1).
+function stepHouseNumber(addr, n) {
+  const m = String(addr || '').match(/^(\s*)(\d+)(.*)$/);
+  if (!m) return null;
+  const v = Number(m[2]) + n;
+  return v > 0 ? m[1] + v + m[3] : null;
+}
 
 const Doors = {
   _range: 'today', _data: null, _services: [],
@@ -128,43 +135,107 @@ const Doors = {
     const existing = id && this._data ? [...(this._data.doors || []), ...(this._data.followUps || [])].find(x => x.id === id) : null;
     this._draft = existing ? { ...existing } : { address: '', lat: null, lng: null };
     this._outcome = null;
+    // Owners delete any door; a crew member only doors they logged themselves
+    // (the same rule the server enforces).
+    const me = this._data && this._data.me;
+    const canDelete = existing && (Auth.getRole() === 'full' || ((existing.visits || []).length && existing.visits.every(v => v.repId && v.repId === me)));
+    // After a door, the next one is usually two numbers up or down the street.
+    const next = !existing && this._lastAddress ? [stepHouseNumber(this._lastAddress, 2), stepHouseNumber(this._lastAddress, -2)].filter(Boolean) : [];
     Modal.show(`
       <div class="modal-title">${existing ? 'Knock again' : 'Log a door'}</div>
       <div class="form-group"><label class="form-label">Address</label>
         <div style="display:flex;gap:6px;">
-          <input class="form-input" id="dr-address" value="${esc(this._draft.address || '')}" placeholder="123 Oak St" autocomplete="off" />
-          <button class="btn" type="button" onclick="Doors.locate()" title="Use my location">📍</button>
+          <input class="form-input" id="dr-address" value="${esc(this._draft.address || '')}" placeholder="123 Oak St" autocomplete="off" oninput="Doors.renderStepper()" />
+          <button class="btn" type="button" onclick="Doors.locate(true)" title="Use my location">📍</button>
         </div>
         <div id="dr-loc" style="font-size:12px;color:var(--muted);margin-top:4px;"></div>
+        <div id="dr-step" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;"></div>
+        ${next.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;">${next.map(a => `<button class="btn btn-sm" type="button" onclick="Doors.useAddress('${jsAttr(a)}')">↪ Next door: ${esc(a.split(',')[0])}</button>`).join('')}</div>` : ''}
       </div>
       <div class="form-label" style="margin-bottom:6px;">What happened?</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
         ${DOOR_OUTCOMES.map(o => `<button class="btn dr-out" data-k="${o.key}" type="button" style="padding:14px 8px;font-size:15px;justify-content:center;" onclick="Doors.pick('${o.key}', this)">${o.icon} ${o.label}</button>`).join('')}
       </div>
       <div id="dr-more" style="margin-top:12px;"></div>
-      <div class="modal-actions"><button class="btn" onclick="Modal.close()">Cancel</button></div>`);
-    if (!existing) this.locate();
+      <div class="modal-actions" style="justify-content:space-between;">
+        ${canDelete ? `<button class="btn btn-danger" type="button" onclick="Doors.remove('${jsAttr(existing.id)}', this)">🗑 Delete this door</button>` : '<span></span>'}
+        <button class="btn" onclick="Modal.close()">Cancel</button>
+      </div>`);
+    this.renderStepper();
+    if (!existing) this.locate(false);
   },
 
-  // GPS → address. The coordinates are kept on the door either way (for a map
-  // later); the address field is only filled when the crew hasn't typed one.
-  locate() {
+  useAddress(a) {
+    const input = document.getElementById('dr-address');
+    if (input) { input.value = a; this.renderStepper(); }
+    const st = document.getElementById('dr-loc'); if (st) st.textContent = '';
+  },
+
+  // −4 / −2 / +2 / +4 buttons around the house number: GPS and the address
+  // data are often one house off, and the neighbours on the same side of the
+  // street are two numbers away.
+  renderStepper() {
+    const el = document.getElementById('dr-step'); if (!el) return;
+    const a = (document.getElementById('dr-address') || {}).value || '';
+    if (!/^\s*\d+/.test(a)) { el.innerHTML = ''; return; }
+    el.innerHTML = [-4, -2, 2, 4].map(n => {
+      const v = stepHouseNumber(a, n);
+      return v ? `<button class="btn btn-sm" type="button" onclick="Doors.useAddress('${jsAttr(v)}')">${n < 0 ? '‹' : ''} ${esc(v.match(/^\s*(\d+)/)[1])} ${n > 0 ? '›' : ''}</button>` : '';
+    }).join('');
+  },
+
+  // GPS → address. A phone's first fix is often 20–50 m off, so listen for a
+  // few seconds and keep the most accurate reading (never a cached one — on
+  // foot, a 30-second-old position is the previous house). The coordinates are
+  // kept on the door either way; the address is filled only when the field is
+  // empty, unless the crew tapped 📍 to ask for it.
+  locate(force) {
     const st = document.getElementById('dr-loc');
     if (!navigator.geolocation) { if (st) st.textContent = 'Location isn\'t available on this device — type the address.'; return; }
-    if (st) st.textContent = 'Finding your address…';
-    navigator.geolocation.getCurrentPosition(async (pos) => {
-      const { latitude: lat, longitude: lng } = pos.coords;
-      if (this._draft) { this._draft.lat = lat; this._draft.lng = lng; }
+    if (this._watch != null) { navigator.geolocation.clearWatch(this._watch); this._watch = null; }
+    if (st) st.textContent = '📡 Getting a GPS fix…';
+    let best = null, done = false;
+    const finish = async () => {
+      if (done) return; done = true;
+      if (this._watch != null) { navigator.geolocation.clearWatch(this._watch); this._watch = null; }
+      clearTimeout(timer);
+      if (!best) { if (st) st.textContent = 'Couldn\'t get your location — type the address.'; return; }
+      const { latitude: lat, longitude: lng, accuracy } = best.coords;
+      if (this._draft) { this._draft.lat = lat; this._draft.lng = lng; this._draft.accuracy = accuracy; }
+      const acc = Number.isFinite(accuracy) ? Math.round(accuracy) : null;
+      if (st) st.textContent = '🔎 Looking up the address' + (acc != null ? ` (±${acc} m)…` : '…');
       try {
         const r = await db.doors.where(lat, lng);
         const input = document.getElementById('dr-address');
-        if (input && r && r.address && !input.value.trim()) input.value = r.address;
-        if (st) st.textContent = r && r.address
-          ? (r.exact ? '📍 From your location — check the house number' : '📍 Street from your location — add the house number')
-          : 'Couldn\'t find an address here — type it.';
+        if (input && r && r.address && (force || !input.value.trim())) { input.value = r.address; this.renderStepper(); }
+        if (st) {
+          const tail = acc == null ? '' : acc > 35 ? ` · GPS is rough (±${acc} m) — check the house` : ` · ±${acc} m`;
+          st.textContent = r && r.address
+            ? (r.exact ? '📍 From your location' + tail + '. Wrong house? Use ‹ ›' : '📍 Street from your location — add the house number' + tail)
+            : 'Couldn\'t find an address here — type it.';
+        }
       } catch (e) { if (st) st.textContent = 'Address lookup failed — type it.'; }
-    }, () => { if (st) st.textContent = 'Location is off — type the address (or allow location for this site).'; },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 });
+    };
+    const timer = setTimeout(finish, 8000);
+    this._watch = navigator.geolocation.watchPosition((pos) => {
+      if (!best || (pos.coords.accuracy || 1e9) < (best.coords.accuracy || 1e9)) best = pos;
+      const acc = Math.round(best.coords.accuracy || 0);
+      if (st && !done) st.textContent = `📡 Getting a GPS fix… ±${acc} m`;
+      if (best.coords.accuracy && best.coords.accuracy <= 12) finish();   // good enough — don't make them wait
+    }, () => { if (!best) { done = true; clearTimeout(timer); if (st) st.textContent = 'Location is off — type the address (or allow location for this site).'; } },
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 });
+  },
+
+  async remove(id, btn) {
+    const door = [...((this._data && this._data.doors) || []), ...((this._data && this._data.followUps) || [])].find(x => x.id === id) || {};
+    const visits = (door.visits || []).length;
+    if (!confirm(`Delete ${door.address || 'this door'}${visits > 1 ? ` and its ${visits} visits` : ''}?` + (door.leadId ? '\n\nThe lead it created stays in Leads.' : ''))) return;
+    disableBtn(btn);
+    try {
+      await db.doors.delete(id);
+      if (this._watch != null) { navigator.geolocation.clearWatch(this._watch); this._watch = null; }
+      Modal.close(); toast('Door deleted'); this.render();
+    } catch (e) { enableBtn(btn); toast(e.message || 'Could not delete', 'error'); }
   },
 
   pick(key, btn) {
@@ -213,6 +284,8 @@ const Doors = {
     try {
       const r = await db.doors.log(body);
       if (!r || !r.ok) throw new Error((r && r.error) || 'Could not save');
+      if (this._watch != null) { navigator.geolocation.clearWatch(this._watch); this._watch = null; }
+      this._lastAddress = body.address;
       Modal.close();
       const o = doorOutcome(body.outcome);
       toast(`${o.icon} ${o.label} logged${r.leadId ? ' · added to Leads' : ''}`);

@@ -6,7 +6,8 @@
 //  - quoted / sold need a phone and become a CRM lead (source door) with the
 //    address as its service address; sold moves the lead to booked and ends
 //    its follow-up texts.
-//  - Stats per rep; technicians can log, view-only can't, only owners delete.
+//  - Stats per rep; technicians can log, view-only can't; owners delete any
+//    door, technicians only doors where every visit is theirs.
 // Run: node test/doors.test.js
 const path = require('path');
 const os = require('os');
@@ -93,9 +94,16 @@ const server = app.listen(0, async () => {
     // ── Permissions ─────────────────────────────────────────────────────────
     eq('view-only cannot log', (await req('POST', '/api/shop/doors', VIEW, { address: '1 A St', outcome: 'not_home' })).status, 403);
     const anyId = doors()[0].id;
-    eq('technician cannot delete', (await req('DELETE', '/api/shop/doors/' + anyId, TECH)).status, 403);
-    eq('owner can delete', (await req('DELETE', '/api/shop/doors/' + anyId, OWNER)).status, 200);
-    eq('…and it is gone', doors().some(d => d.id === anyId), false);
+    const mixed = doors().find(d => d.visits.some(v => v.repId === 'acct_owner') && d.visits.some(v => v.repId === 'acct_tech'));
+    const techOnly = doors().find(d => d.visits.every(v => v.repId === 'acct_tech'));
+    if (mixed) eq('technician cannot delete a door someone else also knocked', (await req('DELETE', '/api/shop/doors/' + mixed.id, TECH)).status, 403);
+    eq('technician can delete a door only they knocked', (await req('DELETE', '/api/shop/doors/' + techOnly.id, TECH)).status, 200);
+    eq('…gone', doors().some(d => d.id === techOnly.id), false);
+    eq('missing door → 404', (await req('DELETE', '/api/shop/doors/door_nope', OWNER)).status, 404);
+    eq('view-only cannot delete', (await req('DELETE', '/api/shop/doors/' + anyId, VIEW)).status, 403);
+    const ownerTarget = (mixed || doors()[0]).id;
+    eq('owner can delete any door', (await req('DELETE', '/api/shop/doors/' + ownerTarget, OWNER)).status, 200);
+    eq('…and it is gone', doors().some(d => d.id === ownerTarget), false);
   } catch (e) {
     failures++;
     console.log('FAIL  threw', e);
