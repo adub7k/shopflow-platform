@@ -210,8 +210,11 @@ const Doors = {
         if (input && r && r.address && (force || !input.value.trim())) { input.value = r.address; this.renderStepper(); }
         if (st) {
           const tail = acc == null ? '' : acc > 35 ? ` · GPS is rough (±${acc} m) — check the house` : ` · ±${acc} m`;
+          // City/County address points are the official ones; OpenStreetMap
+          // numbers can be off, so say where the address came from.
+          const src = r && ({ city: 'City address records', county: 'County address records', osm: 'map data' })[r.source];
           st.textContent = r && r.address
-            ? (r.exact ? '📍 From your location' + tail + '. Wrong house? Use ‹ ›' : '📍 Street from your location — add the house number' + tail)
+            ? (r.exact ? '📍 ' + (src || 'From your location') + tail + '. Wrong house? Use ‹ ›' : '📍 Street from ' + (src || 'your location') + ' — check the house number' + tail)
             : 'Couldn\'t find an address here — type it.';
         }
       } catch (e) { if (st) st.textContent = 'Address lookup failed — type it.'; }

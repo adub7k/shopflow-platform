@@ -18,7 +18,8 @@
 //   POST   /api/shop/doors        log a knock (upserts the door by address)
 //   DELETE /api/shop/doors/:id    undo a mistaken door — owners any door, crew
 //                                 only doors where every visit is theirs
-//   GET    /api/shop/doors/where?lat&lng → nearest street address
+//   GET    /api/shop/doors/where?lat&lng → nearest street address (city /
+//            county address points in Bernalillo County, else OpenStreetMap)
 const router = require('express').Router();
 const { requireAuth, requireRole } = require('../middleware');
 const { master, shopRoute, genId } = require('../db');
@@ -172,45 +173,106 @@ router.delete('/api/shop/doors/:id', requireAuth, rw, shopRoute(async (req, res,
 }));
 
 // ── "Where am I?" — GPS → street address ─────────────────────────────────────
-// OpenStreetMap Nominatim reverse geocoding: free, 1 request/second, so calls
-// are spaced out and cached by ~1 m grid cell. (An ~11 m cell was coarser
-// than a lot — next-door houses shared a cell and got each other's address.)
-const revCache = new Map();
+// Sources, best first:
+//   1. City of Albuquerque address points (AGIS locator) — the city-assigned
+//      addresses, same data as 911. Inside city limits.
+//   2. Bernalillo County address points — unincorporated parts of the county.
+//   3. OpenStreetMap Nominatim — everywhere else. Its house numbers in parts
+//      of Albuquerque are shifted by 25+ houses against the city's points, so
+//      it's the fallback, and a house it found more than 30 m away is not
+//      presented as exact.
+// Results are cached by ~1 m grid cell (an ~11 m cell was coarser than a lot
+// — next-door houses shared a cell and got each other's address).
+const CITY_LOCATOR = 'https://coageo.cabq.gov/cabqgeo/rest/services/locators/AGIS_AddressPointsLocator/GeocodeServer/reverseGeocode';
+const COUNTY_POINTS = 'https://pdsgismaps.bernco.gov/server/rest/services/BERNCOBASEMAP/County_Address_Points/MapServer/299/query';
+const UA = { 'User-Agent': 'ShopFlow/1.0 (support@shopflowtech.com)', 'Accept-Language': 'en' };
+// Bernalillo County, generously boxed.
+const inBernalillo = (lat, lng) => lat > 34.86 && lat < 35.22 && lng > -107.21 && lng < -106.14;
+
+const metersBetween = (a, b, c, d) => {
+  const r = (x) => x * Math.PI / 180, dLat = r(c - a), dLng = r(d - b);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a)) * Math.cos(r(c)) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(h));
+};
+// "9917 SALEM RD NE" → "9917 Salem Rd NE"; quadrants stay upper, "4TH" → "4th".
+const QUADS = new Set(['NE', 'NW', 'SE', 'SW', 'N', 'S', 'E', 'W']);
+const titleAddress = (s) => String(s || '').trim().split(/\s+/).map(w => {
+  const u = w.toUpperCase();
+  if (QUADS.has(u)) return u;
+  if (/^\d+(ST|ND|RD|TH)$/.test(u)) return u.toLowerCase();
+  return /^\d/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+}).join(' ');
+
+async function cityAddress(lat, lng) {
+  const url = CITY_LOCATOR + '?f=json&outSR=4326&distance=50&location='
+    + encodeURIComponent(JSON.stringify({ x: lng, y: lat, spatialReference: { wkid: 4326 } }));
+  const r = await fetch(url, { headers: UA, signal: AbortSignal.timeout(6000) });
+  if (!r.ok) return null;
+  const j = await r.json();
+  const a = j && j.address;
+  if (!a || !a.Address || !/^(PointAddress|Subaddress)$/.test(a.Addr_type || '')) return null;
+  const street = titleAddress(a.Address);
+  return { address: street + ', Albuquerque', street, city: 'Albuquerque', zip: a.Postal || '', exact: true, source: 'city' };
+}
+
+async function countyAddress(lat, lng) {
+  const qs = new URLSearchParams({
+    f: 'json', geometry: JSON.stringify({ x: lng, y: lat, spatialReference: { wkid: 4326 } }),
+    // County points sit at parcel centroids — on big unincorporated lots that
+    // can be 75 m+ from the front door, so search wider and take the nearest.
+    geometryType: 'esriGeometryPoint', inSR: '4326', outSR: '4326', distance: '100', units: 'esriSRUnit_Meter',
+    spatialRel: 'esriSpatialRelIntersects', outFields: 'ADDRESS', returnGeometry: 'true',
+  });
+  const r = await fetch(COUNTY_POINTS + '?' + qs, { headers: UA, signal: AbortSignal.timeout(6000) });
+  if (!r.ok) return null;
+  const j = await r.json();
+  const best = ((j && j.features) || [])
+    .filter(f => f.attributes && f.attributes.ADDRESS && f.geometry)
+    .map(f => ({ f, d: metersBetween(lat, lng, f.geometry.y, f.geometry.x) }))
+    .sort((a, b) => a.d - b.d)[0];
+  if (!best) return null;
+  const street = titleAddress(best.f.attributes.ADDRESS);
+  return { address: street, street, city: '', zip: '', exact: true, source: 'county' };
+}
+
 let revLast = 0;
+async function osmAddress(lat, lng) {
+  // Nominatim allows 1 request/second — space ours out.
+  const wait = revLast + 1100 - Date.now();
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  revLast = Date.now();
+  const url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18'
+    + '&lat=' + encodeURIComponent(lat) + '&lon=' + encodeURIComponent(lng);
+  const r = await fetch(url, { headers: UA, signal: AbortSignal.timeout(8000) });
+  if (!r.ok) return null;
+  const j = await r.json();
+  const a = (j && j.address) || {};
+  const street = [a.house_number, a.road].filter(Boolean).join(' ');
+  const city = a.city || a.town || a.village || a.hamlet || a.suburb || '';
+  // The house it matched, if far from where they're standing, is a guess.
+  const near = Number.isFinite(+j.lat) && metersBetween(lat, lng, +j.lat, +j.lon) <= 30;
+  return {
+    address: [street || (j && j.name) || '', city, a.postcode].filter(Boolean).join(', '),
+    street, city, zip: a.postcode || '', exact: !!a.house_number && near, source: 'osm',
+  };
+}
+
+const revCache = new Map();
 router.get('/api/shop/doors/where', requireAuth, rw, async (req, res) => {
   const lat = Number(req.query.lat), lng = Number(req.query.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180)
     return res.status(400).json({ ok: false, error: 'Location unavailable' });
   const key = lat.toFixed(5) + ',' + lng.toFixed(5);
   if (revCache.has(key)) return res.json({ ok: true, ...revCache.get(key) });
-  // Nominatim gets the coordinates as given (full precision), not the cell.
-  const wait = revLast + 1100 - Date.now();
-  if (wait > 0) await new Promise(r => setTimeout(r, wait));
-  revLast = Date.now();
-  try {
-    const url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18'
-      + '&lat=' + encodeURIComponent(lat) + '&lon=' + encodeURIComponent(lng);
-    const r = await fetch(url, {
-      headers: { 'User-Agent': 'ShopFlow/1.0 (support@shopflowtech.com)', 'Accept-Language': 'en' },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!r.ok) return res.status(502).json({ ok: false, error: 'Address lookup unavailable — type it in' });
-    const j = await r.json();
-    const a = (j && j.address) || {};
-    const street = [a.house_number, a.road].filter(Boolean).join(' ');
-    const city = a.city || a.town || a.village || a.hamlet || a.suburb || '';
-    const out = {
-      address: [street || (j && j.name) || '', city, a.postcode].filter(Boolean).join(', '),
-      street, city, zip: a.postcode || '',
-      // No house number = the GPS fix landed on the road; the crew adds it.
-      exact: !!a.house_number,
-    };
-    if (revCache.size > 2000) revCache.clear();
-    revCache.set(key, out);
-    res.json({ ok: true, ...out });
-  } catch (e) {
-    res.status(502).json({ ok: false, error: 'Address lookup unavailable — type it in' });
-  }
+  // Each source is best-effort: a slow or down service falls through to the next.
+  const tryIt = async (fn) => { try { return await fn(lat, lng); } catch (e) { return null; } };
+  let out = null;
+  if (inBernalillo(lat, lng)) out = (await tryIt(cityAddress)) || (await tryIt(countyAddress));
+  if (!out) out = await tryIt(osmAddress);
+  if (!out || !out.address) return res.status(502).json({ ok: false, error: 'Address lookup unavailable — type it in' });
+  if (revCache.size > 2000) revCache.clear();
+  revCache.set(key, out);
+  res.json({ ok: true, ...out });
 });
 
 module.exports = router;
