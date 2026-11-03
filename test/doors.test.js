@@ -8,6 +8,9 @@
 //    its follow-up texts.
 //  - Stats per rep; technicians can log, view-only can't; owners delete any
 //    door, technicians only doors where every visit is theirs.
+//  - /where: City of Albuquerque points first, then Bernalillo County points,
+//    then OpenStreetMap (a far-away OSM house is not 'exact'); outside the
+//    county the city/county services aren't called. External calls stubbed.
 // Run: node test/doors.test.js
 const path = require('path');
 const os = require('os');
@@ -104,6 +107,51 @@ const server = app.listen(0, async () => {
     const ownerTarget = (mixed || doors()[0]).id;
     eq('owner can delete any door', (await req('DELETE', '/api/shop/doors/' + ownerTarget, OWNER)).status, 200);
     eq('…and it is gone', doors().some(d => d.id === ownerTarget), false);
+
+    // ── Address lookup chain (external services stubbed) ────────────────────
+    const realFetch = global.fetch, calls = [];
+    let city, county, osm;
+    global.fetch = async (url, opts) => {
+      const u = String(url);
+      if (u.startsWith('http://127.0.0.1')) return realFetch(url, opts);
+      const json = (o, ok = true) => ({ ok, json: async () => o });
+      if (u.includes('coageo.cabq.gov')) { calls.push('city'); return city(); }
+      if (u.includes('bernco.gov')) { calls.push('county'); return county(); }
+      if (u.includes('nominatim')) { calls.push('osm'); return osm(); }
+      return json({}, false);
+    };
+    const J = (o, ok = true) => ({ ok, json: async () => o });
+    const where = (lat, lng) => req('GET', `/api/shop/doors/where?lat=${lat}&lng=${lng}`, TECH).then(r => r.body);
+
+    city = () => J({ address: { Address: '9917 SALEM RD NE', Addr_type: 'PointAddress' } });
+    let w = await where(35.11070, -106.52960);
+    eq('city points win inside Albuquerque', [w.address, w.source, w.exact, calls], ['9917 Salem Rd NE, Albuquerque', 'city', true, ['city']]);
+
+    calls.length = 0;
+    city = () => J({ error: { code: 400, message: 'Unable to find address' } });
+    county = () => J({ features: [
+      { attributes: { ADDRESS: '200 FAR AWAY RD SW' }, geometry: { x: -106.70000, y: 35.00030 } },
+      { attributes: { ADDRESS: '1204 4TH ST SW' }, geometry: { x: -106.70001, y: 35.00001 } },
+    ] });
+    w = await where(35.00000, -106.70000);
+    eq('no city point → nearest county point', [w.address, w.source, calls], ['1204 4th St SW', 'county', ['city', 'county']]);
+
+    calls.length = 0;
+    city = () => { throw new Error('down'); };
+    county = () => J({}, false);
+    osm = () => J({ lat: '35.0010', lon: '-106.7001', address: { house_number: '9773', road: 'Salem Road Northeast', city: 'Albuquerque', postcode: '87112' } });
+    w = await where(35.00010, -106.70010);
+    eq('both down → OSM, far house not exact', [w.source, w.exact, w.address, calls], ['osm', false, '9773 Salem Road Northeast, Albuquerque, 87112', ['city', 'county', 'osm']]);
+
+    calls.length = 0;
+    osm = () => J({ lat: '35.68700', lon: '-105.93800', address: { house_number: '12', road: 'Canyon Road', city: 'Santa Fe' } });
+    w = await where(35.68700, -105.93800);
+    eq('outside Bernalillo → OSM only, near house exact', [w.source, w.exact, calls], ['osm', true, ['osm']]);
+
+    calls.length = 0;
+    await where(35.68700, -105.93800);
+    eq('same spot again is cached', calls, []);
+    global.fetch = realFetch;
   } catch (e) {
     failures++;
     console.log('FAIL  threw', e);
