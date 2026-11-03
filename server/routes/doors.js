@@ -16,7 +16,8 @@
 //            → { doors (visited in the window), followUps (come-backs due by
 //                today), stats { all, byRep[] }, goal }
 //   POST   /api/shop/doors        log a knock (upserts the door by address)
-//   DELETE /api/shop/doors/:id    owner only — undo a mistaken door
+//   DELETE /api/shop/doors/:id    undo a mistaken door — owners any door, crew
+//                                 only doors where every visit is theirs
 //   GET    /api/shop/doors/where?lat&lng → nearest street address
 const router = require('express').Router();
 const { requireAuth, requireRole } = require('../middleware');
@@ -159,23 +160,30 @@ router.post('/api/shop/doors', requireAuth, rw, shopRoute(async (req, res, db, h
   res.json({ ok: true, door, leadId: door.leadId || null });
 }));
 
-router.delete('/api/shop/doors/:id', requireAuth, requireRole('full'), shopRoute(async (req, res, db, h) => {
-  h.remove('doors', req.params.id);
+router.delete('/api/shop/doors/:id', requireAuth, rw, shopRoute(async (req, res, db, h) => {
+  const door = h.getById('doors', req.params.id);
+  if (!door) return res.status(404).json({ ok: false, error: 'Door not found' });
+  // A crew member can clean up their own mistakes (their own house logged by
+  // accident) but not erase a door someone else knocked.
+  const own = (door.visits || []).length && door.visits.every(v => v.repId && v.repId === req.accountId);
+  if (req.role !== 'full' && !own) return res.status(403).json({ ok: false, error: 'Only the owner can delete a door someone else logged' });
+  h.remove('doors', door.id);
   res.json({ ok: true });
 }));
 
 // ── "Where am I?" — GPS → street address ─────────────────────────────────────
 // OpenStreetMap Nominatim reverse geocoding: free, 1 request/second, so calls
-// are spaced out and cached by ~10 m grid cell (a crew walking a street asks
-// for the same few cells over and over).
+// are spaced out and cached by ~1 m grid cell. (An ~11 m cell was coarser
+// than a lot — next-door houses shared a cell and got each other's address.)
 const revCache = new Map();
 let revLast = 0;
 router.get('/api/shop/doors/where', requireAuth, rw, async (req, res) => {
   const lat = Number(req.query.lat), lng = Number(req.query.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180)
     return res.status(400).json({ ok: false, error: 'Location unavailable' });
-  const key = lat.toFixed(4) + ',' + lng.toFixed(4);
+  const key = lat.toFixed(5) + ',' + lng.toFixed(5);
   if (revCache.has(key)) return res.json({ ok: true, ...revCache.get(key) });
+  // Nominatim gets the coordinates as given (full precision), not the cell.
   const wait = revLast + 1100 - Date.now();
   if (wait > 0) await new Promise(r => setTimeout(r, wait));
   revLast = Date.now();
