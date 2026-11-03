@@ -321,6 +321,7 @@ const Leads = {
       tiktok:    { icon: '🎵', label: 'TikTok' },
       nextdoor:  { icon: '🏘', label: 'Nextdoor' },
       yelp:      { icon: '⭐', label: 'Yelp' },
+      door:      { icon: '🚪', label: 'Door-to-door' },
     };
     const s = String(src || 'call').toLowerCase();
     return known[s] || { icon: '🔗', label: s.charAt(0).toUpperCase() + s.slice(1) };

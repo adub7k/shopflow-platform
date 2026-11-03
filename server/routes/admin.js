@@ -202,7 +202,10 @@ router.get('/api/admin/shop/:shopId', requireAdmin, (req, res) => {
   // metaPageToken is a long-lived Meta page access token — never ship it to the
   // browser. Same stance as settings.twilio.authToken / emailSmtp.pass in
   // routes/shop.js: the panel only needs to know whether one is configured.
-  const shopSafe = { ...shop, metaPageToken: undefined, metaPageTokenSet: !!shop.metaPageToken };
+  const shopSafe = { ...shop, metaPageToken: undefined, metaPageTokenSet: !!shop.metaPageToken,
+    // The live business type is on the shop's own DB; HQ-created shops never
+    // had it on the master record.
+    industry: getShopDb(shop.id).get('industry').value() || shop.industry || 'barbershop' };
   res.json({
     shop: shopSafe, settings: { shopName: settings.shopName, tagline: settings.tagline, phone: settings.phone, address: settings.address, bookingEnabled: settings.bookingEnabled, bookingMode: settings.bookingMode, accentColor: settings.accentColor, googleReviewLink: settings.googleReviewLink, loyalty: settings.loyalty, deposit: settings.deposit, stripeConnected: !!(settings.stripe?.connectAccountId && settings.stripe?.onboardingComplete), squareConnected: !!((settings.square && settings.square.accessToken) ), twilioConfigured: !!(twilioClient && shopFromNumber(shop.id)) },
     staff, services,

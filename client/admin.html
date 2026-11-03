@@ -1552,7 +1552,10 @@ async function openDrawer(shopId) {
   document.getElementById('sp-body').innerHTML = '<div class="empty-state"><span class="spinner"></span>Loading…</div>';
   document.getElementById('main').scrollTop = 0; window.scrollTo(0, 0);
   try {
-    const res = await fetch('/api/admin/shop/' + shopId, { headers: { 'x-admin-key': adminKey } });
+    const [res] = await Promise.all([
+      fetch('/api/admin/shop/' + shopId, { headers: { 'x-admin-key': adminKey } }),
+      ensureIndustryList(),
+    ]);
     const d = await res.json();
     renderDrawer(d);
   } catch(e) {
@@ -1749,6 +1752,12 @@ function renderDrawer(d) {
           <input class="drawer-edit" type="email" value="${esc(shop.email||'')}" placeholder="owner@shop.com" onblur="if(this.value.trim()!==${JSON.stringify(shop.email||'').replace(/"/g,'&quot;')})updateShop('${shop.id}','email',this.value.trim())" onkeydown="if(event.key==='Enter')this.blur()"/></div>
         <div class="drawer-info-row"><span class="drawer-info-label">Phone</span>
           <input class="drawer-edit" value="${esc(shop.phone||'')}" placeholder="(555) 000-0000" onblur="if(this.value.trim()!==${JSON.stringify(shop.phone||'').replace(/"/g,'&quot;')})updateShop('${shop.id}','phone',this.value.trim())" onkeydown="if(event.key==='Enter')this.blur()"/></div>
+        <div class="drawer-info-row">
+          <span class="drawer-info-label">Business type</span>
+          <select class="drawer-edit" style="width:auto;" onchange="changeShopIndustry('${shop.id}', this)" data-current="${esc(shop.industry||'barbershop')}">
+            ${industryOptionsHtml(shop.industry||'barbershop')}
+          </select>
+        </div>
         <div class="drawer-info-row">
           <span class="drawer-info-label">Plan label</span>
           <input class="drawer-edit" list="plan-suggestions" value="${esc(shop.plan||'')}" placeholder="e.g. Receptionist"
@@ -2706,6 +2715,43 @@ async function resetSalesPin() {
 }
 
 // ── Shop CRUD ─────────────────────────────────────────────────────────────────
+// Business types, from the server's industry profiles. Fetched once; the shop
+// page re-renders after it arrives so the picker is never empty.
+let INDUSTRY_LIST = null;
+function industryOptionsHtml(current) {
+  const list = INDUSTRY_LIST || [{ key: current, label: current }];
+  if (!list.some(i => i.key === current)) list.unshift({ key: current, label: current });
+  return list.map(i => `<option value="${esc(i.key)}"${i.key === current ? ' selected' : ''}>${esc(i.label)}</option>`).join('');
+}
+async function ensureIndustryList() {
+  if (INDUSTRY_LIST) return INDUSTRY_LIST;
+  try { INDUSTRY_LIST = await fetch('/api/industries').then(r => r.json()); } catch(e) { INDUSTRY_LIST = null; }
+  return INDUSTRY_LIST;
+}
+// Switching changes the shop's whole CRM (statuses, job fields, pages,
+// vocabulary); its leads, clients and appointments are kept.
+async function changeShopIndustry(shopId, sel) {
+  const prev = sel.dataset.current, next = sel.value;
+  if (next === prev) return;
+  const label = sel.options[sel.selectedIndex].textContent;
+  if (!confirm(`Switch this shop to ${label}?\n\nIts statuses, job fields, pages and wording change to ${label}. Leads, clients and appointments are kept.`)) { sel.value = prev; return; }
+  const resetServices = confirm(`Also replace the service list with the ${label} defaults?\n\nOK = replace (best for a shop that still has the wrong defaults)\nCancel = keep the current services`);
+  try {
+    const res = await fetch('/api/admin/shop/' + shopId + '/industry', {
+      method: 'POST',
+      headers: { 'x-admin-key': adminKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ industry: next, resetServices }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed');
+    sel.dataset.current = next;
+    const idx = allShops.findIndex(s => s.id === shopId);
+    if (idx >= 0) allShops[idx].industry = next;
+    toast(`Switched to ${label} ✓`);
+    openDrawer(shopId);
+  } catch(e) { sel.value = prev; toast(e.message || 'Switch failed'); }
+}
+
 async function saveNotes(shopId) {
   const val = document.getElementById('drawer-notes')?.value || '';
   try {

@@ -9,6 +9,7 @@ function bucketLeadSource(raw) {
   if (/\b(call|phone|missed|voicemail|receptionist|ai-voice)\b/.test(s)) return { key: 'call', label: 'Phone call' };
   if (/\b(booking-page|booking|online)\b/.test(s))                      return { key: 'online', label: 'Online booking' };
   if (/\b(website|web|form|landing)\b/.test(s))                         return { key: 'website', label: 'Website' };
+  if (/\b(door|d2d|canvass)/.test(s))                                  return { key: 'door', label: 'Door-to-door' };
   if (/\breferral\b/.test(s))                                            return { key: 'referral', label: 'Referral' };
   if (/\bwalk/.test(s))                                                   return { key: 'walk-in', label: 'Walk-in' };
   return { key: s.slice(0, 30), label: s.charAt(0).toUpperCase() + s.slice(1, 30) };

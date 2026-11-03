@@ -142,5 +142,7 @@ const db = {
   // ── Cleaning module (industry extension) ──
   properties:    { all: (customerId) => apiFetch('/properties'+(customerId?'?customerId='+customerId:'')), save: (p) => apiFetch('/properties',{method:'POST',body:p}), delete: (id) => apiFetch('/properties/'+id,{method:'DELETE'}) },
   crews:         { all: () => apiFetch('/crews'), save: (c) => apiFetch('/crews',{method:'POST',body:c}), delete: (id) => apiFetch('/crews/'+id,{method:'DELETE'}) },
+  // Door-to-door canvassing (routes/doors.js).
+  doors:         { list: (w) => apiFetch('/doors?since='+encodeURIComponent(w.since)+'&until='+encodeURIComponent(w.until)+'&today='+encodeURIComponent(w.today)), log: (d) => apiFetch('/doors',{method:'POST',body:d}), delete: (id) => apiFetch('/doors/'+id,{method:'DELETE'}), where: (lat,lng) => apiFetch('/doors/where?lat='+encodeURIComponent(lat)+'&lng='+encodeURIComponent(lng)) },
   recurring:     { all: () => apiFetch('/recurring'), save: (r) => apiFetch('/recurring',{method:'POST',body:r}), delete: (id) => apiFetch('/recurring/'+id,{method:'DELETE'}), generate: (id) => apiFetch('/recurring/'+id+'/generate',{method:'POST'}) },
 };
