@@ -13,7 +13,7 @@ const ROLE_PAGES = {
 // washing — the profile's `fieldService` flag). Injected after the role base
 // set, so a barbershop never sees them. (Owners + technicians only; view-only
 // stays calendar-only.)
-const FIELD_SERVICE_PAGES = ['jobs','properties','crews','recurring'];
+const FIELD_SERVICE_PAGES = ['jobs','doors','properties','crews','recurring'];
 function allowedPages(){
   let pages = (ROLE_PAGES[Auth.getRole()] || ROLE_PAGES.full).slice();
   const extra = Shop.fieldService ? FIELD_SERVICE_PAGES : null;
@@ -46,7 +46,7 @@ const App = {
     document.querySelectorAll('.nav-item,.bottom-nav-item').forEach(b=>b.classList.remove('active'));
     const el=document.getElementById('page-'+page); if(el)el.classList.add('active');
     document.querySelectorAll('[data-page="'+page+'"]').forEach(b=>b.classList.add('active'));
-    const titles={dashboard:'Dashboard',messages:'Messages',appointments:'Appointments',jobs:'Jobs',properties:'Properties',crews:'Crews',recurring:'Recurring',response:'Response Center',pipeline:'Pipeline',leads:'Leads',clients:'Clients',quotes:'Estimates',revenue:'Revenue',tasks:'Tasks',reviews:'Reviews',automations:'Automations',notifications:'Notifications',settings:'Settings'};
+    const titles={dashboard:'Dashboard',messages:'Messages',appointments:'Appointments',jobs:'Jobs',properties:'Properties',crews:'Crews',recurring:'Recurring',doors:'Door Knocking',response:'Response Center',pipeline:'Pipeline',leads:'Leads',clients:'Clients',quotes:'Estimates',revenue:'Revenue',tasks:'Tasks',reviews:'Reviews',automations:'Automations',notifications:'Notifications',settings:'Settings'};
     const tt=document.getElementById('topbar-title'); if(tt&&titles[page])tt.textContent=titles[page];
     this._render(page);
   },
@@ -58,6 +58,7 @@ const App = {
     if(page==='properties')  Properties.render();
     if(page==='crews')       Crews.render();
     if(page==='recurring')   Recurring.render();
+    if(page==='doors')       Doors.render();
     if(page==='response')    Response.render();
     if(page==='pipeline')    Pipeline.render();
     if(page==='leads')       Leads.render();

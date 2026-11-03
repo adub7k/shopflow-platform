@@ -1858,3 +1858,7 @@ router.get('/api/shop/features', requireAuth, (req, res) => {
 });
 
 module.exports = router;
+// Shared with routes/doors.js so a door-knock lead moves stages exactly like a
+// lead moved by hand (stage log, follow-up sequence ending on booked, …).
+module.exports.applyLeadStatus = applyLeadStatus;
+module.exports.actorOf = actorOf;

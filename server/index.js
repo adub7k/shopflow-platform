@@ -134,6 +134,7 @@ app.use(require('./routes/shop'));
 app.use(require('./routes/client'));
 app.use(require('./routes/newsletter'));
 app.use(require('./routes/cleaning'));
+app.use(require('./routes/doors'));
 app.use(require('./routes/receptionist'));
 app.use(require('./routes/admin'));
 app.use(require('./routes/sales'));
